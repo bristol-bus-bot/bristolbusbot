@@ -1,0 +1,12 @@
+[Unit]
+Description=Publish audit data after the daily rollup
+
+[Timer]
+OnCalendar=*-*-* 03:10:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=30s
+Unit=bbb-audit-publish.service
+
+[Install]
+WantedBy=timers.target

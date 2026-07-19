@@ -1,0 +1,33 @@
+[Unit]
+Description=Bristol Bus Bot weekly local and R2 repository check
+Wants=network-online.target
+After=network-online.target bbb-backup.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/bristolbusbot/backup.env
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name backup-check -- /usr/local/sbin/bbb-backup check
+TimeoutStartSec=4h
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+CPUWeight=20
+NoNewPrivileges=yes
+PrivateDevices=no
+DevicePolicy=closed
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/mnt/bbb-backup /var/cache/bristolbusbot /var/lib/bristolbusbot/monitoring /run/lock
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

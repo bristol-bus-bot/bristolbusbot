@@ -1,0 +1,57 @@
+[Unit]
+Description=Bristol Bus Bot public website
+Documentation=https://github.com/bristol-bus-bot/bristolbusbot
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/site
+EnvironmentFile=/etc/bristolbusbot/site.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@BBB_DEPLOY_BASE@/current/site/venv/bin/python -m gunicorn --workers 2 --bind 127.0.0.1:5002 --no-control-socket wsgi:app
+Restart=always
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+
+# Collect real production usage for seven days before setting memory limits.
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUWeight=100
+
+# The site only reads its code/config and the collector/pipeline databases.
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+IPAddressDeny=any
+IPAddressAllow=localhost
+ProcSubset=pid
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

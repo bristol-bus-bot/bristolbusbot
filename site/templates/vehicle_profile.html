@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Bus {{ details.reg or public_code }} · Bristol Buses LIVE{% endblock %}
+{% block body_class %}profile-page{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ asset_url('css/profile.css') }}">{% endblock %}
+{% block body %}
+<main class="profile-shell">
+    <nav class="profile-nav" aria-label="Back links">
+        <a href="/">← Track buses live</a>
+        <a href="{{ audit_url }}">Full audit and method ↗</a>
+    </nav>
+
+    <article class="profile-card">
+        <header class="profile-header">
+            <p class="profile-kicker">Observed vehicle profile</p>
+            <h1>{% if details.reg %}{{ details.reg }}{% else %}Bus {{ public_code }}{% endif %}</h1>
+            <p>{{ profile.operator_name }}{% if details.fleetNumber %} · fleet {{ details.fleetNumber }}{% endif %}</p>
+        </header>
+
+        {% if active %}
+        <section class="profile-live" aria-label="Current live state">
+            <strong>Live now:</strong>
+            route {{ active.line or 'unknown' }} to {{ active.destination }}
+            {% if active.hasSchedule %}· {{ active.delayMinutes|abs }} min
+                {% if active.eventType == 'delayed' %}late{% elif active.eventType == 'early' %}early{% else %}from schedule{% endif %}
+            {% endif %}
+            <a href="/">View on map</a>
+        </section>
+        {% endif %}
+
+        <section aria-labelledby="performance-title">
+            <h2 id="performance-title">Measured punctuality</h2>
+            <div class="profile-stat-grid">
+                <div><strong>{{ profile.on_time_pct }}%</strong><span>on time</span></div>
+                <div><strong>{{ '{:,}'.format(profile.readings) }}</strong><span>timing-point readings</span></div>
+                <div><strong>{{ profile.observed_days }}</strong><span>service days observed</span></div>
+            </div>
+            <p class="profile-note">
+                {{ measurement_start_label }} through {{ through_date_label }}.
+                On time means between 1 minute early and 5 min 59 s late,
+                measured within 150 m of a timing point.
+            </p>
+        </section>
+
+        <section aria-labelledby="routes-title">
+            <h2 id="routes-title">Routes observed</h2>
+            <ul class="profile-routes">
+            {% for route in profile.routes %}
+                <li><strong>{{ route.route }}</strong><span>{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span></li>
+            {% endfor %}
+            </ul>
+        </section>
+
+        {% if details.model %}
+        <section aria-labelledby="vehicle-title">
+            <h2 id="vehicle-title">Vehicle</h2>
+            <p>{{ details.model }}{% if details.extras.fuel %} · {{ details.extras.fuel }}{% endif %}</p>
+        </section>
+        {% endif %}
+
+        <footer class="profile-disclosure">
+            This is an aggregate of public open-data observations, not a movement history
+            or a verdict on the vehicle. Route allocation, traffic and operating conditions
+            all affect the result. <a href="{{ audit_url }}">Read the full method and limitations.</a>
+        </footer>
+    </article>
+</main>
+{% endblock %}
+{% block app_scripts %}{% endblock %}

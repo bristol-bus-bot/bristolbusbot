@@ -1,0 +1,27 @@
+[Unit]
+Description=Bristol Bus Bot collector staleness guard
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/collector
+EnvironmentFile=/etc/bristolbusbot/collector.env
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name staleness --skip-exit-code 75 -- /usr/bin/flock -n -E 75 /run/lock/bristolbusbot/staleness.lock @BBB_DEPLOY_BASE@/current/collector/venv/bin/python @BBB_DEPLOY_BASE@/current/collector/check_collector_freshness.py
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

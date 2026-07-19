@@ -1,0 +1,12 @@
+[Unit]
+Description=Check collector freshness hourly
+
+[Timer]
+OnCalendar=*-*-* *:15:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=60s
+Unit=bbb-staleness.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the encrypted backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=2min
+Unit=bbb-backup.service
+
+[Install]
+WantedBy=timers.target

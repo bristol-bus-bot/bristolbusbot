@@ -1,0 +1,13 @@
+[Unit]
+Description=Send the estate digest at 08:00 and 20:00
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 20:00:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=60s
+Unit=bbb-digest.service
+
+[Install]
+WantedBy=timers.target

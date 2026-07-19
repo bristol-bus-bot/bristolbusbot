@@ -1,0 +1,43 @@
+// Auto-generated mapping from bus model names to short blurbs.
+//
+// This module exports a constant object `BUS_MODEL_BLURBS` where each key is
+// the exact `vehicle_type.name` string found in the Bristol bus dataset and
+// the corresponding value is a short description of that model.  The
+// descriptions draw upon historical and technical information collected
+// from manufacturer sources, industry publications and Wikipedia entries.
+//
+// When updating these blurbs, keep them concise (one or two sentences) so
+// they can be injected into AI prompts without dramatically increasing
+// token count.
+
+export const BUS_MODEL_BLURBS: Record<string, string> = {
+  "Volvo B9TL Wright Eclipse Gemini": "The Wright Eclipse Gemini body on Volvo’s B9TL chassis combines a spacious low‑floor design with a distinctive curved front. Introduced in the mid‑2000s, it followed the B7TL‑based original and has become an iconic double‑decker across the UK.",
+  "Scania N280UD ADL Enviro400 City CBG": "Powered by compressed biogas, this Scania N280UD chassis with Enviro400 City body delivers a quiet, low‑emission ride. The 9.3‑litre OC09 engine gives 280 bhp while gas cylinders are mounted at the rear, making it almost as straightforward as a diesel to operate.",
+  "ADL Enviro400 MMC": "Alexander Dennis’s 2014 ‘Major Model Change’ Enviro400 introduced a sleeker look and options for diesel, gas, hybrid or electric drivetrains. Built at Falkirk and Scarborough, it carries up to 100 passengers and can be supplied as an integral bus or body on Scania/Volvo chassis.",
+  "Yutong U11DD": "The U11DD is a battery‑electric double‑decker built for the UK. A 220 kW motor and up to 422 kWh of batteries deliver a range close to 500 km, with space for around 70 passengers and features like USB charging and a step‑free lower deck.",
+  "Wright StreetDeck Ultroliner": "The diesel StreetDeck, later dubbed the Ultroliner, is Wrightbus’s integral double‑decker. It recovers braking energy via micro‑hybrid technology and originally used a Daimler OM934 engine, combining modern styling with efficient performance.",
+  "ADL Enviro400": "The original Enviro400 (2005–2018) set the benchmark for low‑floor double‑deckers. Available as a complete bus or as bodywork on Scania and Volvo chassis, it used Cummins engines and paved the way for the later MMC refresh.",
+  "Unknown": "This bus type hasn’t been classified in the data. It may represent a one‑off vehicle or an unrecorded model.",
+  "Scania N250UD ADL Enviro400 MMC": "Combining Scania’s 9.3‑litre DC09 engine (around 250 bhp) with the Enviro400 MMC body, this variant offers extra comfort features. Stagecoach examples include tables and coach‑style interiors, and the chassis moves the radiator to eliminate the rear window.",
+  "ADL Enviro200 MMC": "The Enviro200 MMC (2014‑present) is a single‑deck successor to the earlier Enviro200. Offered in lengths from 8.9 to 11.8 m, it can be diesel or electric and some units have participated in autonomous bus trials.",
+  "Volvo B7RLE Wright Eclipse 2": "Wrightbus’s Eclipse 2 body, launched in 2008, modernised the original Eclipse with new styling and moved exclusively to Volvo’s B7RLE low‑entry chassis. It remained in production until the B8RLE‑based Eclipse 3 appeared in 2015.",
+  "Wright StreetLite DF": "The StreetLite DF (Door‑Forward) is a compact midibus introduced in 2010. With lengths around 10 m and seating for 33–45 passengers, it positions the front axle behind the entry door and uses Daimler or Cummins engines.",
+  "ADL Enviro200": "The first‑generation Enviro200 midibus (2003–2018) evolved through multiple facelifts. It replaced the Dennis Dart SLF and offered Cummins or MAN engines with outputs between 140 and 240 hp over lengths of 8.9–11.8 m.",
+  "Volvo B7RLE Wright Eclipse Urban": "The Eclipse Urban pairs Wrightbus bodywork with Volvo’s B7RLE chassis. Introduced in 2003 after the unpopular B7L version, it proved more reliable and inspired the facelifted Urban 2 (2008) and subsequent Eclipse 3 (2015).",
+  "Volvo B9TL Wright Eclipse Gemini 2": "The 2008 Eclipse Gemini 2 updated Wrightbus’s double‑decker design with new front and rear panels. Available on Volvo’s B9TL and hybrid B5LH chassis, it offered a low‑roof option and was ordered by operators like First West Yorkshire and Lothian Buses.",
+  "Optare Solo SR": "Optare’s Solo SR is a sleeker evolution of the original low‑floor midibus, launched in 2007. It features curved side glazing, comes in lengths from 7.2 to 9.6 m and is available in diesel, hybrid and electric forms.",
+  "Yutong E12": "Yutong’s E12 electric single‑decker uses a 215 kW motor and up to 422 kWh of batteries for a range around 370 km. UK models seat roughly 39 people and feature ZF axles with air suspension for a smooth ride.",
+  "ADL Enviro400 City": "The Enviro400 City adds premium touches to the MMC platform, including a restyled front and a glass staircase. Launched in 2015, it’s offered with diesel, hybrid, electric or CNG drivetrains and has been popular with London operators.",
+  "Volvo B9R Plaxton Panther": "Plaxton’s second‑generation Panther coach body (2010) is paired with Volvo’s B9R chassis. It’s a high‑floor touring coach seating around 53 passengers, designed for long‑distance express work.",
+  "Volvo B7TL Wright Eclipse Gemini": "The first‑generation Eclipse Gemini body debuted in 2001 on Volvo’s B7TL double‑decker chassis. Its low‑floor layout and sweeping front end proved popular with London operators and helped shift Wrightbus’s designs onto the B9TL and B5TL.",
+  "VDL DB300 Wright Gemini 2 HEV": "A handful of diesel‑electric Gemini 2 HEVs were built on VDL’s DB300 chassis in 2007–08. Arriva and First London trialled these early hybrids, which offered improved fuel economy over conventional diesel buses.",
+  "Wright StreetDeck Electroliner": "The StreetDeck Electroliner is Wrightbus’s battery‑electric double‑decker. A 454 kWh battery delivers up to 200 miles of range with rapid CCS2 charging, and it shares more than 85 % of its components with the diesel StreetDeck.",
+  "Wright StreetDeck NewPower EV": "Not a new build but a retrofit: NewPower is Wrightbus’s repower programme, run from Europe’s largest repowering facility in Bicester, that converts existing diesel StreetDecks to battery‑electric for roughly half the cost of buying new. Equipmake supplies the modular electric drivetrain and a 436 kWh battery pack, extending the donor bus’s useful life by around a decade while reusing 85 %+ of the original chassis and bodywork.",
+  "ADL Enviro100EV": "The Enviro100EV is an 8.5 m battery‑electric midibus launched in 2024. It seats about 45 passengers, uses a Voith electric drive and offers 236 or 354 kWh of NMC batteries for a range up to roughly 285 miles.",
+  "Yutong E9L": "The 9.5 m E9L is a stretched version of Yutong’s E9 electric midibus. A 120 kW motor and 255 kWh battery allow it to carry around 60 passengers, while its narrow 2.42 m width and twin doors make it suitable for rural and urban routes.",
+  "Mercedes-Benz Tourismo": "The Tourismo has been Europe’s best‑selling high‑deck coach since 1994. Successive generations (1994, 2006 and 2017) improved fuel efficiency, comfort and safety; the latest models feature lengths from 12.3 to 13.9 m and use Mercedes’ OM470 engine.",
+  "Yutong GT12": "The GT12 is a 12.2 m diesel coach powered by a DAF MX11 450 bhp Euro 6e engine. Seating 53 passengers with USB charging at every seat, full air suspension and wheelchair accessibility, it's a common sight on UK roads for long-distance and day operations.",
+  "Scania N230UD OmniCity": "Scania's own integral double-decker, the OmniCity, was introduced in 2006 with a 9-litre DC09 engine producing 230 bhp. The N230UD became the best-selling variant in UK service, with major orders from Stagecoach, London operators and Go-Ahead companies, and offered ethanol fuel options alongside conventional diesel.",
+  "Scania CN230UD OmniCity": "A Polish-built sibling of the N230UD, the CN230UD shares the same OmniCity double-decker bodywork, 8.9-litre five-cylinder DC09 engine producing 230 bhp, and ZF Ecomat gearbox. The 'C' prefix denotes assembly at Scania's Kapena plant in Poland rather than the standard Slupsk facility, but mechanically and visually it's near-identical to its more common N-series counterpart.",
+  "Volvo B5TL MCV EvoSeti": "The B5TL chassis paired with MCV's EvoSeti body combines Volvo's compact 5.1-litre D5K-240 engine with a lightweight aluminium-framed design. Launched around 2015 as a Euro 6 successor to the B9TL, it saves 1,000 kg over its predecessor and seats 75-83 passengers with improved fuel economy."
+};

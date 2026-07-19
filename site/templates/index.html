@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block body %}
+
+    <!-- Header bar - black with road sign logo -->
+    <header class="h-12 flex items-center px-4" style="background:var(--header);box-shadow:var(--shadow-card);position:relative;z-index:1100;">
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- SVG road sign logo: Bristol Buses LIVE (bristolbuses.live) -->
+            <svg id="logo-sign" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 126 46" height="38" style="flex-shrink:0;cursor:pointer;">
+                <!-- Green sign background with grey border -->
+                <rect id="logo-border" x="1" y="1" width="124" height="44" rx="4" ry="4" fill="#00703C" stroke="#7E8582" stroke-width="1.5" style="transition:stroke 0.2s;"/>
+                <!-- Blue badge for 'Bristol' -->
+                <rect x="6" y="6" width="52" height="34" rx="3" ry="3" fill="#1D70B8" stroke="#fff" stroke-width="1"/>
+                <text x="32" y="28" text-anchor="middle" fill="#fff" font-family="Overpass, sans-serif" font-size="13" font-weight="700">Bristol</text>
+                <!-- 'Buses' in white; the LED LIVE panel echoes the .live TLD -->
+                <text x="65" y="20" fill="#FFFFFF" font-family="Overpass, sans-serif" font-size="12" font-weight="700">Buses</text>
+                <!-- 'LIVE' dot matrix display -->
+                <rect x="63" y="24" width="42" height="16" rx="2" ry="2" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="0.5"/>
+                <text x="84" y="36.5" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" letter-spacing="0.1em" style="filter:drop-shadow(0 0 3px rgba(245,158,11,0.6));">LIVE</text>
+            </svg>
+        </div>
+
+        <!-- Status counts -->
+        <div id="header-stats" class="flex items-center gap-2 ml-3">
+            <div class="stat-chip stat-ontime"><span class="stat-dot"></span><span id="count-punctual">0</span><span class="stat-label">on time</span></div>
+            <div class="stat-chip stat-early"><span class="stat-di"></span><span id="count-early">0</span><span class="stat-label">early</span></div>
+            <div class="stat-chip stat-late"><span class="stat-sq"></span><span id="count-delayed">0</span><span class="stat-label">late</span></div>
+            <div class="stat-chip stat-origin"><span class="stat-dot"></span><span id="count-waiting">0</span><span class="stat-label">at origin</span></div>
+            <div class="stat-chip stat-depot depot-stat">
+                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span id="count-depot">0</span><span class="stat-label">at depot</span>
+            </div>
+        </div>
+
+        <!-- Layer toggles (desktop) -->
+        <div id="header-toggles" class="flex items-center gap-2 ml-3" style="border-left:1px solid var(--line);padding-left:10px;">
+            <button id="toggle-polylines-btn" class="toggle-btn" style="padding:3px 10px;border-radius:999px;border:1.5px solid rgba(121,68,0,0.35);background:transparent;color:#794400;font-size:9px;font-weight:600;cursor:pointer;font-family:'Overpass',sans-serif;transition:all 0.15s;">routes</button>
+            <button id="toggle-boundary-btn" class="toggle-btn toggle-active" style="padding:3px 10px;border-radius:999px;border:1.5px solid #794400;background:#794400;color:#fff;font-size:9px;font-weight:600;cursor:pointer;font-family:'Overpass',sans-serif;transition:all 0.15s;">boundary</button>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs ml-auto" style="flex-shrink:0;">
+            <span id="last-updated" class="font-mono header-desktop-only" style="color:var(--fg-2);font-weight:600;">--:--:--</span>
+            {% if audit_headline %}
+            <a id="audit-headline-link"
+               class="audit-headline-link"
+               href="https://bristol-bus-bot.github.io/weca-bus-audit/"
+               title="Independent audit: {{ audit_headline.readings }} timing-point measurements, {{ audit_headline.measurement_start }} through {{ audit_headline.through_date }}"
+               aria-label="Independent bus punctuality audit: {{ audit_headline.on_time_pct }} percent on time; view method and results">
+                <span class="audit-headline-full">Audit: {{ audit_headline.on_time_pct }}% on time &#8599;</span>
+                <span class="audit-headline-compact" aria-hidden="true">Audit {{ audit_headline.on_time_pct }}% &#8599;</span>
+            </a>
+            {% endif %}
+            <a id="bsky-link" href="https://bsky.app/profile/did:plc:y2oqhgnbw66jtd5hnbda76nk" target="_blank" rel="noopener noreferrer"
+                class="bsky-link"
+                style="display:flex;align-items:center;gap:5px;border-left:1px solid var(--line);padding-left:12px;margin-left:4px;color:#0069c9;text-decoration:none;font-weight:600;transition:color 0.2s;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 568 501" fill="currentColor">
+                    <path d="M123.121 33.6637C188.241 82.5526 258.281 181.681 284 234.873C309.719 181.681 379.759 82.5526 444.879 33.6637C491.866 -1.61183 568 -28.9064 568 57.9464C568 75.2916 558.055 185.159 552 208.982C531.218 288.929 452.835 309.575 382.679 295.478C502.211 315.849 537.205 408.587 466.069 461.097C337.181 556.471 283.842 432.147 277.647 418.3C275.921 414.469 275.101 412.527 284 412.527C292.899 412.527 292.079 414.469 290.353 418.3C284.158 432.147 230.819 556.471 101.931 461.097C30.7945 408.587 65.7891 315.849 185.321 295.478C115.165 309.575 36.7821 288.929 16 208.982C9.94525 185.159 0 75.2916 0 57.9464C0 -28.9064 76.1338 -1.61183 123.121 33.6637Z"/>
+                </svg>
+                <span class="bsky-handle" style="font-size:10px;">@bristolbusbot.live</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main layout -->
+    <div class="main-layout flex h-[calc(100vh-48px)]">
+
+        <!-- Map -->
+        <div class="map-container flex-1 relative">
+            <div id="map" class="w-full h-full"></div>
+
+            <!-- Legend moved to header -->
+
+            <!-- Mobile FAB toggles (hidden on desktop) -->
+            <div class="mobile-fab-stack" style="display:none;position:absolute;bottom:72px;right:12px;z-index:1000;flex-direction:column;gap:8px;">
+                <button id="fab-polylines" title="Toggle routes"
+                    style="width:44px;height:44px;border-radius:14px;background:#ffffff;border:none;box-shadow:var(--shadow-popup);color:#794400;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-size:10px;font-weight:700;font-family:'Overpass',sans-serif;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg>
+                </button>
+                <button id="fab-boundary" title="Toggle boundary"
+                    style="width:44px;height:44px;border-radius:14px;background:#794400;border:none;box-shadow:var(--shadow-popup);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke-dasharray="4 2"/></svg>
+                </button>
+            </div>
+
+            <!-- Geolocation button -->
+            <button id="geolocate-btn" title="Find my location"
+                style="position:absolute;bottom:12px;right:12px;z-index:1000;width:44px;height:44px;border-radius:14px;background:#ffffff;border:none;box-shadow:var(--shadow-popup);color:#5b6672;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color 0.2s;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Right panel - departure board (collapsible) -->
+        <div id="sidebar" style="width:420px;transition:width 0.3s ease;overflow:hidden;position:relative;" class="bg-surface border-l border-border flex flex-col">
+
+            <!-- Mobile drag handle -->
+            <div class="sheet-handle" id="sheet-handle">
+                <div class="sheet-handle-bar"></div>
+            </div>
+
+            <!-- Collapse toggle button -->
+            <button id="sidebar-toggle" style="position:absolute;top:50%;left:0;transform:translateY(-50%);z-index:10;width:20px;height:48px;background:#ffffff;border:1px solid var(--line);border-left:none;border-radius:0 10px 10px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#5b6672;" title="Toggle sidebar">
+                <svg id="collapse-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+
+            <div id="sidebar-content" role="region" aria-label="Live departures" style="min-width:420px;display:flex;flex-direction:column;height:100%;">
+                <div id="dep-live-region" class="sr-only" aria-live="polite"></div>
+
+                <!-- Search input -->
+                <div style="padding:10px 16px 8px 16px;border-bottom:1px solid var(--line);position:relative;">
+                    <input id="stop-search" type="text" placeholder="Search stops, routes or buses..." autocomplete="off"
+                        role="combobox" aria-autocomplete="list"
+                        aria-controls="stop-search-results" aria-expanded="false"
+                        aria-describedby="search-status"
+                        style="width:100%;box-sizing:border-box;padding:9px 12px 9px 34px;border-radius:999px;border:none;background:var(--surface-2);color:var(--fg-1);font-size:12px;font-family:'Overpass',sans-serif;outline:none;"
+                        >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7E8582" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:26px;top:50%;transform:translateY(-50%);">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <!-- Search results dropdown -->
+                    <div id="stop-search-results" role="listbox" aria-label="Search results"
+                        style="display:none;position:absolute;left:16px;right:16px;top:calc(100% + 4px);background:var(--surface-1);border:none;border-radius:12px;box-shadow:var(--shadow-popup);max-height:400px;overflow-y:auto;z-index:100;"></div>
+                    <div id="search-status" class="sr-only" aria-live="polite"></div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto">
+                    <div class="p-5">
+
+                        <!-- Stop header - transport sign style (shown when stop selected) -->
+                        <div id="stop-header" class="mb-4 hidden">
+                            <div id="stop-header-sign" class="stop-sign" role="button" tabindex="0">
+                                <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+                                    <div style="flex:1;min-width:0;">
+                                        <div id="selected-stop-name" class="stop-name"></div>
+                                        <div id="stop-street-display" class="stop-street"></div>
+                                        <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+                                            <div id="stop-code-display" class="stop-code"></div>
+                                            <div id="stop-ward-display" class="stop-ward"></div>
+                                        </div>
+                                        <div id="stop-routes-display" class="stop-chips"></div>
+                                    </div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Prompt (shown when no stop selected) -->
+                        <div id="board-prompt" class="py-20 text-center">
+                            <div style="color:var(--fg-2);font-size:13px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9aa4ae" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 12px;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12 8 12 12 14 14"/>
+                                </svg>
+                                click a stop or search above
+                            </div>
+                        </div>
+
+                        <!-- Departures list -->
+                        <div id="departures-list"></div>
+
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-5 py-3 border-t border-border flex justify-between text-[11px] text-muted font-mono">
+                    <span>15s refresh</span>
+                    <span id="departure-update-time"></span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Vehicle detail panel (hidden by default; shown by selectFleetVehicle) -->
+    <div id="vehicle-panel-backdrop"
+        style="display:none;position:fixed;inset:0;background:rgba(27,32,39,0.45);z-index:5000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);">
+        <div id="vehicle-panel" class="vp-modal">
+            <!-- Close button (matches the leaflet popup close style) -->
+            <button id="vehicle-panel-close" aria-label="Close"
+                style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.28);border:none;color:rgba(255,255,255,0.75);cursor:pointer;width:28px;height:28px;border-radius:50%;font-size:16px;line-height:28px;text-align:center;padding:0;z-index:10;transition:color 0.15s ease, background 0.15s ease;">&times;</button>
+            <div id="vehicle-panel-content"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+
+{% endblock %}

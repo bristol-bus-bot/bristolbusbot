@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh the Bristol Bus Bot aggregate health snapshot
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Unit=bbb-health.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+[project]
+name = "bbb-site"
+version = "0.1.0"
+description = "bristolbuses.live — live map and departure board backed by the shared collector"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    # tests build fixture live.db via the collector package (same repo):
+    #   pip install -e ../collector -e ".[dev]"
+]
+
+[tool.setuptools.packages.find]
+# only app/ is the package; templates/ and static/ are served files
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

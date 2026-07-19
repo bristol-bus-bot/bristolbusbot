@@ -1,0 +1,12 @@
+[Unit]
+Description=Check both encrypted backup repositories weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=5min
+Unit=bbb-backup-check.service
+
+[Install]
+WantedBy=timers.target

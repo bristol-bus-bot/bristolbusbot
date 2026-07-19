@@ -1,0 +1,29 @@
+[Unit]
+Description=Bristol Bus Bot daily scheduled-trips snapshot
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/pipeline
+EnvironmentFile=/etc/bristolbusbot/collector.env
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name audit-snapshot --skip-exit-code 75 -- /usr/bin/flock -n -E 75 /run/lock/bristolbusbot/audit.lock @BBB_DEPLOY_BASE@/current/pipeline/venv/bin/python3 @BBB_DEPLOY_BASE@/current/pipeline/audit_snapshot.py
+TimeoutStartSec=20min
+UMask=0077
+CPUWeight=50
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/collector /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+IPAddressDeny=any
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

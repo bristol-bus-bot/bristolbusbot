@@ -1,0 +1,484 @@
+{
+  "_comment": "Local flavour data for Bristol Bus Bot - neighborhood-based with coordinate bounding boxes. British spellings throughout.",
+  "_note": "Bounds are [north, south, east, west] in decimal degrees. Neighborhoods checked in order, first match wins.",
+
+  "Clifton Village": {
+    "flavour": "Bristol's most glamorous Georgian quarter, where the Suspension Bridge dominates the skyline and property prices match the altitude. Students, professionals, and tourists jostle on boutique-lined streets.",
+    "keywords": ["Suspension Bridge", "Georgian", "affluent", "University", "boutiques", "tourists"],
+    "bounds": { "north": 51.475, "south": 51.450, "east": -2.595, "west": -2.630 }
+  },
+
+  "Clifton Down": {
+    "flavour": "The Downs themselves - 400 acres of green space where kite-flyers and dog-walkers roam free. Perfect for views, fresh air, and watching the annual Balloon Fiesta gridlock.",
+    "keywords": ["Clifton Downs", "green space", "Balloon Fiesta", "park", "views", "Observatory"],
+    "bounds": { "north": 51.480, "south": 51.455, "east": -2.595, "west": -2.635 }
+  },
+
+  "Redland": {
+    "flavour": "Affluent North Bristol suburb of Victorian villas and leafy streets, popular with professionals and families who appreciate proximity to Clifton without quite the same price tag.",
+    "keywords": ["Victorian", "affluent", "leafy", "residential", "families"],
+    "bounds": { "north": 51.475, "south": 51.465, "east": -2.590, "west": -2.610 }
+  },
+
+  "Cotham": {
+    "flavour": "Studenty North Bristol neighbourhood where Victorian terraces house multiple occupancy flats and Cotham Hill provides an alpine challenge for buses and cyclists alike.",
+    "keywords": ["students", "Victorian", "Cotham Hill", "steep", "residential"],
+    "bounds": { "north": 51.470, "south": 51.460, "east": -2.595, "west": -2.610 }
+  },
+
+  "Montpelier": {
+    "flavour": "Bohemian hilltop neighbourhood where independent cafes, vintage shops, and community spirit thrive. Montpelier's alternative scene sits between Stokes Croft and the suburbs.",
+    "keywords": ["bohemian", "independent", "community", "alternative", "hilltop"],
+    "bounds": { "north": 51.475, "south": 51.465, "east": -2.582, "west": -2.595 }
+  },
+
+  "Stokes Croft": {
+    "flavour": "Bristol's bohemian heart with vibrant street art, independent cafes, and counter-culture energy. Gloucester Road's endless independent shops meet rebellious creativity.",
+    "keywords": ["street art", "Banksy", "independent", "alternative", "Gloucester Road", "bohemian"],
+    "bounds": { "north": 51.465, "south": 51.455, "east": -2.582, "west": -2.600 }
+  },
+
+  "St Pauls": {
+    "flavour": "Historic inner-city neighbourhood and the heart of Bristol's Caribbean community. St Pauls Carnival brings sound systems and celebration every summer, celebrating multicultural Bristol.",
+    "keywords": ["multicultural", "Caribbean", "Carnival", "community", "diverse", "historic"],
+    "bounds": { "north": 51.470, "south": 51.455, "east": -2.575, "west": -2.595 }
+  },
+
+  "Kingsdown": {
+    "flavour": "Steep terraced streets between the city centre and Cotham, where every journey involves a hill. Views reward the cardiovascular effort.",
+    "keywords": ["steep", "terraces", "hillside", "views"],
+    "bounds": { "north": 51.460, "south": 51.450, "east": -2.585, "west": -2.600 }
+  },
+
+  "City Centre": {
+    "flavour": "Bristol's heart where Park Street climbs the hill past Queen's Road, Cabot Circus sprawls modern and glass, and Broadmead soldiers on with high street chains. Students, shoppers, and office workers converge.",
+    "keywords": ["Park Street", "Cabot Circus", "Broadmead", "shopping", "city centre", "Queen's Road"],
+    "bounds": { "north": 51.460, "south": 51.448, "east": -2.580, "west": -2.600 }
+  },
+
+  "Harbourside": {
+    "flavour": "Bristol's regenerated waterfront where Brunel's SS Great Britain sits in dry dock and harbourside apartments command premium prices. The Floating Harbour and Watershed cinema define the cultural quarter.",
+    "keywords": ["SS Great Britain", "Floating Harbour", "Watershed", "waterfront", "regeneration", "culture"],
+    "bounds": { "north": 51.455, "south": 51.445, "east": -2.585, "west": -2.615 }
+  },
+
+  "Hotwells": {
+    "flavour": "West Bristol neighbourhood beneath Clifton, where the Avon Gorge meets the Floating Harbour. Cumberland Basin roundabout, Hotwell Road's bars and cafes, and the Portway below.",
+    "keywords": ["Avon Gorge", "Cumberland Basin", "Hotwell Road", "Floating Harbour", "Portway"],
+    "bounds": { "north": 51.460, "south": 51.445, "east": -2.610, "west": -2.650 }
+  },
+
+  "Redcliffe": {
+    "flavour": "South of the Floating Harbour, where St Mary Redcliffe church's Gothic spire watches over a mix of old maritime quarter and new-build flats. Queen Elizabeth called it 'the fairest parish church in England'.",
+    "keywords": ["St Mary Redcliffe", "church", "Gothic", "maritime", "harbourside"],
+    "bounds": { "north": 51.450, "south": 51.445, "east": -2.580, "west": -2.595 }
+  },
+
+  "Temple Meads": {
+    "flavour": "Bristol's historic railway hub, where Brunel's original terminus still stands. Commuters and intercity passengers pour through whilst Temple Quarter regeneration towers over Victorian engineering.",
+    "keywords": ["railway", "Brunel", "commuters", "Temple Quarter", "station", "regeneration"],
+    "bounds": { "north": 51.455, "south": 51.445, "east": -2.575, "west": -2.590 }
+  },
+
+  "Old Market": {
+    "flavour": "East of the centre where independent shops, Caribbean grocers, and St Jude's tunnels mark the gateway to East Bristol. Gentrification and grit coexist uneasily.",
+    "keywords": ["Old Market", "independent", "diverse", "East Bristol", "St Judes"],
+    "bounds": { "north": 51.460, "south": 51.450, "east": -2.575, "west": -2.590 }
+  },
+
+  "Lawrence Hill": {
+    "flavour": "Inner-city Bristol between Temple Meads and the M32, with diverse communities, industrial heritage, and ongoing Temple Quarter regeneration transforming the skyline.",
+    "keywords": ["Temple Quarter", "M32", "diverse", "regeneration", "inner city", "industrial"],
+    "bounds": { "north": 51.465, "south": 51.453, "east": -2.560, "west": -2.575 }
+  },
+
+  "Easton": {
+    "flavour": "Vibrant multicultural East Bristol where community projects thrive and St Mark's Road forms the commercial heart. Independent spirit meets diverse cultures in Victorian terraces.",
+    "keywords": ["multicultural", "St Mark's Road", "diverse", "community", "independent", "Victorian"],
+    "bounds": { "north": 51.470, "south": 51.450, "east": -2.565, "west": -2.585 }
+  },
+
+  "St Werburghs": {
+    "flavour": "Former railway suburb transformed into green community haven. The city farm, community gardens, and cooperative spirit make this East Bristol's ecological heart.",
+    "keywords": ["community", "city farm", "green", "cooperative", "gardens"],
+    "bounds": { "north": 51.480, "south": 51.465, "east": -2.560, "west": -2.575 }
+  },
+
+  "Eastville": {
+    "flavour": "Northeast Bristol where Eastville Park provides green respite from the M32 thundering past. Fishponds Road climbs eastward whilst traffic fumes linger.",
+    "keywords": ["Eastville Park", "M32", "park", "Fishponds Road"],
+    "bounds": { "north": 51.480, "south": 51.468, "east": -2.550, "west": -2.565 }
+  },
+
+  "Fishponds": {
+    "flavour": "Northeast Bristol suburb four miles from the centre, where Victorian terraces line a tree-lined high street. Community spirit and local shops maintain village atmosphere despite urban sprawl.",
+    "keywords": ["Victorian", "high street", "community", "local shops", "suburban"],
+    "bounds": { "north": 51.490, "south": 51.470, "east": -2.520, "west": -2.540 }
+  },
+
+  "Downend": {
+    "flavour": "Northeast Bristol suburb between Fishponds and Staple Hill, where Downend roundabout marks the gateway to South Gloucestershire. Suburban sprawl with local shops and excellent bus links.",
+    "keywords": ["suburban", "northeast Bristol", "South Gloucestershire", "roundabout"],
+    "bounds": { "north": 51.505, "south": 51.485, "east": -2.500, "west": -2.560 }
+  },
+
+  "St George": {
+    "flavour": "East Bristol neighbourhood climbing the hill from the city. Church Road's shops serve locals whilst Troopers Hill's former copper mine site provides industrial heritage and striking red earth.",
+    "keywords": ["Church Road", "Troopers Hill", "industrial heritage", "East Bristol", "hillside"],
+    "bounds": { "north": 51.485, "south": 51.465, "east": -2.540, "west": -2.560 }
+  },
+
+  "Kingswood": {
+    "flavour": "East Bristol/South Glos town with high street shops and former mining heritage. Kingswood's civic identity persists despite becoming part of Bristol's urban sprawl.",
+    "keywords": ["high street", "former mining", "East Bristol", "South Gloucestershire", "civic"],
+    "bounds": { "north": 51.470, "south": 51.450, "east": -2.500, "west": -2.565 }
+  },
+
+  "Hanham": {
+    "flavour": "East Bristol suburb between Kingswood and Keynsham, where the River Avon marks the southern boundary. Hanham Hall and local shops define the village centre.",
+    "keywords": ["River Avon", "East Bristol", "village", "suburban"],
+    "bounds": { "north": 51.450, "south": 51.435, "east": -2.500, "west": -2.525 }
+  },
+
+  "Longwell Green": {
+    "flavour": "South Gloucestershire suburb east of Bristol, where interwar and post-war housing meets the Avon Ring Road. Gateway to the east for those escaping the city.",
+    "keywords": ["South Gloucestershire", "suburban", "Ring Road", "residential"],
+    "bounds": { "north": 51.465, "south": 51.450, "east": -2.480, "west": -2.520 }
+  },
+
+  "Staple Hill": {
+    "flavour": "Northeast Bristol suburb where the former mining village meets suburban sprawl. Page Park provides green space, whilst Staple Hill's high street maintains community identity despite the orbital traffic.",
+    "keywords": ["suburban", "high street", "Page Park", "community", "northeast"],
+    "bounds": { "north": 51.490, "south": 51.465, "east": -2.500, "west": -2.540 }
+  },
+
+  "Stapleton": {
+    "flavour": "Former village swallowed by Bristol's expansion, where the Frome Valley Walkway and remains of rural past sit uncomfortably alongside suburban development.",
+    "keywords": ["suburban", "former village", "Frome Valley", "residential"],
+    "bounds": { "north": 51.495, "south": 51.465, "east": -2.540, "west": -2.570 }
+  },
+
+  "Frenchay": {
+    "flavour": "Northeast Bristol village between the M32 and UWE, where Frenchay Hospital once dominated. Village green, historic buildings, and academic sprawl meet uncomfortably.",
+    "keywords": ["village", "UWE", "hospital", "northeast Bristol", "green"],
+    "bounds": { "north": 51.505, "south": 51.495, "east": -2.510, "west": -2.530 }
+  },
+
+  "Hambrook": {
+    "flavour": "Northeast Bristol village on the edge of South Gloucestershire, where rural character battles suburban sprawl. The Crown Inn marks the village centre.",
+    "keywords": ["village", "rural", "South Gloucestershire", "suburban"],
+    "bounds": { "north": 51.515, "south": 51.505, "east": -2.510, "west": -2.530 }
+  },
+
+  "Stoke Gifford": {
+    "flavour": "Northeast Bristol/South Glos where the Bristol Parkway station serves commuters avoiding Temple Meads. Business parks and housing estates surround the railway hub.",
+    "keywords": ["Bristol Parkway", "station", "business parks", "commuter", "South Gloucestershire"],
+    "bounds": { "north": 51.520, "south": 51.505, "east": -2.530, "west": -2.555 }
+  },
+
+  "Horfield": {
+    "flavour": "North Bristol residential area with Victorian and Edwardian terraces surrounding Horfield Common. Gloucester Road's independent shops define the southern boundary.",
+    "keywords": ["Victorian", "Edwardian", "Horfield Common", "residential", "Gloucester Road"],
+    "bounds": { "north": 51.500, "south": 51.485, "east": -2.570, "west": -2.590 }
+  },
+
+  "Bishopston": {
+    "flavour": "North Bristol residential area where Gloucester Road's independent shops meet leafy residential streets. Ashley Down and Horfield merge into studenty and family terraces.",
+    "keywords": ["Gloucester Road", "independent shops", "residential", "terraces", "North Bristol"],
+    "bounds": { "north": 51.490, "south": 51.470, "east": -2.570, "west": -2.600 }
+  },
+
+  "Lockleaze": {
+    "flavour": "North Bristol estate built in the 1930s, bordered by the M32 motorway. Community spirit persists despite the infrastructure carving through.",
+    "keywords": ["estate", "M32", "community", "1930s", "residential"],
+    "bounds": { "north": 51.500, "south": 51.485, "east": -2.570, "west": -2.585 }
+  },
+
+  "Filton": {
+    "flavour": "North Bristol where aerospace heritage meets modern tech parks. Former Concorde assembly site now houses business parks, with Filton Abbey Wood station connecting to the rest of Bristol.",
+    "keywords": ["aerospace", "Concorde", "business parks", "industrial", "Filton Abbey Wood"],
+    "bounds": { "north": 51.520, "south": 51.500, "east": -2.550, "west": -2.600 }
+  },
+
+  "Brentry": {
+    "flavour": "North Bristol residential area between Southmead and Henbury. Interwar and post-war housing estates with Brentry Hospital providing local landmark status.",
+    "keywords": ["residential", "North Bristol", "suburban", "hospital"],
+    "bounds": { "north": 51.515, "south": 51.500, "east": -2.605, "west": -2.625 }
+  },
+
+  "Southmead": {
+    "flavour": "North Bristol dominated by Southmead Hospital, one of Bristol's major medical centres. Residential streets radiate from the sprawling hospital campus.",
+    "keywords": ["hospital", "medical", "residential", "North Bristol", "Southmead Hospital"],
+    "bounds": { "north": 51.515, "south": 51.490, "east": -2.585, "west": -2.635 }
+  },
+
+  "Henleaze": {
+    "flavour": "Affluent northwest Bristol with Edwardian villas, Henleaze Lake for swimming, and a village high street maintaining independent character against chain store encroachment.",
+    "keywords": ["affluent", "Henleaze Lake", "Edwardian", "village", "swimming"],
+    "bounds": { "north": 51.495, "south": 51.475, "east": -2.605, "west": -2.625 }
+  },
+
+  "Henbury": {
+    "flavour": "Northwest Bristol where Blaise Castle estate provides green space and historic grandeur. Former village now suburban, with Henbury School anchoring the community.",
+    "keywords": ["Blaise Castle", "estate", "northwest Bristol", "suburban", "green space"],
+    "bounds": { "north": 51.525, "south": 51.505, "east": -2.605, "west": -2.630 }
+  },
+
+  "Westbury-on-Trym": {
+    "flavour": "Northwest Bristol village absorbed by the city but maintaining independent identity. Victorian and Edwardian houses surround a village centre with church and green.",
+    "keywords": ["village", "Victorian", "Edwardian", "village centre", "affluent"],
+    "bounds": { "north": 51.500, "south": 51.475, "east": -2.610, "west": -2.660 }
+  },
+
+  "Stoke Bishop": {
+    "flavour": "Exclusive northwest Bristol with large detached houses, woodland, and University halls of residence. One of the city's wealthiest postcodes where buses fear to tread.",
+    "keywords": ["exclusive", "affluent", "woodland", "University", "detached houses"],
+    "bounds": { "north": 51.490, "south": 51.465, "east": -2.635, "west": -2.665 }
+  },
+
+  "Sneyd Park": {
+    "flavour": "Bristol's most exclusive enclave of Victorian villas and modern mansions, where the Avon Gorge meets extreme affluence. Residents likely arrive by private helicopter.",
+    "keywords": ["exclusive", "affluent", "villas", "mansions", "Avon Gorge"],
+    "bounds": { "north": 51.475, "south": 51.460, "east": -2.620, "west": -2.645 }
+  },
+
+  "Sea Mills": {
+    "flavour": "Northwest Bristol where the Avon meets the Trym. Former riverside village now suburban, with the railway providing tenuous connection to civilisation.",
+    "keywords": ["riverside", "Avon", "suburban", "former village", "railway"],
+    "bounds": { "north": 51.495, "south": 51.480, "east": -2.635, "west": -2.660 }
+  },
+
+  "Shirehampton": {
+    "flavour": "Northwest Bristol village between Avonmouth industry and the Avon Gorge. High Street maintains village character whilst lorries thunder to the docks.",
+    "keywords": ["village", "docks", "High Street", "industrial", "northwest"],
+    "bounds": { "north": 51.500, "south": 51.475, "east": -2.665, "west": -2.710 }
+  },
+
+  "Pill": {
+    "flavour": "North Somerset village across the Avon from Shirehampton, where the river meets the Avon Gorge. Former pilot village clinging to steep hillside overlooking the river.",
+    "keywords": ["riverside", "North Somerset", "village", "Avon Gorge", "pilots"],
+    "bounds": { "north": 51.475, "south": 51.465, "east": -2.665, "west": -2.690 }
+  },
+
+  "Avonmouth": {
+    "flavour": "Bristol's industrial gateway to the Severn Estuary, where docks, warehouses, and the M5 motorway dominate. The port keeps Bristol connected to the world, if not to reliable bus schedules.",
+    "keywords": ["docks", "port", "industrial", "Severn", "M5", "warehouses"],
+    "bounds": { "north": 51.520, "south": 51.490, "east": -2.625, "west": -2.700 }
+  },
+
+  "Lawrence Weston": {
+    "flavour": "Northwest Bristol estate between Avonmouth docks and Henbury. Post-war housing with community spirit and perpetual promises of regeneration.",
+    "keywords": ["estate", "community", "Avonmouth", "residential"],
+    "bounds": { "north": 51.515, "south": 51.495, "east": -2.650, "west": -2.670 }
+  },
+
+  "Bedminster": {
+    "flavour": "South Bristol's formerly industrial heart, now rapidly gentrifying with trendy cafes sprouting where factories once stood. East Street remains the commercial spine of South Bristol.",
+    "keywords": ["South Bristol", "gentrification", "East Street", "regeneration", "independent shops"],
+    "bounds": { "north": 51.450, "south": 51.425, "east": -2.585, "west": -2.640 }
+  },
+
+  "Southville": {
+    "flavour": "Trendy South Bristol buzzing with independent cafes, bars, and shops on North Street. The Tobacco Factory Theatre anchors the cultural scene in this rapidly gentrifying area.",
+    "keywords": ["North Street", "Tobacco Factory", "independent", "trendy", "gentrification", "cafes"],
+    "bounds": { "north": 51.450, "south": 51.440, "east": -2.590, "west": -2.605 }
+  },
+
+  "Ashton Gate": {
+    "flavour": "Home to Bristol City's Ashton Gate Stadium, where football fans gather and Metrobus glides past. Industrial estate meets matchday fervour.",
+    "keywords": ["stadium", "football", "Bristol City", "Metrobus", "Ashton Gate"],
+    "bounds": { "north": 51.445, "south": 51.430, "east": -2.605, "west": -2.625 }
+  },
+
+  "Bower Ashton": {
+    "flavour": "South Bristol where UWE's art campus occupies former tobacco warehouses. Students meet River Avon at Bristol's creative southern edge.",
+    "keywords": ["UWE", "art", "creative", "riverside", "students"],
+    "bounds": { "north": 51.445, "south": 51.430, "east": -2.625, "west": -2.645 }
+  },
+
+  "Windmill Hill": {
+    "flavour": "South Bristol neighbourhood between Bedminster and Totterdown, with Victorian terraces, community gardens, and Windmill Hill City Farm providing urban-rural contrast.",
+    "keywords": ["Victorian", "community", "City Farm", "South Bristol"],
+    "bounds": { "north": 51.450, "south": 51.435, "east": -2.575, "west": -2.595 }
+  },
+
+  "Totterdown": {
+    "flavour": "Southeast Bristol's rainbow-painted neighbourhood of extremely steep streets - Vale Street claims to be England's steepest residential road. Colourful houses, community spirit, and award-winning cafes.",
+    "keywords": ["painted houses", "steep", "colourful", "Vale Street", "community", "creative"],
+    "bounds": { "north": 51.448, "south": 51.438, "east": -2.565, "west": -2.580 }
+  },
+
+  "Arnos Vale": {
+    "flavour": "South Bristol where the Victorian cemetery provides Gothic grandeur amongst the urban sprawl. Baths Road climbs towards the city past the dead and the living.",
+    "keywords": ["cemetery", "Victorian", "Gothic", "Arnos Vale Cemetery"],
+    "bounds": { "north": 51.445, "south": 51.435, "east": -2.570, "west": -2.585 }
+  },
+
+  "Brislington": {
+    "flavour": "East Bristol suburb straddling the A4 Bath Road, gateway to Somerset. Mix of Victorian terraces, interwar semis, and inevitable retail parks.",
+    "keywords": ["A4", "Bath Road", "suburban", "retail parks", "Victorian"],
+    "bounds": { "north": 51.450, "south": 51.420, "east": -2.520, "west": -2.580 }
+  },
+
+  "Stockwood": {
+    "flavour": "South Bristol residential area between Brislington and Whitchurch. Post-war estates and modern housing with Stockwood Open Space providing green relief.",
+    "keywords": ["South Bristol", "residential", "post-war", "open space", "suburban"],
+    "bounds": { "north": 51.425, "south": 51.395, "east": -2.520, "west": -2.585 }
+  },
+
+  "Knowle": {
+    "flavour": "South Bristol residential area on the Wells Road ridge. Mix of interwar Addison and Wheatley Act housing, community spirit, and buses struggling up the hill.",
+    "keywords": ["Wells Road", "interwar", "residential", "South Bristol", "hillside"],
+    "bounds": { "north": 51.435, "south": 51.415, "east": -2.570, "west": -2.595 }
+  },
+
+  "Knowle West": {
+    "flavour": "South Bristol estate built in the 1930s with distinctive council housing and strong community identity. Media stereotypes meet genuine neighbourhood pride.",
+    "keywords": ["estate", "1930s", "community", "South Bristol", "council housing"],
+    "bounds": { "north": 51.425, "south": 51.410, "east": -2.585, "west": -2.605 }
+  },
+
+  "Filwood": {
+    "flavour": "South Bristol residential area between Knowle West and Hengrove, where 1930s and post-war housing meets Hengrove Park's green expanse.",
+    "keywords": ["residential", "South Bristol", "Hengrove Park", "estates"],
+    "bounds": { "north": 51.425, "south": 51.410, "east": -2.570, "west": -2.590 }
+  },
+
+  "Hengrove": {
+    "flavour": "South Bristol area including Hengrove Park - the former airfield site now providing open space. Gateway to Somerset via the A37 through Whitchurch.",
+    "keywords": ["Hengrove Park", "former airfield", "A37", "South Bristol", "park"],
+    "bounds": { "north": 51.425, "south": 51.395, "east": -2.565, "west": -2.605 }
+  },
+
+  "Whitchurch": {
+    "flavour": "Southern Bristol village absorbed by urban sprawl but maintaining high street identity. Airport buses and A37 traffic define modern character.",
+    "keywords": ["village", "high street", "South Bristol", "A37", "airport"],
+    "bounds": { "north": 51.410, "south": 51.395, "east": -2.585, "west": -2.605 }
+  },
+
+  "Hartcliffe": {
+    "flavour": "South Bristol post-war estate with 1950s and 60s housing. Community-focused area where regeneration promises compete with reality.",
+    "keywords": ["estate", "South Bristol", "community", "post-war"],
+    "bounds": { "north": 51.430, "south": 51.405, "east": -2.595, "west": -2.630 }
+  },
+
+  "Withywood": {
+    "flavour": "South Bristol estate neighbouring Hartcliffe, built on former farmland. Local shops on Hartcliffe Way serve the community whilst buses navigate the housing labyrinth.",
+    "keywords": ["estate", "South Bristol", "community", "residential"],
+    "bounds": { "north": 51.430, "south": 51.405, "east": -2.605, "west": -2.630 }
+  },
+
+  "Bishopsworth": {
+    "flavour": "South Bristol residential area with 1930s council estates and post-war housing. Quieter than neighbouring wards but equally vulnerable to traffic delays.",
+    "keywords": ["residential", "South Bristol", "suburban", "estates"],
+    "bounds": { "north": 51.425, "south": 51.410, "east": -2.605, "west": -2.640 }
+  },
+
+  "Long Ashton": {
+    "flavour": "North Somerset village immediately southwest of Bristol, where affluent commuters enjoy countryside proximity and Bristol prices. The Angel pub anchors the village centre.",
+    "keywords": ["village", "North Somerset", "affluent", "commuter", "countryside"],
+    "bounds": { "north": 51.450, "south": 51.425, "east": -2.640, "west": -2.670 }
+  },
+
+  "Abbots Leigh": {
+    "flavour": "North Somerset village in the Avon Gorge, where the George Inn serves walkers and affluent residents enjoy rural seclusion despite proximity to Bristol.",
+    "keywords": ["village", "Avon Gorge", "rural", "North Somerset", "affluent"],
+    "bounds": { "north": 51.465, "south": 51.450, "east": -2.640, "west": -2.670 }
+  },
+
+  "Failand": {
+    "flavour": "North Somerset village on the ridge southwest of Bristol. Rural lanes, Dundry Down views, and commuters seeking countryside despite the A369 rumbling past.",
+    "keywords": ["village", "North Somerset", "rural", "Dundry Down", "countryside"],
+    "bounds": { "north": 51.445, "south": 51.420, "east": -2.670, "west": -2.700 }
+  },
+
+  "Flax Bourton": {
+    "flavour": "North Somerset village astride the A370 Bristol Airport road. Former flax cultivation gives way to commuter housing and airport traffic jams.",
+    "keywords": ["village", "North Somerset", "airport", "A370", "rural"],
+    "bounds": { "north": 51.425, "south": 51.405, "east": -2.690, "west": -2.710 }
+  },
+
+  "Dundry": {
+    "flavour": "North Somerset hilltop village where Dundry Down provides views across Bristol and Somerset. At 764 feet elevation, locals enjoy clear air and wind turbines.",
+    "keywords": ["hilltop", "views", "North Somerset", "Dundry Down", "wind turbines"],
+    "bounds": { "north": 51.420, "south": 51.395, "east": -2.630, "west": -2.685 }
+  },
+
+  "Chew Valley": {
+    "flavour": "North Somerset rural villages south of Bristol - Pensford, Chew Magna, Chew Stoke, and Felton. Mendip foothills, Chew Valley Lake, and quiet lanes far from urban sprawl.",
+    "keywords": ["rural", "North Somerset", "villages", "Chew Valley Lake", "Mendips", "countryside"],
+    "bounds": { "north": 51.400, "south": 51.375, "east": -2.540, "west": -2.710 }
+  },
+
+  "Bath City Centre": {
+    "flavour": "Bath's historic core where Roman baths meet Georgian elegance. Tourists outnumber locals, World Heritage Site status is sacrosanct, and buses navigate streets designed for sedan chairs.",
+    "keywords": ["Roman", "Georgian", "tourists", "World Heritage", "Bath Abbey", "historic"],
+    "bounds": { "north": 51.388, "south": 51.376, "east": -2.350, "west": -2.365 }
+  },
+
+  "Bath Spa Station": {
+    "flavour": "Bath's transport hub where the railway station, Southgate shopping centre, and tourists with wheeled suitcases converge. Gateway to Bath for those unwilling to face the parking nightmare.",
+    "keywords": ["station", "railway", "Southgate", "tourists", "transport"],
+    "bounds": { "north": 51.380, "south": 51.373, "east": -2.350, "west": -2.365 }
+  },
+
+  "Walcot": {
+    "flavour": "Bath's bohemian quarter north of the city centre, where Walcot Street's independent shops and artisan businesses thrive. Less polished than the tourist core, more authentic.",
+    "keywords": ["Walcot Street", "bohemian", "independent", "artisan", "authentic"],
+    "bounds": { "north": 51.395, "south": 51.380, "east": -2.350, "west": -2.365 }
+  },
+
+  "Widcombe": {
+    "flavour": "Bath neighbourhood southeast of the centre across the river. Village character persists despite proximity to the city, with Widcombe Hill providing cardiovascular challenge.",
+    "keywords": ["village feel", "riverside", "Widcombe Hill", "hillside", "residential"],
+    "bounds": { "north": 51.380, "south": 51.368, "east": -2.340, "west": -2.358 }
+  },
+
+  "Oldfield Park": {
+    "flavour": "Bath's Edwardian terraced neighbourhood south of the station, nicknamed 'Poets' Corner' for streets named after Chaucer, Milton, and their literary ilk. Popular with families.",
+    "keywords": ["Edwardian", "Poets' Corner", "terraces", "families", "literary"],
+    "bounds": { "north": 51.378, "south": 51.368, "east": -2.368, "west": -2.385 }
+  },
+
+  "Twerton": {
+    "flavour": "Bath's working-class western suburb with 45% social housing - the highest in the city. Lower prices reflect reputation rather than transport links, which remain patchy.",
+    "keywords": ["working class", "affordable", "social housing", "western Bath"],
+    "bounds": { "north": 51.385, "south": 51.370, "east": -2.380, "west": -2.400 }
+  },
+
+  "Weston": {
+    "flavour": "Bath's eastern suburb climbing the hillside, with Victorian and Edwardian terraces offering views across the city. Weston High Street maintains village character.",
+    "keywords": ["hillside", "views", "Victorian", "Edwardian", "village"],
+    "bounds": { "north": 51.390, "south": 51.375, "east": -2.330, "west": -2.350 }
+  },
+
+  "Bathwick": {
+    "flavour": "Affluent Bath neighbourhood east of the centre, where 88% own their homes and Georgian terraces command premium prices. Extensive Grade I listing preserves architectural heritage.",
+    "keywords": ["affluent", "Georgian", "Grade I", "expensive", "heritage"],
+    "bounds": { "north": 51.388, "south": 51.375, "east": -2.345, "west": -2.360 }
+  },
+
+  "Lansdown": {
+    "flavour": "Bath's northern heights with spectacular views, Regency architecture, and Lansdown Crescent. William Beckford's tower watches over the city from the hilltop.",
+    "keywords": ["hilltop", "Regency", "views", "Beckford's Tower", "Lansdown Crescent"],
+    "bounds": { "north": 51.405, "south": 51.385, "east": -2.360, "west": -2.380 }
+  },
+
+  "Keynsham": {
+    "flavour": "Town between Bristol and Bath, where Somerdale (former Cadbury factory) now houses rather than chocolate. Equidistant between two cities, convenient for neither.",
+    "keywords": ["between Bristol and Bath", "Somerdale", "Cadbury", "town", "commuter"],
+    "bounds": { "north": 51.422, "south": 51.395, "east": -2.480, "west": -2.535 }
+  },
+
+  "Weston-super-Mare": {
+    "flavour": "North Somerset's seaside town where Victorian seafront meets 20th-century decline. The Grand Pier soldiers on, attempting to convince visitors that British seaside resorts remain viable.",
+    "keywords": ["seaside", "Grand Pier", "Victorian", "beach", "tourism", "seafront"],
+    "bounds": { "north": 51.360, "south": 51.330, "east": -2.970, "west": -3.000 }
+  },
+
+  "_fallback": {
+    "flavour": "Greater Bristol area, where buses venture into the urban sprawl and suburban uncertainty.",
+    "keywords": ["Bristol", "suburban", "Greater Bristol"],
+    "bounds": { "north": 90, "south": -90, "east": 180, "west": -180 }
+  }
+}

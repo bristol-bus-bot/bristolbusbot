@@ -1,0 +1,32 @@
+[Unit]
+Description=Bristol Bus Bot publish rolled-up audit data to GitHub Pages
+After=bbb-audit-rollup.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/pipeline
+EnvironmentFile=/etc/bristolbusbot/collector.env
+Environment=BBB_PIPELINE_DIR=@BBB_DEPLOY_BASE@/current/pipeline
+Environment=BBB_REMOTE_HOME=@BBB_REMOTE_HOME@
+Environment=BBB_AUDIT_SITE_DIR=/var/lib/bristolbusbot/pipeline/audit_site
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name audit-publish -- /usr/bin/flock -w 900 /run/lock/bristolbusbot/audit.lock @BBB_DEPLOY_BASE@/current/pipeline/publish_to_github.sh
+TimeoutStartSec=30min
+UMask=0077
+CPUWeight=50
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/pipeline/audit_site @BBB_REMOTE_HOME@/bus-audit-repo /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
