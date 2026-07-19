@@ -1,0 +1,82 @@
+/* Shared colours, spacing, type and elevation values. */
+:root {
+  /* surfaces — daylight */
+  --bg:          #f4f5f7;   /* page canvas */
+  --bg-live:     #f4f5f7;   /* LIVE canvas (map page) */
+  --header:      #ffffff;   /* header chrome */
+  --surface-1:   #ffffff;   /* cards */
+  --surface-2:   #eceff2;   /* inset panels, quiet chips */
+  --surface-3:   #e2e6ea;   /* pressed / deeper inset */
+  --line:        #e2e6ea;   /* hairline */
+  --line-2:      #d3d9df;   /* border strong */
+
+  /* ink */
+  --fg-1:        #1b2027;   /* primary */
+  --fg-2:        #5b6672;   /* muted */
+  --fg-3:        #8b949e;   /* faint — decorative micro-text ONLY */
+
+  /* the LED objects — the parts of the real world that ARE dark */
+  --led-bg:      #101112;   /* board / blurb canvas */
+  --led-inset:   inset 0 2px 10px rgba(0, 0, 0, 0.55);
+  --led-ink:     #e8e2d5;   /* destination text on the board */
+  --led-dim:     #6e6a5f;   /* scheduled/dim readout */
+  --led-line:    rgba(255, 255, 255, 0.05);
+
+  /* signature accent — amber LED (inside --led-bg objects ONLY, rule 1) */
+  --amber:       #f59e0b;
+  --amber-soft:  rgba(245, 158, 11, 0.08);
+  --amber-line:  rgba(245, 158, 11, 0.35);
+  --amber-glow:  0 0 8px rgba(245, 158, 11, 0.45);
+  --target:      #fb923c;
+
+  /* UK transport signage — civic objects, unchanged (daylight-native) */
+  --uk-green:    #00703c;
+  --uk-blue:     #1d70b8;
+  --uk-red:      #d4351c;
+  --uk-yellow:   #ffdd00;
+  --uk-grey:     #7e8582;
+  --uk-brown:    #794400;
+  --plate-yellow:#fcd300;
+  --plate-blue:  #003399;
+
+  /* performance verdicts (audit figures) — darkened for light ground */
+  --good:        #1a7f37;
+  --warn:        #9a6700;
+  --bad:         #cf222e;
+
+  /* Live event states use colour, shape and a text label.
+     --ev-early darkened from #eab308: yellow text is unreadable on white.
+     Map marker fills keep their own brighter constants (map_render.js). */
+  --ev-ontime:   #00703c;
+  --ev-early:    #b48800;
+  --ev-late:     #d4351c;
+  --ev-origin:   #1d70b8;   /* waiting at origin */
+  --ev-depot:    #7e8582;
+
+  /* pastel state tints — chip/pill backgrounds (text = matching --ev-*) */
+  --tint-ontime: rgba(0, 112, 60, 0.10);
+  --tint-early:  rgba(180, 136, 0, 0.12);
+  --tint-late:   rgba(212, 53, 28, 0.09);
+  --tint-origin: rgba(29, 112, 184, 0.10);
+  --tint-depot:  rgba(126, 133, 130, 0.14);
+
+  /* type */
+  --font-sans: "Overpass", -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+               Consolas, "Liberation Mono", monospace;
+  --t-display: 3rem;
+  --t-body:    1rem;
+  --t-small:   0.875rem;
+  --t-micro:   0.72rem;
+
+  /* shape + elevation — Material: radius + soft ink shadows */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+  --shadow-card:  0 1px 3px rgba(27, 32, 39, 0.10), 0 4px 16px rgba(27, 32, 39, 0.08);
+  --shadow-popup: 0 8px 28px rgba(27, 32, 39, 0.18);
+  --shadow-modal: 0 12px 40px rgba(27, 32, 39, 0.25);
+  --page: 1080px;
+}

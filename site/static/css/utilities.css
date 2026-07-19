@@ -1,0 +1,38 @@
+/* Small utility set used by the templates. */
+.antialiased { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+.bg-\[\#0e0e0e\] { background-color: var(--bg-live); }
+.bg-surface { background-color: var(--surface-1); }
+.border-border { border-color: var(--line); }
+.border-l { border-left-width: 1px; border-left-style: solid; }
+.border-t { border-top-width: 1px; border-top-style: solid; }
+.flex { display: flex; }
+.flex-1 { flex: 1 1 0%; }
+.flex-col { flex-direction: column; }
+.flex-shrink-0 { flex-shrink: 0; }
+.font-mono { font-family: var(--font-mono); }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+.h-12 { height: 3rem; }
+.h-\[calc\(100vh-48px\)\] { height: calc(100vh - 48px); }
+.h-full { height: 100%; }
+.hidden { display: none; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.mb-4 { margin-bottom: 1rem; }
+.ml-3 { margin-left: 0.75rem; }
+.ml-auto { margin-left: auto; }
+.overflow-hidden { overflow: hidden; }
+.overflow-y-auto { overflow-y: auto; }
+.p-5 { padding: 1.25rem; }
+.px-4 { padding-left: 1rem; padding-right: 1rem; }
+.px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
+.py-20 { padding-top: 5rem; padding-bottom: 5rem; }
+.py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.relative { position: relative; }
+.text-\[11px\] { font-size: 11px; }
+.text-center { text-align: center; }
+.text-muted { color: var(--fg-2); }
+.text-xs { font-size: 0.75rem; line-height: 1rem; }
+.text-zinc-100 { color: var(--fg-1); }
+.w-full { width: 100%; }

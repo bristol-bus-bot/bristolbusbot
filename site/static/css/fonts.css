@@ -1,0 +1,18 @@
+/* Self-hosted variable fonts. The files contain the complete weight ranges
+   used by the site, so the browser does not synthesise intermediate weights.
+   Licences are retained alongside the font files. */
+@font-face {
+  font-family: "Overpass";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/overpass-variable.0a1c9727.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/jetbrains-mono-variable.83c005d4.woff2") format("woff2");
+}

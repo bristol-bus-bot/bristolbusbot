@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample Bristol Bus Bot service memory every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=bbb-resource-sample.service
+
+[Install]
+WantedBy=timers.target

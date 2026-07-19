@@ -1,0 +1,58 @@
+[Unit]
+Description=Bristol Bus Bot social posting service
+Documentation=https://github.com/bristol-bus-bot/bristolbusbot
+Wants=network-online.target
+After=network-online.target bbb-collector.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/bot
+EnvironmentFile=/etc/bristolbusbot/bot.env
+Environment=NODE_ENV=production
+Environment=RUNTIME_MANAGER=systemd
+Environment=ENABLE_FILE_LOGS=false
+Environment=RARE_WORKING_SHADOW=true
+Environment=AUDIT_INTEGRATION_PATH=/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json
+ExecStart=/usr/bin/node @BBB_DEPLOY_BASE@/current/bot/dist/index.js
+Restart=always
+RestartSec=5s
+TimeoutStopSec=90s
+KillSignal=SIGTERM
+UMask=0077
+
+# V8 needs executable memory for its JIT, so MemoryDenyWriteExecute is not
+# compatible with this Node service. All other practical accounting applies.
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUWeight=100
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/bot /var/lib/bristolbusbot/collector
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

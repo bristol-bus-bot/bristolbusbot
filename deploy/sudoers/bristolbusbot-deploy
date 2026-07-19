@@ -1,0 +1,2 @@
+Cmnd_Alias BBB_DEPLOY = /usr/local/sbin/bbb-deploy-control restart collector, /usr/local/sbin/bbb-deploy-control restart site, /usr/local/sbin/bbb-deploy-control restart bot, /usr/local/sbin/bbb-deploy-control restart tunnel, /usr/local/sbin/bbb-deploy-control bot-token-promote, /usr/local/sbin/bbb-deploy-control timetable-promote, /usr/local/sbin/bbb-deploy-control timetable-rollback, /usr/local/sbin/bbb-deploy-control tunnel-promote, /usr/local/sbin/bbb-deploy-control tunnel-rollback
+@BBB_DEPLOY_USER@ ALL=(root) NOPASSWD: BBB_DEPLOY

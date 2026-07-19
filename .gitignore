@@ -1,0 +1,60 @@
+.env
+*.env
+!.env.example
+!/deploy/local.env.example
+*.key
+*.pem
+
+# Workstation-only production identity and hardware identifiers.
+/deploy/local.env
+
+# ── Databases and bulk data ──
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+/data/
+itm_south_west_gtfs/
+timetable_backup*
+
+# Runtime cache downloaded from bustimes.org. Keep local copies for the
+# application, but do not redistribute the community-maintained fleet dataset.
+/pipeline/fbribuses.json
+/site/fbribuses.json
+/bot/data/fbribuses.json
+/pipeline/enrichment_report.json
+
+# ── Build artefacts ──
+node_modules/
+dist/
+*.tsbuildinfo
+static/css/tailwind.css
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.test-tmp/
+.ruff_cache/
+.venv/
+venv/
+
+# ── Logs / scratch ──
+*.log
+logs/
+.fuse_hidden*
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+docs/DOMAIN.md
+
+# Disposable deployment/test workspaces (always removed after the command).
+/.bbb-push-*/
+/.bbb-pytest-*/
+/.bbb-final-*/

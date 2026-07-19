@@ -1,0 +1,10 @@
+# Public ingress for the one production named tunnel. The credential JSON is
+# installed separately with root-only ownership; it is never stored in Git.
+tunnel: @BBB_CLOUDFLARE_TUNNEL_ID@
+credentials-file: /etc/bristolbusbot/cloudflared/@BBB_CLOUDFLARE_TUNNEL_ID@.json
+ingress:
+  - hostname: bristolbuses.live
+    service: http://127.0.0.1:5002
+  - hostname: www.bristolbuses.live
+    service: http://127.0.0.1:5002
+  - service: http_status:404

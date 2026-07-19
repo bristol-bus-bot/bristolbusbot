@@ -1,0 +1,51 @@
+[Unit]
+Description=Bristol Bus Bot Cloudflare named tunnel
+Documentation=https://github.com/bristol-bus-bot/bristolbusbot
+Wants=network-online.target
+After=network-online.target bbb-site.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config /etc/bristolbusbot/cloudflared/config.yml tunnel run @BBB_CLOUDFLARE_TUNNEL_ID@
+Restart=always
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+
+# Measure production usage for seven days before setting memory limits.
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUWeight=100
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProcSubset=pid
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

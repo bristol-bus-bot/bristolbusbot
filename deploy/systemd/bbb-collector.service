@@ -1,0 +1,55 @@
+[Unit]
+Description=Bristol Bus Bot shared BODS collector
+Documentation=https://github.com/bristol-bus-bot/bristolbusbot
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/collector
+EnvironmentFile=/etc/bristolbusbot/collector.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@BBB_DEPLOY_BASE@/current/collector/venv/bin/python -m collector.run
+Restart=always
+RestartSec=5s
+TimeoutStopSec=120s
+KillSignal=SIGTERM
+UMask=0077
+
+# Measure production usage for seven days before setting memory limits.
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUWeight=100
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/collector
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProcSubset=pid
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=Bristol Bus Bot per-service RSS sampler
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-sample-resources
+TimeoutStartSec=1min
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/monitoring
+IPAddressDeny=any
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

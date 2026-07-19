@@ -1,0 +1,46 @@
+/* Header status chips and search focus. */
+.stat-chip { display: inline-flex; align-items: center; gap: 5px;
+             padding: 3px 10px; border-radius: var(--r-pill);
+             font-size: 10px; font-weight: 700; }
+.stat-chip .stat-label { font-weight: 500; opacity: .8; }
+.stat-ontime { background: var(--tint-ontime); color: var(--ev-ontime); }
+.stat-early  { background: var(--tint-early);  color: var(--ev-early); }
+.stat-late   { background: var(--tint-late);   color: var(--ev-late); }
+.stat-origin { background: var(--tint-origin); color: var(--ev-origin); }
+.stat-depot  { background: var(--tint-depot);  color: var(--ev-depot); }
+.stat-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.stat-sq  { width: 7px; height: 7px; border-radius: 2px; background: currentColor; flex-shrink: 0; }
+.stat-di  { width: 7px; height: 7px; border-radius: 2px; background: currentColor;
+            transform: rotate(45deg); flex-shrink: 0; }
+
+/* Search focus ring. */
+#stop-search:focus { box-shadow: 0 0 0 2px rgba(0, 112, 60, 0.35); }
+/* One quiet bridge to the independent audit; deliberately separate from the
+   live counters and grouped with the timestamp and social link. */
+.audit-headline-link {
+    color: #005ea5;
+    font-family: "Overpass", sans-serif;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    border-left: 1px solid var(--line);
+    padding-left: 12px;
+}
+
+.audit-headline-link:hover,
+.audit-headline-link:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.audit-headline-compact { display: none; }
+
+@media (max-width: 768px) {
+    .audit-headline-link {
+        padding-left: 0;
+        border-left: 0;
+        font-size: 9px;
+    }
+    .audit-headline-full { display: none; }
+    .audit-headline-compact { display: inline; }
+}

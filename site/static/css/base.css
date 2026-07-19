@@ -1,0 +1,268 @@
+/* Core site layout and shared component styles. */
+        body { font-family: 'Overpass', -apple-system, BlinkMacSystemFont, sans-serif; font-weight: 500; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #c9d1d8; border-radius: 2px; }
+
+        #map { background: #dfe6ea; z-index: 1; }
+
+        /* flat dark popups */
+        .leaflet-popup-content-wrapper {
+            background: #ffffff !important;
+            color: var(--fg-1) !important;
+            border: none !important;
+            border-radius: 12px !important;
+            box-shadow: var(--shadow-popup) !important;
+            padding: 0 !important;
+            font-family: 'Overpass', sans-serif !important;
+            font-weight: 500 !important;
+        }
+        .leaflet-popup-content { margin: 0 !important; }
+        .leaflet-popup-tip { background: #ffffff !important; border: none !important; }
+        .leaflet-popup-close-button {
+            font-size: 14px !important;
+            width: 28px !important;
+            height: 28px !important;
+            line-height: 28px !important;
+            text-align: center !important;
+            padding: 0 !important;
+            top: 6px !important;
+            right: 6px !important;
+            border-radius: 50% !important;
+            transition: color 0.15s ease, background 0.15s ease !important;
+            color: rgba(255, 255, 255, 0.75) !important;
+            background: rgba(0, 0, 0, 0.28) !important;
+        }
+        .leaflet-popup-close-button:hover {
+            color: #fff !important;
+            background: rgba(0, 0, 0, 0.45) !important;
+        }
+        /* Stop popups get yellow X via :has() */
+        .leaflet-popup-content-wrapper:has(.stop-popup) .leaflet-popup-close-button,
+        .leaflet-popup:has(.stop-popup) > .leaflet-popup-close-button { color: rgba(255, 221, 0, 0.45) !important; }
+        .leaflet-popup-content-wrapper:has(.stop-popup) .leaflet-popup-close-button:hover,
+        .leaflet-popup:has(.stop-popup) > .leaflet-popup-close-button:hover { color: #FFDD00 !important; }
+
+        /* hide default zoom control styling conflicts */
+        .leaflet-control-zoom { border: none !important; }
+        .leaflet-control-zoom { box-shadow: var(--shadow-card) !important; border-radius: 10px !important; overflow: hidden; }
+        .leaflet-control-zoom a {
+            background: #ffffff !important;
+            color: var(--fg-2) !important;
+            border: none !important;
+            width: 32px !important;
+            height: 32px !important;
+            line-height: 32px !important;
+            font-size: 14px !important;
+        }
+        .leaflet-control-zoom a:hover { background: var(--surface-2) !important; color: var(--fg-1) !important; }
+
+        .bus-marker { animation: none !important; }
+        .bus-marker.featured {
+            filter: drop-shadow(0 0 4px rgba(32, 139, 254, 0.6));
+            animation: bsky-glow 2.5s ease-in-out infinite !important;
+        }
+        @keyframes bsky-glow {
+            0%, 100% { filter: drop-shadow(0 0 4px rgba(32, 139, 254, 0.5)); }
+            50% { filter: drop-shadow(0 0 8px rgba(32, 139, 254, 0.85)); }
+        }
+
+        /* pulse for DUE */
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-glow { animation: pulse-glow 1.5s ease-in-out infinite; }
+
+        /* live indicator pulse */
+        @keyframes live-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .live-dot { animation: live-pulse 2s ease-in-out infinite; }
+
+        /* toggle buttons - tourist brown */
+        .toggle-btn:hover:not(.toggle-active) { border-color: #794400 !important; color: #794400 !important; background: rgba(121,68,0,0.1) !important; }
+        .toggle-btn.toggle-active:hover { background: #8b5000 !important; }
+
+        /* clickable live departure rows */
+        .dep-row-live:hover { background: rgba(0,112,60,0.12) !important; }
+        .dep-row-live:active { background: rgba(0,112,60,0.2) !important; }
+
+        /* search input focus */
+        /* search focus ring now lives in chrome.css (input is borderless) */
+
+        /* livery header band on popup */
+        .popup-livery-header {
+            height: 44px;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        .popup-livery-header::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.35));
+            pointer-events: none;
+        }
+        .popup-livery-header > * { position: relative; z-index: 1; }
+
+        /* bot quote terminal readout */
+        .bot-quote {
+            font-family: 'JetBrains Mono', monospace;
+            color: #f59e0b;
+            text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+            font-size: 10.5px;
+            line-height: 1.4;
+            letter-spacing: 0.02em;
+        }
+
+        /* feature badge */
+        .feature-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.03em;
+        }
+
+        /* UK reg plate (rear style: yellow background, blue UK strip) */
+        .uk-plate {
+            display: inline-flex;
+            align-items: stretch;
+            background: #FCD300;
+            border: 3px solid #000;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4), inset 0 -2px 0 rgba(0,0,0,0.06);
+            user-select: text;
+        }
+        .uk-plate-flag {
+            background: #003399;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0 8px;
+            min-width: 32px;
+            line-height: 1;
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+        }
+        .uk-plate-flag-mark {
+            font-size: 9px;
+            opacity: 0.85;
+            margin-bottom: 3px;
+            letter-spacing: 0;
+        }
+        .uk-plate-text {
+            color: #000;
+            font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            line-height: 1;
+        }
+        /* Sizes */
+        .uk-plate-lg { height: 48px; }
+        .uk-plate-lg .uk-plate-text { font-size: 26px; }
+        .uk-plate-md { height: 38px; }
+        .uk-plate-md .uk-plate-text { font-size: 20px; }
+        .uk-plate-md .uk-plate-flag { font-size: 10px; min-width: 28px; padding: 0 6px; }
+        .uk-plate-md .uk-plate-flag-mark { font-size: 8px; }
+
+        /* --- Bottom sheet drag handle (hidden on desktop) --- */
+        .sheet-handle { display: none; }
+
+        /* --- Mobile layout --- */
+        @media (max-width: 768px) {
+            header { height: 40px !important; padding: 0 8px !important; }
+            #logo-sign { height: 28px !important; }
+
+            /* Compact header stats: hide labels, tighten gaps, hide depot separator */
+            #header-stats { gap: 6px !important; margin-left: 8px !important; padding-left: 8px !important; font-size: 9px !important; }
+            #header-stats .stat-label { display: none !important; }
+            #header-stats .depot-stat { border-left: none !important; padding-left: 0 !important; }
+
+            /* Hide toggles from header (moved to map FABs) */
+            #header-toggles { display: none !important; }
+
+            /* Hide timestamp, keep Bluesky icon-only */
+            .header-desktop-only { display: none !important; }
+            .bsky-link { border-left: none !important; padding-left: 0 !important; margin-left: 0 !important; }
+            .bsky-handle { display: none !important; }
+
+            .main-layout {
+                flex-direction: column !important;
+                height: calc(100vh - 40px) !important;
+                height: calc(100dvh - 40px) !important;
+            }
+
+            .map-container {
+                flex: 1 !important;
+                width: 100% !important;
+            }
+
+            #sidebar {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                width: 100% !important;
+                height: 85vh !important;
+                height: 85dvh !important;
+                border-left: none !important;
+                border-top: none !important;
+                box-shadow: 0 -6px 24px rgba(27,32,39,.18) !important;
+                border-radius: 20px 20px 0 0 !important;
+                z-index: 1001 !important;
+                transform: translateY(calc(100% - 56px));
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            }
+            #sidebar.sheet-peek { transform: translateY(60%); }
+            #sidebar.sheet-expanded { transform: translateY(0); }
+
+            #sidebar-content { min-width: 100% !important; }
+            #sidebar-toggle { display: none !important; }
+
+            .sheet-handle {
+                display: flex !important;
+                justify-content: center;
+                padding: 10px 0 4px;
+                cursor: grab;
+                touch-action: none;
+            }
+            .sheet-handle-bar {
+                width: 40px;
+                height: 4px;
+                border-radius: 2px;
+                background: #c3cad1;
+            }
+
+            /* Mobile FABs for layer toggles */
+            .mobile-fab-stack {
+                display: flex !important;
+            }
+
+            /* Geolocation button above FAB stack */
+            #geolocate-btn { bottom: 180px !important; }
+
+            /* Search results max height on mobile */
+            #stop-search-results { max-height: 50vh !important; }
+
+            /* Larger touch targets for departure rows */
+            .dep-row-live { min-height: 52px !important; }
+        }

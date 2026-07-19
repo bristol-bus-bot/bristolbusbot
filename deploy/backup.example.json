@@ -1,0 +1,63 @@
+{
+  "staging_root": "/var/cache/bristolbusbot/staging",
+  "lock_file": "/run/lock/bristolbusbot-backup.lock",
+  "local_mountpoint": "/mnt/bbb-backup",
+  "expected_mount_source": "/dev/disk/by-uuid/REPLACE_WITH_BACKUP_FILESYSTEM_UUID",
+  "local_repository": "/mnt/bbb-backup/restic",
+  "r2_repository": "s3:https://ACCOUNT_ID.r2.cloudflarestorage.com/bristolbusbot-backup",
+  "password_file": "/etc/bristolbusbot/restic-password",
+  "r2_password_file": "/etc/bristolbusbot/restic-password",
+  "require_root": true,
+  "require_mounted_local_repository": true,
+  "restic_binary": "restic",
+  "tag": "bbb-backup",
+  "sqlite_timeout_seconds": 1800,
+  "restic_timeout_seconds": 10800,
+  "sqlite_databases": [
+    {
+      "name": "collector-audit",
+      "path": "/var/lib/bristolbusbot/collector/audit.db"
+    },
+    {
+      "name": "collector-live",
+      "path": "/var/lib/bristolbusbot/collector/live.db"
+    },
+    {
+      "name": "bot-app-data",
+      "path": "/var/lib/bristolbusbot/bot/app_data.db"
+    },
+    {
+      "name": "pipeline-timetable",
+      "path": "/var/lib/bristolbusbot/pipeline/timetable.db"
+    },
+    {
+      "name": "social",
+      "path": "/var/lib/bristolbusbot/social.db",
+      "required": false
+    }
+  ],
+  "paths": [
+    {
+      "name": "ssh-state",
+      "path": "@BBB_REMOTE_HOME@/.ssh"
+    },
+    {
+      "name": "fstab",
+      "path": "/etc/fstab"
+    },
+    {
+      "name": "systemd-system",
+      "path": "/etc/systemd/system"
+    },
+    {
+      "name": "bristolbusbot-config",
+      "path": "/etc/bristolbusbot"
+    }
+  ],
+  "git_repositories": [
+    {
+      "name": "published-audit",
+      "path": "@BBB_REMOTE_HOME@/bus-audit-repo"
+    }
+  ]
+}

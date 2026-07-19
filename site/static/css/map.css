@@ -1,0 +1,141 @@
+/* Map popups. Class names use pp-* for buses and sp-* for stops. */
+.pp { width: 240px; }
+.pp-line { font-size: 20px; font-weight: 800; color: #fff;
+           text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.pp-line-sm { font-size: 16px; }
+.pp-dest { font-size: 11px; color: rgba(255,255,255,.85);
+           text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 500; }
+.pp-depot-name { font-size: 10px; color: rgba(255,255,255,.7);
+                 text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 600;
+                 letter-spacing: .03em; }
+.pp-body { padding: 10px 14px 12px; }
+.pp-status-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.pp-status { display: inline-block; padding: 2px 7px; border-radius: var(--r-sm);
+             font-size: 10px; font-weight: 700; }
+.pp-punctual { color: var(--ev-ontime); background: var(--tint-ontime); }
+.pp-early    { color: var(--ev-early); background: var(--tint-early); }
+.pp-delayed  { color: var(--ev-late); background: var(--tint-late); }
+.pp-waiting  { color: var(--ev-origin); background: var(--tint-origin); }
+.pp-at { font-size: 10px; color: var(--fg-3); }
+.pp-identity { border-left: 3px solid var(--line-2); padding-left: 10px; margin-bottom: 8px; }
+.pp-model { color: var(--fg-1); font-size: 11px; font-weight: 600; }
+.pp-reg { font-size: 9.5px; font-family: var(--font-mono); color: var(--fg-3);
+          margin-top: 2px; }
+.pp-livery { font-size: 9px; color: var(--fg-3); margin-top: 1px; }
+.pp-quote { margin-bottom: 8px; padding: 6px 8px; background: var(--led-bg);
+            border-radius: var(--r-sm); }
+.pp-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+.fb-electric { background: var(--tint-ontime); color: var(--uk-green); }
+.fb-gas { background: rgba(126,133,130,.15); color: var(--uk-grey); }
+.fb-plain { background: var(--surface-2); color: var(--fg-2); }
+.pp-featured { display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+               margin-bottom: 8px; border-radius: var(--r-sm);
+               border: 1px solid rgba(0,133,255,.2); background: rgba(0,133,255,.07);
+               color: #0085ff; font-size: 10px; font-weight: 600;
+               text-decoration: none; font-family: var(--font-sans); }
+.pp-featured:hover { background: rgba(0,133,255,.15); }
+.pp-route-btn { width: 100%; padding: 5px 0; border-radius: var(--r-sm);
+                border: 1px solid rgba(29,112,184,.2); background: rgba(29,112,184,.08);
+                color: var(--uk-blue); font-size: 10px; font-weight: 600;
+                cursor: pointer; font-family: var(--font-sans);
+                transition: background .15s; }
+.pp-route-btn:hover { background: rgba(29,112,184,.2); }
+
+.sp { width: 220px; }
+.sp-head { background: var(--uk-green); border: 1px solid var(--uk-grey);
+           border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 10px 14px; }
+.sp-name { font-size: 13px; font-weight: 700; color: #fff; }
+.sp-street { font-size: 10px; color: rgba(255,255,255,.7); margin-top: 1px; }
+.sp-loc { font-size: 9px; color: rgba(255,255,255,.5); margin-top: 1px; }
+.sp-code { font-size: 9px; font-family: var(--font-mono); color: var(--uk-yellow);
+           opacity: .7; margin-top: 2px; }
+.sp-body { padding: 10px 14px; }
+.sp-btn { width: 100%; padding: 7px; border-radius: var(--r-sm); font-size: 11px;
+          font-weight: 600; cursor: pointer; background: var(--uk-blue);
+          color: #fff; border: 2px solid var(--uk-grey); letter-spacing: .03em;
+          font-family: var(--font-sans); }
+
+/* vehicle detail modal (vp-*) — shares pp-identity / badges / bot-quote */
+.vp-header { display: flex; align-items: center; gap: 8px; }
+.vp-fleet { font-size: 18px; font-weight: 800; color: #fff;
+            text-shadow: 0 1px 4px rgba(0,0,0,.6);
+            font-family: var(--font-mono); letter-spacing: .04em; }
+.vp-route { margin-left: auto; font-size: 11px; color: rgba(255,255,255,.85);
+            text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 200px; }
+.vp-pill { display: inline-block; padding: 2px 8px; border-radius: var(--r-sm);
+           font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.vp-pill-withdrawn { background: var(--tint-late); color: var(--uk-red); }
+.vp-pill-live { background: var(--tint-ontime); color: var(--uk-green); }
+.vp-pill-off { background: var(--surface-2); color: var(--fg-2); }
+.vp-body { padding: 16px 18px; }
+.vp-plate-row { display: flex; justify-content: center; margin-bottom: 14px; }
+.vp-named { background: var(--led-bg); border-left: 3px solid var(--amber);
+            padding: 6px 10px; margin-bottom: 12px;
+            border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.vp-named-label { color: var(--uk-grey); font-size: 8px; font-weight: 700;
+                  letter-spacing: .08em; text-transform: uppercase; }
+.vp-named-name { color: var(--amber); font-size: 13px; font-weight: 600;
+                 font-family: var(--font-mono); margin-top: 1px; }
+.vp-model { color: var(--fg-1); font-size: 13px; font-weight: 600; }
+.vp-code { font-size: 10px; font-family: var(--font-mono); color: var(--fg-3);
+           margin-top: 3px; }
+.vp-meta { font-size: 10px; color: var(--fg-2); margin-top: 2px; }
+.vp-quote { margin-bottom: 10px; padding: 7px 10px; }
+.vp-notes { padding: 7px 10px; background: var(--surface-2); border-radius: var(--r-sm);
+            border-left: 2px solid var(--line-2); font-size: 10px; color: var(--fg-2);
+            line-height: 1.45; margin-bottom: 10px; }
+.vp-notes-label { color: var(--fg-3); font-size: 8px; font-weight: 700;
+                  letter-spacing: .08em; text-transform: uppercase;
+                  display: block; margin-bottom: 2px; }
+.vp-live { margin-top: 12px; padding: 9px 12px; border-radius: var(--r-md);
+           border: 1px solid transparent; }
+.vp-live-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.vp-live-route { color: var(--fg-1); font-size: 11px; font-family: var(--font-mono);
+                 margin-top: 3px; }
+.vp-live-route strong { color: var(--fg-1); }
+.vp-at { font-size: 10px; color: var(--fg-2); }
+.vp-punctual { background: var(--tint-ontime); color: var(--ev-ontime); }
+.vp-punctual-bg { background: var(--tint-ontime); border-color: rgba(0,112,60,.25); }
+.vp-early { background: var(--tint-early); color: var(--ev-early); }
+.vp-early-bg { background: var(--tint-early); border-color: rgba(180,136,0,.25); }
+.vp-delayed { background: var(--tint-late); color: var(--ev-late); }
+.vp-delayed-bg { background: var(--tint-late); border-color: rgba(212,53,28,.25); }
+.vp-waiting { background: var(--tint-origin); color: var(--ev-origin); }
+.vp-waiting-bg { background: var(--tint-origin); border-color: rgba(29,112,184,.25); }
+.vp-depot { background: var(--tint-depot); color: var(--ev-depot); }
+.vp-depot-bg { background: var(--tint-depot); border-color: rgba(126,133,130,.3); }
+.vp-track { width: 100%; margin-top: 12px; padding: 9px 14px;
+            background: var(--amber); color: #0a0a0a; border: none;
+            border-radius: var(--r-md); font-weight: 700; font-size: 12px;
+            cursor: pointer; letter-spacing: .04em; font-family: var(--font-sans);
+            text-transform: uppercase; transition: background .15s; }
+.vp-track:hover { background: #fbbf24; }
+.vp-offduty { margin-top: 12px; padding: 9px 12px; background: var(--surface-2);
+              border: 1px dashed var(--line-2); border-radius: var(--r-md);
+              color: var(--fg-2); font-size: 11px; text-align: center;
+              font-style: italic; }
+
+
+/* Shared presentation for map popups and the vehicle modal. */
+.leaflet-popup-content-wrapper {
+    background: var(--surface-1) !important;
+    border: none !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--shadow-popup) !important;
+    overflow: hidden;
+}
+.leaflet-popup-tip { background: var(--surface-1) !important;
+                     border: none !important; }
+.vp-modal {
+    background: var(--surface-1);
+    border: none;
+    border-radius: var(--r-lg);
+    max-width: 460px; width: 100%;
+    max-height: 92vh; overflow-y: auto;
+    box-shadow: var(--shadow-modal);
+    position: relative;
+    font-family: var(--font-sans);
+    color: var(--fg-1);
+}

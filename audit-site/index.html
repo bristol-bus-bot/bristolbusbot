@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WECA bus punctuality audit - an independent monitor of West of England buses</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to audit results</a>
+<main id="main-content">
+<div class="wrap">
+  <header class="audit-header">
+    <span class="ds-pill">Independent · non-commercial · open data</span>
+    <h1 class="audit-title">WECA bus punctuality audit</h1>
+    <p class="audit-sub">An independent monitor of bus punctuality across the West of England, built from the operators' own public real-time data.</p>
+    <a class="live-link" href="https://bristolbuses.live/">Track buses live ↗</a>
+  </header>
+
+  <div id="err" role="alert" aria-live="assertive"></div>
+
+  <div class="op-bar">
+    <span class="op-bar-label">Showing</span>
+    <div class="op-tabs" id="operator-tabs" role="tablist" aria-label="Bus operator"></div>
+  </div>
+
+  <div class="headline-top">
+    <p class="audit-muted audit-small period" id="period-line">Loading…</p>
+    <div class="headline">
+      <div class="card primary">
+        <div class="cap">On-time</div>
+        <div class="bignum"><span id="ot-pct">–</span><small>%</small></div>
+        <div class="gauge">
+          <div class="gfill" id="ot-fill"></div>
+          <div class="gtgt" id="ot-tgt"></div>
+        </div>
+        <div class="legend"><span>0%</span><span id="tgt-label" style="color:var(--target)">target 95%</span><span>100%</span></div>
+        <p class="audit-small audit-muted" id="ot-band" style="margin-top:10px"></p>
+      </div>
+      <div class="card side">
+        <div class="stat"><span class="k">Typical lateness</span><span class="v" id="median-delay">–</span></div>
+        <div class="stat"><span class="k">Average lateness</span><span class="v" id="mean-delay">–</span></div>
+        <div class="stat"><span class="k">Measurements taken</span><span class="v" id="readings">–</span></div>
+        <div class="stat"><span class="k">Journeys tracked</span><span class="v" id="trips">–</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="sec" style="--sec-i:0">
+    <button type="button" class="sec-head" aria-expanded="true" aria-controls="areas-panel">
+      <svg class="sec-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <h2 class="audit-h2">Areas, wards &amp; vehicles</h2>
+    </button>
+    <div class="sec-body" id="areas-panel"><div class="sec-body-inner">
+      <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">Where the delays are</h3>
+      <p class="audit-muted audit-small">On-time % by where the buses run. Which neighbourhoods get the better service, and which the worse.</p>
+      <div class="controls">
+        <span class="audit-faint audit-small">Area:</span>
+        <button type="button" class="gctl active" data-geo="area" aria-pressed="true">By area</button>
+        <button type="button" class="gctl" data-geo="ward" aria-pressed="false">By ward</button>
+        <span class="audit-faint audit-small" style="margin-left:8px">Sort:</span>
+        <button type="button" class="gsort active" data-gsort="reads" aria-pressed="true">Most measured</button>
+        <button type="button" class="gsort" data-gsort="worst" aria-pressed="false">Worst</button>
+        <button type="button" class="gsort" data-gsort="best" aria-pressed="false">Best</button>
+      </div>
+      <div class="chart" id="geo-chart" aria-live="polite"></div>
+
+      <h3 class="dash-sub">Electric fleet</h3>
+      <div class="card fleet-card" id="electric-card"></div>
+
+      <h3 class="dash-sub">Vehicles by model</h3>
+      <p class="audit-muted audit-small">How each bus type performs, and the service numbers it runs. Buses are assigned to routes operationally, so treat by-model punctuality as indicative, not a verdict on the vehicle. Model names link to Wikipedia.</p>
+      <div id="fleet-models"></div>
+    </div></div>
+  </section>
+
+  <section class="sec" style="--sec-i:1">
+    <button type="button" class="sec-head" aria-expanded="true" aria-controls="routes-panel">
+      <svg class="sec-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <h2 class="audit-h2">By route</h2>
+    </button>
+    <div class="sec-body" id="routes-panel"><div class="sec-body-inner">
+      <p class="audit-muted audit-small">Every route as a tile, coloured by on-time %. Faded tiles have few readings (n&lt;30), so treat those as indicative. Tap a tile for its full breakdown. Tiles marked <span class="cell-freq">freq</span> run 6+ buses an hour, where the official standard judges wait time, not timetable punctuality.</p>
+      <div class="controls">
+        <span class="audit-faint audit-small">Sort:</span>
+        <button type="button" class="ctl active" data-sort="worst" aria-pressed="true">Worst first</button>
+        <button type="button" class="ctl" data-sort="best" aria-pressed="false">Best first</button>
+        <button type="button" class="ctl" data-sort="route" aria-pressed="false">By route</button>
+        <label class="chk"><input type="checkbox" id="hideLowN"> Hide low-sample routes</label>
+      </div>
+      <div class="route-grid" id="route-grid" aria-label="Route punctuality"></div>
+      <div class="route-detail" id="route-detail" aria-live="polite"></div>
+      <p class="audit-faint audit-small" style="margin-top:14px">A reading is a recorded approach within 150 m of a timing point. "Median/Mean" are seconds early (−) or late (+).</p>
+    </div></div>
+  </section>
+
+  <section class="sec collapsed" style="--sec-i:2">
+    <button type="button" class="sec-head" aria-expanded="false" aria-controls="about-panel">
+      <svg class="sec-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(-90deg)"><polyline points="6 9 12 15 18 9"/></svg>
+      <h2 class="audit-h2">What this is, and what it isn't</h2>
+    </button>
+    <div class="sec-body" id="about-panel" style="height:0"><div class="sec-body-inner">
+      <div class="callout">
+        <strong>The point.</strong> Bus operators across the West of England publish their live vehicle data, and WECA's Bus Service Improvement Plan sets a <strong>95% punctuality target</strong> for the area, but there is no accessible, route-level public scorecard showing whether that target is being met. This site builds one from the operators' own open data.
+      </div>
+
+      <details class="detail" open>
+        <summary>What we claim</summary>
+        <div class="detail-body">
+          <ul>
+            <li>These figures are <strong>our independent measurement</strong> of on-time performance at timing points, computed from operators' public BODS real-time feeds against the published timetable.</li>
+            <li>We use the <strong>DfT statistical on-time definition</strong>: a stop counts as on-time if the bus is between 1 minute early and 5 min 59 s late.</li>
+            <li>The method, the code, and the limitations are all open. Anyone can reproduce or challenge them.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="detail">
+        <summary>What we do <em>not</em> claim</summary>
+        <div class="detail-body">
+          <ul>
+            <li>We do <strong>not</strong> claim any operator is breaking the law or withholding required data. Operators are legally required to publish timetables, vehicle locations and fares, and they do. Performance figures are <em>not</em> a statutory publication requirement.</li>
+            <li>We do <strong>not</strong> claim these are the official figures. They are an independent estimate and will differ from any internal operator or regulator measurement.</li>
+            <li>Low-sample routes, smaller operators with patchier real-time data, and partial collection days are <strong>not</strong> reliable on their own, and are flagged as such.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="detail">
+        <summary>Full methodology</summary>
+        <div class="detail-body">
+          <p class="audit-p">The complete method, data sources (including the routes drawn from TNDS that operators do not publish to BODS), the geography, fleet and frequent-service definitions, and every limitation are documented in <code class="ds-code">AUDIT_METHODOLOGY.md</code> in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub repository</a>.</p>
+        </div>
+      </details>
+    </div></div>
+  </section>
+
+  <footer class="audit-footer">
+    <p>An independent, non-commercial measurement of West of England bus punctuality, built only from operators' own public open data so anyone can see whether the 95% target is being met. Full method, sources and limitations are in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">methodology</a>, and all the code and data are on <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub</a>.</p>
+    <p class="audit-faint audit-small">Contains public sector information licensed under the Open Government Licence v3.0 (DfT Bus Open Data Service). Generated <span id="genat">–</span> · service day <span id="genday">–</span>.</p>
+  </footer>
+</div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

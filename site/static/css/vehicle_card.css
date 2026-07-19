@@ -1,0 +1,103 @@
+/* Vehicle cards in compact and full sizes. */
+.vc-compact { width: 250px; }
+.vc-full { width: 100%; }
+.vc-head { display: flex; align-items: center; gap: 8px;
+           padding: 10px 14px; min-height: 44px; }
+.vc-line { font-size: 20px; font-weight: 800; color: #fff;
+           text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.vc-line-sm { font-size: 16px; }
+.vc-dest { font-size: 11px; color: rgba(255,255,255,.85);
+           text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 500; }
+.vc-fleet { font-size: 18px; font-weight: 800; color: #fff;
+            text-shadow: 0 1px 4px rgba(0,0,0,.6);
+            font-family: var(--font-mono); letter-spacing: .04em; }
+.vc-head-route { margin-left: auto; font-size: 11px;
+                 color: rgba(255,255,255,.85);
+                 text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 600;
+                 white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; max-width: 200px; }
+.vc-depot-name { font-size: 10px; color: rgba(255,255,255,.7);
+                 text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 600;
+                 letter-spacing: .03em; }
+.vc-body { padding: 12px 14px 14px; }
+.vc-full .vc-body { padding: 16px 18px; }
+.vc-plate-row { display: flex; justify-content: center; margin-bottom: 12px; }
+.vc-named { background: var(--led-bg); border-left: 3px solid var(--amber);
+            padding: 6px 10px; margin-bottom: 12px;
+            border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.vc-named-label { color: var(--uk-grey); font-size: 8px; font-weight: 700;
+                  letter-spacing: .08em; text-transform: uppercase; }
+.vc-named-name { color: var(--amber); font-size: 13px; font-weight: 600;
+                 font-family: var(--font-mono); margin-top: 1px; }
+.vc-status-row { display: flex; align-items: center; gap: 6px;
+                 margin-bottom: 10px; }
+/* status chips: pill-shaped (Material), one family everywhere */
+.vc-status { display: inline-block; padding: 3px 10px;
+             border-radius: var(--r-pill); font-size: 10px;
+             font-weight: 700; letter-spacing: .03em; }
+.st-punctual { color: var(--ev-ontime); background: var(--tint-ontime); }
+.st-early    { color: var(--ev-early); background: var(--tint-early); }
+.st-delayed  { color: var(--ev-late); background: var(--tint-late); }
+.st-waiting  { color: var(--ev-origin); background: var(--tint-origin); }
+.st-depot    { color: var(--ev-depot); background: var(--tint-depot); }
+.st-live     { color: var(--uk-green); background: var(--tint-ontime); }
+.st-off      { color: var(--fg-2); background: var(--surface-2); }
+.st-withdrawn{ color: var(--uk-red); background: var(--tint-late); }
+.vc-at { font-size: 10px; color: var(--fg-3); }
+.vc-identity { border-left: 3px solid var(--line-2); padding-left: 10px;
+               margin-bottom: 10px; }
+.vc-model { color: var(--fg-1); font-size: 12px; font-weight: 600; }
+.vc-full .vc-model { font-size: 13px; }
+.vc-code { font-size: 10px; font-family: var(--font-mono); color: var(--fg-3);
+           margin-top: 2px; }
+.vc-meta { font-size: 10px; color: var(--fg-2); margin-top: 2px; }
+/* Bot commentary uses the departure-board treatment. */
+.vc-quote { margin-bottom: 10px; padding: 7px 10px; background: var(--led-bg);
+            border-radius: var(--r-md);
+            font-family: var(--font-mono); color: var(--amber);
+            text-shadow: var(--amber-glow);
+            font-size: 10.5px; line-height: 1.4; letter-spacing: .02em; }
+.vc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.vc-badge { display: inline-block; padding: 2px 8px;
+            border-radius: var(--r-pill); font-size: 9px; font-weight: 700;
+            letter-spacing: .04em; background: var(--surface-2);
+            color: var(--fg-2); }
+.vc-badge.fb-electric { background: var(--tint-ontime); color: var(--uk-green); }
+.vc-badge.fb-gas { background: rgba(126,133,130,.14); color: var(--uk-grey); }
+.vc-notes { padding: 7px 10px; background: var(--surface-2); border-radius: var(--r-md);
+            border-left: 2px solid var(--line-2); font-size: 10px; color: var(--fg-2);
+            line-height: 1.45; margin-bottom: 10px; }
+.vc-notes-label { color: var(--fg-3); font-size: 8px; font-weight: 700;
+                  letter-spacing: .08em; text-transform: uppercase;
+                  display: block; margin-bottom: 2px; }
+/* actions: one button family */
+.vc-action { width: 100%; padding: 8px 0; border-radius: var(--r-md);
+             border: none; font-size: 11px; font-weight: 700;
+             letter-spacing: .04em; cursor: pointer;
+             font-family: var(--font-sans); transition: filter .15s;
+             display: block; text-align: center; text-decoration: none; }
+.vc-action + .vc-action { margin-top: 8px; }
+.vc-action:hover { filter: brightness(0.94); }
+.vc-action-primary { background: var(--amber); color: #0a0a0a;
+                     text-transform: uppercase; }
+.vc-action-blue { background: var(--tint-origin); color: var(--uk-blue); }
+.vc-action-bsky { background: rgba(0,133,255,.1); color: #0069c9;
+                  font-weight: 600; }
+/* Flickr reg-plate search — links out so photographers keep attribution */
+.vc-action-flickr { background: var(--surface-2); color: var(--fg-2);
+                    font-weight: 600; }
+.vc-offduty { margin-top: 4px; padding: 9px 12px; background: var(--surface-2);
+              border: 1px dashed var(--line-2); border-radius: var(--r-md);
+              color: var(--fg-2); font-size: 11px; text-align: center;
+              font-style: italic; }
+
+/* medium plate for the compact card */
+.uk-plate-md { transform: scale(.82); transform-origin: center; }
+
+/* Material floats: no strokes, shadow only, rounder */
+.leaflet-popup-content-wrapper {
+    border: none !important;
+    border-radius: 16px !important;
+}
+.leaflet-popup-tip { border: none !important; }
+.vp-modal { border: none; border-radius: 16px; }

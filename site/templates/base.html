@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#f4f5f7">
+    <link rel="manifest" href="{{ asset_url('manifest.webmanifest') }}">
+    <link rel="apple-touch-icon" href="{{ asset_url('icons/apple-touch-icon.png') }}">
+    <title>{% block title %}Bristol Buses LIVE · bristolbuses.live{% endblock %}</title>
+
+    <link rel="stylesheet" href="{{ asset_url('vendor/leaflet-1.9.4/leaflet.a7837102.css') }}">
+
+    <link rel="icon" type="image/svg+xml" href="{{ asset_url('favicon.svg') }}">
+
+    <link rel="stylesheet" href="{{ asset_url('css/fonts.css') }}">
+    <!-- utilities.css: the 37 hand-rolled classes that replaced the
+         Tailwind CDN (see static/css/utilities.css) -->
+    <link rel="stylesheet" href="{{ asset_url('css/utilities.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/tokens.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/base.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/board.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/map.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/vehicle_card.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/mobile.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/chrome.css') }}">
+    {% block styles %}{% endblock %}
+</head>
+<body class="{% block body_class %}bg-[#0e0e0e] text-zinc-100 antialiased overflow-hidden{% endblock %}">
+{% block body %}{% endblock %}
+
+{% block app_scripts %}
+    <script src="{{ asset_url('vendor/leaflet-1.9.4/leaflet.85d455b4.js') }}"></script>
+    <!-- Module scripts populate window.BBB before the main bundle starts. -->
+    <script type="module" src="{{ asset_url('js/board.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/vehicle_card.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/map_render.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/vehicle_panel.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/search_logic.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/search.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/route_view.js') }}"></script>
+    <script src="{{ asset_url('js/app.js') }}" defer></script>
+{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>
