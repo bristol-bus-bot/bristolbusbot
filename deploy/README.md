@@ -79,13 +79,17 @@ must all recover; otherwise the previous database is restored automatically.
 `pipeline/build_timetable.py` is invoked by `push.py`; production promotion
 always goes through the deployment command.
 
-## One-time layout installation
+## Layout installation and updates
 
-`python deploy/push.py --install-layout` is a one-time bootstrap, not a routine
-deploy command. It creates the release/current directories, installs the exact
-sudo allowlist and release-aware systemd units, initially links to the existing
-known-good folders, and verifies every service and timer. It restores the old
-unit files if any health gate fails.
+`python deploy/push.py --install-layout` creates the release/current directories,
+installs the exact sudo allowlist, deployment helpers and release-aware systemd
+units, and verifies every service and timer. Existing `current` release links
+are preserved. Re-run it only when a reviewed helper or unit template changes;
+it backs up and restores the installed units if any health gate fails.
+
+When a unit starts calling a renamed release file, deploy a release containing
+both the old compatibility entry point and the new file before updating the
+layout. This keeps both the old and new unit valid throughout the transition.
 
 ## Other deployment tooling
 

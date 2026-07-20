@@ -173,6 +173,8 @@ def populate_release(component: str, root: Path) -> None:
         copy_tree(REPO / "collector/src", root / "src")
         copy_file(REPO / "pipeline/check_collector_freshness.py",
                   root / "check_collector_freshness.py")
+        copy_file(REPO / "pipeline/compare_collectors.py",
+                  root / "compare_collectors.py")
         copy_file(REPO / "pipeline/status_digest.py", root / "status_digest.py")
     elif component == "site":
         for name in ("pyproject.toml", "wsgi.py"):
@@ -572,8 +574,8 @@ def refresh_timetable(no_download: bool) -> Path:
 def command_plan(args: argparse.Namespace) -> list[str]:
     if args.install_layout:
         return [
-            "Install the release directories, exact sudo allowlist and release-aware systemd units.",
-            "Initially point every current symlink at today's live folders; no application code changes.",
+            "Install or update the exact sudo allowlist, helpers and release-aware systemd units.",
+            "Create any missing current symlinks while preserving existing live release selections.",
             "Restart and health-check all four live services, restoring the old units on failure.",
         ]
     if args.timetable:
@@ -615,7 +617,7 @@ Commands and scope:
                          does NOT rebuild or replace the timetable database
   --timetable PATH       only a known timetable; restarts collector, site and bot
   --refresh-timetable    builds locally, then performs --timetable deployment
-  --install-layout       one-time symlink/systemd/sudo bootstrap; no new app code
+  --install-layout       install/update symlink, systemd and sudo layout; no app code
   --dry-run              prints the exact scope; no build, SSH or live change
 
 Every code release is staged and verified before its atomic switch. Production

@@ -13,6 +13,12 @@ from check_collector_freshness import (
     ping_healthcheck,
     staleness_check,
 )
+from compare_collectors import main as compatibility_main
+from check_collector_freshness import main
+
+
+def test_previous_entry_point_forwards_to_current_checker():
+    assert compatibility_main is main
 
 
 def test_staleness_reads_shared_collector_poller_status(tmp_path):
