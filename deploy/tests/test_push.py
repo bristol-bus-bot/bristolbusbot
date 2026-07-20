@@ -56,6 +56,9 @@ def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
         assert (extract / "route_details.json").is_file()
     if component == "site":
         assert (extract / "_collector/pyproject.toml").is_file()
+    if component == "collector":
+        assert (extract / "check_collector_freshness.py").is_file()
+        assert (extract / "compare_collectors.py").is_file()
     if component == "pipeline":
         assert (extract / "audit_integration.py").is_file()
         assert (extract / "audit_promote.py").is_file()
@@ -164,6 +167,15 @@ def test_layout_installer_waits_for_slow_startup_and_has_rollback_trap():
         assert f"if ! {check};" in installer
     assert "trap rollback EXIT INT TERM" in installer
     assert "previous units were restored" in installer
+
+
+def test_layout_update_preserves_existing_current_release_links():
+    installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'if [ ! -e "$link" ] && [ ! -L "$link" ]; then' in installer
+    assert 'ln -s "$legacy" "$link"' in installer
+    assert "ln -sfn" not in installer
 
 
 def test_layout_payload_renders_all_private_identity_tokens(tmp_path):

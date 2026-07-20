@@ -3,7 +3,9 @@
 These are source-controlled unit templates. Account and home-directory tokens
 are rendered from the Git-ignored `deploy/local.env` by
 `python deploy/push.py --install-layout`; do not copy the raw templates into
-`/etc/systemd/system` or edit installed copies by hand.
+`/etc/systemd/system` or edit installed copies by hand. Re-run the command after
+a reviewed unit or deployment-helper change; it preserves the selected release
+links and restores the prior units if a health gate fails.
 
 The units execute through `~/bristolbusbot/current/<component>` on the
 Pi. Install or update releases only with `python deploy/push.py`; do not

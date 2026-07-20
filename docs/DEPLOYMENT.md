@@ -31,7 +31,9 @@ rollup/publish/snapshot, collector staleness check, twice-daily digest,
 nightly backup, weekly backup-repository check, resource sampling and an
 aggregate health snapshot. Unit templates are source-controlled in
 `deploy/systemd/` and rendered by `deploy/push.py --install-layout`; do not edit
-live copies.
+live copies. Re-run that command after reviewed unit or deployment-helper
+changes. It preserves the current release links and rolls the installed units
+back if the live health gates fail.
 Units use `Restart=always`, sandboxing (`ProtectSystem=strict`, exact
 `ReadWritePaths`, `IPAddressDeny=any` for networkless jobs) and
 `Persistent=true` timers with locking so delayed or coincident runs are
