@@ -16,9 +16,6 @@ jobs:
     timeout-minutes: 45
     environment: timetable-build
     env:
-      TMPDIR: ${{ runner.temp }}/bbb-timetable-sources
-      SQLITE_TMPDIR: ${{ runner.temp }}/bbb-sqlite
-      BBB_TIMETABLE_DB: ${{ runner.temp }}/bbb-candidate/timetable.db
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
 
@@ -38,8 +35,11 @@ jobs:
 
       - name: Prepare disposable build directories
         run: |
-          mkdir -p "$TMPDIR" "$SQLITE_TMPDIR"
-          mkdir -p "$(dirname "$BBB_TIMETABLE_DB")" "$RUNNER_TEMP/timetable-package"
+          echo "TMPDIR=$RUNNER_TEMP/bbb-timetable-sources" >> "$GITHUB_ENV"
+          echo "SQLITE_TMPDIR=$RUNNER_TEMP/bbb-sqlite" >> "$GITHUB_ENV"
+          echo "BBB_TIMETABLE_DB=$RUNNER_TEMP/bbb-candidate/timetable.db" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/bbb-timetable-sources" "$RUNNER_TEMP/bbb-sqlite"
+          mkdir -p "$RUNNER_TEMP/bbb-candidate" "$RUNNER_TEMP/timetable-package"
 
       - name: Build complete timetable candidate
         run: python pipeline/build_timetable.py --skip-deploy
