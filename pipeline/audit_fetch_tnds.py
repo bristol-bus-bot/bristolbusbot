@@ -18,6 +18,7 @@ Usage:
 import os
 import sys
 import tempfile
+import zipfile
 from ftplib import FTP
 from pathlib import Path
 
@@ -42,21 +43,42 @@ def main():
     out = OUT_DIR / f"{REGION}.zip"
 
     print(f"Connecting to {FTP_HOST} ...")
+    ftp = None
+    part = out.with_suffix(out.suffix + ".part")
+    part.unlink(missing_ok=True)
     try:
         ftp = FTP(host=FTP_HOST, user=USER, passwd=PASS, timeout=180)
+        ftp.cwd(FTP_DIR)
+        try:
+            size = ftp.size(f"{REGION}.zip")
+        except Exception:
+            size = None
+        print(f"Downloading {REGION}.zip" +
+              (f" ({size // (1024*1024)} MB)" if size else "") + " ...")
+        with open(part, "wb") as output:
+            ftp.retrbinary(f"RETR {REGION}.zip", output.write)
+        ftp.quit()
+        ftp = None
+        actual = part.stat().st_size
+        if actual == 0:
+            raise ValueError("downloaded archive is empty")
+        if size is not None and actual != size:
+            raise ValueError(
+                f"download size mismatch: expected {size}, got {actual}")
+        with zipfile.ZipFile(part) as archive:
+            bad_member = archive.testzip()
+            if bad_member:
+                raise zipfile.BadZipFile(f"CRC failure in {bad_member}")
+        os.replace(part, out)
     except Exception as e:
-        print(f"ERROR: FTP login failed ({e}). Check TNDS_USER / TNDS_PASS.")
+        part.unlink(missing_ok=True)
+        if ftp is not None:
+            try:
+                ftp.close()
+            except Exception:
+                pass
+        print(f"ERROR: TNDS download failed ({e}). Check credentials/network.")
         return 1
-    ftp.cwd(FTP_DIR)
-
-    try:
-        size = ftp.size(f"{REGION}.zip")
-    except Exception:
-        size = None
-    print(f"Downloading {REGION}.zip" + (f" ({size // (1024*1024)} MB)" if size else "") + " ...")
-    with open(out, "wb") as f:
-        ftp.retrbinary(f"RETR {REGION}.zip", f.write)
-    ftp.quit()
 
     mb = out.stat().st_size / (1024 * 1024)
     print(f"Saved {out} ({mb:.1f} MB)")

@@ -204,7 +204,8 @@ def find_stops_in_area(stops_file: Path, boundary_prepared, bounds) -> set:
 # Route/Trip identification
 # ============================================================================
 
-def find_routes_serving_area(stop_times_file: Path, trips_file: Path, stops_in_area: set) -> tuple:
+def find_routes_serving_area(stop_times_file: Path, trips_file: Path,
+                             stops_in_area: set) -> tuple[set[str], set[str]]:
     """
     Determine which routes serve the WECA area.
     
@@ -248,26 +249,27 @@ def find_routes_serving_area(stop_times_file: Path, trips_file: Path, stops_in_a
     # Step 2: Find route_ids for qualifying trips
     logger.info(f"Scanning trips.txt to find route_ids...")
     route_ids = set()
-    trip_to_route = {}  # We'll need this to include ALL trips for qualifying routes
     
     with open(trips_file, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             trip_id = row.get('trip_id', '')
             route_id = row.get('route_id', '')
-            trip_to_route[trip_id] = route_id
-            
             if trip_id in qualifying_trip_ids:
                 route_ids.add(route_id)
     
     logger.info(f"  Routes serving WECA area: {len(route_ids):,}")
     
-    # Step 3: Include ALL trips for qualifying routes (not just the ones we found)
-    # This ensures complete schedule data for every route
-    all_trip_ids = {
-        tid for tid, rid in trip_to_route.items() 
-        if rid in route_ids
-    }
+    # Step 3: Include ALL trips for qualifying routes (not just the ones we
+    # found). Re-scan the cheap trips file instead of retaining the complete
+    # regional trip-to-route mapping in RAM.
+    all_trip_ids = set()
+    with open(trips_file, 'r', encoding='utf-8-sig', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get('route_id', '') in route_ids:
+                all_trip_ids.add(row.get('trip_id', ''))
+    all_trip_ids.discard('')
     logger.info(f"  Total trips for qualifying routes: {len(all_trip_ids):,}")
     
     return route_ids, all_trip_ids
@@ -377,12 +379,10 @@ def create_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_routes_agency ON routes(agency_id)",
         
         # Stop times lookup by trip
-        "CREATE INDEX IF NOT EXISTS idx_stop_times_trip ON stop_times(trip_id)",
         "CREATE INDEX IF NOT EXISTS idx_stop_times_stop ON stop_times(stop_id)",
         "CREATE INDEX IF NOT EXISTS idx_stop_times_trip_seq ON stop_times(trip_id, stop_sequence)",
         
         # Fuzzy matching: find trip by line + time + calendar
-        "CREATE INDEX IF NOT EXISTS idx_trips_route ON trips(route_id)",
         "CREATE INDEX IF NOT EXISTS idx_trips_route_dir ON trips(route_id, direction_id)",
         "CREATE INDEX IF NOT EXISTS idx_trips_service ON trips(service_id)",
         "CREATE INDEX IF NOT EXISTS idx_routes_short_name ON routes(route_short_name)",
@@ -405,63 +405,66 @@ def create_indexes(conn):
     logger.info(f"  Created {len(indexes)} indexes")
 
 
-def load_csv_filtered(conn, table_name: str, file_path: Path, 
-                       filter_set: set = None, filter_column: str = None):
-    """
-    Load a CSV file into a SQLite table, optionally filtering by a column value.
-    
-    Args:
-        conn: SQLite connection
-        table_name: Target table name
-        file_path: Path to CSV file
-        filter_set: If provided, only include rows where filter_column value is in this set
-        filter_column: Column to filter on
-    """
+def load_csv_filtered(conn, table_name: str, file_path: Path,
+                      filter_set: set | None = None,
+                      filter_column: str | None = None,
+                      *, required: bool = True) -> int:
+    """Stream a GTFS CSV into SQLite, optionally retaining selected rows."""
     if not file_path.exists():
-        logger.warning(f"File not found: {file_path}")
+        if required:
+            raise FileNotFoundError(f"required GTFS file not found: {file_path}")
+        logger.info(f"Optional GTFS file not found: {file_path}")
         return 0
-    
-    filter_desc = f" (filtered by {filter_column})" if filter_set else ""
+
+    if filter_set is not None and not filter_column:
+        raise ValueError("filter_column is required when filter_set is supplied")
+    filter_desc = (f" (filtered by {filter_column})"
+                   if filter_set is not None else "")
     logger.info(f"Loading {file_path.name} into {table_name}{filter_desc}...")
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-    
-    total = len(rows)
-    
-    if filter_set and filter_column:
-        rows = [r for r in rows if r.get(filter_column, '') in filter_set]
-    
-    loaded = len(rows)
-    
-    if not rows:
-        logger.warning(f"  No rows to load!")
-        return 0
-    
-    columns = list(rows[0].keys())
-    placeholders = ','.join(['?' for _ in columns])
-    sql = f"INSERT OR REPLACE INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
-    
+
+    total = 0
+    loaded = 0
     batch_size = 5000
-    for i in range(0, len(rows), batch_size):
-        batch = rows[i:i+batch_size]
-        data = [[row.get(col, '') for col in columns] for row in batch]
-        conn.executemany(sql, data)
-        
-        processed = min(i + batch_size, len(rows))
-        if processed % 50000 == 0 or processed == len(rows):
-            logger.info(f"  {processed:,}/{loaded:,} rows")
-    
-    if filter_set:
-        logger.info(f"  Loaded {loaded:,} of {total:,} rows ({loaded/total*100:.1f}%)")
+    batch = []
+    with open(file_path, 'r', encoding='utf-8-sig', newline='') as f:
+        reader = csv.DictReader(f)
+        columns = list(reader.fieldnames or [])
+        if not columns:
+            raise ValueError(f"GTFS file has no header: {file_path}")
+        placeholders = ','.join('?' for _ in columns)
+        sql = (f"INSERT OR REPLACE INTO {table_name} ({','.join(columns)}) "
+               f"VALUES ({placeholders})")
+
+        for row in reader:
+            total += 1
+            if filter_set is not None \
+                    and row.get(filter_column or '', '') not in filter_set:
+                continue
+            batch.append([row.get(col, '') for col in columns])
+            loaded += 1
+            if len(batch) >= batch_size:
+                conn.executemany(sql, batch)
+                batch.clear()
+                if loaded % 50_000 == 0:
+                    logger.info(f"  Loaded {loaded:,} rows...")
+
+        if batch:
+            conn.executemany(sql, batch)
+
+    if filter_set is not None:
+        percentage = (loaded / total * 100) if total else 0
+        logger.info(
+            f"  Loaded {loaded:,} of {total:,} rows ({percentage:.1f}%)")
     else:
         logger.info(f"  Loaded {loaded:,} rows")
-    
+
+    if required and loaded == 0:
+        raise ValueError(f"required GTFS table {table_name} loaded no rows")
     return loaded
 
 
-def load_stop_times_filtered(conn, file_path: Path, trip_ids: set):
+def load_stop_times_filtered(conn, file_path: Path,
+                             trip_ids: set[str]) -> tuple[int, set[str]]:
     """
     Load stop_times.txt filtered to only include rows for qualifying trips.
     
@@ -469,8 +472,7 @@ def load_stop_times_filtered(conn, file_path: Path, trip_ids: set):
     fashion rather than loading it all into memory.
     """
     if not file_path.exists():
-        logger.warning(f"File not found: {file_path}")
-        return 0
+        raise FileNotFoundError(f"required GTFS file not found: {file_path}")
     
     logger.info(f"Loading {file_path.name} (filtered to {len(trip_ids):,} trips)...")
     
@@ -478,8 +480,9 @@ def load_stop_times_filtered(conn, file_path: Path, trip_ids: set):
     total = 0
     batch = []
     columns = None
+    used_stop_ids = set()
     
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, 'r', encoding='utf-8-sig', newline='') as f:
         reader = csv.DictReader(f)
         
         for row in reader:
@@ -492,6 +495,9 @@ def load_stop_times_filtered(conn, file_path: Path, trip_ids: set):
                 columns = list(row.keys())
             
             batch.append([row.get(col, '') for col in columns])
+            stop_id = row.get('stop_id', '')
+            if stop_id:
+                used_stop_ids.add(stop_id)
             loaded += 1
             
             if len(batch) >= 10000:
@@ -512,26 +518,12 @@ def load_stop_times_filtered(conn, file_path: Path, trip_ids: set):
         sql = f"INSERT OR REPLACE INTO stop_times ({','.join(columns)}) VALUES ({placeholders})"
         conn.executemany(sql, batch)
     
-    logger.info(f"  Loaded {loaded:,} of {total:,} stop_times ({loaded/total*100:.1f}%)")
-    return loaded
-
-
-def cleanup_unused_stops(conn, trip_ids: set):
-    """Remove stops not referenced by any included stop_times"""
-    logger.info("Cleaning up unused stops...")
-    
-    before = conn.execute("SELECT COUNT(*) FROM stops").fetchone()[0]
-    
-    conn.execute("""
-        DELETE FROM stops 
-        WHERE stop_id NOT IN (
-            SELECT DISTINCT stop_id FROM stop_times
-        )
-    """)
-    
-    after = conn.execute("SELECT COUNT(*) FROM stops").fetchone()[0]
-    removed = before - after
-    logger.info(f"  Removed {removed:,} unused stops ({before:,} → {after:,})")
+    if loaded == 0:
+        raise ValueError("required GTFS table stop_times loaded no rows")
+    percentage = (loaded / total * 100) if total else 0
+    logger.info(
+        f"  Loaded {loaded:,} of {total:,} stop_times ({percentage:.1f}%)")
+    return loaded, used_stop_ids
 
 
 def verify_database(conn):
@@ -603,14 +595,14 @@ def main():
 
     gtfs_path = args.gtfs
     boundary_path = args.boundary
-    output_db = args.output
+    output_path = Path(args.output).resolve()
     
     logger.info("=" * 60)
     logger.info("WECA Timetable Builder")
     logger.info("=" * 60)
     logger.info(f"GTFS data:  {gtfs_path}")
     logger.info(f"Boundary:   {boundary_path}")
-    logger.info(f"Output:     {output_db}")
+    logger.info(f"Output:     {output_path}")
     logger.info(f"Min stops:  {MIN_STOPS_IN_AREA}")
     
     # Download fresh GTFS data unless --no-download
@@ -692,17 +684,22 @@ def main():
     logger.info("-" * 40)
     
     # Remove existing output
-    output_path = Path(output_db)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
-        logger.info(f"Removing existing {output_db}")
+        logger.info(f"Removing existing {output_path}")
         output_path.unlink()
-    
-    conn = sqlite3.connect(output_db)
-    conn.execute("PRAGMA journal_mode=WAL;")
+    Path(f"{output_path}-wal").unlink(missing_ok=True)
+    Path(f"{output_path}-shm").unlink(missing_ok=True)
+
+    # This is a disposable candidate. Crash safety comes from keeping it
+    # separate from the live database until final validation and atomic
+    # promotion.
+    conn = sqlite3.connect(output_path)
+    conn.execute("PRAGMA journal_mode=OFF;")
     conn.execute("PRAGMA foreign_keys=ON;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
-    conn.execute("PRAGMA cache_size=50000;")
-    conn.execute("PRAGMA temp_store=MEMORY;")
+    conn.execute("PRAGMA synchronous=OFF;")
+    conn.execute("PRAGMA cache_size=-32768;")
+    conn.execute("PRAGMA temp_store=FILE;")
     
     try:
         create_tables(conn)
@@ -716,9 +713,6 @@ def main():
         load_csv_filtered(conn, "routes", gtfs_path / "routes.txt",
                           route_ids, "route_id")
         
-        # All stops first (we'll clean up later)
-        load_csv_filtered(conn, "stops", gtfs_path / "stops.txt")
-        
         # Trips: only for qualifying routes
         load_csv_filtered(conn, "trips", gtfs_path / "trips.txt",
                           trip_ids, "trip_id")
@@ -729,13 +723,16 @@ def main():
         
         # Calendar dates: only for qualifying service_ids
         load_csv_filtered(conn, "calendar_dates", gtfs_path / "calendar_dates.txt",
-                          service_ids, "service_id")
+                          service_ids, "service_id", required=False)
         
         # Stream stop_times to keep memory use bounded.
-        load_stop_times_filtered(conn, gtfs_path / "stop_times.txt", trip_ids)
-        
-        # Clean up stops not referenced by any included stop_times
-        cleanup_unused_stops(conn, trip_ids)
+        _, used_stop_ids = load_stop_times_filtered(
+            conn, gtfs_path / "stop_times.txt", trip_ids)
+
+        # Load only stops referenced by retained stop_times instead of loading
+        # the full regional set and deleting most of it afterwards.
+        load_csv_filtered(conn, "stops", gtfs_path / "stops.txt",
+                          used_stop_ids, "stop_id")
         
         # Create indexes
         create_indexes(conn)
@@ -753,10 +750,10 @@ def main():
     
     duration = datetime.now() - start_time
     logger.info(f"\n✓ Build complete in {duration}")
-    logger.info(f"  Output: {output_db}")
+    logger.info(f"  Output: {output_path}")
     logger.info(f"  Size: {output_path.stat().st_size / (1024*1024):.1f} MB")
     logger.info(f"\nNext steps:")
-    logger.info(f"  1. Rename {output_db} → timetable.db (or update DB_PATH in app.py)")
+    logger.info(f"  1. Finalize and validate {output_path} before promotion")
     logger.info(f"  2. Update app.py to remove FBRI-only operator filtering")
     logger.info(f"  3. Update app.py BOUNDING_BOX to match the WECA boundary")
 
