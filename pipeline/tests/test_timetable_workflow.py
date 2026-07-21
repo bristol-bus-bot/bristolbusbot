@@ -39,6 +39,18 @@ def test_secrets_are_environment_gated_and_scoped_to_build_step():
     assert "TNDS_PASS: ${{ secrets.TNDS_PASS }}" in build_step
 
 
+def test_runner_temp_paths_are_set_only_after_the_runner_starts():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    job_env = text.split("    env:", 1)[1].split("    steps:", 1)[0]
+    assert "runner.temp" not in job_env
+    prepare_step = text.split(
+        "      - name: Prepare disposable build directories", 1)[1].split(
+            "      - name:", 1)[0]
+    assert 'TMPDIR=$RUNNER_TEMP/bbb-timetable-sources' in prepare_step
+    assert 'SQLITE_TMPDIR=$RUNNER_TEMP/bbb-sqlite' in prepare_step
+    assert 'BBB_TIMETABLE_DB=$RUNNER_TEMP/bbb-candidate/timetable.db' in prepare_step
+
+
 def test_external_actions_are_pinned_to_immutable_commits():
     text = WORKFLOW.read_text(encoding="utf-8")
     uses_lines = []
