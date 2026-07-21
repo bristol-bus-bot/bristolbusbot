@@ -24,3 +24,32 @@ def test_timetable_artifact_has_short_retention_and_exact_payload_gate():
     assert "BODS_API_KEY: ${{ secrets.BODS_API_KEY }}" in text
     assert "TNDS_USER: ${{ secrets.TNDS_USER }}" in text
     assert "TNDS_PASS: ${{ secrets.TNDS_PASS }}" in text
+
+
+def test_secrets_are_environment_gated_and_scoped_to_build_step():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "environment: timetable-build" in text
+    job_env = text.split("    env:", 1)[1].split("    steps:", 1)[0]
+    assert "secrets." not in job_env
+    build_step = text.split(
+        "      - name: Build complete timetable candidate", 1)[1].split(
+            "      - name:", 1)[0]
+    assert "BODS_API_KEY: ${{ secrets.BODS_API_KEY }}" in build_step
+    assert "TNDS_USER: ${{ secrets.TNDS_USER }}" in build_step
+    assert "TNDS_PASS: ${{ secrets.TNDS_PASS }}" in build_step
+
+
+def test_external_actions_are_pinned_to_immutable_commits():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    uses_lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- uses:"):
+            stripped = stripped[2:]
+        if stripped.startswith("uses:"):
+            uses_lines.append(stripped)
+    assert len(uses_lines) == 3
+    for line in uses_lines:
+        reference = line.split("@", 1)[1].split()[0]
+        assert len(reference) == 40
+        assert all(character in "0123456789abcdef" for character in reference)

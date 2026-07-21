@@ -16,6 +16,28 @@ def write_zip(path: Path, member: str = "source.xml") -> None:
         archive.writestr(member, "<TransXChange />")
 
 
+def test_source_errors_redact_credentials(monkeypatch):
+    bods_key = "bods-secret-value"
+    monkeypatch.setattr(first_txc, "API_KEY", bods_key)
+    bods_error = RuntimeError(
+        f"failed https://example.invalid/data?api_key={bods_key}&noc=FBRI")
+    bods_message = first_txc.safe_error(bods_error)
+    assert bods_key not in bods_message
+    assert "api_key=[REDACTED]" in bods_message
+
+
+def test_tnds_errors_redact_username_and_password(monkeypatch):
+    import audit_fetch_tnds as tnds
+
+    monkeypatch.setattr(tnds, "USER", "download-user")
+    monkeypatch.setattr(tnds, "PASS", "download-password")
+    message = tnds.safe_error(
+        RuntimeError("download-user failed with download-password"))
+    assert "download-user" not in message
+    assert "download-password" not in message
+    assert message.count("[REDACTED]") == 2
+
+
 def test_first_txc_failure_preserves_previous_complete_cache(
         tmp_path, monkeypatch):
     destination = tmp_path / "first-txc"
