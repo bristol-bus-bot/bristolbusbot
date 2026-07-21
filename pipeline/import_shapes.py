@@ -78,9 +78,15 @@ def main():
         sys.exit(1)
 
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+    candidate_build = os.getenv("BBB_CANDIDATE_BUILD") == "1"
+    conn.execute(
+        "PRAGMA journal_mode=OFF" if candidate_build
+        else "PRAGMA journal_mode=WAL")
+    conn.execute(
+        "PRAGMA synchronous=OFF" if candidate_build
+        else "PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-32768")  # 32 MiB cache
+    conn.execute("PRAGMA temp_store=FILE")
     cursor = conn.cursor()
 
     # Step 1: Get all shape_ids used by Bristol trips
@@ -94,11 +100,13 @@ def main():
         conn.close()
         sys.exit(1)
 
-    # Step 2: Create shapes table
-    print("Step 2: Creating shapes table...")
-    cursor.execute("DROP TABLE IF EXISTS shapes")
+    # Raw shape points are build intermediates. Keep them in SQLite's
+    # file-backed TEMP database and publish only the derived route_shapes table.
+    print("Step 2: Creating temporary shapes table...")
+    cursor.execute("DROP TABLE IF EXISTS main.shapes")
+    cursor.execute("DROP TABLE IF EXISTS temp.shapes")
     cursor.execute("""
-        CREATE TABLE shapes (
+        CREATE TEMP TABLE shapes (
             shape_id TEXT NOT NULL,
             shape_pt_lat REAL NOT NULL,
             shape_pt_lon REAL NOT NULL,
@@ -150,7 +158,9 @@ def main():
 
     # Step 4: Create index
     print("Step 4: Creating index on shapes...")
-    cursor.execute("CREATE INDEX idx_shapes_id_seq ON shapes (shape_id, shape_pt_sequence)")
+    cursor.execute(
+        "CREATE INDEX temp.idx_shapes_id_seq "
+        "ON shapes (shape_id, shape_pt_sequence)")
     conn.commit()
 
     # Step 5: Build simplified route polylines
@@ -295,7 +305,7 @@ def main():
     variant_count = cursor.fetchone()[0]
 
     print(f"\nDone!")
-    print(f"  Shapes table: {inserted} points")
+    print(f"  Temporary shape points processed: {inserted}")
     print(f"  Route shapes: {total_route_shapes} polylines across {total_operators} operators ({total_json_bytes / 1024:.0f} KB total JSON)")
     if variant_count:
         print(f"  Geographic variants: {variant_count} extra polylines from split routes")
@@ -310,6 +320,8 @@ def main():
         pts = json.loads(sample[4])
         print(f"\n  Sample: Route {sample[0]} ({sample[1]}, dir {sample[2]}, var {sample[3]}) has {len(pts)} simplified points")
 
+    cursor.execute("DROP TABLE temp.shapes")
+    conn.commit()
     conn.close()
     print("\nAll done. Restart the Flask server to use the new shape data.")
 

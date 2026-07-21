@@ -1,0 +1,83 @@
+name: Timetable candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timetable-candidate
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: timetable-build
+    env:
+      TMPDIR: ${{ runner.temp }}/bbb-timetable-sources
+      SQLITE_TMPDIR: ${{ runner.temp }}/bbb-sqlite
+      BBB_TIMETABLE_DB: ${{ runner.temp }}/bbb-candidate/timetable.db
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pipeline/requirements-runtime.txt
+            pipeline/requirements-build.txt
+
+      - name: Install pinned build dependencies
+        run: python -m pip install --requirement pipeline/requirements-build.txt
+
+      - name: Prepare disposable build directories
+        run: |
+          mkdir -p "$TMPDIR" "$SQLITE_TMPDIR"
+          mkdir -p "$(dirname "$BBB_TIMETABLE_DB")" "$RUNNER_TEMP/timetable-package"
+
+      - name: Build complete timetable candidate
+        run: python pipeline/build_timetable.py --skip-deploy
+        env:
+          BODS_API_KEY: ${{ secrets.BODS_API_KEY }}
+          TNDS_USER: ${{ secrets.TNDS_USER }}
+          TNDS_PASS: ${{ secrets.TNDS_PASS }}
+
+      - name: Run independent production validation
+        run: python deploy/timetable_control.py validate "$BBB_TIMETABLE_DB"
+
+      - name: Create provenance manifest
+        run: |
+          python pipeline/timetable_manifest.py create \
+            --database "$BBB_TIMETABLE_DB" \
+            --output "$RUNNER_TEMP/timetable-package/manifest.json" \
+            --gtfs "$TMPDIR/busaudit_gtfs" \
+            --first-txc "$TMPDIR/busaudit_first_txc" \
+            --tnds "$TMPDIR/busaudit_tnds" \
+            --builder-commit "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --minimum-service-days 14
+
+      - name: Assemble and re-verify the exact artifact payload
+        run: |
+          cp "$BBB_TIMETABLE_DB" "$RUNNER_TEMP/timetable-package/timetable.db"
+          cp pipeline/TIMETABLE_ARTIFACT_ATTRIBUTION.txt "$RUNNER_TEMP/timetable-package/"
+          python pipeline/timetable_manifest.py verify \
+            --database "$RUNNER_TEMP/timetable-package/timetable.db" \
+            --manifest "$RUNNER_TEMP/timetable-package/manifest.json" \
+            --minimum-service-days 14
+          test "$(find "$RUNNER_TEMP/timetable-package" -maxdepth 1 -type f | wc -l)" -eq 3
+
+      - name: Upload seven-day delivery artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bristolbusbot-timetable
+          path: ${{ runner.temp }}/timetable-package/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
