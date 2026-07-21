@@ -15,6 +15,7 @@ Writes the downloaded TXC zips to a temp folder and prints what it found
 Needs BODS_API_KEY in .env (same key the collector uses).
 """
 import os
+import re
 import shutil
 import sys
 import time
@@ -33,6 +34,17 @@ OUT_DIR = Path(tempfile.gettempdir()) / "busaudit_first_txc"
 WATCH = {"42", "43", "44", "45"}
 USER_AGENT = "BristolBusBot timetable builder (+https://bristolbuses.live/)"
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+
+
+def safe_error(exc):
+    """Keep credential-bearing query strings out of public build logs."""
+    message = str(exc)
+    message = re.sub(
+        r"([?&]api_key=)[^&\s'\"]+", r"\1[REDACTED]", message,
+        flags=re.IGNORECASE)
+    if API_KEY:
+        message = message.replace(API_KEY, "[REDACTED]")
+    return f"{type(exc).__name__}: {message}"
 
 
 def discard_directory(path):
@@ -122,7 +134,8 @@ def download_archive(session, url, destination):
             part.unlink(missing_ok=True)
             if attempt < 3:
                 time.sleep(2 ** (attempt - 1))
-    raise RuntimeError(f"download failed after 3 attempts: {last_error}")
+    raise RuntimeError(
+        f"download failed after 3 attempts: {safe_error(last_error)}")
 
 
 def main():
@@ -142,7 +155,7 @@ def main():
         datasets = list_datasets(session)
     except requests.RequestException as exc:
         discard_directory(staging)
-        print(f"ERROR: dataset listing failed: {exc}")
+        print(f"ERROR: dataset listing failed: {safe_error(exc)}")
         return 1
     if not datasets:
         discard_directory(staging)

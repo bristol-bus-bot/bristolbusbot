@@ -33,6 +33,15 @@ FTP_HOST = "ftp.tnds.basemap.co.uk"
 FTP_DIR = "TNDSV2.5"
 
 
+def safe_error(exc):
+    """Remove FTP credentials from any exception written to public logs."""
+    message = str(exc)
+    for secret in (USER, PASS):
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    return f"{type(exc).__name__}: {message}"
+
+
 def main():
     if not USER or not PASS:
         print("ERROR: TNDS_USER / TNDS_PASS not set in .env.")
@@ -77,7 +86,9 @@ def main():
                 ftp.close()
             except Exception:
                 pass
-        print(f"ERROR: TNDS download failed ({e}). Check credentials/network.")
+        print(
+            f"ERROR: TNDS download failed ({safe_error(e)}). "
+            "Check credentials/network.")
         return 1
 
     mb = out.stat().st_size / (1024 * 1024)

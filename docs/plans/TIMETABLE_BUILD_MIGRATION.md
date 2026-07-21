@@ -189,9 +189,13 @@ gate, not a production requirement, because live sources change continually.
 
 ## Secrets and public data
 
-`BODS_API_KEY`, `TNDS_USER`, and `TNDS_PASS` live in GitHub Secrets for the
-build workflow. The workflow runs with minimum repository permissions, never on
-pull-request code with secrets, and never prints its environment.
+`BODS_API_KEY`, `TNDS_USER`, and `TNDS_PASS` live as environment-scoped secrets
+in a dedicated GitHub `timetable-build` environment. Only the build step
+receives them. The workflow uses immutable action commit pins, runs with minimum
+repository permissions, never runs pull-request code with secrets, redacts
+credential-bearing errors, and never prints its environment. The initial shadow
+run requires environment approval; that approval gate can be removed only when
+the unattended path is deliberately enabled.
 
 BODS timetable data and TNDS are published under the Open Government Licence,
 so the derived timetable may be delivered through a public-repository artifact

@@ -160,7 +160,9 @@ Add a dedicated workflow separate from ordinary PR CI:
   running build;
 - pinned Python and locked build dependencies;
 - minimum GitHub permissions;
-- BODS/TNDS credentials from GitHub Secrets;
+- BODS/TNDS credentials from the dedicated `timetable-build` GitHub
+  environment, exposed only to the build step;
+- immutable full-commit pins for every reused GitHub action;
 - bounded network retries, timeouts, size ceilings, archive tests, and an honest
   User-Agent;
 - build, validate, manifest, and upload in that order;
