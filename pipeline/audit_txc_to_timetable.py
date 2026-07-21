@@ -18,7 +18,6 @@ Usage:
     python audit_txc_to_timetable.py <timetable.db> <first_txc_dir> [known_good.db]
 """
 import os
-import io
 import re
 import sys
 import glob
@@ -27,7 +26,7 @@ import sqlite3
 
 import txc_parser as txc
 
-LINE_RE = re.compile(r"<LineName>([^<]+)</LineName>")
+LINE_RE = re.compile(br"<LineName>([^<]+)</LineName>")
 
 # TimingStatus may use either the long form or the TXC three-letter code.
 PRINCIPAL = "principal"
@@ -107,6 +106,7 @@ def main():
     routes_added = set()
     n_trips = n_st = n_stops_added = 0
     seq_counter = 0
+    errors = []
 
     def ensure_stop(atco):
         nonlocal n_stops_added
@@ -143,25 +143,32 @@ def main():
     for zpath in zips:
         try:
             zf = zipfile.ZipFile(zpath)
-        except zipfile.BadZipFile:
+        except zipfile.BadZipFile as exc:
+            errors.append(f"bad zip {os.path.basename(zpath)}: {exc}")
             continue
         for name in zf.namelist():
             if not name.lower().endswith(".xml"):
                 continue
             raw = zf.read(name)
-            text = raw.decode("utf-8", "ignore")
             # only First BRISTOL files (these datasets bundle every First region)
-            if "FBRI" not in text:
+            if b"FBRI" not in raw:
                 continue
-            file_lines = {m.split("|", 1)[0].strip() for m in LINE_RE.findall(text)}
+            file_lines = {
+                value.decode("utf-8", "ignore").split("|", 1)[0].strip()
+                for value in LINE_RE.findall(raw)
+            }
             new_lines = sorted(file_lines - target_first)
             if not new_lines:
                 continue
             print(f"  parsing {os.path.basename(zpath)}/{name}  (missing lines: {new_lines})", flush=True)
             try:
-                doc = txc.TransXChange(io.BytesIO(raw))
+                del raw
+                with zf.open(name) as xml_file:
+                    doc = txc.TransXChange(xml_file)
             except Exception as e:
                 print(f"    parse failed: {e}", flush=True)
+                errors.append(
+                    f"parse failed {os.path.basename(zpath)}/{name}: {e}")
                 continue
             noc_map = {}
             if getattr(doc, "operators", None) is not None:
@@ -195,9 +202,15 @@ def main():
                         jp = j.journey_pattern
                         direction = 1 if (jp and jp.is_inbound()) else 0
                         trip_id = f"SUP_T_{service.service_code}_{j.code}"
+                        if cur.execute(
+                                "SELECT 1 FROM trips WHERE trip_id=? LIMIT 1",
+                                (trip_id,)).fetchone():
+                            continue
                         try:
                             cells = list(j.get_times())
-                        except Exception:
+                        except Exception as exc:
+                            errors.append(
+                                f"journey parse failed {trip_id}: {exc}")
                             continue
                         seq = 0
                         wrote_any = False
@@ -222,7 +235,19 @@ def main():
                                 "INSERT OR IGNORE INTO trips (trip_id, route_id, service_id, direction_id) "
                                 "VALUES (?,?,?,?)", (trip_id, route_id, service_id, direction))
                             n_trips += 1
+        zf.close()
 
+    if errors:
+        conn.rollback()
+        print("ERROR: TXC merge was incomplete:", flush=True)
+        for error in errors[:20]:
+            print(f"  {error}", flush=True)
+        if len(errors) > 20:
+            print(f"  ... and {len(errors) - 20} more", flush=True)
+        conn.close()
+        if good:
+            good.close()
+        return 1
     conn.commit()
     added_routes = sorted({r.replace("SUP_R_", "") for r in routes_added})
     print(f"TXC merge: added First routes {added_routes}")

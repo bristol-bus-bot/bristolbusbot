@@ -83,7 +83,7 @@ def promote_atomically(staged_db: Path, live_db: Path) -> Path:
 
 
 def finalize_static_database(path: Path) -> None:
-    """Checkpoint build WAL data and make the published DB truly read-only.
+    """Optimize the candidate and make the published DB truly read-only.
 
     Runtime consumers never write this database, so DELETE journal mode avoids
     requiring writable `-wal`/`-shm` sidecars inside their sandboxes.
@@ -91,6 +91,10 @@ def finalize_static_database(path: Path) -> None:
     conn = sqlite3.connect(path)
     try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+        conn.execute("ANALYZE")
+        conn.execute("PRAGMA optimize").fetchall()
+        conn.commit()
+        conn.execute("VACUUM")
         mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
         if mode.lower() != "delete":
             raise RuntimeError(f"could not set static journal mode: {mode}")
@@ -155,7 +159,12 @@ def main():
     # Supplement First routes BODS dropped from the lossy GTFS, by parsing
     # First's own TransXChange (the authoritative registration data).
     txc_dir = TMP / "busaudit_first_txc"
-    if not run([PY, str(HERE / "audit_fetch_first_txc.py")]):
+    if no_download:
+        if not txc_dir.is_dir() or not any(txc_dir.glob("*.zip")):
+            logger.error(
+                "Cached First TransXChange source is missing from %s.", txc_dir)
+            return 1
+    elif not run([PY, str(HERE / "audit_fetch_first_txc.py")]):
         logger.error("Fetching First's TransXChange failed - aborting.")
         return 1
     merge_cmd = [PY, str(HERE / "audit_txc_to_timetable.py"), str(WECA_DB), str(txc_dir)]
@@ -166,18 +175,27 @@ def main():
         return 1
 
     # TNDS (Traveline): the source for First routes that are not in BODS at all
-    # (e.g. 42-45). Needs TNDS_USER / TNDS_PASS in .env. If unavailable we carry
-    # on and let validation decide whether the result is good enough to ship.
+    # (e.g. 42-45). It is a required source for an unattended complete build.
     tnds_dir = TMP / "busaudit_tnds"
-    if run([PY, str(HERE / "audit_fetch_tnds.py")]):
-        tnds_merge = [PY, str(HERE / "audit_txc_to_timetable.py"), str(WECA_DB), str(tnds_dir)]
-        if BUSBOT_DB.exists():
-            tnds_merge.append(str(BUSBOT_DB))
-        if not run(tnds_merge):
-            logger.error("TNDS merge failed - aborting.")
+    if no_download:
+        tnds_ready = tnds_dir.is_dir() and any(tnds_dir.glob("*.zip"))
+        if not tnds_ready:
+            logger.error("Cached TNDS source is missing from %s.", tnds_dir)
             return 1
     else:
-        logger.warning("TNDS fetch skipped/failed (check TNDS_USER/TNDS_PASS in .env).")
+        tnds_ready = run([PY, str(HERE / "audit_fetch_tnds.py")])
+    if not tnds_ready:
+        logger.error(
+            "TNDS fetch failed (check TNDS_USER/TNDS_PASS) - aborting; "
+            "partial timetable candidates are never published.")
+        return 1
+    tnds_merge = [PY, str(HERE / "audit_txc_to_timetable.py"),
+                  str(WECA_DB), str(tnds_dir)]
+    if BUSBOT_DB.exists():
+        tnds_merge.append(str(BUSBOT_DB))
+    if not run(tnds_merge):
+        logger.error("TNDS merge failed - aborting.")
+        return 1
 
     validation = validate(WECA_DB)
     logger.info(
@@ -219,6 +237,7 @@ def main():
     if (Path(GTFS_DIR) / "shapes.txt").exists():
         env_shapes = {**os.environ, "BBB_TIMETABLE_DB": str(staged_db),
                       "BBB_GTFS_DIR": str(GTFS_DIR),
+                      "BBB_CANDIDATE_BUILD": "1",
                       "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         logger.info("Importing route shapes from the same GTFS extract...")
         if subprocess.run([PY, str(HERE / "import_shapes.py")],
