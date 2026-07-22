@@ -20,6 +20,7 @@ CREATE TABLE routes (route_id TEXT PRIMARY KEY, agency_id TEXT, route_short_name
     route_long_name TEXT, route_type INTEGER);
 CREATE TABLE calendar (service_id TEXT PRIMARY KEY, monday INT, tuesday INT, wednesday INT,
     thursday INT, friday INT, saturday INT, sunday INT, start_date TEXT, end_date TEXT);
+CREATE TABLE calendar_dates (service_id TEXT, date TEXT, exception_type INT);
 CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT, service_id TEXT,
     trip_headsign TEXT, trip_short_name TEXT, direction_id INT, block_id TEXT,
     shape_id TEXT, wheelchair_accessible INT, vehicle_journey_code TEXT);

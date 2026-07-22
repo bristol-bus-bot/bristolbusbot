@@ -295,6 +295,15 @@ export class DatabaseManager {
 
             const originDateTime = DateTime.fromISO(originAimedDepartureTime, { zone: 'UTC' }).setZone(TARGET_TIMEZONE);
             const targetDayOfWeek = originDateTime.toFormat('ccc'); // e.g., 'Sat' or 'Sun' from the live data
+            const hour = originDateTime.hour;
+            const dayMapping: Record<string, string> = {
+                'Sun': 'sunday', 'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
+                'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday'
+            };
+            const exactServiceDays = [originDateTime];
+            if (hour >= 0 && hour < 6) {
+                exactServiceDays.unshift(originDateTime.minus({ days: 1 }));
+            }
 
             // Try with trip_id (GTFS equivalent of datedJourneyRef)
             // Attempt with FBRI operator first, then without (SIRI operator refs don't always match GTFS)
@@ -303,26 +312,63 @@ export class DatabaseManager {
                     const agencyClause = agencyFilter
                         ? `a.agency_noc = '${agencyFilter}' AND`
                         : '';
-                    const rows = await new Promise<any[]>((res) => this.timetableDb!.all(
-                        `SELECT ${fields} FROM stop_times st
-                         JOIN trips t ON st.trip_id = t.trip_id
-                         JOIN stops s ON st.stop_id = s.stop_id
-                         JOIN routes r ON t.route_id = r.route_id
-                         JOIN agency a ON r.agency_id = a.agency_id
-                         WHERE ${agencyClause}
-                         (t.trip_id = ? OR t.vehicle_journey_code = ?)
-                         ORDER BY st.stop_sequence ASC;`,
-                        [datedJourneyRef, datedJourneyRef],
-                        (e, r: any[]) => res(e ? [] : r)
-                    ));
+                    for (const serviceDay of exactServiceDays) {
+                        const dayColumn = dayMapping[serviceDay.toFormat('ccc')];
+                        if (!dayColumn) continue;
+                        const dateStr = serviceDay.toFormat('yyyyMMdd');
+                        const trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
+                            `SELECT DISTINCT t.trip_id FROM trips t
+                             JOIN routes r ON t.route_id = r.route_id
+                             JOIN agency a ON r.agency_id = a.agency_id
+                             WHERE ${agencyClause}
+                             (t.trip_id = ? OR (
+                                 t.vehicle_journey_code = ?
+                                 AND r.route_short_name = ?
+                             ))
+                             AND (
+                                 EXISTS (
+                                     SELECT 1 FROM calendar c
+                                     WHERE c.service_id=t.service_id
+                                       AND c.${dayColumn}=1
+                                       AND c.start_date<=? AND c.end_date>=?
+                                       AND t.service_id NOT IN (
+                                           SELECT service_id FROM calendar_dates
+                                           WHERE date=? AND exception_type=2
+                                       )
+                                 )
+                                 OR EXISTS (
+                                     SELECT 1 FROM calendar_dates cd
+                                     WHERE cd.service_id=t.service_id
+                                       AND cd.date=? AND cd.exception_type=1
+                                 )
+                             )
+                             ORDER BY CASE WHEN t.trip_id=? THEN 0 ELSE 1 END
+                             LIMIT 1;`,
+                            [
+                                datedJourneyRef, datedJourneyRef, lineName,
+                                dateStr, dateStr, dateStr, dateStr,
+                                datedJourneyRef
+                            ],
+                            (e, r: any) => res(e ? null : (r || null))
+                        ));
+                        if (!trip) continue;
+                        const rows = await new Promise<any[]>((res) => this.timetableDb!.all(
+                            `SELECT ${fields} FROM stop_times st
+                             JOIN stops s ON st.stop_id = s.stop_id
+                             WHERE st.trip_id = ?
+                             ORDER BY st.stop_sequence ASC;`,
+                            [trip.trip_id],
+                            (e, r: any[]) => res(e ? [] : r)
+                        ));
 
-                    if (rows.length > 0) {
-                        timer.complete({
-                            method: agencyFilter ? 'trip_id' : 'trip_id_no_operator',
-                            rowsFound: rows.length,
-                            dayOfWeek: targetDayOfWeek
-                        });
-                        return rows;
+                        if (rows.length > 0) {
+                            timer.complete({
+                                method: agencyFilter ? 'trip_id' : 'trip_id_no_operator',
+                                rowsFound: rows.length,
+                                dayOfWeek: targetDayOfWeek
+                            });
+                            return rows;
+                        }
                     }
                 }
             }
@@ -334,10 +380,15 @@ export class DatabaseManager {
 
             // GTFS uses 24+ hour notation for services past midnight (e.g., 24:20:00 = 00:20)
             // For times between 00:00-05:59, also search for 24+ hour equivalents
-            const hour = originDateTime.hour;
             const minute = originDateTime.minute;
             const second = originDateTime.second;
-            const searchTimes: Array<{key: string, lower: string, upper: string, dayOfWeek: string}> = [{key: depTimeKey, lower, upper, dayOfWeek: targetDayOfWeek}];
+            const searchTimes: Array<{key: string, lower: string, upper: string, dayOfWeek: string, serviceDate: string}> = [{
+                key: depTimeKey,
+                lower,
+                upper,
+                dayOfWeek: targetDayOfWeek,
+                serviceDate: originDateTime.toFormat('yyyyMMdd')
+            }];
 
             if (hour >= 0 && hour < 6) {
                 // Convert to GTFS 24+ hour format
@@ -356,14 +407,14 @@ export class DatabaseManager {
 
                 // GTFS service day: times 24:00+ belong to previous calendar day
                 const gtfsDayOfWeek = originDateTime.minus({ days: 1 }).toFormat('ccc');
-                searchTimes.push({key: gtfsDepTimeKey, lower: gtfsLower, upper: gtfsUpper, dayOfWeek: gtfsDayOfWeek});
+                searchTimes.push({
+                    key: gtfsDepTimeKey,
+                    lower: gtfsLower,
+                    upper: gtfsUpper,
+                    dayOfWeek: gtfsDayOfWeek,
+                    serviceDate: originDateTime.minus({ days: 1 }).toFormat('yyyyMMdd')
+                });
             }
-
-            // Day of week mapping for calendar table: Sun=0, Mon=1, ..., Sat=6
-            const dayMapping: Record<string, string> = {
-                'Sun': 'sunday', 'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
-                'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday'
-            };
 
             // Try with FBRI operator first, then without operator filter
             // SIRI OperatorRef often doesn't match GTFS agency_noc, so fallback catches more routes
@@ -388,25 +439,27 @@ export class DatabaseManager {
                          r.route_short_name = ?
                          AND st.departure_time BETWEEN ? AND ?
                          AND c.${dayColumn} = 1
+                         AND c.start_date <= ? AND c.end_date >= ?
+                         AND t.service_id NOT IN (
+                             SELECT service_id FROM calendar_dates
+                             WHERE date = ? AND exception_type = 2
+                         )
                          ORDER BY ABS(strftime('%s', '1970-01-01 ' || st.departure_time) - strftime('%s', '1970-01-01 ' || ?)) ASC
                          LIMIT 1;`;
 
                     trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
                         calendarSql,
-                        [lineName, timeSet.lower, timeSet.upper, timeSet.key],
+                        [
+                            lineName, timeSet.lower, timeSet.upper,
+                            timeSet.serviceDate, timeSet.serviceDate,
+                            timeSet.serviceDate, timeSet.key
+                        ],
                         (e, r: any) => res(e ? null : (r || null))
                     ));
 
                     if (trip) break; // Found a match in calendar, stop searching
 
                     // If no match in calendar, try calendar_dates (specific date exceptions/additions)
-                    // Use the GTFS service day for midnight times (subtract 1 day if 00:00-05:59)
-                    let gtfsServiceDate = originDateTime;
-                    if (hour >= 0 && hour < 6) {
-                        gtfsServiceDate = originDateTime.minus({ days: 1 });
-                    }
-                    const dateStr = gtfsServiceDate.toFormat('yyyyMMdd'); // Format: YYYYMMDD
-
                     const calendarDatesSql = `SELECT DISTINCT t.trip_id
                          FROM trips t
                          JOIN routes r ON t.route_id = r.route_id
@@ -423,7 +476,10 @@ export class DatabaseManager {
 
                     trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
                         calendarDatesSql,
-                        [lineName, timeSet.lower, timeSet.upper, dateStr, timeSet.key],
+                        [
+                            lineName, timeSet.lower, timeSet.upper,
+                            timeSet.serviceDate, timeSet.key
+                        ],
                         (e, r: any) => res(e ? null : (r || null))
                     ));
 

@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "deploy"))
 from timetable_control import VALIDATOR_ID, validate  # noqa: E402
 
 
-MANIFEST_VERSION = 4
+MANIFEST_VERSION = 5
 GTFS_REQUIRED = (
     "agency.txt",
     "routes.txt",
@@ -39,6 +39,7 @@ TABLES = (
     "calendar_dates",
     "route_shapes",
     "stop_routes",
+    "route_service_editions",
 )
 
 

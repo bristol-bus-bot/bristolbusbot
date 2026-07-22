@@ -123,6 +123,11 @@ def test_new_candidates_require_precomputed_stop_routes_but_legacy_live_is_reada
     with pytest.raises(RuntimeError, match="stop_routes"):
         validate(legacy, require_stop_routes=True)
 
+    legacy_with_stop_routes = tmp_path / "legacy-with-stop-routes.db"
+    make_timetable(legacy_with_stop_routes)
+    with pytest.raises(RuntimeError, match="route_service_editions"):
+        validate(legacy_with_stop_routes, require_stop_routes=True)
+
 
 def test_rejects_incomplete_precomputed_stop_routes(tmp_path):
     database = tmp_path / "bad-stop-routes.db"

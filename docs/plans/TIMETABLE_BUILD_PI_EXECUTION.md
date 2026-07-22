@@ -269,6 +269,21 @@ lookup pairs; the complete website search payload assembled in about 0.052
 seconds on the Windows verification run. Detailed Slack notifications now
 distinguish accepted, rejected, rolled-back and rollback-failed outcomes.
 
+Source-edition evidence (2026-07-22): the fresh BODS aggregate grew from
+1,183,343 to 1,965,256 stop-time rows almost entirely because First Bristol
+published overlapping current and future revisions under the same route IDs.
+The records were structurally unique but many revisions represented the same
+service period, so duplicate-key checks could not detect the problem. The
+candidate builder now records each route edition, gives replacement-like
+revisions non-overlapping effective windows, and retains small or differently
+scheduled cohorts as possible genuine additions. The independent validator
+recomputes those windows and rejects unresolved replacement overlaps. Collector,
+site and bot matching apply calendar ranges plus dated additions/removals; Slack
+success includes the number of editions separated. A laptop copy of production
+rewindowed 30,817 trips across 146 superseded editions: route 75 fell from two
+active Sunday editions on 26 July to one, and from three on 30 August to one,
+without deleting any source journey or stop-time records.
+
 Acceptance: forced failures before replace, after replace, during restart, and
 during health check all produce the expected live file and job record.
 

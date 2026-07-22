@@ -7,13 +7,22 @@ import json
 import math
 import os
 import sqlite3
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PIPELINE_MODULES = PROJECT_ROOT / "pipeline"
+if PIPELINE_MODULES.is_dir():
+    sys.path.insert(0, str(PIPELINE_MODULES))
+
+from timetable_editions import validate_database as validate_route_editions  # noqa: E402
+
+
 ROOT = Path("/var/lib/bristolbusbot/pipeline")
 EXPECTED_FBRI = {"1", "2", "42", "43", "44", "45", "75", "76", "X1", "m1"}
-VALIDATOR_ID = "bbb-timetable-control-v3"
+VALIDATOR_ID = "bbb-timetable-control-v4"
 REQUIRED_COLUMNS = {
     "agency": {"agency_id", "agency_noc"},
     "routes": {"route_id", "agency_id", "route_short_name"},
@@ -227,6 +236,8 @@ def validate(path: Path, *, today: date | None = None,
                 f"{over_variant[1]}/{over_variant[0]}/{over_variant[2]} "
                 f"has {over_variant[3]}")
         shape_count = _validate_shape_geometry(connection)
+        edition_result = validate_route_editions(
+            connection, require_table=require_stop_routes)
     finally:
         connection.close()
     missing = sorted(EXPECTED_FBRI - routes)
@@ -251,6 +262,7 @@ def validate(path: Path, *, today: date | None = None,
     }
     if "stop_routes" in counts:
         result["stop_routes"] = counts["stop_routes"]
+    result.update(edition_result)
     return result
 
 

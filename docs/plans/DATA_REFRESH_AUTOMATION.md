@@ -292,6 +292,7 @@ administration surface.
 |---|---|---|
 | external builder unavailable | overdue build health | old data stays live; workstation/GCP fallback |
 | source returns partial data | source-stage and count gates | discard whole candidate |
+| source publishes overlapping route revisions | route-edition window validation | preserve revisions but prevent replacement editions being active together |
 | fleet-code collision | identity audit fixtures | canonical registration plus `(NOC, fleet_code)` |
 | bot still reads release data | consumer-path audit | tested environment overrides before cutover |
 | source changes legitimately exceed limits | named refusal | recorded manual override with review |
