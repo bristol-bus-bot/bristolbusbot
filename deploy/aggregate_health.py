@@ -32,6 +32,9 @@ JOB_MAX_AGE_HOURS = {
     "staleness": 2,
     "digest": 14,
 }
+TIMETABLE_DELIVERY_STATE = Path(
+    "/var/lib/bristolbusbot/timetable-shadow/state.json")
+TIMETABLE_TOKEN_WARNING_DAYS = 30
 
 
 def utcnow() -> datetime:
@@ -106,6 +109,53 @@ def job_checks() -> tuple[dict, list[str]]:
     return checks, issues
 
 
+def timetable_delivery_check() -> tuple[dict, list[str]]:
+    enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-timetable-shadow.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    if not enabled:
+        return {"status": "disabled"}, []
+    issues: list[str] = []
+    result: dict[str, object] = {"status": "enabled"}
+    job_path = STATE / "jobs" / "timetable-shadow.json"
+    try:
+        job = json.loads(job_path.read_text(encoding="utf-8"))
+        last_result = job.get("last_result")
+        last_ok = (job.get("last_skipped_at")
+                   if last_result == "skipped" else job.get("last_success_at"))
+        age_h = age_seconds(last_ok) / 3600 if last_ok else None
+        result["job"] = {
+            "result": last_result,
+            "last_ok_at": last_ok,
+            "age_hours": round(age_h, 2) if age_h is not None else None,
+        }
+        if last_result == "failure" or age_h is None or age_h > 30:
+            issues.append("job:timetable-shadow")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        result["job"] = {"result": "missing", "error": str(exc)}
+        issues.append("job:timetable-shadow")
+
+    try:
+        state = json.loads(TIMETABLE_DELIVERY_STATE.read_text(encoding="utf-8"))
+        expires = datetime.fromisoformat(
+            str(state["token_expires_utc"]).replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        days = (expires.astimezone(timezone.utc) - utcnow()).total_seconds() / 86400
+        result["token"] = {
+            "expires_utc": expires.astimezone(timezone.utc).isoformat(),
+            "days_remaining": round(days, 1),
+        }
+        result["last_attempt"] = state.get("last_shadow_attempt")
+        if days <= TIMETABLE_TOKEN_WARNING_DAYS:
+            issues.append("credential:timetable-token-expiry")
+    except (OSError, KeyError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        result["token"] = {"status": "missing", "error": str(exc)}
+        issues.append("credential:timetable-token-expiry")
+    return result, issues
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -133,6 +183,8 @@ def main() -> int:
     services, found = service_checks()
     issues.extend(found)
     jobs, found = job_checks()
+    issues.extend(found)
+    timetable_delivery, found = timetable_delivery_check()
     issues.extend(found)
 
     try:
@@ -193,6 +245,7 @@ def main() -> int:
         "issues": unique_issues,
         "services": services,
         "jobs": jobs,
+        "timetable_delivery": timetable_delivery,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
         "audit": {"latest_rollup_service_date": audit_day,

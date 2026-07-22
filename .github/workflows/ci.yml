@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: python -m compileall -q site pipeline collector
+      - run: python -m compileall -q site pipeline collector deploy
       - run: pip install -e "collector[dev]" -e "site[dev]" flask paramiko
       - run: python -m pytest collector -q
       - run: python -m pytest site -q

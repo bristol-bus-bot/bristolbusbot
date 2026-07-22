@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "deploy"))
 from timetable_control import validate  # noqa: E402
 
 
-MANIFEST_VERSION = 2
+MANIFEST_VERSION = 3
 GTFS_REQUIRED = (
     "agency.txt",
     "routes.txt",
@@ -172,14 +172,29 @@ def database_summary(database: Path) -> dict[str, object]:
 def create_manifest(*, database: Path, output: Path, gtfs: Path,
                     first_txc: Path, tnds: Path, source_status: Path,
                     builder_commit: str,
-                    workflow_run_id: str, minimum_service_days: int) -> dict:
+                    workflow_run_id: str, build_started_utc: str,
+                    minimum_service_days: int) -> dict:
     if database.is_symlink() or not database.is_file():
         raise RuntimeError(f"candidate is not a regular file: {database}")
     validation = validate(
         database, minimum_service_days=minimum_service_days)
+    try:
+        started = datetime.fromisoformat(build_started_utc.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RuntimeError("invalid build start timestamp") from exc
+    if started.tzinfo is None:
+        raise RuntimeError("build start timestamp must include a timezone")
+    finished = datetime.now(timezone.utc)
+    started = started.astimezone(timezone.utc)
+    if started > finished:
+        raise RuntimeError("build start timestamp is after build finish")
     manifest = {
         "manifest_version": MANIFEST_VERSION,
-        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "created_utc": finished.isoformat(),
+        "build": {
+            "started_utc": started.isoformat(),
+            "finished_utc": finished.isoformat(),
+        },
         "builder": {
             "commit": builder_commit,
             "workflow_run_id": workflow_run_id,
@@ -226,8 +241,20 @@ def verify_manifest(*, database: Path, manifest_path: Path,
         raise RuntimeError("manifest byte size does not match candidate")
     if artifact.get("sha256") != sha256_file(database):
         raise RuntimeError("manifest SHA-256 does not match candidate")
+    validation_record = manifest.get("validation")
+    if not isinstance(validation_record, dict):
+        raise RuntimeError("manifest has no validation record")
+    if validation_record.get("validator") != "bbb-timetable-control-v2":
+        raise RuntimeError("manifest names an unsupported validator")
+    recorded_minimum = validation_record.get("minimum_service_days")
+    if (isinstance(recorded_minimum, bool)
+            or not isinstance(recorded_minimum, int)
+            or recorded_minimum < minimum_service_days):
+        raise RuntimeError("manifest validation window is too short")
     validation = validate(
         database, minimum_service_days=minimum_service_days)
+    if validation_record.get("result") != validation:
+        raise RuntimeError("manifest validation result does not match candidate")
     if manifest.get("database") != database_summary(database):
         raise RuntimeError("manifest database summary does not match candidate")
     return validation
@@ -246,6 +273,7 @@ def main() -> int:
     create.add_argument("--source-status", required=True, type=Path)
     create.add_argument("--builder-commit", required=True)
     create.add_argument("--workflow-run-id", required=True)
+    create.add_argument("--build-started-utc", required=True)
     create.add_argument("--minimum-service-days", type=int, default=14)
 
     verify = subparsers.add_parser("verify")
@@ -265,6 +293,7 @@ def main() -> int:
                 source_status=args.source_status,
                 builder_commit=args.builder_commit,
                 workflow_run_id=args.workflow_run_id,
+                build_started_utc=args.build_started_utc,
                 minimum_service_days=args.minimum_service_days,
             )
             print(

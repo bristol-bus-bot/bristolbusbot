@@ -1,3 +1,5 @@
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +20,14 @@ TEST_SETTINGS = settings_from({
     "BBB_CLOUDFLARE_TUNNEL_ID": "da61e550-dead-4bad-8dad-da4cface0001",
     "BBB_LOCAL_GTFS_DIR": r"C:\Darkplace\gtfs",
 })
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX installer syntax is checked on Linux CI")
+def test_layout_installer_has_valid_posix_shell_syntax():
+    subprocess.run(
+        ["sh", "-n", str(push.DEPLOY / "install_unified_deploy.sh")],
+        check=True,
+    )
 
 
 def test_dry_run_never_connects_or_reads_timetable(monkeypatch, tmp_path, capsys):
@@ -169,6 +179,23 @@ def test_layout_installer_waits_for_slow_startup_and_has_rollback_trap():
     assert "previous units were restored" in installer
 
 
+def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_path):
+    installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert "/usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py" in installer
+    assert "left disabled until its root-only credential is configured" in installer
+
+    archive = push.install_payload(tmp_path, TEST_SETTINGS)
+    import tarfile
+    extract = tmp_path / "shadow-layout"
+    extract.mkdir()
+    with tarfile.open(archive) as payload:
+        payload.extractall(extract, filter="data")
+    assert (extract / "timetable_delivery.py").is_file()
+    assert (extract / "timetable_manifest.py").is_file()
+    assert (extract / "systemd/bbb-timetable-shadow@.service").is_file()
+
+
 def test_layout_update_preserves_existing_current_release_links():
     installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
         encoding="utf-8"
@@ -176,6 +203,17 @@ def test_layout_update_preserves_existing_current_release_links():
     assert 'if [ ! -e "$link" ] && [ ! -L "$link" ]; then' in installer
     assert 'ln -s "$legacy" "$link"' in installer
     assert "ln -sfn" not in installer
+
+
+def test_layout_rollback_restores_helpers_and_removes_new_units():
+    installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert 'printf \'%s %s\\n\' "$name" "$destination" >> "$backup/file-map"' in installer
+    assert 'cp -p "$backup/files/$name" "$destination" || true' in installer
+    assert 'rm -f "/etc/systemd/system/$name"' in installer
+    assert 'rm -f "$destination"' in installer
+    assert installer.index("changed=1") < installer.index(
+        'install -o root -g root -m 0755 "$stage/deploy_control.sh"')
 
 
 def test_layout_payload_renders_all_private_identity_tokens(tmp_path):
