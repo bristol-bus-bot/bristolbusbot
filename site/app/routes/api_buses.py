@@ -21,6 +21,8 @@ def api_buses():
                                       bus.get("vehicleRef"))
         if slug:
             bus["profileUrl"] = url_for("pages.vehicle_profile", slug=slug)
+            bus["profileApiUrl"] = url_for(
+                "pages.vehicle_profile_data", slug=slug)
     _fill_stop_names(payload)
     resp = jsonify({"buses": payload, "count": len(payload)})
     # Clients poll faster than the collector writes, so roughly half of
