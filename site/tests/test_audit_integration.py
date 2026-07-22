@@ -37,7 +37,16 @@ def install_snapshot(app, tmp_path, *, published_at=None, readings=45):
             "early": 5,
             "late": 10,
             "on_time_pct": 66.7,
-            "routes": [{"route": "75", "observed_days": 3, "readings": 45}],
+            "routes": [{
+                "route": "75", "observed_days": 3, "readings": 45,
+                "on_time": 30, "early": 5, "late": 10,
+                "on_time_pct": 66.7,
+                "days": [{
+                    "service_date": "20260716", "readings": 15,
+                    "on_time": 10, "early": 1, "late": 4,
+                    "on_time_pct": 66.7,
+                }],
+            }],
         }],
         "rare_workings": {"mode": "shadow", "events": []},
     }), encoding="utf-8")
@@ -65,12 +74,20 @@ def test_compact_headline_and_vehicle_links_use_fresh_published_snapshot(
         buses = client.get("/api/buses").get_json()["buses"]
     bus = next(item for item in buses if item["vehicleRef"] == "FBRI-36205")
     assert bus["profileUrl"] == f"/vehicles/{SLUG}"
+    assert bus["profileApiUrl"] == f"/api/vehicle-profiles/{SLUG}"
 
     profile = client.get(f"/vehicles/{SLUG}")
     assert profile.status_code == 200
     assert b"66.7%" in profile.data
     assert b"45" in profile.data
+    assert b"16 July 2026" in profile.data
     assert b"Full audit and method" in profile.data
+
+    profile_data = client.get(f"/api/vehicle-profiles/{SLUG}")
+    assert profile_data.status_code == 200
+    assert profile_data.get_json()["profile"]["routes"][0]["days"][0][
+        "service_date"] == "20260716"
+    assert profile_data.headers["Cache-Control"] == "no-cache"
 
 
 def test_fleet_search_gets_profile_link_from_unambiguous_fleet_code(
@@ -87,6 +104,7 @@ def test_fleet_search_gets_profile_link_from_unambiguous_fleet_code(
 
     vehicle = client.get("/api/fleet").get_json()["fleet"][0]
     assert vehicle["profile_url"] == f"/vehicles/{SLUG}"
+    assert vehicle["profile_api_url"] == f"/api/vehicle-profiles/{SLUG}"
 
 
 def test_stale_or_small_snapshot_hides_every_public_surface(
@@ -97,6 +115,7 @@ def test_stale_or_small_snapshot_hides_every_public_surface(
     )
     assert b"Audit: 55.0% on time" not in client.get("/").data
     assert client.get(f"/vehicles/{SLUG}").status_code == 404
+    assert client.get(f"/api/vehicle-profiles/{SLUG}").status_code == 404
 
     install_snapshot(app, tmp_path, readings=29)
     assert b"Audit: 55.0% on time" not in client.get("/").data

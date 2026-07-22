@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, url_for
 
 from .. import db
 
@@ -70,7 +70,9 @@ def api_fleet():
         bus = dict(base)
         slug = audit.slug_for_identity(bus.get("fleet_code"), bus.get("reg"))
         if slug:
-            bus["profile_url"] = f"/vehicles/{slug}"
+            bus["profile_url"] = url_for("pages.vehicle_profile", slug=slug)
+            bus["profile_api_url"] = url_for(
+                "pages.vehicle_profile_data", slug=slug)
         result.append(bus)
     return jsonify({"fleet": result})
 

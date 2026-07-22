@@ -651,6 +651,20 @@
                     applyRouteViewDimming();
                     refreshRouteViewSidebar();
                 }
+                if (vehicleSidebarState?.bus) {
+                    const refreshed = latestBusData.find(
+                        bus => bus.vehicleRef === vehicleSidebarState.bus.vehicleRef
+                            && bus.operatorRef === vehicleSidebarState.bus.operatorRef);
+                    vehicleSidebarState.bus = refreshed || null;
+                    if (!refreshed) {
+                        vehicleSidebarState.schedule = null;
+                        vehicleSidebarState.scheduleLoading = false;
+                    }
+                    // Journey content benefits from the live refresh.  Avoid
+                    // rebuilding an open history accordion every 15 seconds.
+                    if (!refreshed || vehicleSidebarState.activeTab === 'journey')
+                        renderVehicleSidebarState();
+                }
             } catch (e) {
                 console.error('fetchBuses failed:', e);
             }
@@ -728,7 +742,7 @@
                 sidebar.style.width = '20px';
                 icon.innerHTML = '<polyline points="15 18 9 12 15 6"/>'; // safe: static constant
             } else {
-                sidebar.style.width = '420px';
+                sidebar.style.width = '480px';
                 icon.innerHTML = '<polyline points="9 18 15 12 9 6"/>'; // safe: static constant
             }
             // Leaflet needs to know the map size changed
@@ -744,7 +758,7 @@
         // Built once at startup. Cross-referenced against latestBusData on every
         // search to mark which vehicles are currently on the road.
         let fleetData = [];
-        let fleetByCode = {};   // fleet_code (string) -> fleet entry
+        let fleetByOperatorCode = {}; // operator + fleet code -> fleet entry
         let fleetByReg = {};    // reg plate (uppercase, no spaces) -> fleet entry
 
         async function fetchSearchStops(retries = 1) {
@@ -776,10 +790,13 @@
                     return;
                 }
                 // Build lookup tables for instant active-bus matching
-                fleetByCode = {};
+                fleetByOperatorCode = {};
                 fleetByReg = {};
                 fleetData.forEach(v => {
-                    if (v.fleet_code) fleetByCode[String(v.fleet_code)] = v;
+                    if (v.fleet_code && v.operator_id) {
+                        fleetByOperatorCode[
+                            `${v.operator_id}:${String(v.fleet_code)}`] = v;
+                    }
                     if (v.reg) {
                         const r = v.reg.toUpperCase().replace(/\s+/g, '');
                         fleetByReg[r] = v;
@@ -1090,205 +1107,8 @@
         let routeViewActive = false;
         let activeRouteVehicleRef = null;
 
-        async function showBusRoute(vehicleRef, line, directionId, journeyCode, destination, liveryAccent, directionRef, originAimedDep, delayMinutes, eventType, operatorRef, tripId) {
-            const busPos = busMarkers.get(vehicleRef)?.getLatLng();
-            const routeColor = liveryAccent || '#7E8582';
-
-            // Clear any previous route
-            clearBusRoute(true);
-
-            // Track focused bus and dim others
-            activeRouteVehicleRef = vehicleRef;
-            busMarkers.forEach((m, ref) => {
-                m.getElement()?.style.setProperty('opacity', ref === vehicleRef ? '1' : '0.2');
-                m.getElement()?.style.setProperty('transition', 'opacity 0.3s');
-            });
-
-            // Preserve the departure board while the route view is open.
-            if (!routeViewActive) {
-                window.BBB.saveBoard(document.getElementById('departures-list'));
-            }
-            routeViewActive = true;
-            const stopHeader = document.getElementById('stop-header');
-            const boardPrompt = document.getElementById('board-prompt');
-            stopHeader.classList.add('hidden');
-            boardPrompt.classList.add('hidden');
-
-            // Build delay badge - use actual delay, not coarse eventType
-            const delay = parseInt(delayMinutes) || 0;
-            const isWaiting = eventType === 'waiting';
-            const statusText = isWaiting ? `departs in ${Math.abs(delay)}m` :
-                              delay === 0 ? 'on time' :
-                              delay < 0 ? `${Math.abs(delay)}m early` :
-                              `${delay}m late`;
-            const statusColor = isWaiting ? '#60a5fa' :
-                               delay === 0 ? '#00703C' :
-                               delay < 0 ? '#eab308' : '#D4351C';
-
-            // Fetch journey schedule first — we need stops to pick the right shape variant
-            let scheduleStops = [];
-            let scheduleData = null;
-            if (journeyCode || tripId) {
-                try {
-                    let url = `/api/journey-schedule/${journeyCode}`;
-                    const params = new URLSearchParams();
-                    if (tripId) params.set('tripId', tripId);
-                    if (operatorRef) params.set('operator', operatorRef);
-                    if (line) params.set('line', line);
-                    if (directionRef) params.set('directionRef', directionRef);
-                    if (originAimedDep) params.set('originAimedDep', originAimedDep);
-                    if (params.toString()) url += '?' + params.toString();
-                    const res = await fetch(url);
-                    if (res.ok) {
-                        scheduleData = await res.json();
-                        scheduleStops = (scheduleData.stops || []).filter(s => s.latitude && s.longitude);
-                    } else {
-                        console.warn(`loadJourneySchedule: HTTP ${res.status} for journey ${journeyCode} (line ${line})`);
-                    }
-                } catch (e) {
-                    console.error(`Failed to load journey schedule for ${journeyCode} (line ${line}):`, e);
-                }
-            }
-
-            // Pick shape variant using schedule stops (best match), falling back to bus position
-            const shapeInfo = getShapeForBus(line, directionId, operatorRef, busPos?.lat, busPos?.lng, scheduleStops);
-
-            if (shapeInfo) {
-                activeRouteLayer = L.polyline(shapeInfo.points, {
-                    color: routeColor,
-                    weight: 4,
-                    opacity: 0.6,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    interactive: false
-                }).addTo(map);
-                map.fitBounds(activeRouteLayer.getBounds(), { padding: [40, 40] });
-            } else if (scheduleStops.length >= 2) {
-                // No shape geometry for this route (TNDS-recovered routes —
-                // 42-45, 70, 74, AZ*, N43 — have timetables but no GTFS
-                // shapes). Fall back to the scheduled stops, DASHED to say
-                // 'approximate path', so the isolated route is always
-                // visible on the map rather than just a scatter of dots.
-                console.log(`showBusRoute: no shape for ${operatorRef} ${line} dir ${directionId} — drawing stop-path fallback (${scheduleStops.length} stops)`);
-                activeRouteLayer = L.polyline(
-                    scheduleStops.map(st => [st.latitude, st.longitude]), {
-                    color: routeColor,
-                    weight: 3,
-                    opacity: 0.55,
-                    dashArray: '7 7',
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    interactive: false
-                }).addTo(map);
-                map.fitBounds(activeRouteLayer.getBounds(), { padding: [40, 40] });
-            }
-
-            // Render the route header and stop list.
-            const rvWrap = window.BBB.journeyHeader(
-                document.getElementById('departures-list'), {
-                    line, destination, eventType,
-                    delayMinutes,
-                    routeColor,
-                    hasShape: !!activeRouteLayer,
-                    onClose: () => clearBusRoute(),
-                });
-            if (isMobile()) setSheetState('expanded');
-
-            if (!scheduleData) {
-                window.BBB.journeyNoSchedule(rvWrap);
-                return;
-            }
-
-            try {
-                const stops = scheduleData.stops || [];
-
-                // Find current bus position to determine which stop it's at
-                let currentStopIdx = -1;
-                const busMarker = busMarkers.get(vehicleRef);
-                if (busMarker) {
-                    const busPos = busMarker.getLatLng();
-                    let minDist = Infinity;
-                    stops.forEach((s, i) => {
-                        if (s.latitude && s.longitude) {
-                            const dl = busPos.lat - s.latitude;
-                            const dn = busPos.lng - s.longitude;
-                            const d = dl*dl + dn*dn;
-                            if (d < minDist) { minDist = d; currentStopIdx = i; }
-                        }
-                    });
-                }
-
-                // Add stop markers on map
-                stops.forEach((s, i) => {
-                    if (!s.latitude || !s.longitude) return;
-                    const isCurrent = i === currentStopIdx;
-                    const isPast = i < currentStopIdx;
-                    const markerColor = isCurrent ? '#FFDD00' : isPast ? routeColor : '#555';
-                    const size = isCurrent ? 8 : 6;
-                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="${size}" height="${size}">
-                        <circle cx="5" cy="5" r="4" fill="${markerColor}" stroke="#111" stroke-width="1" opacity="${isPast ? 0.6 : 0.8}"/>
-                    </svg>`;
-                    const marker = L.marker([s.latitude, s.longitude], {
-                        icon: L.divIcon({ html: svg, className: '', iconSize: [size, size], iconAnchor: [size/2, size/2] }),
-                        zIndexOffset: 500,
-                        interactive: false
-                    }).addTo(map);
-                    activeRouteStopMarkers.push(marker);
-                });
-
-                // Group stops by ward
-                const groups = [];
-                let currentGroup = null;
-                stops.forEach((s, i) => {
-                    const ward = s.ward || 'Other';
-                    if (!currentGroup || currentGroup.ward !== ward) {
-                        currentGroup = { ward, stops: [] };
-                        groups.push(currentGroup);
-                    }
-                    currentGroup.stops.push({ ...s, idx: i });
-                });
-
-                // Format time (GTFS HH:MM:SS → HH:MM, handle >24h)
-                function fmtTime(t) {
-                    if (!t) return '';
-                    const parts = t.split(':');
-                    let h = parseInt(parts[0]);
-                    if (h >= 24) h -= 24;
-                    return `${String(h).padStart(2,'0')}:${parts[1]}`;
-                }
-
-                // Add delay minutes to a GTFS time string, return formatted HH:MM
-                function fmtTimeWithDelay(t, delayMins) {
-                    if (!t) return '';
-                    const parts = t.split(':');
-                    let h = parseInt(parts[0]);
-                    let m = parseInt(parts[1]);
-                    if (h >= 24) h -= 24;
-                    m += delayMins;
-                    while (m >= 60) { m -= 60; h++; }
-                    while (m < 0) { m += 60; h--; }
-                    if (h >= 24) h -= 24;
-                    if (h < 0) h += 24;
-                    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-                }
-
-                const busDelay = parseInt(delayMinutes) || 0;
-                const isWaitingRoute = eventType === 'waiting';
-                const hasDelay = busDelay !== 0 && !isWaitingRoute;
-
-                window.BBB.journeyStops(rvWrap, {
-                    groups, currentStopIdx, busDelay, hasDelay, routeColor,
-                    fmtTime, fmtTimeWithDelay,
-                    flyTo: (lat, lon) => map.flyTo([lat, lon], 17),
-                });
-
-            } catch (e) {
-                console.error(`Failed to load journey schedule for ${journeyCode} (line ${line}):`, e);
-            }
-        }
-
-
         function clearBusRoute(keepSidebar) {
+            if (!keepSidebar) vehicleSidebarState = null;
             // Also clear route search view if active
             if (activeRouteLine) clearRouteView(true);
 
@@ -1323,98 +1143,258 @@
             }
         }
 
-        // --- Vehicle detail panel ---
-        // Find the active bus (from latestBusData) that matches a fleet entry,
-        // matching either by fleet number or by reg plate. Returns null if not live.
+        // --- Unified vehicle sidebar ---
+        let vehicleSidebarState = null;
+        const vehicleProfileCache = new Map();
+
+        function normaliseReg(value) {
+            return String(value || '').toUpperCase().replace(/\s+/g, '');
+        }
+
+        function findFleetVehicleForBus(bus) {
+            if (!bus) return null;
+            const reg = normaliseReg(bus.reg);
+            if (reg && fleetByReg[reg]) return fleetByReg[reg];
+            const key = bus.operatorRef && bus.fleetNumber
+                ? `${bus.operatorRef}:${String(bus.fleetNumber)}` : '';
+            return key ? (fleetByOperatorCode[key] || null) : null;
+        }
+
+        function vehicleFromBus(bus) {
+            return {
+                id: null,
+                fleet_code: bus.fleetNumber || '',
+                reg: bus.reg || '',
+                model: bus.model || '',
+                fuel: bus.fuel || '',
+                double_decker: !!bus.isDoubleDecker,
+                coach: !!bus.isCoach,
+                livery_name: bus.livery?.name || '',
+                livery_left: bus.livery?.left || '',
+                garage_name: bus.garage || '',
+                operator_id: bus.operatorRef || '',
+                operator_name: OPERATOR_NAMES?.[bus.operatorRef] || bus.operatorRef || '',
+                special_features: bus.specialFeatures || [],
+                profile_url: bus.profileUrl,
+                profile_api_url: bus.profileApiUrl,
+            };
+        }
+
         function findActiveBusForVehicle(v) {
             if (!Array.isArray(latestBusData) || !v) return null;
             const code = v.fleet_code ? String(v.fleet_code) : '';
-            const regKey = v.reg ? v.reg.toUpperCase().replace(/\s+/g, '') : '';
+            const regKey = normaliseReg(v.reg);
             return latestBusData.find(b => {
-                if (b.fleetNumber && code && String(b.fleetNumber) === code) return true;
-                if (b.reg && regKey && String(b.reg).toUpperCase().replace(/\s+/g, '') === regKey) return true;
+                if (b.reg && regKey && normaliseReg(b.reg) === regKey) return true;
+                if (b.fleetNumber && code && String(b.fleetNumber) === code
+                        && (!v.operator_id || b.operatorRef === v.operator_id)) return true;
                 return false;
             }) || null;
         }
 
-        // Show the vehicle detail panel for a fleet entry by id
+        function renderVehicleSidebarState() {
+            const state = vehicleSidebarState;
+            if (!state) return;
+            window.BBB.renderVehicleSidebar(
+                document.getElementById('departures-list'), {
+                    ...state,
+                    description: pickDescriptionFor(state.vehicle, state.bus)
+                        || state.bus?.description || null,
+                    featuredPost: state.bus ? busbotPosts[state.bus.vehicleRef] : null,
+                    profileUrl: state.vehicle.profile_url || state.bus?.profileUrl,
+                    onClose: closeVehicleSidebar,
+                    onTabChange: tab => {
+                        if (!vehicleSidebarState) return;
+                        vehicleSidebarState.activeTab = tab;
+                        renderVehicleSidebarState();
+                    },
+                    onTrack: focusSidebarVehicle,
+                    onFlyTo: (lat, lon) => {
+                        if (isMobile()) setSheetState('collapsed');
+                        map.flyTo([lat, lon], 17);
+                    },
+                });
+        }
+
+        function scheduleUrl(bus) {
+            const code = encodeURIComponent(bus.journeyCode || `vehicle-${bus.line || 'route'}`);
+            const params = new URLSearchParams();
+            if (bus.tripId) params.set('tripId', bus.tripId);
+            if (bus.operatorRef) params.set('operator', bus.operatorRef);
+            if (bus.line) params.set('line', bus.line);
+            if (bus.directionRef) params.set('directionRef', bus.directionRef);
+            if (bus.originAimedDep) params.set('originAimedDep', bus.originAimedDep);
+            return `/api/journey-schedule/${code}?${params.toString()}`;
+        }
+
+        function drawVehicleJourney(state, schedule) {
+            if (vehicleSidebarState !== state) return;
+            const bus = state.bus;
+            const stops = Array.isArray(schedule.stops) ? schedule.stops : [];
+            const positioned = stops.filter(stop => stop.latitude && stop.longitude);
+            const busPos = busMarkers.get(bus.vehicleRef)?.getLatLng();
+            const shapeInfo = getShapeForBus(
+                bus.line, bus.directionId, bus.operatorRef,
+                busPos?.lat, busPos?.lng, positioned);
+
+            if (shapeInfo) {
+                activeRouteLayer = L.polyline(shapeInfo.points, {
+                    color: state.routeColor, weight: 4, opacity: .62,
+                    lineCap: 'round', lineJoin: 'round', interactive: false,
+                }).addTo(map);
+            } else if (positioned.length >= 2) {
+                activeRouteLayer = L.polyline(
+                    positioned.map(stop => [stop.latitude, stop.longitude]), {
+                        color: state.routeColor, weight: 3, opacity: .55,
+                        dashArray: '7 7', lineCap: 'round', lineJoin: 'round',
+                        interactive: false,
+                    }).addTo(map);
+            }
+            if (activeRouteLayer && !isMobile())
+                map.fitBounds(activeRouteLayer.getBounds(), { padding: [40, 40] });
+
+            let currentStopIdx = 0;
+            if (busPos) {
+                let nearest = Infinity;
+                stops.forEach((stop, index) => {
+                    if (!stop.latitude || !stop.longitude) return;
+                    const lat = busPos.lat - stop.latitude;
+                    const lon = busPos.lng - stop.longitude;
+                    const distance = lat * lat + lon * lon;
+                    if (distance < nearest) {
+                        nearest = distance;
+                        currentStopIdx = index;
+                    }
+                });
+            }
+
+            stops.forEach((stop, index) => {
+                if (!stop.latitude || !stop.longitude) return;
+                const current = index === currentStopIdx;
+                const past = index < currentStopIdx;
+                const colour = current ? '#FFDD00' : past ? state.routeColor : '#7E8582';
+                const size = current ? 8 : 6;
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="${size}" height="${size}">
+                    <circle cx="5" cy="5" r="4" fill="${colour}" stroke="#111" stroke-width="1" opacity="${past ? .58 : .84}"/>
+                </svg>`;
+                activeRouteStopMarkers.push(L.marker([stop.latitude, stop.longitude], {
+                    icon: L.divIcon({ html: svg, className: '', iconSize: [size, size],
+                                      iconAnchor: [size / 2, size / 2] }),
+                    zIndexOffset: 500, interactive: false,
+                }).addTo(map));
+            });
+            state.schedule = schedule;
+            state.currentStopIdx = currentStopIdx;
+            state.scheduleLoading = false;
+            renderVehicleSidebarState();
+        }
+
+        async function loadVehicleJourney(state) {
+            try {
+                const response = await fetch(scheduleUrl(state.bus));
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const schedule = await response.json();
+                drawVehicleJourney(state, schedule);
+            } catch (error) {
+                console.warn('Unified vehicle journey unavailable:', error);
+                if (vehicleSidebarState !== state) return;
+                state.scheduleLoading = false;
+                state.schedule = null;
+                renderVehicleSidebarState();
+            }
+        }
+
+        async function loadVehicleProfile(state, url) {
+            if (vehicleProfileCache.has(url)) {
+                state.profile = vehicleProfileCache.get(url);
+                state.profileLoading = false;
+                renderVehicleSidebarState();
+                return;
+            }
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const profile = (await response.json()).profile || null;
+                vehicleProfileCache.set(url, profile);
+                if (vehicleSidebarState !== state) return;
+                state.profile = profile;
+            } catch (error) {
+                console.warn('Vehicle profile unavailable:', error);
+                if (vehicleSidebarState !== state) return;
+                state.profile = null;
+            }
+            state.profileLoading = false;
+            renderVehicleSidebarState();
+        }
+
+        function openVehicleSidebarView(vehicle, bus, preferredTab) {
+            setSearchOpen(false);
+            if (map) map.closePopup();
+            clearBusRoute(true);
+            if (!routeViewActive)
+                window.BBB.saveBoard(document.getElementById('departures-list'));
+            routeViewActive = true;
+            document.getElementById('stop-header').classList.add('hidden');
+            document.getElementById('board-prompt').classList.add('hidden');
+
+            if (bus) {
+                activeRouteVehicleRef = bus.vehicleRef;
+                busMarkers.forEach((marker, ref) => {
+                    marker.getElement()?.style.setProperty(
+                        'opacity', ref === bus.vehicleRef ? '1' : '.18');
+                });
+            }
+            const profileApiUrl = vehicle.profile_api_url || bus?.profileApiUrl;
+            const state = {
+                vehicle,
+                bus,
+                activeTab: preferredTab || (bus ? 'journey' : 'vehicle'),
+                routeColor: extractLiveryColor(
+                    { left: vehicle.livery_left || bus?.livery?.left }) || '#7E8582',
+                schedule: null,
+                scheduleLoading: Boolean(bus?.hasSchedule && (bus.journeyCode || bus.tripId)),
+                currentStopIdx: null,
+                profile: null,
+                profileLoading: Boolean(profileApiUrl),
+            };
+            vehicleSidebarState = state;
+            if (sidebarCollapsed) toggleSidebar();
+            if (isMobile()) setSheetState('expanded');
+            renderVehicleSidebarState();
+            if (state.scheduleLoading) loadVehicleJourney(state);
+            if (profileApiUrl) loadVehicleProfile(state, profileApiUrl);
+        }
+
         function selectFleetVehicle(id) {
-            const v = fleetData.find(x => x.id === id);
-            if (!v) {
+            const vehicle = fleetData.find(item => item.id === id);
+            if (!vehicle) {
                 console.warn('selectFleetVehicle: no vehicle with id', id);
                 return;
             }
-            // one-layer rule: modal replaces every other surface
-            setSearchOpen(false);
-            if (map) map.closePopup();
-            if (isMobile() && sheetState !== 'collapsed') setSheetState('collapsed');
-
-            const activeBus = findActiveBusForVehicle(v);
-            const isLive = !!activeBus;
-
-            const content = document.getElementById('vehicle-panel-content');
-            window.BBB.renderVehiclePanel(content, v, isLive, activeBus,
-                                          pickDescriptionFor(v, activeBus));
-
-            // Show backdrop (centered flex)
-            const backdrop = document.getElementById('vehicle-panel-backdrop');
-            backdrop.style.display = 'flex';
+            const bus = findActiveBusForVehicle(vehicle);
+            openVehicleSidebarView(vehicle, bus, bus ? 'journey' : 'vehicle');
         }
 
-        function closeVehiclePanel(e) {
-            // If invoked from the backdrop click handler, only close when click was on the backdrop itself
-            if (e && e.target && e.target.id !== 'vehicle-panel-backdrop' && e.type === 'click') return;
-            const backdrop = document.getElementById('vehicle-panel-backdrop');
-            if (backdrop) backdrop.style.display = 'none';
+        window.openVehicleSidebar = function(vehicleRef, operatorRef) {
+            const bus = latestBusData.find(item => item.vehicleRef === vehicleRef
+                && (!operatorRef || item.operatorRef === operatorRef));
+            if (!bus) return;
+            const vehicle = findFleetVehicleForBus(bus) || vehicleFromBus(bus);
+            openVehicleSidebarView(vehicle, bus, 'journey');
+        };
+
+        function focusSidebarVehicle() {
+            const bus = vehicleSidebarState?.bus;
+            const marker = bus ? busMarkers.get(bus.vehicleRef) : null;
+            if (!marker) return;
+            if (isMobile()) setSheetState('collapsed');
+            map.flyTo(marker.getLatLng(), 16, { duration: .8 });
         }
 
-        // Track a fleet vehicle on the map: zoom to its current position and pop up its info
-        function trackVehicleOnMap(id) {
-            const v = fleetData.find(x => x.id === id);
-            if (!v) {
-                console.warn('trackVehicleOnMap: no vehicle with id', id);
-                return;
-            }
-            const activeBus = findActiveBusForVehicle(v);
-            if (!activeBus) {
-                console.warn('trackVehicleOnMap: vehicle is not currently active', v.fleet_code, v.reg);
-                // Defensive: shouldn't be reachable since the button only renders when live
-                return;
-            }
-            const marker = busMarkers.get(activeBus.vehicleRef);
-            if (!marker) {
-                console.warn('trackVehicleOnMap: no marker found for', activeBus.vehicleRef);
-                return;
-            }
-            // Close the panel and fly to the bus
-            closeVehiclePanel();
-            // Clear any active stop or route view so the popup isn't dimmed
-            if (typeof clearRouteView === 'function' && activeRouteLine) {
-                clearRouteView();
-            }
-            const lat = activeBus.lat;
-            const lon = activeBus.lon;
-            if (typeof lat === 'number' && typeof lon === 'number') {
-                map.flyTo([lat, lon], 16, { duration: 0.8 });
-                // Wait for the fly to settle before opening the popup
-                setTimeout(() => {
-                    try { marker.openPopup(); } catch (e) { console.warn('openPopup failed', e); }
-                }, 850);
-            } else {
-                // No position — just open the popup
-                try { marker.openPopup(); } catch (e) { console.warn('openPopup failed', e); }
-            }
+        function closeVehicleSidebar() {
+            vehicleSidebarState = null;
+            clearBusRoute();
         }
-
-        // ESC closes the vehicle panel (only if it's open)
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                const backdrop = document.getElementById('vehicle-panel-backdrop');
-                if (backdrop && backdrop.style.display === 'flex') {
-                    closeVehiclePanel();
-                }
-            }
-        });
 
         // --- Operator display names ---
         const OPERATOR_NAMES = {
@@ -1504,6 +1484,7 @@
         async function selectSearchRoute(routeKey) {
             setSearchOpen(false);
             document.getElementById('stop-search').value = '';
+            vehicleSidebarState = null;
 
             // Clear any existing route/bus view
             clearBusRoute(true);
@@ -1814,10 +1795,6 @@
                 });
             }
 
-            on('vehicle-panel-backdrop', 'click', closeVehiclePanel);
-            on('vehicle-panel', 'click', (event) => event.stopPropagation());
-            on('vehicle-panel-close', 'click', () => closeVehiclePanel());
-
             const logo = document.getElementById('logo-sign');
             if (logo) {
                 const border = logo.querySelector('#logo-border');
@@ -1834,17 +1811,6 @@
                 geolocate.addEventListener('mouseenter', () => { geolocate.style.color = '#1b2027'; });
                 geolocate.addEventListener('mouseleave', () => {
                     geolocate.style.color = geolocate.dataset.activeColor || '#5b6672';
-                });
-            }
-            const close = document.getElementById('vehicle-panel-close');
-            if (close) {
-                close.addEventListener('mouseenter', () => {
-                    close.style.background = 'rgba(0,0,0,0.45)';
-                    close.style.color = '#fff';
-                });
-                close.addEventListener('mouseleave', () => {
-                    close.style.background = 'rgba(0,0,0,0.28)';
-                    close.style.color = 'rgba(255,255,255,0.75)';
                 });
             }
         }
@@ -1870,7 +1836,7 @@
 
         // ONE-LAYER RULE (mobile): only one surface above the map, ever.
         // Opening a popup collapses the sheet; raising the sheet closes
-        // popups; the modal (z 5000) closes both when it opens.
+        // popups; vehicle detail uses the same sheet rather than another modal.
         map.on('popupopen', () => {
             if (isMobile() && sheetState !== 'collapsed') setSheetState('collapsed');
         });
@@ -1888,7 +1854,6 @@
         // Escape key clears active route or route view
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closeVehiclePanel();
                 if (activeRouteLine) { clearRouteView(); return; }
                 if (routeViewActive || activeRouteLayer) { clearBusRoute(); }
             }

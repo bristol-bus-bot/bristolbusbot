@@ -1,0 +1,143 @@
+/* Unified vehicle experience inside the existing departures sidebar. */
+.vehicle-sidebar { overflow: hidden; border: 1px solid var(--line); border-radius: 16px;
+                   background: var(--surface-1); box-shadow: var(--shadow-card); }
+.vs-head { height: auto !important; padding: 0 !important; background: var(--surface-1); }
+.vs-livery-band { width: 100%; height: 11px; background: var(--line-2); }
+.vs-head-top { display: flex; align-items: flex-start; justify-content: space-between;
+               gap: 12px; padding: 14px 16px 10px; }
+.vs-kicker, .vs-livery-name { display: block; }
+.vs-kicker { color: var(--fg-1); font: 700 10px var(--font-mono);
+             letter-spacing: .05em; text-transform: uppercase; }
+.vs-livery-name { margin-top: 3px; color: var(--fg-3); font-size: 9px; }
+.vs-close { min-width: 58px; min-height: 34px; padding: 0 12px; border: 0;
+            border-radius: var(--r-pill); background: var(--surface-2); color: var(--fg-1);
+            font: 700 10px var(--font-sans); cursor: pointer; }
+.vs-close:hover { filter: brightness(.96); }
+.vs-route-identity { display: grid; grid-template-columns: 52px minmax(0,1fr);
+                     gap: 12px; align-items: center; padding: 0 16px 13px; }
+.vs-route-number { display: grid; place-items: center; width: 52px; height: 52px;
+                   border-radius: 12px; background: var(--uk-yellow); color: #171717;
+                   box-shadow: inset 0 -3px rgba(0,0,0,.12); font-size: 25px; font-weight: 850; }
+.vs-route-copy { min-width: 0; }
+.vs-route-copy h2, .vs-offline-title h2 { margin: 0; color: var(--fg-1);
+                                         font-size: 16px; line-height: 1.2; }
+.vs-live-line { display: flex; align-items: center; gap: 7px; min-width: 0;
+                margin-top: 6px; color: var(--fg-3); font-size: 10px; }
+.vs-live-line > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-status { display: inline-flex; flex-shrink: 0; align-items: center; min-height: 22px;
+             padding: 0 8px; border-radius: var(--r-pill); font-size: 9px; font-weight: 750; }
+.vs-status-ontime { color: var(--ev-ontime); background: var(--tint-ontime); }
+.vs-status-late { color: var(--ev-late); background: var(--tint-late); }
+.vs-status-early { color: var(--ev-early); background: var(--tint-early); }
+.vs-status-waiting { color: var(--ev-origin); background: var(--tint-origin); }
+.vs-status-off { color: var(--fg-2); background: var(--surface-2); }
+.vs-offline-title { display: flex; align-items: center; justify-content: space-between;
+                    gap: 10px; padding: 0 16px 15px; }
+.vs-progress { display: grid; grid-template-columns: minmax(0,1fr) 1.5fr minmax(0,1fr);
+               gap: 7px; align-items: center; padding: 0 16px 14px;
+               color: var(--fg-3); font-size: 8px; font-weight: 650; }
+.vs-progress > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-progress > span:last-child { overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.vs-progress-track { height: 4px; overflow: hidden; border-radius: 8px; background: var(--surface-2); }
+.vs-progress-track span { display: block; height: 100%; border-radius: inherit; }
+.vs-tabs { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid var(--line);
+           border-bottom: 1px solid var(--line); background: var(--surface-1); }
+.vs-tab { min-height: 46px; border: 0; border-bottom: 3px solid transparent;
+          background: transparent; color: var(--fg-3); font: 750 10px var(--font-sans);
+          cursor: pointer; }
+.vs-tab[aria-selected="true"] { border-bottom-color: var(--uk-blue); color: var(--uk-blue); }
+.vs-panel { min-height: 260px; padding: 16px; }
+.vs-empty { display: grid; gap: 5px; padding: 34px 18px; text-align: center;
+            color: var(--fg-2); font-size: 11px; }
+.vs-empty strong { color: var(--fg-1); font-size: 13px; }
+.vs-next { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px;
+           align-items: center; padding: 12px 13px; border: 1px solid rgba(0,112,60,.18);
+           border-radius: var(--r-md); background: var(--tint-ontime); }
+.vs-next div { display: grid; gap: 2px; min-width: 0; }
+.vs-eyebrow { color: var(--uk-green); font-size: 8px; font-weight: 800;
+              letter-spacing: .08em; text-transform: uppercase; }
+.vs-next strong { overflow: hidden; color: var(--fg-1); font-size: 12px;
+                  text-overflow: ellipsis; white-space: nowrap; }
+.vs-next-time { color: var(--fg-1); font: 750 13px var(--font-mono); }
+.vs-stop-list { margin: 13px 0 0; padding: 0; list-style: none; }
+.vs-ward { margin-top: 9px; padding: 5px 3px 3px; border-bottom: 1px solid var(--line);
+           color: var(--ev-early); font: 700 8px var(--font-mono);
+           letter-spacing: .09em; text-transform: uppercase; }
+.vs-stop { display: grid; grid-template-columns: 12px minmax(0,1fr) auto; gap: 7px;
+           align-items: center; min-height: 34px; padding: 3px 6px;
+           border-left: 2px solid transparent; border-radius: var(--r-sm); }
+.vs-stop.is-current { border-left-color: var(--uk-yellow); background: var(--tint-early); }
+.vs-stop.is-past { opacity: .62; }
+.vs-stop-dot { width: 7px; height: 7px; border: 1px solid var(--line-2);
+               border-radius: 50%; background: var(--surface-1); }
+.vs-stop.is-past .vs-stop-dot { border-color: var(--uk-green); background: var(--uk-green); }
+.vs-stop.is-current .vs-stop-dot { border: 2px solid var(--ev-early); background: var(--uk-yellow); }
+.vs-stop-name { min-width: 0; padding: 0; border: 0; background: transparent; color: var(--fg-2);
+                overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap;
+                font: 500 10px var(--font-sans); cursor: pointer; }
+.vs-stop.is-current .vs-stop-name { color: var(--fg-1); font-weight: 700; }
+.vs-stop-name small { margin-left: 5px; color: var(--ev-early); font-size: 8px; }
+.vs-stop-time { color: var(--fg-2); font: 650 9px var(--font-mono); }
+.vs-stop-time small { margin-left: 4px; color: var(--fg-3); font-size: 7px; text-decoration: line-through; }
+.vc-embedded .vc-body { padding: 0; }
+.vc-embedded .vc-model { font-size: 13px; }
+.vs-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+.vs-metric { display: grid; gap: 3px; padding: 10px 8px; border-radius: var(--r-md);
+             background: var(--surface-2); }
+.vs-metric strong { color: var(--fg-1); font: 750 16px var(--font-mono); }
+.vs-metric span { color: var(--fg-2); font-size: 8px; }
+.vs-method-note, .vs-disclosure { color: var(--fg-2); font-size: 9px; line-height: 1.45; }
+.vs-method-note { margin: 12px 2px; }
+.vs-route-history { margin-top: 7px; overflow: hidden; border: 1px solid var(--line);
+                    border-radius: var(--r-md); background: var(--surface-1); }
+.vs-route-history summary { display: grid; grid-template-columns: auto minmax(0,1fr) auto;
+                            gap: 9px; align-items: center; min-height: 44px; padding: 0 11px;
+                            cursor: pointer; list-style: none; }
+.vs-route-history summary::-webkit-details-marker { display: none; }
+.vs-route-history summary::after { content: "+"; color: var(--fg-3); font-size: 16px; }
+.vs-route-history[open] summary::after { content: "-"; }
+.vs-route-history summary strong { color: var(--fg-1); font-size: 13px; }
+.vs-route-history summary span { overflow: hidden; color: var(--fg-2); font-size: 8px;
+                                 text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.vs-day-list { border-top: 1px solid var(--line); }
+.vs-day { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+          min-height: 34px; padding: 0 11px; border-top: 1px solid var(--line); }
+.vs-day:first-child { border-top: 0; }
+.vs-day time { color: var(--fg-1); font-size: 9px; }
+.vs-day span { color: var(--uk-green); font-size: 9px; font-weight: 700; }
+.vs-day small { color: var(--fg-3); font-size: 8px; }
+.vs-day-empty { margin: 0; padding: 10px 11px; border-top: 1px solid var(--line);
+                color: var(--fg-3); font-size: 9px; }
+.vs-disclosure { margin: 13px 2px 9px; }
+.vs-profile-link { display: block; padding: 9px; border-radius: var(--r-md);
+                   background: var(--tint-origin); color: var(--uk-blue);
+                   text-align: center; text-decoration: none; font-size: 10px; font-weight: 700; }
+
+/* The map tooltip is only a live journey summary; detail belongs above. */
+.bus-tooltip { width: 250px; overflow: hidden; border-radius: 14px; background: var(--surface-1); }
+.bt-livery { height: 7px; }
+.bt-body { padding: 12px 13px 13px; }
+.bt-route { display: flex; align-items: baseline; gap: 7px; padding-right: 22px; }
+.bt-line { color: var(--fg-1); font-size: 19px; font-weight: 850; }
+.bt-dest { overflow: hidden; color: var(--fg-2); font-size: 10px;
+           text-overflow: ellipsis; white-space: nowrap; }
+.bt-live { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.bt-place { overflow: hidden; color: var(--fg-3); font-size: 9px;
+            text-overflow: ellipsis; white-space: nowrap; }
+.bt-vehicle { margin-top: 9px; color: var(--fg-2); font: 650 9px var(--font-mono); }
+.bt-details { width: 100%; min-height: 36px; margin-top: 10px; border: 0;
+              border-radius: var(--r-md); background: var(--tint-origin); color: var(--uk-blue);
+              font: 750 10px var(--font-sans); cursor: pointer; }
+.leaflet-popup:has(.bus-tooltip) .leaflet-popup-close-button { color: var(--fg-2) !important;
+                                                               background: rgba(255,255,255,.88) !important; }
+
+@media (max-width: 768px) {
+    .vehicle-sidebar { border-right: 0; border-left: 0; border-radius: 14px; }
+    .vs-panel { min-height: 320px; padding: 14px 12px 28px; }
+    .vs-head-top, .vs-route-identity, .vs-progress { padding-inline: 13px; }
+    .vs-tab, .vs-close { min-height: 44px; }
+    .vs-stop { min-height: 42px; }
+    .vs-stop-name { min-height: 38px; }
+    .vs-route-history summary { min-height: 48px; }
+    .vs-day { min-height: 40px; }
+}

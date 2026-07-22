@@ -98,7 +98,22 @@ def test_headline_is_count_weighted_and_profile_gate_is_enforced():
     assert profile["readings"] == 45
     assert profile["slug"] == integration._slug("FBRI", "FBRI-100")
     assert profile["routes"] == [
-        {"route": "75", "observed_days": 3, "readings": 45}
+        {
+            "route": "75", "observed_days": 3, "readings": 45,
+            "on_time": 30, "early": 0, "late": 15,
+            "on_time_pct": 66.7,
+            "days": [
+                {"service_date": "20260716", "readings": 15,
+                 "on_time": 10, "early": 0, "late": 5,
+                 "on_time_pct": 66.7},
+                {"service_date": "20260715", "readings": 15,
+                 "on_time": 10, "early": 0, "late": 5,
+                 "on_time_pct": 66.7},
+                {"service_date": "20260714", "readings": 15,
+                 "on_time": 10, "early": 0, "late": 5,
+                 "on_time_pct": 66.7},
+            ],
+        }
     ]
 
 

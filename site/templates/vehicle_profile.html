@@ -45,7 +45,27 @@
             <h2 id="routes-title">Routes observed</h2>
             <ul class="profile-routes">
             {% for route in profile.routes %}
-                <li><strong>{{ route.route }}</strong><span>{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span></li>
+                <li>
+                    <details{% if loop.first %} open{% endif %}>
+                        <summary>
+                            <strong>{{ route.route }}</strong>
+                            <span>{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
+                        </summary>
+                        {% if route.days %}
+                        <div class="profile-route-days">
+                            {% for day in route.days %}
+                            <div>
+                                <time datetime="{{ day.service_date }}">{{ display_service_date(day.service_date) }}</time>
+                                <span>{{ day.on_time_pct }}% on time</span>
+                                <small>{{ day.readings }} readings</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="profile-route-empty">Daily detail will appear after the next audit refresh.</p>
+                        {% endif %}
+                    </details>
+                </li>
             {% endfor %}
             </ul>
         </section>
