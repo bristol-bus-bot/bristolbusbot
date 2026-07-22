@@ -256,6 +256,19 @@ now sends an explicit project identity, and the transaction ceiling was raised
 to 20 minutes so rollback retains its own complete recovery window. Automatic
 promotion remained disabled.
 
+Consumer-regression evidence (2026-07-22): after the corrected transaction was
+accepted, the larger candidate exposed a site query that recomputed every
+stop-to-route relationship from 1.96 million `stop_times` rows. Gunicorn killed
+the request at 30 seconds and the public endpoint returned HTTP 502, while the
+shallow `/healthz` gate still passed. The known-good timetable was restored and
+automatic promotion was paused. New candidates now materialise `stop_routes`
+after all source merges, the site reads that compact table, the browser performs
+only one bounded retry, and promotion calls the real stop-search endpoint with
+a minimum-result and 20-second gate. A full cached-input build produced 14,670
+lookup pairs; the complete website search payload assembled in about 0.052
+seconds on the Windows verification run. Detailed Slack notifications now
+distinguish accepted, rejected, rolled-back and rollback-failed outcomes.
+
 Acceptance: forced failures before replace, after replace, during restart, and
 during health check all produce the expected live file and job record.
 

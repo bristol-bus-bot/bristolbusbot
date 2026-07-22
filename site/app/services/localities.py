@@ -26,6 +26,29 @@ def _load_json(path: str) -> dict:
 
 def routes_per_stop(gtfs_conn) -> dict[str, list[str]]:
     """Return routes per stop, with numeric routes sorted first."""
+    has_precomputed = gtfs_conn.execute(
+        "SELECT 1 FROM sqlite_master "
+        "WHERE type='table' AND name='stop_routes'").fetchone()
+    if has_precomputed:
+        rows = gtfs_conn.execute(
+            "SELECT stop_code, route_short_name FROM stop_routes "
+            "ORDER BY stop_code, route_short_name").fetchall()
+        grouped: dict[str, list[str]] = {}
+        for row in rows:
+            grouped.setdefault(row["stop_code"], []).append(
+                row["route_short_name"])
+        return {
+            code: sorted(
+                routes,
+                key=lambda x: (
+                    not x.isdigit(), int(x) if x.isdigit() else 0, x))
+            for code, routes in grouped.items()
+        }
+
+    # Compatibility for the previous rollback database during the one-time
+    # schema transition. All newly generated candidates require stop_routes.
+    logger.warning(
+        "legacy timetable has no stop_routes table; using slow fallback query")
     rows = gtfs_conn.execute(f"""
         SELECT s.stop_code, GROUP_CONCAT(DISTINCT r.route_short_name) AS routes
         FROM stop_times st
