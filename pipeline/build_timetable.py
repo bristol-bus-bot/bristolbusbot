@@ -12,6 +12,8 @@ import subprocess
 from pathlib import Path
 from datetime import date
 
+from timetable_editions import normalize_database as normalize_route_editions
+
 HERE = Path(__file__).parent
 PY = sys.executable
 # Use the system temporary directory for downloaded and intermediate data.
@@ -236,6 +238,23 @@ def main():
             "required First route; TNDS fallback is not needed.")
         write_source_status(
             tnds_status="not_needed", missing_before_tnds=[])
+
+    # BODS can publish current and future revisions of the same registered
+    # route with overlapping calendar ranges. Preserve every revision, but
+    # make replacement-like editions effective one at a time.
+    logger.info("Resolving overlapping timetable editions...")
+    try:
+        edition_result = normalize_route_editions(WECA_DB)
+    except (OSError, sqlite3.Error, RuntimeError) as exc:
+        logger.error(
+            "Route-edition normalization failed - refusing the candidate: %s",
+            exc)
+        return 2
+    logger.info(
+        "Resolved %s superseded route editions; re-windowed %s trips.",
+        edition_result["superseded_route_editions"],
+        edition_result["trips_rewindowed"],
+    )
 
     validation = validate(WECA_DB)
     logger.info(

@@ -38,6 +38,7 @@ from timetable_delivery import (
     sha256_file,
 )
 from timetable_manifest import database_summary
+from timetable_editions import normalize_database
 
 
 NOW = datetime(2026, 7, 22, 10, 0, tzinfo=timezone.utc)
@@ -72,6 +73,7 @@ def run_record(**updates) -> dict:
 
 
 def write_manifest(database: Path, destination: Path, **updates) -> None:
+    normalize_database(database)
     result = validate(database, minimum_service_days=14)
     manifest = {
         "manifest_version": MANIFEST_VERSION,

@@ -53,6 +53,12 @@ def make_database(path: Path) -> None:
         CREATE TABLE stop_routes (
             stop_code TEXT NOT NULL, route_short_name TEXT NOT NULL,
             PRIMARY KEY (stop_code, route_short_name)) WITHOUT ROWID;
+        CREATE TABLE route_service_editions (
+            route_id TEXT NOT NULL, edition_start TEXT NOT NULL,
+            source_end TEXT NOT NULL, effective_end TEXT NOT NULL,
+            trip_count INTEGER NOT NULL, day_mask TEXT NOT NULL,
+            resolution TEXT NOT NULL, superseded_by TEXT,
+            PRIMARY KEY (route_id, edition_start)) WITHOUT ROWID;
 
         CREATE INDEX idx_trips_vjc ON trips(vehicle_journey_code);
         CREATE INDEX idx_routes_agency ON routes(agency_id);
@@ -91,6 +97,9 @@ def make_database(path: Path) -> None:
         "INSERT INTO route_shapes VALUES "
         "('1', 'FBRI', 0, 0, '[[51.45, -2.59], [51.46, -2.58]]')")
     connection.execute("INSERT INTO stop_routes VALUES ('0100S', '1')")
+    connection.execute(
+        "INSERT INTO route_service_editions VALUES "
+        "('R0','20200101','20991231','20991231',1,'1111111','retained',NULL)")
     connection.commit()
     connection.close()
 
@@ -138,7 +147,7 @@ def test_create_and_verify_manifest(tmp_path):
         minimum_service_days=14,
     )
 
-    assert manifest["manifest_version"] == 4
+    assert manifest["manifest_version"] == 5
     assert manifest["build"]["started_utc"] == "2026-07-17T00:00:00+00:00"
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \
