@@ -14,8 +14,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PIPELINE_MODULES = PROJECT_ROOT / "pipeline"
-if PIPELINE_MODULES.is_dir():
-    sys.path.insert(0, str(PIPELINE_MODULES))
+INSTALLED_MODULES = Path("/usr/local/libexec/bristolbusbot-timetable")
+for module_root in (PIPELINE_MODULES, INSTALLED_MODULES):
+    if module_root.is_dir():
+        sys.path.insert(0, str(module_root))
 
 from timetable_editions import validate_database as validate_route_editions  # noqa: E402
 

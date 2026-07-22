@@ -188,6 +188,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
         encoding="utf-8")
     assert "/usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py" in installer
     assert "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py" in installer
+    assert (
+        '"$stage/timetable_editions.py" '
+        "/usr/local/libexec/bristolbusbot-timetable/timetable_editions.py"
+    ) in installer
     assert "left disabled until its root-only credential is configured" in installer
 
     archive = push.install_payload(tmp_path, TEST_SETTINGS)
