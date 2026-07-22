@@ -176,6 +176,11 @@ Add a dedicated workflow separate from ordinary PR CI:
 Acceptance: a manual workflow run produces a candidate that passes a clean
 local download, manifest verification, and validation. No Pi service is changed.
 
+Implementation evidence (2026-07-22): GitHub run `29903848166` completed from
+the merged default-branch commit in about three and a half minutes. Its exact
+three-file artifact passed a clean Windows download, manifest/hash verification,
+and the independent production validator. TNDS was recorded as `not_needed`.
+
 ### WP5 - Pi trigger and downloader in shadow mode
 
 Add an unprivileged Pi service and timer that:
@@ -197,6 +202,16 @@ never logged, and has an expiry warning in aggregate health.
 Acceptance: repeated timers are idempotent; a second process cannot duplicate a
 download; malformed API data, expired artifacts, unsafe ZIPs, bad hashes, and
 validation failures all leave production untouched.
+
+Implementation status (2026-07-22): code and hostile-input tests are complete.
+The root-installed Python entry point has no promotion action or destination
+argument; the systemd unit grants write access only to the shadow and monitoring
+directories. Routine runs use `@auto`, while an attended run may name only a
+numeric GitHub run ID. The daily timer is installed disabled until its
+repository-scoped credential exists. Its 05:00 window follows the 04:30 Sunday
+backup check, and both share the heavy-I/O lock so the backup has precedence.
+Pi installation and the first attended
+shadow delivery remain the WP5 rollout gate.
 
 ### WP6 - Pi promotion transaction
 
