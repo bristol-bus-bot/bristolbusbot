@@ -59,6 +59,7 @@ jobs:
             --gtfs "$TMPDIR/busaudit_gtfs" \
             --first-txc "$TMPDIR/busaudit_first_txc" \
             --tnds "$TMPDIR/busaudit_tnds" \
+            --source-status "$TMPDIR/busaudit_timetable_source_status.json" \
             --builder-commit "$GITHUB_SHA" \
             --workflow-run-id "$GITHUB_RUN_ID" \
             --minimum-service-days 14

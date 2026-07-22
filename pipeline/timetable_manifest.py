@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "deploy"))
 from timetable_control import validate  # noqa: E402
 
 
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 GTFS_REQUIRED = (
     "agency.txt",
     "routes.txt",
@@ -63,7 +63,8 @@ def file_record(path: Path, *, relative_to: Path | None = None) -> dict[str, obj
     }
 
 
-def source_records(gtfs: Path, first_txc: Path, tnds: Path) -> dict[str, object]:
+def source_records(gtfs: Path, first_txc: Path, tnds: Path,
+                   source_status: Path) -> dict[str, object]:
     records: dict[str, object] = {}
     gtfs_files = []
     for name in GTFS_REQUIRED:
@@ -77,13 +78,55 @@ def source_records(gtfs: Path, first_txc: Path, tnds: Path) -> dict[str, object]
             gtfs_files.append(file_record(path, relative_to=gtfs))
     records["bods_gtfs"] = {"files": gtfs_files}
 
-    for key, directory in (("first_txc", first_txc), ("tnds", tnds)):
-        archives = sorted(directory.glob("*.zip")) if directory.is_dir() else []
-        if not archives:
-            raise RuntimeError(f"required {key} archives are missing: {directory}")
-        records[key] = {
-            "files": [file_record(path, relative_to=directory) for path in archives],
-        }
+    first_archives = sorted(first_txc.glob("*.zip")) \
+        if first_txc.is_dir() else []
+    if not first_archives:
+        raise RuntimeError(
+            f"required first_txc archives are missing: {first_txc}")
+    records["first_txc"] = {
+        "status": "used",
+        "files": [
+            file_record(path, relative_to=first_txc)
+            for path in first_archives
+        ],
+    }
+
+    if source_status.is_symlink() or not source_status.is_file():
+        raise RuntimeError(f"source-status record is missing: {source_status}")
+    try:
+        status_payload = json.loads(source_status.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"invalid source-status record: {exc}") from exc
+    if status_payload.get("schema") != 1:
+        raise RuntimeError("unsupported source-status schema")
+    tnds_status = status_payload.get("tnds")
+    if not isinstance(tnds_status, dict):
+        raise RuntimeError("source-status record has no TNDS decision")
+    status = tnds_status.get("status")
+    missing_before = tnds_status.get("missing_before_fallback")
+    if status not in {"fallback_used", "not_needed"}:
+        raise RuntimeError(f"invalid TNDS source status: {status!r}")
+    if not isinstance(missing_before, list) or not all(
+            isinstance(route, str) and route for route in missing_before):
+        raise RuntimeError("invalid TNDS missing-route record")
+    if status == "not_needed" and missing_before:
+        raise RuntimeError(
+            "TNDS cannot be not_needed when required routes were missing")
+    if status == "fallback_used" and not missing_before:
+        raise RuntimeError(
+            "TNDS fallback_used status has no missing-route reason")
+
+    tnds_archives = sorted(tnds.glob("*.zip")) if tnds.is_dir() else []
+    if status == "fallback_used" and not tnds_archives:
+        raise RuntimeError(f"required TNDS fallback archive is missing: {tnds}")
+    records["tnds"] = {
+        "status": status,
+        "missing_before_fallback": missing_before,
+        "files": [
+            file_record(path, relative_to=tnds)
+            for path in tnds_archives
+        ] if status == "fallback_used" else [],
+    }
     return records
 
 
@@ -127,7 +170,8 @@ def database_summary(database: Path) -> dict[str, object]:
 
 
 def create_manifest(*, database: Path, output: Path, gtfs: Path,
-                    first_txc: Path, tnds: Path, builder_commit: str,
+                    first_txc: Path, tnds: Path, source_status: Path,
+                    builder_commit: str,
                     workflow_run_id: str, minimum_service_days: int) -> dict:
     if database.is_symlink() or not database.is_file():
         raise RuntimeError(f"candidate is not a regular file: {database}")
@@ -153,7 +197,7 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
             "minimum_service_days": minimum_service_days,
             "result": validation,
         },
-        "sources": source_records(gtfs, first_txc, tnds),
+        "sources": source_records(gtfs, first_txc, tnds, source_status),
         "licence": {
             "identifier": "OGL-3.0",
             "attribution_file": "TIMETABLE_ARTIFACT_ATTRIBUTION.txt",
@@ -199,6 +243,7 @@ def main() -> int:
     create.add_argument("--gtfs", required=True, type=Path)
     create.add_argument("--first-txc", required=True, type=Path)
     create.add_argument("--tnds", required=True, type=Path)
+    create.add_argument("--source-status", required=True, type=Path)
     create.add_argument("--builder-commit", required=True)
     create.add_argument("--workflow-run-id", required=True)
     create.add_argument("--minimum-service-days", type=int, default=14)
@@ -217,6 +262,7 @@ def main() -> int:
                 gtfs=args.gtfs,
                 first_txc=args.first_txc,
                 tnds=args.tnds,
+                source_status=args.source_status,
                 builder_commit=args.builder_commit,
                 workflow_run_id=args.workflow_run_id,
                 minimum_service_days=args.minimum_service_days,
