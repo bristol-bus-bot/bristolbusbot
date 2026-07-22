@@ -210,8 +210,12 @@ directories. Routine runs use `@auto`, while an attended run may name only a
 numeric GitHub run ID. The daily timer is installed disabled until its
 repository-scoped credential exists. Its 05:00 window follows the 04:30 Sunday
 backup check, and both share the heavy-I/O lock so the backup has precedence.
-Pi installation and the first attended
-shadow delivery remain the WP5 rollout gate.
+Automatic checks use the last successful shadow delivery as the freshness
+clock: success starts a six-day cooldown, yielding about one build per week,
+while a failed due run retries the next day. The service-coverage horizon is a
+safety signal, not a reason to leave frequently changing source data stale.
+Pi installation and two attended shadow deliveries completed on 2026-07-22;
+unattended timer activation remains the WP5 rollout gate.
 
 ### WP6 - Pi promotion transaction
 

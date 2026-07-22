@@ -112,6 +112,12 @@ sudo systemctl start bbb-timetable-shadow@RUN_ID.service
 sudo journalctl -u bbb-timetable-shadow@RUN_ID.service --since today
 ```
 
+The daily timer checks the live database and monitoring state every morning. A
+successful automatic shadow delivery starts a six-day cooldown, producing
+roughly one fresh GitHub build per week; a failed due run retries the next day.
+The 28-day service-coverage signal remains a safety warning and validator input,
+but a far-future service date never postpones the normal weekly refresh.
+
 While the GitHub `timetable-build` environment still requires a reviewer, a
 newly dispatched run pauses safely for approval. Keep that gate for the first
 attended Pi delivery; remove it only when beginning the explicitly approved
