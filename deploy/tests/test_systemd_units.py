@@ -192,6 +192,7 @@ def test_timetable_promoter_is_root_fixed_path_and_sandboxed():
         "ReadWritePaths=/var/lib/bristolbusbot/pipeline "
         "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
         "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
+        "TimeoutStartSec=20min",
     ):
         assert setting in service
     assert "/var/lib/bristolbusbot/timetable-shadow" not in next(
