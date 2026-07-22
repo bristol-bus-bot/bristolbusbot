@@ -3,6 +3,7 @@
 import os
 import sys
 import csv
+import json
 import shutil
 import sqlite3
 import tempfile
@@ -17,6 +18,7 @@ PY = sys.executable
 TMP = Path(tempfile.gettempdir())
 GTFS_DIR = TMP / "busaudit_gtfs"
 WECA_DB = TMP / "busaudit_timetable_weca.db"
+SOURCE_STATUS = TMP / "busaudit_timetable_source_status.json"
 # BBB_TIMETABLE_DB selects the finished local database path.
 TIMETABLE_DB = Path(os.getenv("BBB_TIMETABLE_DB", str(HERE / "timetable.db")))
 # An existing timetable may supply stop coordinates missing from source data.
@@ -42,6 +44,24 @@ def run(cmd):
     # Use UTF-8 consistently across Windows and Linux child processes.
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(cmd, env=env).returncode == 0
+
+
+def write_source_status(*, tnds_status: str,
+                        missing_before_tnds: list[str]) -> None:
+    """Record whether the legacy TNDS fallback contributed to this build."""
+    payload = {
+        "schema": 1,
+        "tnds": {
+            "status": tnds_status,
+            "missing_before_fallback": missing_before_tnds,
+        },
+    }
+    temporary = SOURCE_STATUS.with_name(
+        f".{SOURCE_STATUS.name}.new-{os.getpid()}")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
+    os.replace(temporary, SOURCE_STATUS)
 
 
 def validate(db_path, *, today: date | None = None):
@@ -141,6 +161,8 @@ def main():
             "promotion, consumer health checks and rollback cannot be bypassed.")
         return 2
 
+    SOURCE_STATUS.unlink(missing_ok=True)
+
     logger.info("=" * 80)
     logger.info("AUDIT TIMETABLE UPDATE")
     logger.info("=" * 80)
@@ -174,28 +196,46 @@ def main():
         logger.error("TXC merge failed - aborting.")
         return 1
 
-    # TNDS (Traveline): the source for First routes that are not in BODS at all
-    # (e.g. 42-45). It is a required source for an unattended complete build.
+    # TNDS is an older, slower FTP source. It is a safety fallback, not a
+    # compulsory dependency when BODS GTFS plus First's own TXC already meet
+    # the completeness contract.
+    primary_validation = validate(WECA_DB)
+    missing_before_tnds = list(primary_validation["missing"])
     tnds_dir = TMP / "busaudit_tnds"
-    if no_download:
-        tnds_ready = tnds_dir.is_dir() and any(tnds_dir.glob("*.zip"))
+    if missing_before_tnds:
+        logger.warning(
+            "Primary sources are missing required First routes %s; "
+            "using the TNDS fallback.", missing_before_tnds)
+        if no_download:
+            tnds_ready = tnds_dir.is_dir() and any(tnds_dir.glob("*.zip"))
+            if not tnds_ready:
+                logger.error(
+                    "TNDS fallback is required but its cache is missing from %s.",
+                    tnds_dir)
+                return 1
+        else:
+            tnds_ready = run([PY, str(HERE / "audit_fetch_tnds.py")])
         if not tnds_ready:
-            logger.error("Cached TNDS source is missing from %s.", tnds_dir)
+            logger.error(
+                "TNDS fallback was required but could not be fetched - "
+                "aborting; partial timetable candidates are never published.")
             return 1
+        tnds_merge = [PY, str(HERE / "audit_txc_to_timetable.py"),
+                      str(WECA_DB), str(tnds_dir)]
+        if BUSBOT_DB.exists():
+            tnds_merge.append(str(BUSBOT_DB))
+        if not run(tnds_merge):
+            logger.error("TNDS fallback merge failed - aborting.")
+            return 1
+        write_source_status(
+            tnds_status="fallback_used",
+            missing_before_tnds=missing_before_tnds)
     else:
-        tnds_ready = run([PY, str(HERE / "audit_fetch_tnds.py")])
-    if not tnds_ready:
-        logger.error(
-            "TNDS fetch failed (check TNDS_USER/TNDS_PASS) - aborting; "
-            "partial timetable candidates are never published.")
-        return 1
-    tnds_merge = [PY, str(HERE / "audit_txc_to_timetable.py"),
-                  str(WECA_DB), str(tnds_dir)]
-    if BUSBOT_DB.exists():
-        tnds_merge.append(str(BUSBOT_DB))
-    if not run(tnds_merge):
-        logger.error("TNDS merge failed - aborting.")
-        return 1
+        logger.info(
+            "Primary BODS and First TXC sources already contain every "
+            "required First route; TNDS fallback is not needed.")
+        write_source_status(
+            tnds_status="not_needed", missing_before_tnds=[])
 
     validation = validate(WECA_DB)
     logger.info(

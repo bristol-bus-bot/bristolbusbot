@@ -20,6 +20,7 @@ def test_timetable_artifact_has_short_retention_and_exact_payload_gate():
     assert "retention-days: 7" in text
     assert "if-no-files-found: error" in text
     assert "timetable_manifest.py verify" in text
+    assert '--source-status "$TMPDIR/busaudit_timetable_source_status.json"' in text
     assert "-eq 3" in text
     assert "BODS_API_KEY: ${{ secrets.BODS_API_KEY }}" in text
     assert "TNDS_USER: ${{ secrets.TNDS_USER }}" in text
