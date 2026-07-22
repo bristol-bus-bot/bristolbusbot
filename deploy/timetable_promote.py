@@ -31,6 +31,7 @@ COPY_CHUNK = 1024 * 1024
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 COLLECTOR_VERIFY_TIMEOUT_SECONDS = 45
 COLLECTOR_VERIFY_ATTEMPTS = 6
+HEALTH_USER_AGENT = "bristolbusbot-timetable-promoter/1"
 
 
 class PromotionError(RuntimeError):
@@ -174,7 +175,11 @@ class SystemServices:
 
     @staticmethod
     def _json(url: str) -> dict[str, object]:
-        with urllib.request.urlopen(url, timeout=10) as response:
+        request = urllib.request.Request(url, headers={
+            "Accept": "application/json",
+            "User-Agent": HEALTH_USER_AGENT,
+        })
+        with urllib.request.urlopen(request, timeout=10) as response:
             value = json.load(response)
         if not isinstance(value, dict):
             raise RuntimeError("health response is not an object")
