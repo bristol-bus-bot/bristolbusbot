@@ -91,7 +91,7 @@
         </div>
 
         <!-- Right panel - departure board (collapsible) -->
-        <div id="sidebar" style="width:420px;transition:width 0.3s ease;overflow:hidden;position:relative;" class="bg-surface border-l border-border flex flex-col">
+        <div id="sidebar" style="width:480px;transition:width 0.3s ease;overflow:hidden;position:relative;" class="bg-surface border-l border-border flex flex-col">
 
             <!-- Mobile drag handle -->
             <div class="sheet-handle" id="sheet-handle">
@@ -103,7 +103,7 @@
                 <svg id="collapse-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
 
-            <div id="sidebar-content" role="region" aria-label="Live departures" style="min-width:420px;display:flex;flex-direction:column;height:100%;">
+            <div id="sidebar-content" role="region" aria-label="Live departures and vehicle details" style="min-width:480px;display:flex;flex-direction:column;height:100%;">
                 <div id="dep-live-region" class="sr-only" aria-live="polite"></div>
 
                 <!-- Search input -->
@@ -169,17 +169,6 @@
             </div>
         </div>
 
-    </div>
-
-    <!-- Vehicle detail panel (hidden by default; shown by selectFleetVehicle) -->
-    <div id="vehicle-panel-backdrop"
-        style="display:none;position:fixed;inset:0;background:rgba(27,32,39,0.45);z-index:5000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);">
-        <div id="vehicle-panel" class="vp-modal">
-            <!-- Close button (matches the leaflet popup close style) -->
-            <button id="vehicle-panel-close" aria-label="Close"
-                style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.28);border:none;color:rgba(255,255,255,0.75);cursor:pointer;width:28px;height:28px;border-radius:50%;font-size:16px;line-height:28px;text-align:center;padding:0;z-index:10;transition:color 0.15s ease, background 0.15s ease;">&times;</button>
-            <div id="vehicle-panel-content"></div>
-        </div>
     </div>
 
     <!-- Leaflet JS -->

@@ -42,8 +42,21 @@ def vehicle_profile(slug: str):
         active=active, public_code=public_code,
         measurement_start_label=_display_service_date(profile["measurement_start"]),
         through_date_label=_display_service_date(profile["through_date"]),
+        display_service_date=_display_service_date,
         audit_url="https://bristol-bus-bot.github.io/weca-bus-audit/",
     )
+
+
+@bp.route("/api/vehicle-profiles/<slug>")
+def vehicle_profile_data(slug: str):
+    """Return one fresh, publishable profile for the unified map sidebar."""
+    audit = current_app.extensions["bbb_audit_integration"]
+    profile = audit.profile(slug)
+    if profile is None:
+        abort(404)
+    response = jsonify({"profile": profile})
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @bp.route("/api/stops-with-locality")
