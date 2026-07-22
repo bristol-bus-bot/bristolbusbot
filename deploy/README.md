@@ -108,10 +108,11 @@ candidate never reached production, the previous database was restored, or
 automatic rollback could not prove recovery. Daily no-change checks stay quiet.
 
 Production status (22 July 2026): the timer and automatic-promotion marker are
-enabled. GitHub run `29944744744` completed the full unattended path and was
-accepted after database, consumer, stop-search and public-health gates. The
-steps below remain the installation/recovery procedure, not unfinished rollout
-work.
+enabled. GitHub run `29944744744` completed the full production `auto` path and
+was accepted after database, consumer, stop-search and public-health gates. It
+was manually initiated during commissioning; the first timer-triggered due run
+remains routine evidence. The steps below remain the installation/recovery
+procedure, not unfinished implementation work.
 
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without

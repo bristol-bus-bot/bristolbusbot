@@ -35,9 +35,10 @@ records it, and the bot posts about it. These processes cannot disagree by const
 Routine timetable refreshes are also unattended. The Pi checks each morning,
 asks a fixed GitHub Actions workflow for a fresh candidate when the six-day
 cooldown has elapsed, validates the result independently, and either promotes
-it atomically or keeps the previous database. The first fully unattended live
-promotion completed successfully on 22 July 2026; the Windows workstation is
-now an emergency fallback rather than part of normal production.
+it atomically or keeps the previous database. The complete production `auto`
+path was accepted on 22 July 2026 and the daily timer is enabled; the first
+scheduler-triggered due rebuild remains routine observation. The Windows
+workstation is now an emergency fallback rather than part of normal production.
 
 These are the principles that shape the code:
 
