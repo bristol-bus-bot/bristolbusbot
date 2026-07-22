@@ -100,12 +100,13 @@ This is the priority because every other timetable-derived artifact depends on
 it. A full build on the 1 GB Pi is optional fallback work, not a gate.
 
 Acceptance evidence (22 July 2026): attended promotion, forced rollback tests,
-automatic no-change handling and the first fully unattended GitHub build -> Pi
-delivery -> live promotion all passed. The accepted run was `29944744744`; its
-consumer and functional health gates passed and the previous database remained
-available. The maintainer chose not to make an arbitrary wait for a second
-weekly run a completion gate. Later runs remain observable routine operations,
-and the laptop is no longer part of normal timetable production.
+automatic no-change handling and a manually initiated production `auto` GitHub
+build -> Pi delivery -> live promotion all passed. The accepted run was
+`29944744744`; its consumer and functional health gates passed and the previous
+database remained available. The daily timer is enabled. The maintainer chose
+not to make an arbitrary six-day wait for its first due rebuild a completion
+gate. That scheduler-triggered cycle remains observable routine evidence, and
+the laptop is no longer part of normal timetable production.
 
 ## Phase B - Identity and complete consumer-path audit
 

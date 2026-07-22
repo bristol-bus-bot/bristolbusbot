@@ -114,10 +114,12 @@ delivery; the project has no cron jobs.
 
 Timetable automation is end to end. The Pi is the scheduler of record, GitHub
 does the heavy build, and the Pi independently validates and promotes the
-candidate under the shared maintenance lock. The first fully unattended build,
-delivery and live promotion was accepted on 22 July 2026. A failed source,
-workflow, download, validator, restart or functional health check leaves or
-restores the previous timetable.
+candidate under the shared maintenance lock. The complete production `auto`
+path was accepted on 22 July 2026 and the daily timer is enabled. That run was
+manually initiated while commissioning; the first scheduler-triggered due
+rebuild remains routine evidence rather than an implementation dependency. A
+failed source, workflow, download, validator, restart or functional health
+check leaves or restores the previous timetable.
 
 Code releases, operating-system upgrades, boundary editions and curated
 content remain deliberate human actions. Fleet, locality and AI-description

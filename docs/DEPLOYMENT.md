@@ -77,11 +77,12 @@ same rejected candidate automatically. Its detailed result and timer job record
 feed aggregate health.
 
 This path is live, not shadow-only: GitHub run `29944744744` was downloaded,
-validated and accepted by the unattended `auto` promotion path on 22 July
+validated and accepted by the production `auto` promotion path on 22 July
 2026. The candidate carried service through 30 May 2027 and all consumer and
-functional health gates passed. Continued runs are routine monitoring rather
-than a remaining rollout gate; the workstation is retained only as an attended
-fallback.
+functional health gates passed. That commissioning run was manually initiated;
+the 05:00 timer is enabled but had not yet fired as of that date. Its first due
+rebuild remains routine monitoring rather than a remaining implementation
+gate; the workstation is retained only as an attended fallback.
 
 `python deploy/push.py --refresh-timetable` remains the attended workstation
 fallback. It applies the same validation, fixed staging, atomic replacement and

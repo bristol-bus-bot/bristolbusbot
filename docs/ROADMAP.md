@@ -12,9 +12,10 @@ The core system is complete and live:
 - Immutable release deployment with health gates and automatic rollback
   (`deploy/push.py`) is the only production deployment path.
 - End-to-end timetable automation: the Pi detects when a refresh is due,
-  GitHub builds it, and the Pi validates, promotes or rolls back. The first
-  fully unattended live promotion passed on 22 July 2026, so the laptop is no
-  longer part of routine timetable production.
+  GitHub builds it, and the Pi validates, promotes or rolls back. The complete
+  production `auto` path passed on 22 July 2026 and the daily timer is enabled,
+  so the laptop is no longer part of routine timetable production. The first
+  scheduler-triggered due rebuild remains routine observation.
 - Encrypted local and off-site backups, weekly repository checks, restore
   verification tooling and independent dead-man monitoring.
 - Self-hosted fonts and Leaflet; content-addressed frontend assets;

@@ -1,7 +1,8 @@
 # Timetable delivery execution plan: GitHub build, Pi promotion
 
-Status: complete and live; the first unattended production promotion was
-accepted on 22 July 2026.
+Status: complete, enabled and live; the production `auto` path was accepted on
+22 July 2026. Its first scheduler-triggered due cycle remains routine follow-up
+evidence.
 
 The filename is retained because earlier discussions and documentation link to
 it. This is no longer a plan to make the production Pi perform the normal full
@@ -324,8 +325,10 @@ recovery path.
 5. Rehearse promotion against a disposable root and force rollback.
 6. Enable production promotion and attend the first run.
 7. Observe subsequent unattended promotions; the laptop remains an emergency
-   fallback until live automation has operating history. Completed on 22 July
-   2026 when run `29944744744` was accepted by the `auto` path.
+   fallback while live automation accumulates operating history. Run
+   `29944744744` was accepted by the production `auto` path on 22 July 2026,
+   but was manually initiated during commissioning; the first timer-triggered
+   due cycle remains to be observed without blocking normal operation.
 8. Update `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `pipeline/README.md`,
    `deploy/README.md`, and the roadmap with the proven state.
 
@@ -362,8 +365,9 @@ service-health impact merely confirms that GitHub remains the build plane.
 
 ## Done means
 
-All work packages passed their acceptance gates on 22 July 2026. An attended
-live promotion, automatic no-change exercise and a fully unattended live
-promotion succeeded; failure and rollback were demonstrated; later runs are
-observable; the laptop is documented only as a fallback; and the Pi remained
-healthy throughout.
+All implementation work packages passed their acceptance gates on 22 July
+2026. An attended live promotion, automatic no-change exercise and the complete
+production `auto` path succeeded; failure and rollback were demonstrated; the
+daily timer is enabled; the laptop is documented only as a fallback; and the Pi
+remained healthy throughout. The first scheduler-triggered due rebuild is
+routine operating evidence still to be observed.
