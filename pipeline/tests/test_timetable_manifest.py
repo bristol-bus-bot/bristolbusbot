@@ -130,10 +130,12 @@ def test_create_and_verify_manifest(tmp_path):
         source_status=source_status,
         builder_commit="a" * 40,
         workflow_run_id="123",
+        build_started_utc="2026-07-17T00:00:00+00:00",
         minimum_service_days=14,
     )
 
-    assert manifest["manifest_version"] == 2
+    assert manifest["manifest_version"] == 3
+    assert manifest["build"]["started_utc"] == "2026-07-17T00:00:00+00:00"
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \
         manifest["database"]["route_shape_keys"]
@@ -157,6 +159,7 @@ def test_verify_rejects_manifest_hash_mismatch(tmp_path):
         source_status=source_status,
         builder_commit="a" * 40,
         workflow_run_id="123",
+        build_started_utc="2026-07-17T00:00:00+00:00",
         minimum_service_days=0,
     )
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -164,6 +167,31 @@ def test_verify_rejects_manifest_hash_mismatch(tmp_path):
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="SHA-256"):
+        verify_manifest(database=database, manifest_path=manifest_path)
+
+
+def test_verify_rejects_a_falsified_recorded_validation_result(tmp_path):
+    database = tmp_path / "timetable.db"
+    manifest_path = tmp_path / "manifest.json"
+    make_database(database)
+    gtfs, first, tnds, source_status = make_sources(tmp_path)
+    create_manifest(
+        database=database,
+        output=manifest_path,
+        gtfs=gtfs,
+        first_txc=first,
+        tnds=tnds,
+        source_status=source_status,
+        builder_commit="a" * 40,
+        workflow_run_id="123",
+        build_started_utc="2026-07-17T00:00:00+00:00",
+        minimum_service_days=0,
+    )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["validation"]["result"]["routes"] += 1
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="validation result"):
         verify_manifest(database=database, manifest_path=manifest_path)
 
 
@@ -183,6 +211,7 @@ def test_create_rejects_missing_required_source(tmp_path):
             source_status=source_status,
             builder_commit="a" * 40,
             workflow_run_id="123",
+            build_started_utc="2026-07-17T00:00:00+00:00",
             minimum_service_days=0,
         )
 
@@ -204,6 +233,7 @@ def test_manifest_records_tnds_as_not_needed_without_an_archive(tmp_path):
         source_status=source_status,
         builder_commit="a" * 40,
         workflow_run_id="123",
+        build_started_utc="2026-07-17T00:00:00+00:00",
         minimum_service_days=0,
     )
 

@@ -528,10 +528,14 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
     root.mkdir()
     for name in (
         "install_unified_deploy.sh", "deploy_control.sh", "timetable_control.py",
+        "timetable_delivery.py",
         "validate_production_config.py", "verify_release.py",
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
+        "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
+        "configure_timetable_delivery.py",
     ):
         copy_file(DEPLOY / name, root / name)
+    copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
     copy_tree(DEPLOY / "systemd", root / "systemd")
     copy_tree(DEPLOY / "sudoers", root / "sudoers")
     copy_tree(DEPLOY / "tmpfiles", root / "tmpfiles")

@@ -35,6 +35,7 @@ jobs:
 
       - name: Prepare disposable build directories
         run: |
+          echo "BBB_BUILD_STARTED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           echo "TMPDIR=$RUNNER_TEMP/bbb-timetable-sources" >> "$GITHUB_ENV"
           echo "SQLITE_TMPDIR=$RUNNER_TEMP/bbb-sqlite" >> "$GITHUB_ENV"
           echo "BBB_TIMETABLE_DB=$RUNNER_TEMP/bbb-candidate/timetable.db" >> "$GITHUB_ENV"
@@ -62,6 +63,7 @@ jobs:
             --source-status "$TMPDIR/busaudit_timetable_source_status.json" \
             --builder-commit "$GITHUB_SHA" \
             --workflow-run-id "$GITHUB_RUN_ID" \
+            --build-started-utc "$BBB_BUILD_STARTED_UTC" \
             --minimum-service-days 14
 
       - name: Assemble and re-verify the exact artifact payload

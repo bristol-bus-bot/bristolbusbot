@@ -8,7 +8,7 @@ Group=@BBB_DEPLOY_USER@
 WorkingDirectory=@BBB_DEPLOY_BASE@/current/pipeline
 EnvironmentFile=/etc/bristolbusbot/collector.env
 Environment=BBB_PIPELINE_DIR=@BBB_DEPLOY_BASE@/current/pipeline
-ExecStart=/usr/local/libexec/bbb-run-recorded-job --name audit-rollup --skip-exit-code 75 -- /usr/bin/flock -n -E 75 /run/lock/bristolbusbot/audit.lock /usr/local/libexec/bbb-audit-rollup
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name audit-rollup --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 75 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/flock -n -E 75 /run/lock/bristolbusbot/audit.lock /usr/local/libexec/bbb-audit-rollup
 TimeoutStartSec=20min
 UMask=0077
 CPUWeight=50
