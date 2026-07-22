@@ -50,6 +50,9 @@ def make_database(path: Path) -> None:
             route_name TEXT, operator_noc TEXT, direction_id INTEGER,
             variant INTEGER, points_json TEXT,
             PRIMARY KEY (route_name, operator_noc, direction_id, variant));
+        CREATE TABLE stop_routes (
+            stop_code TEXT NOT NULL, route_short_name TEXT NOT NULL,
+            PRIMARY KEY (stop_code, route_short_name)) WITHOUT ROWID;
 
         CREATE INDEX idx_trips_vjc ON trips(vehicle_journey_code);
         CREATE INDEX idx_routes_agency ON routes(agency_id);
@@ -87,6 +90,7 @@ def make_database(path: Path) -> None:
     connection.execute(
         "INSERT INTO route_shapes VALUES "
         "('1', 'FBRI', 0, 0, '[[51.45, -2.59], [51.46, -2.58]]')")
+    connection.execute("INSERT INTO stop_routes VALUES ('0100S', '1')")
     connection.commit()
     connection.close()
 
@@ -134,7 +138,7 @@ def test_create_and_verify_manifest(tmp_path):
         minimum_service_days=14,
     )
 
-    assert manifest["manifest_version"] == 3
+    assert manifest["manifest_version"] == 4
     assert manifest["build"]["started_utc"] == "2026-07-17T00:00:00+00:00"
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \

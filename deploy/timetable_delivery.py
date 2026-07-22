@@ -22,7 +22,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping
 from zoneinfo import ZoneInfo
 
-from timetable_control import validate
+from timetable_control import VALIDATOR_ID, validate
 from timetable_manifest import (
     GTFS_OPTIONAL,
     GTFS_REQUIRED,
@@ -62,6 +62,7 @@ COUNT_RATIOS = {
     "stop_times": 0.75,
     "route_shapes": 0.70,
     "first_routes": 0.80,
+    "stop_routes": 0.70,
 }
 
 
@@ -466,7 +467,7 @@ def validate_manifest_identity(manifest: dict, run: dict, artifact: dict,
 
     validation_record = manifest.get("validation")
     if (not isinstance(validation_record, dict)
-            or validation_record.get("validator") != "bbb-timetable-control-v2"
+            or validation_record.get("validator") != VALIDATOR_ID
             or validation_record.get("minimum_service_days") != MINIMUM_SERVICE_DAYS):
         raise DeliveryError("invalid_manifest", "manifest validation contract is unsupported")
     licence = manifest.get("licence")
@@ -525,8 +526,16 @@ def compare_with_current(current: Path, candidate_result: dict[str, object]) -> 
         raise DeliveryError("current_timetable_invalid", "current timetable cannot be compared safely") from exc
     comparisons: dict[str, dict[str, object]] = {}
     for name, ratio in COUNT_RATIOS.items():
-        old = int(current_result[name])
         new = int(candidate_result[name])
+        if name not in current_result:
+            comparisons[name] = {
+                "current": None,
+                "candidate": new,
+                "minimum": 1,
+                "schema_migration": True,
+            }
+            continue
+        old = int(current_result[name])
         minimum = int(old * ratio)
         comparisons[name] = {"current": old, "candidate": new, "minimum": minimum}
         if old > 0 and new < minimum:

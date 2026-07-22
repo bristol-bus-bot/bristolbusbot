@@ -18,7 +18,7 @@ sys.path.insert(0, str(DEPLOY))
 sys.path.insert(0, str(PIPELINE))
 
 from test_timetable_control import make_timetable
-from timetable_control import EXPECTED_FBRI, validate
+from timetable_control import EXPECTED_FBRI, VALIDATOR_ID, validate
 from timetable_delivery import (
     ALLOWED_FILES,
     ARTIFACT_NAME,
@@ -93,7 +93,7 @@ def write_manifest(database: Path, destination: Path, **updates) -> None:
         },
         "database": database_summary(database),
         "validation": {
-            "validator": "bbb-timetable-control-v2",
+            "validator": VALIDATOR_ID,
             "minimum_service_days": 14,
             "result": result,
         },

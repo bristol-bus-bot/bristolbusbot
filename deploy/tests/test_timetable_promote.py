@@ -92,6 +92,36 @@ def test_health_request_has_an_explicit_identity(monkeypatch):
     assert seen[0][1]["timeout"] == 10
 
 
+def test_site_health_gate_exercises_the_real_stop_search_endpoint(monkeypatch):
+    calls = []
+
+    def response(url, *, timeout=10):
+        calls.append((url, timeout))
+        if url.endswith("/healthz"):
+            return {"status": "ok"}
+        return {"stops": [{}] * 1000}
+
+    monkeypatch.setattr(SystemServices, "_json", staticmethod(response))
+
+    assert SystemServices().wait_component("site") is True
+    assert calls == [
+        ("http://127.0.0.1:5002/healthz", 10),
+        ("http://127.0.0.1:5002/api/stops-with-locality", 20),
+    ]
+
+
+def test_site_health_gate_rejects_an_incomplete_stop_search_payload(monkeypatch):
+    def response(url, *, timeout=10):
+        if url.endswith("/healthz"):
+            return {"status": "ok"}
+        return {"stops": []}
+
+    monkeypatch.setattr(SystemServices, "_json", staticmethod(response))
+    monkeypatch.setattr("timetable_promote.time.sleep", lambda _seconds: None)
+
+    assert SystemServices().wait_component("site") is False
+
+
 def promotion_case(tmp_path: Path, *, services=None, fault=None):
     shadow = tmp_path / "shadow"
     candidate = shadow / "candidate"

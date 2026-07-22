@@ -80,3 +80,34 @@ def test_stops_with_locality_shape(client):
     assert s["0100C"]["routes"] == ["75"]
     for key in ("ward", "area", "street", "enriched_locality", "local_authority"):
         assert key in s["0100A"]
+
+
+def test_stops_with_locality_uses_precomputed_routes_without_schedule_joins(
+        client, app):
+    import sqlite3
+
+    cfg = app.config["BBB"]
+    connection = sqlite3.connect(cfg.timetable_db)
+    connection.execute("DROP TABLE stop_times")
+    connection.execute("DROP TABLE trips")
+    connection.execute("DROP TABLE routes")
+    connection.commit()
+    connection.close()
+
+    data = client.get("/api/stops-with-locality").get_json()
+    stops = {item["stop_code"]: item for item in data["stops"]}
+    assert stops["0100C"]["routes"] == ["75"]
+
+
+def test_stops_with_locality_keeps_legacy_rollback_compatibility(client, app):
+    import sqlite3
+
+    cfg = app.config["BBB"]
+    connection = sqlite3.connect(cfg.timetable_db)
+    connection.execute("DROP TABLE stop_routes")
+    connection.commit()
+    connection.close()
+
+    data = client.get("/api/stops-with-locality").get_json()
+    stops = {item["stop_code"]: item for item in data["stops"]}
+    assert stops["0100C"]["routes"] == ["75"]

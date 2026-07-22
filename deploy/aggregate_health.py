@@ -12,6 +12,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 
 STATE = Path("/var/lib/bristolbusbot/monitoring")
@@ -37,6 +38,9 @@ TIMETABLE_DELIVERY_STATE = Path(
 TIMETABLE_PROMOTION_MARKER = Path(
     "/etc/bristolbusbot/timetable-promotion-enabled")
 TIMETABLE_TOKEN_WARNING_DAYS = 30
+BRISTOL_TZ = ZoneInfo("Europe/London")
+TIMETABLE_RUN_URL = (
+    "https://github.com/bristol-bus-bot/bristolbusbot/actions/runs/{}")
 
 
 def utcnow() -> datetime:
@@ -202,10 +206,19 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
         age_h = age_seconds(finished) / 3600 if finished else None
         result["last_attempt"] = {
             "outcome": outcome,
+            "mode": detail.get("mode"),
             "finished_at": finished,
             "age_hours": round(age_h, 2) if age_h is not None else None,
             "run_id": detail.get("run_id"),
+            "commit": detail.get("commit"),
+            "database_sha256": detail.get("database_sha256"),
+            "previous_sha256": detail.get("previous_sha256"),
+            "duration_seconds": detail.get("duration_seconds"),
+            "validation": detail.get("validation"),
+            "tnds_status": detail.get("tnds_status"),
             "failure_code": detail.get("failure_code"),
+            "error": detail.get("error"),
+            "recovery_healthy": detail.get("recovery_healthy"),
         }
         if outcome not in {"accepted", "no_change"} \
                 or age_h is None or age_h > 24 * 8:
@@ -236,6 +249,103 @@ def notify(text: str) -> None:
         urllib.request.urlopen(request, timeout=15).read()
     except OSError:
         pass
+
+
+def _display_time(value: object) -> str:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(BRISTOL_TZ).strftime("%d %B %Y at %H:%M %Z")
+    except ValueError:
+        return str(value or "unknown time")
+
+
+def _run_line(run_id: object) -> str:
+    value = str(run_id or "")
+    if value.isdigit():
+        return f"GitHub build: <{TIMETABLE_RUN_URL.format(value)}|run {value}>"
+    return "GitHub build: unavailable"
+
+
+def _service_date(value: object) -> str:
+    try:
+        parsed = datetime.strptime(str(value), "%Y%m%d")
+        return f"{parsed.day} {parsed.strftime('%B %Y')}"
+    except ValueError:
+        return str(value or "unknown")
+
+
+def timetable_success_message(attempt: dict[str, object]) -> str:
+    validation = attempt.get("validation")
+    counts = validation if isinstance(validation, dict) else {}
+
+    def count(name: str) -> str:
+        try:
+            return f"{int(counts[name]):,}"
+        except (KeyError, TypeError, ValueError):
+            return "?"
+
+    if attempt.get("tnds_status") == "fallback_used":
+        source = "TNDS fallback used"
+    elif attempt.get("tnds_status") == "not_needed":
+        source = "BODS and First sources complete; TNDS not needed"
+    else:
+        source = "source decision unavailable"
+    digest = str(attempt.get("database_sha256") or "")[:12] or "unknown"
+    duration = attempt.get("duration_seconds")
+    duration_text = (f"{float(duration):.0f}s"
+                     if isinstance(duration, (int, float)) else "unknown")
+    return "\n".join((
+        ":white_check_mark: *Timetable updated automatically*",
+        f"Installed: {_display_time(attempt.get('finished_at'))}",
+        f"Coverage: through {_service_date(counts.get('latest_service'))}",
+        "Contents: "
+        f"{count('routes')} routes · {count('trips')} trips · "
+        f"{count('stops')} stops · {count('stop_times')} stop times · "
+        f"{count('route_shapes')} route shapes",
+        f"Stop-search lookup: {count('stop_routes')} stop/route pairs",
+        f"Sources: {source}",
+        f"Safety: stop search, collector, site, bot and public health passed; "
+        f"previous timetable retained for rollback",
+        f"Database: {digest} · promotion {duration_text}",
+        _run_line(attempt.get("run_id")),
+    ))
+
+
+def timetable_failure_message(kind: str,
+                              attempt: dict[str, object]) -> str:
+    code = str(attempt.get("failure_code") or "unknown_failure")
+    reason = str(attempt.get("error") or "No additional error text was recorded")
+    outcome = str(attempt.get("outcome") or "failure")
+    if kind == "shadow":
+        safety = (
+            "The candidate never reached production; the existing timetable "
+            "remains live. The Pi will try a fresh delivery at its next due check.")
+        title = ":rotating_light: *Timetable build/delivery failed*"
+    elif outcome == "rolled_back" and attempt.get("recovery_healthy") is True:
+        safety = (
+            "The previous timetable was restored and all consumer health "
+            "checks passed. This rejected candidate is blocked from replay.")
+        title = ":rotating_light: *Timetable promotion failed and rolled back*"
+    elif outcome == "rollback_failed":
+        safety = (
+            "Automatic recovery could not prove every service healthy; "
+            "manual attention is required urgently.")
+        title = ":rotating_light: *URGENT: timetable rollback not healthy*"
+    else:
+        safety = (
+            "The candidate was rejected before acceptance; the existing "
+            "timetable remains the production version.")
+        title = ":rotating_light: *Timetable promotion rejected*"
+    return "\n".join((
+        title,
+        f"When: {_display_time(attempt.get('finished_at'))}",
+        f"Failure: `{code}`",
+        f"Reason: {reason[:300]}",
+        f"Safety: {safety}",
+        _run_line(attempt.get("run_id")),
+    ))
 
 
 def main() -> int:
@@ -330,16 +440,52 @@ def main() -> int:
         previous = json.loads(incident_path.read_text(encoding="utf-8"))
         previous_issues = set(previous.get("active", []))
     except (OSError, json.JSONDecodeError):
+        previous = {}
         previous_issues = set()
     current = set(unique_issues)
     opened = sorted(current - previous_issues)
     resolved = sorted(previous_issues - current)
-    if opened:
-        notify(":rotating_light: BBB health incident: " + ", ".join(opened))
-    if resolved:
-        notify(":white_check_mark: BBB health recovery: " + ", ".join(resolved))
+    notified_run = str(previous.get("last_timetable_success_run_id", ""))
+    promotion_attempt = timetable_promotion.get("last_attempt")
+    if not isinstance(promotion_attempt, dict):
+        promotion_attempt = {}
+    accepted_run = str(promotion_attempt.get("run_id") or "")
+    sent_timetable_success = False
+    if promotion_attempt.get("outcome") == "accepted" \
+            and accepted_run.isdigit() and accepted_run != notified_run:
+        notify(timetable_success_message(promotion_attempt))
+        notified_run = accepted_run
+        sent_timetable_success = True
+
+    remaining_opened = list(opened)
+    if "job:timetable-promote" in remaining_opened:
+        notify(timetable_failure_message("promotion", promotion_attempt))
+        remaining_opened.remove("job:timetable-promote")
+    if "job:timetable-shadow" in remaining_opened:
+        delivery_attempt = timetable_delivery.get("last_attempt")
+        notify(timetable_failure_message(
+            "shadow", delivery_attempt if isinstance(delivery_attempt, dict) else {}))
+        remaining_opened.remove("job:timetable-shadow")
+    if remaining_opened:
+        notify(":rotating_light: BBB health incident: " + ", ".join(remaining_opened))
+
+    timetable_resolved = {
+        "job:timetable-promote", "job:timetable-shadow"}.intersection(resolved)
+    if timetable_resolved and not sent_timetable_success:
+        notify(
+            ":white_check_mark: *Timetable automation recovered*\n"
+            "The latest timetable check completed safely and the existing "
+            "production services are healthy.")
+    remaining_resolved = [issue for issue in resolved
+                          if issue not in timetable_resolved]
+    if remaining_resolved:
+        notify(":white_check_mark: BBB health recovery: "
+               + ", ".join(remaining_resolved))
     atomic_json(incident_path, {
-        "updated_at": utcnow().isoformat(), "active": unique_issues})
+        "updated_at": utcnow().isoformat(),
+        "active": unique_issues,
+        "last_timetable_success_run_id": notified_run,
+    })
     print(json.dumps({"status": snapshot["status"], "issues": unique_issues}))
     return 1 if unique_issues else 0
 
