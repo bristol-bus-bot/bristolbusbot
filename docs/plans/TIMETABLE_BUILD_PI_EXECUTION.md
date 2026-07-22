@@ -246,6 +246,16 @@ replacement, during each consumer restart/health gate and at public health;
 post-replacement failures restore the old database. The same rejected artifact
 is not retried automatically.
 
+First live-trial evidence (2026-07-22): the candidate passed every database
+gate and was atomically installed. The trial exposed two Pi-specific health
+assumptions: the collector recovery probe exceeded its original 15-second
+subprocess timeout, and Cloudflare returned HTTP 403 to Python's default
+`urllib` User-Agent. The transaction restored the old database. The probe
+timeout was raised to 45 seconds with six bounded attempts, the health client
+now sends an explicit project identity, and the transaction ceiling was raised
+to 20 minutes so rollback retains its own complete recovery window. Automatic
+promotion remained disabled.
+
 Acceptance: forced failures before replace, after replace, during restart, and
 during health check all produce the expected live file and job record.
 
