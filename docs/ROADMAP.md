@@ -11,6 +11,11 @@ The core system is complete and live:
   systemd, launched publicly at bristolbuses.live on 13 July 2026.
 - Immutable release deployment with health gates and automatic rollback
   (`deploy/push.py`) is the only production deployment path.
+- End-to-end timetable automation: the Pi detects when a refresh is due,
+  GitHub builds it, and the Pi validates, promotes or rolls back. The complete
+  production `auto` path passed on 22 July 2026 and the daily timer is enabled,
+  so the laptop is no longer part of routine timetable production. The first
+  scheduler-triggered due rebuild remains routine observation.
 - Encrypted local and off-site backups, weekly repository checks, restore
   verification tooling and independent dead-man monitoring.
 - Self-hosted fonts and Leaflet; content-addressed frontend assets;
@@ -27,21 +32,27 @@ The core system is complete and live:
 
 In rough order, each gated on the one before where it matters:
 
-1. **Isolated social service.** A separate process with its own database
+1. **Finish the remaining data-estate automation.** Timetable delivery is
+   complete. Next come operator-safe vehicle identity and durable consumer
+   paths, decoupling generated data from code releases, a unified data-health
+   audit, then fail-closed fleet/locality refreshes and human-gated description
+   generation. The authoritative sequence is
+   `docs/plans/DATA_REFRESH_AUTOMATION.md`.
+2. **Isolated social service.** A separate process with its own database
    receives a best-effort handoff after each successful Bluesky post.
    Social failures must be unable to affect the collector, site, audit
    or Bluesky — killing the social service leaves everything else
    healthy. No deployment target exists until the service is implemented.
-2. **Threads as a curated mirror.** Reuses the exact final Bluesky text
+3. **Threads as a curated mirror.** Reuses the exact final Bluesky text
    (no second AI call, no second BODS consumer), capped at one qualifying
    post per rolling hour with significance and cooldown gates. Runs
    logging-only in shadow before going live.
-3. **Instagram as a visual editorial product.** Branded data cards
+4. **Instagram as a visual editorial product.** Branded data cards
    generated from the audit archive, with every post human-approved for
    the first 30 days. Numbers are deterministic; AI garnishes, never
    generates figures. Full editorial and technical specification:
    `docs/plans/SOCIAL_EXPANSION_PLAN.md`.
-4. **Longer tail** (unordered): fleet search on the site, depot
+5. **Longer tail** (unordered): depot
    allocation visualisation, an open read-only API, SIRI-SX disruption
    posts once a verifiable source/corroboration contract exists for
    them.

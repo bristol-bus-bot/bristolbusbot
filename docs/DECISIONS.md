@@ -37,6 +37,11 @@ default-branch artifact, while a separate fixed-path root service revalidates,
 promotes, restarts consumers, checks health and rolls back. The workstation is
 an attended fallback, not a production scheduling dependency.
 
+This decision is implemented in production. After attended and forced-failure
+trials, the complete production `auto` build, delivery and live promotion path
+completed successfully on 22 July 2026. The run was manually initiated during
+commissioning; the enabled daily timer now owns future checks.
+
 ## SQLite and component boundaries
 
 SQLite matches the scale and operating environment of the project. Each

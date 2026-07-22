@@ -1,6 +1,8 @@
 # Timetable build migration: GitHub builds, the Pi promotes
 
-Status: approved architecture; implementation in progress.
+Status: implemented, enabled and live; the complete production `auto` path was
+accepted on 22 July 2026. First scheduler-triggered due cycle is routine
+follow-up evidence.
 
 This is the architecture decision for removing the Windows workstation from
 production timetable refreshes. The companion execution plan is
@@ -249,10 +251,14 @@ rebuilds and a restore drill have both succeeded.
 7. [x] Complete two clean attended Pi shadow validations, enable the daily
    timer, and prove its recent-shadow no-op path. The maintainer chose to proceed
    without waiting a week for another shadow-only run.
-8. [ ] Enable live promotion and attend the first run.
-9. [ ] Observe unattended promotion in normal operation, then declare the
-   laptop removed from normal production duty; retain it as an emergency
-   fallback.
+8. [x] Enable live promotion and attend the first run.
+9. [ ] Observe a scheduler-triggered due promotion in normal operation. This is
+   routine follow-up evidence, not an implementation gate: the timer is enabled
+   and the laptop has already been removed from normal production duty. Retain
+   it as an emergency fallback. GitHub run `29944744744` was accepted through
+   the complete production `auto` path on 22 July 2026 after independent Pi
+   validation and all live health gates, but that commissioning run was
+   manually initiated.
 
 Rollback at every stage is to disable the new timer/service. The existing
 workstation refresh path remains available throughout.

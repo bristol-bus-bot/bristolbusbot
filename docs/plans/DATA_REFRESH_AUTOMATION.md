@@ -1,6 +1,7 @@
 # Full data-refresh automation: master plan
 
-Status: approved direction; timetable delivery implementation is in progress.
+Status: Phase A timetable delivery is complete and live; Phases B-F remain the
+approved next work.
 Social-media expansion is explicitly deferred until this plan is done.
 
 The goal is not "make the Pi do everything." The goal is that the Windows
@@ -98,8 +99,14 @@ Complete WP1-WP8 in `TIMETABLE_BUILD_PI_EXECUTION.md`:
 This is the priority because every other timetable-derived artifact depends on
 it. A full build on the 1 GB Pi is optional fallback work, not a gate.
 
-Acceptance: two unattended promotions pass their health gates and the laptop is
-no longer part of normal timetable production.
+Acceptance evidence (22 July 2026): attended promotion, forced rollback tests,
+automatic no-change handling and a manually initiated production `auto` GitHub
+build -> Pi delivery -> live promotion all passed. The accepted run was
+`29944744744`; its consumer and functional health gates passed and the previous
+database remained available. The daily timer is enabled. The maintainer chose
+not to make an arbitrary six-day wait for its first due rebuild a completion
+gate. That scheduler-triggered cycle remains observable routine evidence, and
+the laptop is no longer part of normal timetable production.
 
 ## Phase B - Identity and complete consumer-path audit
 
@@ -274,7 +281,7 @@ Pi promotion, and a restore drill have all proved reliable.
 
 ## Rollout order
 
-1. Phase A: timetable delivery.
+1. Phase A: timetable delivery. **Complete 22 July 2026.**
 2. Phase B: identity and consumer paths.
 3. Phase C: decouple data from code releases.
 4. Phase D: health audit in report-only mode.

@@ -26,10 +26,10 @@ machine identity.
 ## Services and timers
 
 Four long-running system-level units — collector, site, bot and the
-named Cloudflare tunnel — plus nine timers owning the audit
+named Cloudflare tunnel — plus ten project timers owning the audit
 rollup/publish/snapshot, collector staleness check, twice-daily digest,
-nightly backup, weekly backup-repository check, resource sampling and an
-aggregate health snapshot. Unit templates are source-controlled in
+nightly backup, weekly backup-repository check, resource sampling, aggregate
+health and timetable delivery. Unit templates are source-controlled in
 `deploy/systemd/` and rendered by `deploy/push.py --install-layout`; do not edit
 live copies. Re-run that command after reviewed unit or deployment-helper
 changes. It preserves the current release links and rolls the installed units
@@ -75,6 +75,14 @@ checks the public endpoint, and restores the old database after any failure.
 Automatic promotion requires a root-owned enable marker and never retries the
 same rejected candidate automatically. Its detailed result and timer job record
 feed aggregate health.
+
+This path is live, not shadow-only: GitHub run `29944744744` was downloaded,
+validated and accepted by the production `auto` promotion path on 22 July
+2026. The candidate carried service through 30 May 2027 and all consumer and
+functional health gates passed. That commissioning run was manually initiated;
+the 05:00 timer is enabled but had not yet fired as of that date. Its first due
+rebuild remains routine monitoring rather than a remaining implementation
+gate; the workstation is retained only as an attended fallback.
 
 `python deploy/push.py --refresh-timetable` remains the attended workstation
 fallback. It applies the same validation, fixed staging, atomic replacement and
