@@ -1,4 +1,5 @@
 import json
+import stat
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -23,6 +24,8 @@ def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch
     monkeypatch.setattr(aggregate_health, "job_checks", lambda: ({}, []))
     monkeypatch.setattr(
         aggregate_health, "timetable_delivery_check", lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check", lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
     monkeypatch.setattr(aggregate_health, "notify", messages.append)
     monkeypatch.setattr(
@@ -81,3 +84,41 @@ def test_timetable_delivery_health_accepts_recent_skip_and_warns_on_token(tmp_pa
     assert check["job"]["result"] == "skipped"
     assert "job:timetable-shadow" not in issues
     assert "credential:timetable-token-expiry" in issues
+
+
+def test_timetable_promotion_health_keeps_rejection_visible(tmp_path, monkeypatch):
+    monitoring = tmp_path / "monitoring"
+    jobs = monitoring / "jobs"
+    jobs.mkdir(parents=True)
+    marker = SimpleNamespace(
+        exists=lambda: True,
+        is_symlink=lambda: False,
+        is_file=lambda: True,
+        lstat=lambda: SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o644),
+    )
+    now = datetime.now(timezone.utc)
+    (jobs / "timetable-promote.json").write_text(json.dumps({
+        "last_result": "success",
+        "last_success_at": now.isoformat(),
+    }), encoding="utf-8")
+    detail = monitoring / "timetable-promotion.json"
+    detail.write_text(json.dumps({
+        "outcome": "accepted",
+        "finished_at": now.isoformat(),
+        "run_id": "123",
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", monitoring)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_PROMOTION_MARKER", marker)
+
+    check, issues = aggregate_health.timetable_promotion_check()
+    assert check["last_attempt"]["outcome"] == "accepted"
+    assert issues == []
+
+    detail.write_text(json.dumps({
+        "outcome": "rolled_back",
+        "finished_at": now.isoformat(),
+        "failure_code": "consumer_unhealthy",
+    }), encoding="utf-8")
+    check, issues = aggregate_health.timetable_promotion_check()
+    assert check["last_attempt"]["outcome"] == "rolled_back"
+    assert issues == ["job:timetable-promote"]

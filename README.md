@@ -12,7 +12,7 @@ After many damp waits for rush hour buses in East Bristol, I decided to weaponis
 | `collector/` | The only process that talks to BODS. Polls SIRI-VM (positions) and SIRI-SX (disruptions) every 30s, matches vehicles to the timetable, computes delays once for everyone. | Python | Raspberry Pi (systemd) |
 | `site/` | **bristolbuses.live** - live map + dot-matrix departure board (Flask + Leaflet). | Python/JS | Raspberry Pi (gunicorn/systemd) |
 | `bot/` | **@bristolbusbot.live** - Bluesky bot. AI commentary on delays, with persona. Reads the collector's event stream. | TypeScript | Raspberry Pi (systemd) |
-| `pipeline/` | Offline data jobs: 3-layer timetable build (BODS GTFS → operator TransXChange → TNDS), fleet data refresh, AI blurb generation, route shapes. | Python | Workstation |
+| `pipeline/` | Offline data jobs: 3-layer timetable build (BODS GTFS → operator TransXChange → TNDS), fleet data refresh, AI blurb generation, route shapes. | Python | GitHub Actions + Pi timers; workstation fallback |
 | `audit-site/` | Source of the **WECA bus punctuality audit** static site, published via GitHub Pages (nightly data push from the Pi). | HTML/CSS/JS | GitHub Pages |
 | `deploy/` | Immutable release deployment, systemd units, health/rollback gates, backups, Slack monitoring and named-tunnel configuration. | Python | Workstation → Pi |
 | `docs/` | Architecture, decisions, deployment, roadmap and audit methodology. | — | — |
@@ -26,7 +26,7 @@ After many damp waits for rush hour buses in East Bristol, I decided to weaponis
         collector ──▶ live.db┼── bot (TS) ───────────▶ Bluesky
                 ──▶ audit.db ┴── nightly rollup ─────▶ GitHub Pages (audit)
                 ▲
-        timetable.db  ◀── pipeline (monthly validated build)
+        timetable.db  ◀── GitHub build → Pi validation/promotion
 ```
 
 There is one poller, one matcher and one delay number - the site displays it, the audit
@@ -52,10 +52,11 @@ These are the principles that shape the code:
   → http://localhost:5000. Point `BBB_LIVE_DB` at the collector's live.db.
 - **bot**: `cd bot && npm ci && npm run typecheck && npm run build`
   (local `.env` must keep test mode enabled). See `bot/.env.example`.
-- **pipeline**: run `python deploy\push.py --refresh-timetable` from the
-  repository root to build, validate and atomically deploy the timetable and
-  route shapes. Use `python deploy\push.py --dry-run --refresh-timetable` to
-  inspect its scope without building, connecting or changing anything.
+- **pipeline**: production timetable refreshes are automated through GitHub
+  Actions and the Pi's guarded validation/promotion services. For an attended
+  workstation fallback, run `python deploy\push.py --refresh-timetable` from
+  the repository root. Use `python deploy\push.py --dry-run --refresh-timetable`
+  to inspect its scope without building, connecting or changing anything.
 
 Production code is deployed only through `python deploy\push.py`; see
 `deploy/README.md` for the exact scope of every command and

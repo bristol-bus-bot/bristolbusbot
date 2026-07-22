@@ -2,6 +2,7 @@
 Description=Bristol Bus Bot GitHub timetable delivery shadow validation (%i)
 Wants=network-online.target
 After=network-online.target bbb-backup.service bbb-audit-rollup.service
+OnSuccess=bbb-timetable-promote@auto.service
 
 [Service]
 Type=oneshot

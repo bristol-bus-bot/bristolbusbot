@@ -31,4 +31,7 @@ copies.
 enablement: the layout installer leaves it disabled until the root-only GitHub
 environment file exists. The timer starts the `@auto` service instance; an
 operator can start `bbb-timetable-shadow@RUN_ID.service` for one attended,
-promotion-free delivery.
+exact-run delivery. A successful shadow service chains to the separately
+sandboxed root `bbb-timetable-promote@auto.service`, which remains structurally
+disabled without the root-owned promotion marker. Use
+`bbb-timetable-promote@attended.service` for the first reviewed live swap.

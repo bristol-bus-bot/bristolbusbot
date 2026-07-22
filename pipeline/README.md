@@ -1,10 +1,12 @@
 # pipeline
 
-Heavy timetable builds run on the Windows workstation. The Pi runs only the
-scheduled snapshot, rollup and export/publish jobs under systemd timers.
+Heavy production timetable builds run in GitHub Actions. The Pi schedules the
+refresh, independently validates the delivered artifact, and owns guarded live
+promotion and rollback. The Windows workstation is the development and
+emergency fallback path.
 
-The supported timetable command is `python deploy/push.py --refresh-timetable`.
-It combines three sources because BODS South West GTFS can be lossy:
+The timetable builder combines three sources because BODS South West GTFS can
+be lossy:
 
 1. BODS South West GTFS provides the bulk timetable.
 2. Operator TransXChange recovers routes omitted by GTFS.
@@ -21,10 +23,12 @@ From the repository root:
 python -m pytest pipeline\tests -q
 ```
 
-Production refreshes use `python deploy\push.py --refresh-timetable`; it validates locally,
-uploads to a fixed staging name, atomically promotes, and checks collector,
-site and bot with automatic database rollback. SSH host-key verification is
-mandatory. Deploy scheduled job code separately with
+Normal production refreshes use the fixed `timetable-build` workflow and the
+Pi's daily shadow-delivery timer. A successful candidate is independently
+revalidated, copied to fixed staging, atomically promoted, and checked by the
+collector, site, bot and public health gates with automatic database rollback.
+`python deploy\push.py --refresh-timetable` remains the attended workstation
+fallback. SSH host-key verification is mandatory. Deploy scheduled job code separately with
 `python deploy\push.py --component pipeline`; that never replaces the timetable.
 
 `refresh_enrichment.py` audits and refreshes fleet, livery, description,

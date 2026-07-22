@@ -165,6 +165,10 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "systemctl $" not in helper
     assert "NOPASSWD: ALL" not in sudoers
     assert "bbb-deploy-control timetable-promote" in sudoers
+    assert "timetable-auto-enable:)" in helper
+    assert "timetable-auto-disable:)" in helper
+    assert "bbb-deploy-control timetable-auto-enable" in sudoers
+    assert "bbb-deploy-control timetable-auto-disable" in sudoers
     assert "bot-token-promote:)" in helper
     assert "@BBB_DEPLOY_BASE@/incoming/bot.env.token-new" in helper
     assert "bbb-deploy-control bot-token-promote" in sudoers
@@ -183,6 +187,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
         encoding="utf-8")
     assert "/usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py" in installer
+    assert "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py" in installer
     assert "left disabled until its root-only credential is configured" in installer
 
     archive = push.install_payload(tmp_path, TEST_SETTINGS)
@@ -192,8 +197,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     with tarfile.open(archive) as payload:
         payload.extractall(extract, filter="data")
     assert (extract / "timetable_delivery.py").is_file()
+    assert (extract / "timetable_promote.py").is_file()
     assert (extract / "timetable_manifest.py").is_file()
     assert (extract / "systemd/bbb-timetable-shadow@.service").is_file()
+    assert (extract / "systemd/bbb-timetable-promote@.service").is_file()
 
 
 def test_layout_update_preserves_existing_current_release_links():
