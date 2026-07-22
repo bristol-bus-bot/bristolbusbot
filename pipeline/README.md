@@ -31,6 +31,8 @@ Pi's daily shadow-delivery timer. A successful candidate is independently
 revalidated, copied to fixed staging, atomically promoted, and checked by the
 collector, site, bot, the real stop-search endpoint and public health gates with
 automatic database rollback.
+The path is proven in production: the first unattended candidate was accepted
+on 22 July 2026 after every Pi-side and public functional gate passed.
 `python deploy\push.py --refresh-timetable` remains the attended workstation
 fallback. SSH host-key verification is mandatory. Deploy scheduled job code separately with
 `python deploy\push.py --component pipeline`; that never replaces the timetable.
