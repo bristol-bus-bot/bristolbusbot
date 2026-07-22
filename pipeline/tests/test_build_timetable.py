@@ -1,11 +1,14 @@
 from datetime import date
+import json
 import sqlite3
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
+import build_timetable as builder
 from build_timetable import (
     EXPECTED_FBRI,
     finalize_static_database,
@@ -82,3 +85,77 @@ def test_direct_entry_refuses_before_starting_a_build(monkeypatch):
         lambda *_: (_ for _ in ()).throw(AssertionError("build started")),
     )
     assert main() == 2
+
+
+def configure_shadow_paths(tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    gtfs = scratch / "busaudit_gtfs"
+    first = scratch / "busaudit_first_txc"
+    gtfs.mkdir(parents=True)
+    first.mkdir()
+    (gtfs / "shapes.txt").write_text("fixture\n", encoding="utf-8")
+    (first / "first.zip").write_bytes(b"fixture")
+    monkeypatch.setattr(builder, "TMP", scratch)
+    monkeypatch.setattr(builder, "GTFS_DIR", gtfs)
+    monkeypatch.setattr(builder, "WECA_DB", scratch / "weca.db")
+    monkeypatch.setattr(
+        builder, "SOURCE_STATUS", scratch / "source-status.json")
+    monkeypatch.setattr(
+        builder, "TIMETABLE_DB", tmp_path / "output" / "timetable.db")
+    monkeypatch.setattr(builder, "BUSBOT_DB", tmp_path / "missing-fallback.db")
+    return scratch
+
+
+def test_complete_primary_sources_skip_tnds_fallback(tmp_path, monkeypatch):
+    scratch = configure_shadow_paths(tmp_path, monkeypatch)
+    commands = []
+
+    def fake_run(command):
+        commands.append([str(part) for part in command])
+        if any("build_timetable_weca.py" in str(part) for part in command):
+            builder.WECA_DB.write_bytes(b"candidate")
+        return True
+
+    complete = {
+        "integrity": "ok", "missing": [], "stale": False,
+        "fbri_count": 121, "latest_service": "20991231",
+    }
+    monkeypatch.setattr(builder, "run", fake_run)
+    monkeypatch.setattr(builder, "validate", lambda _path: complete)
+    monkeypatch.setattr(builder, "finalize_static_database", lambda _path: None)
+    monkeypatch.setattr(
+        builder.subprocess, "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(
+        sys, "argv", ["build_timetable.py", "--skip-deploy", "--no-download"])
+
+    assert builder.main() == 0
+    assert not any(
+        "audit_fetch_tnds.py" in " ".join(command) for command in commands)
+    assert not any(
+        "busaudit_tnds" in " ".join(command) for command in commands)
+    status = json.loads(builder.SOURCE_STATUS.read_text(encoding="utf-8"))
+    assert status["tnds"] == {
+        "status": "not_needed", "missing_before_fallback": []}
+    assert not (scratch / "busaudit_tnds").exists()
+
+
+def test_missing_primary_route_requires_tnds_fallback(tmp_path, monkeypatch):
+    configure_shadow_paths(tmp_path, monkeypatch)
+
+    def fake_run(command):
+        if any("build_timetable_weca.py" in str(part) for part in command):
+            builder.WECA_DB.write_bytes(b"candidate")
+        return True
+
+    incomplete = {
+        "integrity": "ok", "missing": ["42"], "stale": False,
+        "fbri_count": 120, "latest_service": "20991231",
+    }
+    monkeypatch.setattr(builder, "run", fake_run)
+    monkeypatch.setattr(builder, "validate", lambda _path: incomplete)
+    monkeypatch.setattr(
+        sys, "argv", ["build_timetable.py", "--skip-deploy", "--no-download"])
+
+    assert builder.main() == 1
+    assert not builder.SOURCE_STATUS.exists()

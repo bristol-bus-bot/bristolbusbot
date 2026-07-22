@@ -91,7 +91,8 @@ def make_database(path: Path) -> None:
     connection.close()
 
 
-def make_sources(root: Path) -> tuple[Path, Path, Path]:
+def make_sources(root: Path, *, tnds_status: str = "fallback_used") \
+        -> tuple[Path, Path, Path, Path]:
     gtfs = root / "gtfs"
     first = root / "first"
     tnds = root / "tnds"
@@ -102,14 +103,23 @@ def make_sources(root: Path) -> tuple[Path, Path, Path]:
         (gtfs / name).write_text(f"fixture {name}\n", encoding="utf-8")
     (first / "first.zip").write_bytes(b"fixture-first")
     (tnds / "SW.zip").write_bytes(b"fixture-tnds")
-    return gtfs, first, tnds
+    source_status = root / "source-status.json"
+    source_status.write_text(json.dumps({
+        "schema": 1,
+        "tnds": {
+            "status": tnds_status,
+            "missing_before_fallback": ["42"]
+            if tnds_status == "fallback_used" else [],
+        },
+    }), encoding="utf-8")
+    return gtfs, first, tnds, source_status
 
 
 def test_create_and_verify_manifest(tmp_path):
     database = tmp_path / "timetable.db"
     manifest_path = tmp_path / "manifest.json"
     make_database(database)
-    gtfs, first, tnds = make_sources(tmp_path)
+    gtfs, first, tnds, source_status = make_sources(tmp_path)
 
     manifest = create_manifest(
         database=database,
@@ -117,15 +127,18 @@ def test_create_and_verify_manifest(tmp_path):
         gtfs=gtfs,
         first_txc=first,
         tnds=tnds,
+        source_status=source_status,
         builder_commit="a" * 40,
         workflow_run_id="123",
         minimum_service_days=14,
     )
 
-    assert manifest["manifest_version"] == 1
+    assert manifest["manifest_version"] == 2
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \
         manifest["database"]["route_shape_keys"]
+    assert manifest["sources"]["tnds"]["status"] == "fallback_used"
+    assert manifest["sources"]["tnds"]["missing_before_fallback"] == ["42"]
     assert verify_manifest(
         database=database, manifest_path=manifest_path)["route_shapes"] == 1
 
@@ -134,13 +147,14 @@ def test_verify_rejects_manifest_hash_mismatch(tmp_path):
     database = tmp_path / "timetable.db"
     manifest_path = tmp_path / "manifest.json"
     make_database(database)
-    gtfs, first, tnds = make_sources(tmp_path)
+    gtfs, first, tnds, source_status = make_sources(tmp_path)
     create_manifest(
         database=database,
         output=manifest_path,
         gtfs=gtfs,
         first_txc=first,
         tnds=tnds,
+        source_status=source_status,
         builder_commit="a" * 40,
         workflow_run_id="123",
         minimum_service_days=0,
@@ -156,7 +170,7 @@ def test_verify_rejects_manifest_hash_mismatch(tmp_path):
 def test_create_rejects_missing_required_source(tmp_path):
     database = tmp_path / "timetable.db"
     make_database(database)
-    gtfs, first, tnds = make_sources(tmp_path)
+    gtfs, first, tnds, source_status = make_sources(tmp_path)
     (gtfs / "shapes.txt").unlink()
 
     with pytest.raises(RuntimeError, match="required GTFS source"):
@@ -166,7 +180,35 @@ def test_create_rejects_missing_required_source(tmp_path):
             gtfs=gtfs,
             first_txc=first,
             tnds=tnds,
+            source_status=source_status,
             builder_commit="a" * 40,
             workflow_run_id="123",
             minimum_service_days=0,
         )
+
+
+def test_manifest_records_tnds_as_not_needed_without_an_archive(tmp_path):
+    database = tmp_path / "timetable.db"
+    manifest_path = tmp_path / "manifest.json"
+    make_database(database)
+    gtfs, first, tnds, source_status = make_sources(
+        tmp_path, tnds_status="not_needed")
+    (tnds / "SW.zip").unlink()
+
+    manifest = create_manifest(
+        database=database,
+        output=manifest_path,
+        gtfs=gtfs,
+        first_txc=first,
+        tnds=tnds,
+        source_status=source_status,
+        builder_commit="a" * 40,
+        workflow_run_id="123",
+        minimum_service_days=0,
+    )
+
+    assert manifest["sources"]["tnds"] == {
+        "status": "not_needed",
+        "missing_before_fallback": [],
+        "files": [],
+    }

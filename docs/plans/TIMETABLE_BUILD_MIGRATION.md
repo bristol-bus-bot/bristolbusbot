@@ -80,7 +80,8 @@ Every build stage must:
 - take explicit source and output paths;
 - write only inside a disposable build directory;
 - never open a production path for writing;
-- fail when any required source is missing, empty, corrupt, or incomplete;
+- fail when any source required to satisfy the completeness contract is
+  missing, empty, corrupt, or incomplete;
 - never publish a partially enriched timetable;
 - leave a structured stage result with timing and named failure information.
 
@@ -106,6 +107,7 @@ The manifest records at least:
 - builder commit and GitHub workflow run ID;
 - build start and finish time;
 - source identifiers, timestamps, sizes, and hashes where available;
+- whether legacy TNDS was used as a fallback or was demonstrably not needed;
 - table row counts;
 - maximum service date;
 - expected First-route result;

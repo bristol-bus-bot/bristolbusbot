@@ -3,11 +3,14 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 
 PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import audit_fetch_first_txc as first_txc  # noqa: E402
+import audit_fetch_tnds as tnds  # noqa: E402
 import audit_txc_to_timetable as txc_merge  # noqa: E402
 
 
@@ -27,8 +30,6 @@ def test_source_errors_redact_credentials(monkeypatch):
 
 
 def test_tnds_errors_redact_username_and_password(monkeypatch):
-    import audit_fetch_tnds as tnds
-
     monkeypatch.setattr(tnds, "USER", "download-user")
     monkeypatch.setattr(tnds, "PASS", "download-password")
     message = tnds.safe_error(
@@ -36,6 +37,90 @@ def test_tnds_errors_redact_username_and_password(monkeypatch):
     assert "download-user" not in message
     assert "download-password" not in message
     assert message.count("[REDACTED]") == 2
+
+
+def test_tnds_download_resumes_after_a_stalled_data_connection(
+        tmp_path, monkeypatch):
+    source_zip = tmp_path / "source.zip"
+    write_zip(source_zip)
+    payload = source_zip.read_bytes()
+    state = {"connections": 0, "starts": []}
+
+    class FakeFTP:
+        def __init__(self, **_kwargs):
+            state["connections"] += 1
+            self.connection = state["connections"]
+
+        def cwd(self, _directory):
+            pass
+
+        def size(self, _name):
+            return len(payload)
+
+        def retrbinary(self, _command, callback, blocksize, rest=None):
+            start = rest or 0
+            state["starts"].append(start)
+            remaining = payload[start:]
+            if self.connection == 1:
+                amount = max(1, len(remaining) // 2)
+                callback(remaining[:amount])
+                raise TimeoutError("simulated stalled transfer")
+            for offset in range(0, len(remaining), blocksize):
+                callback(remaining[offset:offset + blocksize])
+
+        def quit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(tnds, "USER", "user")
+    monkeypatch.setattr(tnds, "PASS", "password")
+    destination = tmp_path / "SW.zip"
+
+    size = tnds.download_archive(
+        destination, ftp_factory=FakeFTP, sleep=lambda _delay: None)
+
+    assert size == len(payload)
+    assert destination.read_bytes() == payload
+    assert state["connections"] == 2
+    assert state["starts"][0] == 0
+    assert 0 < state["starts"][1] < len(payload)
+    assert not destination.with_suffix(".zip.part").exists()
+
+
+def test_tnds_failure_preserves_previous_archive(tmp_path, monkeypatch):
+    class CorruptFTP:
+        def __init__(self, **_kwargs):
+            pass
+
+        def cwd(self, _directory):
+            pass
+
+        def size(self, _name):
+            return 7
+
+        def retrbinary(self, _command, callback, blocksize, rest=None):
+            callback(b"not-zip"[(rest or 0):])
+
+        def quit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(tnds, "USER", "user")
+    monkeypatch.setattr(tnds, "PASS", "password")
+    destination = tmp_path / "SW.zip"
+    destination.write_bytes(b"previous-valid-source")
+
+    with pytest.raises(RuntimeError, match="after 2 attempts"):
+        tnds.download_archive(
+            destination, ftp_factory=CorruptFTP,
+            sleep=lambda _delay: None, max_attempts=2)
+
+    assert destination.read_bytes() == b"previous-valid-source"
+    assert not destination.with_suffix(".zip.part").exists()
 
 
 def test_first_txc_failure_preserves_previous_complete_cache(

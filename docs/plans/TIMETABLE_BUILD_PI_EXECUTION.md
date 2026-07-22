@@ -37,9 +37,13 @@ ZIP member's file-like stream to the parser where supported.
 
 ### H3 - incomplete sources can look successful
 
-No catch-print-break path may publish the data gathered before a source failed.
-Every required source gets an explicit success record and plausibility checks.
-TNDS, First TXC, and BODS failures abort the whole timetable build.
+No catch-print-break path may publish the data gathered before a required
+source failed. BODS GTFS and First TXC are the primary sources. Their combined
+output is checked against the explicit completeness contract. TNDS is used only
+when that check finds required routes missing; if needed, its download or merge
+failure aborts the whole build. The manifest records either `fallback_used`
+with the missing-route reason or `not_needed` after a successful primary-source
+check.
 
 ### H4 - shape output is order-sensitive
 
@@ -163,8 +167,8 @@ Add a dedicated workflow separate from ordinary PR CI:
 - BODS/TNDS credentials from the dedicated `timetable-build` GitHub
   environment, exposed only to the build step;
 - immutable full-commit pins for every reused GitHub action;
-- bounded network retries, timeouts, size ceilings, archive tests, and an honest
-  User-Agent;
+- bounded network retries, timeouts, size ceilings, resumable TNDS transfer,
+  progress diagnostics, archive tests, and an honest User-Agent;
 - build, validate, manifest, and upload in that order;
 - artifact contains only the three approved files and expires after seven days;
 - failure summary names the stage without exposing secrets.
@@ -256,7 +260,7 @@ workstation path remains available.
 | # | Risk | Detection | Mitigation |
 |---|---|---|---|
 | R1 | source download is truncated or huge | byte limits, ZIP test | streaming, retries, fail closed |
-| R2 | one required source silently disappears | source-stage manifest | hard failure; no artifact |
+| R2 | one required source silently disappears | source-stage manifest | conditional TNDS fallback or hard failure; no partial artifact |
 | R3 | optimized build changes data | frozen-input hashes | one change at a time; exact regression |
 | R4 | greedy shape order changes variants | route-shape hash/key checks | explicit order; unchanged arithmetic |
 | R5 | GitHub workflow runs attacker-controlled code with secrets | event/ref audit | default branch only; never PR code |
