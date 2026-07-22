@@ -155,7 +155,7 @@ def test_backup_sandbox_cache_directory_is_created_before_unit_start():
         assert "DevicePolicy=closed" in unit
 
 
-def test_timetable_shadow_is_unprivileged_sandboxed_and_promotion_free():
+def test_timetable_shadow_is_unprivileged_sandboxed_and_chains_guarded_promotion():
     service = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
     timer = (SYSTEMD / "bbb-timetable-shadow.timer").read_text(encoding="utf-8")
     assert service.startswith("[Unit]\n")
@@ -171,11 +171,31 @@ def test_timetable_shadow_is_unprivileged_sandboxed_and_promotion_free():
         "ReadWritePaths=/var/lib/bristolbusbot/timetable-shadow "
         "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
         "/run/lock/bristolbusbot/heavy-io.lock",
+        "OnSuccess=bbb-timetable-promote@auto.service",
     ):
         assert setting in service
-    assert "timetable-promote" not in service
     assert ".timetable.db.upload" not in service
     assert "05:00:00" in timer
+
+
+def test_timetable_promoter_is_root_fixed_path_and_sandboxed():
+    service = (SYSTEMD / "bbb-timetable-promote@.service").read_text(
+        encoding="utf-8")
+    for setting in (
+        "User=root",
+        "--name timetable-promote --skip-exit-code 75",
+        "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py --mode %i",
+        "/run/lock/bristolbusbot/heavy-io.lock",
+        "NoNewPrivileges=yes",
+        "ProtectHome=yes",
+        "ProtectSystem=strict",
+        "ReadWritePaths=/var/lib/bristolbusbot/pipeline "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
+    ):
+        assert setting in service
+    assert "/var/lib/bristolbusbot/timetable-shadow" not in next(
+        line for line in service.splitlines() if line.startswith("ReadWritePaths="))
 
 
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
@@ -184,6 +204,7 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-backup-check.service",
         "bbb-audit-rollup.service",
         "bbb-timetable-shadow@.service",
+        "bbb-timetable-promote@.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source

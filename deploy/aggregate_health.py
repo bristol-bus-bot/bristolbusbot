@@ -34,6 +34,8 @@ JOB_MAX_AGE_HOURS = {
 }
 TIMETABLE_DELIVERY_STATE = Path(
     "/var/lib/bristolbusbot/timetable-shadow/state.json")
+TIMETABLE_PROMOTION_MARKER = Path(
+    "/etc/bristolbusbot/timetable-promotion-enabled")
 TIMETABLE_TOKEN_WARNING_DAYS = 30
 
 
@@ -156,6 +158,64 @@ def timetable_delivery_check() -> tuple[dict, list[str]]:
     return result, issues
 
 
+def timetable_promotion_check() -> tuple[dict, list[str]]:
+    marker = TIMETABLE_PROMOTION_MARKER
+    if not marker.exists() and not marker.is_symlink():
+        return {"status": "disabled"}, []
+    issues: list[str] = []
+    result: dict[str, object] = {"status": "enabled"}
+    try:
+        details = marker.lstat()
+        safe = (not marker.is_symlink() and marker.is_file())
+        if os.name != "nt":
+            safe = (safe and details.st_uid == 0
+                    and (details.st_mode & 0o777) == 0o644)
+        if not safe:
+            raise OSError("automatic-promotion marker is unsafe")
+    except OSError as exc:
+        result["marker"] = {"status": "unsafe", "error": str(exc)}
+        return result, ["job:timetable-promote"]
+
+    job_path = STATE / "jobs" / "timetable-promote.json"
+    try:
+        job = json.loads(job_path.read_text(encoding="utf-8"))
+        last_result = job.get("last_result")
+        last_ok = (job.get("last_skipped_at")
+                   if last_result == "skipped" else job.get("last_success_at"))
+        age_h = age_seconds(last_ok) / 3600 if last_ok else None
+        result["job"] = {
+            "result": last_result,
+            "last_ok_at": last_ok,
+            "age_hours": round(age_h, 2) if age_h is not None else None,
+        }
+        if last_result == "failure" or age_h is None or age_h > 30:
+            issues.append("job:timetable-promote")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        result["job"] = {"result": "missing", "error": str(exc)}
+        issues.append("job:timetable-promote")
+
+    detail_path = STATE / "timetable-promotion.json"
+    try:
+        detail = json.loads(detail_path.read_text(encoding="utf-8"))
+        outcome = detail.get("outcome")
+        finished = detail.get("finished_at")
+        age_h = age_seconds(finished) / 3600 if finished else None
+        result["last_attempt"] = {
+            "outcome": outcome,
+            "finished_at": finished,
+            "age_hours": round(age_h, 2) if age_h is not None else None,
+            "run_id": detail.get("run_id"),
+            "failure_code": detail.get("failure_code"),
+        }
+        if outcome not in {"accepted", "no_change"} \
+                or age_h is None or age_h > 24 * 8:
+            issues.append("job:timetable-promote")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        result["last_attempt"] = {"outcome": "missing", "error": str(exc)}
+        issues.append("job:timetable-promote")
+    return result, issues
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -185,6 +245,8 @@ def main() -> int:
     jobs, found = job_checks()
     issues.extend(found)
     timetable_delivery, found = timetable_delivery_check()
+    issues.extend(found)
+    timetable_promotion, found = timetable_promotion_check()
     issues.extend(found)
 
     try:
@@ -246,6 +308,7 @@ def main() -> int:
         "services": services,
         "jobs": jobs,
         "timetable_delivery": timetable_delivery,
+        "timetable_promotion": timetable_promotion,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
         "audit": {"latest_rollup_service_date": audit_day,
