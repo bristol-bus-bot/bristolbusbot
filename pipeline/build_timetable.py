@@ -290,6 +290,17 @@ def main():
         logger.error("No shapes.txt in the GTFS extract - refusing to publish a partial timetable.")
         return 2
 
+    # Stop search needs the distinct route names serving each stop. Computing
+    # that relationship from millions of stop_times inside a web request can
+    # exceed the Pi's worker timeout, so materialise it once in the disposable
+    # candidate after every source merge has completed.
+    logger.info("Precomputing compact stop-search route lookup...")
+    if not run([PY, str(HERE / "prepare_stop_routes.py"), str(staged_db)]):
+        staged_db.unlink(missing_ok=True)
+        logger.error(
+            "Stop-search lookup generation failed - refusing to publish the candidate.")
+        return 2
+
     try:
         finalize_static_database(staged_db)
     except (OSError, sqlite3.Error, RuntimeError) as exc:

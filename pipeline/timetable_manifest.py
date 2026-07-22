@@ -15,10 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy"))
 
-from timetable_control import validate  # noqa: E402
+from timetable_control import VALIDATOR_ID, validate  # noqa: E402
 
 
-MANIFEST_VERSION = 3
+MANIFEST_VERSION = 4
 GTFS_REQUIRED = (
     "agency.txt",
     "routes.txt",
@@ -38,6 +38,7 @@ TABLES = (
     "calendar",
     "calendar_dates",
     "route_shapes",
+    "stop_routes",
 )
 
 
@@ -177,7 +178,8 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
     if database.is_symlink() or not database.is_file():
         raise RuntimeError(f"candidate is not a regular file: {database}")
     validation = validate(
-        database, minimum_service_days=minimum_service_days)
+        database, minimum_service_days=minimum_service_days,
+        require_stop_routes=True)
     try:
         started = datetime.fromisoformat(build_started_utc.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -208,7 +210,7 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
         },
         "database": database_summary(database),
         "validation": {
-            "validator": "bbb-timetable-control-v2",
+            "validator": VALIDATOR_ID,
             "minimum_service_days": minimum_service_days,
             "result": validation,
         },
@@ -244,7 +246,7 @@ def verify_manifest(*, database: Path, manifest_path: Path,
     validation_record = manifest.get("validation")
     if not isinstance(validation_record, dict):
         raise RuntimeError("manifest has no validation record")
-    if validation_record.get("validator") != "bbb-timetable-control-v2":
+    if validation_record.get("validator") != VALIDATOR_ID:
         raise RuntimeError("manifest names an unsupported validator")
     recorded_minimum = validation_record.get("minimum_service_days")
     if (isinstance(recorded_minimum, bool)
@@ -252,7 +254,8 @@ def verify_manifest(*, database: Path, manifest_path: Path,
             or recorded_minimum < minimum_service_days):
         raise RuntimeError("manifest validation window is too short")
     validation = validate(
-        database, minimum_service_days=minimum_service_days)
+        database, minimum_service_days=minimum_service_days,
+        require_stop_routes=True)
     if validation_record.get("result") != validation:
         raise RuntimeError("manifest validation result does not match candidate")
     if manifest.get("database") != database_summary(database):

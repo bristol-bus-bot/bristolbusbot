@@ -95,9 +95,17 @@ fail-closed until `/etc/bristolbusbot/timetable-promotion-enabled` exists as a
 root-owned regular file with mode `0644`. The promoter accepts no paths: it
 re-verifies the fixed candidate, copies it to fixed production staging, checks
 the hash again, atomically promotes it, restarts the three consumers, and checks
-local and public health. Failure after replacement restores
+local health, the timetable-backed stop-search endpoint and public health.
+Failure after replacement restores
 `timetable.db.previous`; an automatically rejected candidate is not retried
 until a different candidate arrives.
+
+Aggregate health sends one detailed Slack message when a different timetable is
+accepted. It includes coverage, row counts, source/fallback status, database and
+GitHub-run identity, functional-check results and rollback readiness. A failed
+delivery or promotion alert names the failure and explicitly says whether the
+candidate never reached production, the previous database was restored, or
+automatic rollback could not prove recovery. Daily no-change checks stay quiet.
 
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without

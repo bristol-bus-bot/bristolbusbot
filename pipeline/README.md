@@ -13,9 +13,12 @@ be lossy:
 3. TNDS supplies routes absent from BODS altogether.
 
 The job builds and enriches a sibling staging database, imports matching route
-shapes, validates SQLite integrity, service-date freshness, expected First
-routes and shapes, then performs one atomic promotion. A failed stage leaves
-the known-good timetable pathname untouched.
+shapes, and materialises the small `stop_routes` lookup used by website search.
+That lookup is generated once from the final merged timetable so the Pi never
+has to join millions of stop-time rows inside a web request. The job validates
+SQLite integrity, service-date freshness, expected First routes, shapes and the
+lookup before one atomic promotion. A failed stage leaves the known-good
+timetable pathname untouched.
 
 From the repository root:
 
@@ -26,7 +29,8 @@ python -m pytest pipeline\tests -q
 Normal production refreshes use the fixed `timetable-build` workflow and the
 Pi's daily shadow-delivery timer. A successful candidate is independently
 revalidated, copied to fixed staging, atomically promoted, and checked by the
-collector, site, bot and public health gates with automatic database rollback.
+collector, site, bot, the real stop-search endpoint and public health gates with
+automatic database rollback.
 `python deploy\push.py --refresh-timetable` remains the attended workstation
 fallback. SSH host-key verification is mandatory. Deploy scheduled job code separately with
 `python deploy\push.py --component pipeline`; that never replaces the timetable.

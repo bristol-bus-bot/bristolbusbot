@@ -45,6 +45,9 @@ def make_timetable(path: Path, *, routes=EXPECTED_FBRI,
             route_name TEXT, operator_noc TEXT, direction_id INTEGER,
             variant INTEGER, points_json TEXT,
             PRIMARY KEY (route_name, operator_noc, direction_id, variant));
+        CREATE TABLE stop_routes (
+            stop_code TEXT NOT NULL, route_short_name TEXT NOT NULL,
+            PRIMARY KEY (stop_code, route_short_name)) WITHOUT ROWID;
 
         CREATE INDEX idx_trips_vjc ON trips(vehicle_journey_code);
         CREATE INDEX idx_routes_agency ON routes(agency_id);
@@ -78,6 +81,8 @@ def make_timetable(path: Path, *, routes=EXPECTED_FBRI,
         "INSERT INTO stop_times (trip_id, arrival_time, departure_time, stop_id, "
         "stop_sequence) VALUES ('T1', '08:00:00', '08:00:00', 'S1', 1)")
     connection.execute(
+        "INSERT INTO stop_routes VALUES ('0100S1', ?)", (first_name,))
+    connection.execute(
         "INSERT INTO calendar (service_id, monday, tuesday, wednesday, thursday, "
         "friday, saturday, sunday, start_date, end_date) "
         "VALUES ('WK', 1, 1, 1, 1, 1, 1, 1, '20200101', ?)", (latest,))
@@ -103,6 +108,32 @@ def test_validate_promote_and_rollback(tmp_path):
     result = rollback(tmp_path)
     assert result["latest_service"] == "20980101"
     assert failed.is_file()
+
+
+def test_new_candidates_require_precomputed_stop_routes_but_legacy_live_is_readable(
+        tmp_path):
+    legacy = tmp_path / "legacy.db"
+    make_timetable(legacy)
+    connection = sqlite3.connect(legacy)
+    connection.execute("DROP TABLE stop_routes")
+    connection.commit()
+    connection.close()
+
+    assert "stop_routes" not in validate(legacy)
+    with pytest.raises(RuntimeError, match="stop_routes"):
+        validate(legacy, require_stop_routes=True)
+
+
+def test_rejects_incomplete_precomputed_stop_routes(tmp_path):
+    database = tmp_path / "bad-stop-routes.db"
+    make_timetable(database)
+    connection = sqlite3.connect(database)
+    connection.execute("DELETE FROM stop_routes")
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(RuntimeError, match="no precomputed stop routes"):
+        validate(database, require_stop_routes=True)
 
 
 def test_rejects_missing_routes_stale_service_and_missing_shapes(tmp_path):
