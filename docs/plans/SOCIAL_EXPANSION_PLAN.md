@@ -1,6 +1,8 @@
 # Instagram and Threads design proposal
 
-Status: proposed. This document expands the social-media items in
+Status: proposed and explicitly deferred until Phases B-F of
+`DATA_REFRESH_AUTOMATION.md` are complete. This document expands the
+social-media items in
 [`docs/ROADMAP.md`](../ROADMAP.md) into editorial principles, technical
 constraints and acceptance criteria. It describes intended behaviour rather
 than currently deployed functionality.
@@ -242,19 +244,20 @@ revision/hash plus approver ID/time, Meta container and published-media IDs.
 Any caption, alt-text, media, data or schedule edit creates a revision and
 invalidates the previous approval.
 
-Protected command-centre controls: list/preview drafts, approve/reject, edit
-captions and alt text, reschedule, inspect failures and external IDs. For the
-first 30 days approval is technically required — no draft can enter the
-publishing state without a recorded approval.
+Any future operator UI must be loopback-only and authenticated; it may
+list/preview drafts, approve/reject, edit captions and alt text, reschedule and
+inspect failures and external IDs. It must not revive or publish the removed
+command-centre page. For the first 30 days approval is technically required —
+no draft can enter the publishing state without a recorded approval.
 
-**Slack approval flow** (primary day-to-day interface; the command centre
-remains canonical):
+**Slack approval flow** (primary day-to-day interface and canonical approval
+record):
 
 - When a draft is generated, post a card to the configured review channel: preview images
   uploaded directly to Slack via `files.getUploadURLExternal` followed by
   `files.completeUploadExternal` (never the retired `files.upload` method;
   draft media stays otherwise unexposed), caption, alt text, data-gate results, schedule time, and
-  Approve / Reject buttons plus an "edit in dashboard" link.
+  Approve / Reject buttons plus an optional link to the protected operator view.
 - Interactivity via **Socket Mode** (free tier; the Pi connects outward, so
   no public endpoint is added). Button presses are accepted only when team ID,
   channel ID and owner's user ID match configured allowlists, verified server-
@@ -320,8 +323,9 @@ remains canonical):
   are exposed at opaque `/media/social/{assetId}.jpg` URLs (Meta must fetch
   publicly): no directory listing, `X-Robots-Tag: noindex`, assets removed
   48 hours after publication, path-traversal safe.
-- Public OAuth callbacks forward to the loopback-bound bot service; validate
-  a short-lived single-use state value.
+- Public OAuth callbacks route through the existing public site/tunnel ingress
+  to the loopback-bound core bot service; do not create a separate public
+  administration surface. Validate a short-lived single-use state value.
 - Meta tokens in a dedicated root-owned/sealed file under
   `/etc/bristolbusbot`, readable only by the intended service identity,
   written atomically and never logged. Threads and Instagram credentials are

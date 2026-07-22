@@ -1,7 +1,7 @@
 # Timetable delivery execution plan: GitHub build, Pi promotion
 
-Status: rollout in progress; builder and shadow delivery proven, guarded live
-promotion implemented and under deployment.
+Status: complete and live; the first unattended production promotion was
+accepted on 22 July 2026.
 
 The filename is retained because earlier discussions and documentation link to
 it. This is no longer a plan to make the production Pi perform the normal full
@@ -306,6 +306,12 @@ during health check all produce the expected live file and job record.
 Acceptance: the digest reports a deliberately injected failure in plain
 language, and a restore drill recovers a timetable independently of GitHub.
 
+Implementation status (2026-07-22): timetable delivery and promotion job
+records feed aggregate health, accepted and failed paths produce detailed Slack
+language, the live and `.previous` files remain in the encrypted backup set,
+and the existing local/off-site restore procedure provides the independent
+recovery path.
+
 ### WP8 - Evidence-gated rollout
 
 1. Run one GitHub build manually and inspect the artifact and logs.
@@ -318,7 +324,8 @@ language, and a restore drill recovers a timetable independently of GitHub.
 5. Rehearse promotion against a disposable root and force rollback.
 6. Enable production promotion and attend the first run.
 7. Observe subsequent unattended promotions; the laptop remains an emergency
-   fallback until live automation has operating history.
+   fallback until live automation has operating history. Completed on 22 July
+   2026 when run `29944744744` was accepted by the `auto` path.
 8. Update `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `pipeline/README.md`,
    `deploy/README.md`, and the roadmap with the proven state.
 
@@ -355,7 +362,8 @@ service-health impact merely confirms that GitHub remains the build plane.
 
 ## Done means
 
-All work packages have passed their acceptance gates; an attended live
-promotion and automatic no-change exercise have succeeded; failure and rollback
-have been demonstrated in tests; later unattended runs are observable; the
-laptop is documented only as a fallback; and the Pi remains healthy throughout.
+All work packages passed their acceptance gates on 22 July 2026. An attended
+live promotion, automatic no-change exercise and a fully unattended live
+promotion succeeded; failure and rollback were demonstrated; later runs are
+observable; the laptop is documented only as a fallback; and the Pi remained
+healthy throughout.

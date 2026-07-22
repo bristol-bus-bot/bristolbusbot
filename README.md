@@ -32,6 +32,13 @@ After many damp waits for rush hour buses in East Bristol, I decided to weaponis
 There is one poller, one matcher and one delay number - the site displays it, the audit
 records it, and the bot posts about it. These processes cannot disagree by construction.
 
+Routine timetable refreshes are also unattended. The Pi checks each morning,
+asks a fixed GitHub Actions workflow for a fresh candidate when the six-day
+cooldown has elapsed, validates the result independently, and either promotes
+it atomically or keeps the previous database. The first fully unattended live
+promotion completed successfully on 22 July 2026; the Windows workstation is
+now an emergency fallback rather than part of normal production.
+
 These are the principles that shape the code:
 
 - Delays are measured against the timetable

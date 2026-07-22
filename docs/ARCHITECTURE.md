@@ -105,6 +105,26 @@ automatic rollback. Configuration and secrets live outside releases;
 durable state lives in a dedicated state directory. See
 `docs/DEPLOYMENT.md`.
 
+## Operations and automation
+
+Four long-running services keep collection, the website, the bot and the
+Cloudflare tunnel alive. Ten project timers own resource sampling, aggregate
+health, staleness checks, digests, backups, audit publication and timetable
+delivery; the project has no cron jobs.
+
+Timetable automation is end to end. The Pi is the scheduler of record, GitHub
+does the heavy build, and the Pi independently validates and promotes the
+candidate under the shared maintenance lock. The first fully unattended build,
+delivery and live promotion was accepted on 22 July 2026. A failed source,
+workflow, download, validator, restart or functional health check leaves or
+restores the previous timetable.
+
+Code releases, operating-system upgrades, boundary editions and curated
+content remain deliberate human actions. Fleet, locality and AI-description
+refreshes are later phases of `docs/plans/DATA_REFRESH_AUTOMATION.md`; they must
+not be described as automated until their own candidate, validation and
+rollback contracts have been deployed and proved.
+
 ## Invariants
 
 These hold everywhere and changes must not break them:
