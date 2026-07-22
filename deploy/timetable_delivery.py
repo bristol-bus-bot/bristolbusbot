@@ -49,9 +49,9 @@ MAX_DATABASE_BYTES = 512 * 1024 * 1024
 MAX_TOTAL_BYTES = MAX_DATABASE_BYTES + 2 * 1024 * 1024
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MINIMUM_SERVICE_DAYS = 14
-REFRESH_WINDOW_DAYS = 28
+COVERAGE_WARNING_DAYS = 28
 MAX_ARTIFACT_AGE = timedelta(days=7)
-MINIMUM_DISPATCH_INTERVAL = timedelta(days=6)
+MINIMUM_REFRESH_INTERVAL = timedelta(days=6)
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 BRISTOL_TZ = ZoneInfo("Europe/London")
@@ -310,10 +310,10 @@ def read_github_token() -> str | None:
 class DeliveryConfig:
     shadow_root: Path = SHADOW_ROOT
     live_database: Path = LIVE_DATABASE
-    refresh_window_days: int = REFRESH_WINDOW_DAYS
+    coverage_warning_days: int = COVERAGE_WARNING_DAYS
     minimum_service_days: int = MINIMUM_SERVICE_DAYS
     max_artifact_age: timedelta = MAX_ARTIFACT_AGE
-    minimum_dispatch_interval: timedelta = MINIMUM_DISPATCH_INTERVAL
+    minimum_refresh_interval: timedelta = MINIMUM_REFRESH_INTERVAL
     poll_timeout_seconds: int = 45 * 60
     discovery_timeout_seconds: int = 2 * 60
 
@@ -569,14 +569,14 @@ class TimetableDelivery:
                 self.token_expires_utc, "BBB_GITHUB_TOKEN_EXPIRES_UTC").isoformat()
         atomic_json(self.config.state_path, payload)
 
-    def refresh_due(self) -> tuple[bool, str]:
+    def coverage_urgent(self) -> tuple[bool, str]:
         try:
             result = validate(self.config.live_database, today=date(1970, 1, 1))
             latest = datetime.strptime(str(result["latest_service"]), "%Y%m%d").date()
         except (OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
             raise DeliveryError("current_timetable_invalid", "current timetable health cannot be read") from exc
         threshold = self.now().astimezone(BRISTOL_TZ).date() + timedelta(
-            days=self.config.refresh_window_days)
+            days=self.config.coverage_warning_days)
         return latest <= threshold, latest.isoformat()
 
     def _workflow(self) -> tuple[dict, int]:
@@ -726,21 +726,24 @@ class TimetableDelivery:
     def run(self, requested_run_id: int | None = None) -> dict[str, object]:
         started = self.now()
         state = self.state()
-        due, latest = self.refresh_due()
+        urgent, latest = self.coverage_urgent()
+        refresh_due = True
+        last_success_value = state.get("last_shadow_success_at")
+        if last_success_value:
+            last_success = parse_utc(
+                last_success_value, "last_shadow_success_at")
+            refresh_due = (
+                started - last_success >= self.config.minimum_refresh_interval)
         state["last_check"] = {
             "checked_at": started.isoformat(),
             "current_latest_service": latest,
-            "refresh_due": due,
+            "coverage_urgent": urgent,
+            "coverage_warning_days": self.config.coverage_warning_days,
+            "refresh_due": refresh_due,
         }
-        if requested_run_id is None and not due:
+        if requested_run_id is None and not refresh_due:
             self.write_state(state)
-            raise DeliverySkipped("not_due", "current timetable is outside the refresh window")
-        if requested_run_id is None and state.get("last_shadow_success_at"):
-            last_success = parse_utc(
-                state["last_shadow_success_at"], "last_shadow_success_at")
-            if started - last_success < self.config.minimum_dispatch_interval:
-                self.write_state(state)
-                raise DeliverySkipped("recent_shadow", "a recent shadow delivery already succeeded")
+            raise DeliverySkipped("recent_shadow", "a recent shadow delivery already succeeded")
         if not self.client.token:
             raise DeliveryError("missing_token", "GitHub delivery token is not configured")
         if not self.token_expires_utc:

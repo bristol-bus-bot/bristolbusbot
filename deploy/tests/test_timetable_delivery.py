@@ -225,14 +225,53 @@ def test_attended_shadow_delivery_validates_and_never_addresses_live_output(tmp_
     assert client.calls.count(("download", 77, f"sha256:{sha256_file(archive)}")) == 1
 
 
-def test_healthy_timetable_skips_without_contacting_github(tmp_path):
+def test_first_auto_run_refreshes_even_with_far_future_coverage(tmp_path):
     archive = make_package(tmp_path)
     client = FakeClient(archive)
     runner = delivery(tmp_path, client)
 
-    with pytest.raises(DeliverySkipped, match="outside the refresh window"):
+    result = runner.run()
+
+    assert result["run_id"] == RUN_ID
+    state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
+    assert state["last_check"]["coverage_urgent"] is False
+    assert state["last_check"]["refresh_due"] is True
+
+
+def test_recent_auto_success_skips_without_contacting_github(tmp_path):
+    archive = make_package(tmp_path)
+    client = FakeClient(archive)
+    runner = delivery(tmp_path, client)
+    runner.config.shadow_root.mkdir(parents=True)
+    runner.config.state_path.write_text(json.dumps({
+        "schema": 1,
+        "last_shadow_success_at": (NOW - timedelta(days=5)).isoformat(),
+    }), encoding="utf-8")
+
+    with pytest.raises(DeliverySkipped, match="recent shadow delivery"):
         runner.run()
+
     assert client.calls == []
+    state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
+    assert state["last_check"]["coverage_urgent"] is False
+    assert state["last_check"]["refresh_due"] is False
+
+
+def test_auto_refreshes_again_after_six_days(tmp_path):
+    archive = make_package(tmp_path)
+    client = FakeClient(archive)
+    runner = delivery(tmp_path, client)
+    runner.config.shadow_root.mkdir(parents=True)
+    runner.config.state_path.write_text(json.dumps({
+        "schema": 1,
+        "last_shadow_run_id": "older-run",
+        "last_shadow_success_at": (NOW - timedelta(days=6)).isoformat(),
+    }), encoding="utf-8")
+
+    result = runner.run()
+
+    assert result["run_id"] == RUN_ID
+    assert "runs" in client.calls
 
 
 def test_bad_manifest_hash_and_validation_leave_live_and_candidate_untouched(tmp_path):
