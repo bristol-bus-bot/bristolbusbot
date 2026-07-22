@@ -1,4 +1,5 @@
 import json
+import stat
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -89,9 +90,12 @@ def test_timetable_promotion_health_keeps_rejection_visible(tmp_path, monkeypatc
     monitoring = tmp_path / "monitoring"
     jobs = monitoring / "jobs"
     jobs.mkdir(parents=True)
-    marker = tmp_path / "promotion-enabled"
-    marker.write_text("enabled=test\n", encoding="utf-8")
-    marker.chmod(0o644)
+    marker = SimpleNamespace(
+        exists=lambda: True,
+        is_symlink=lambda: False,
+        is_file=lambda: True,
+        lstat=lambda: SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o644),
+    )
     now = datetime.now(timezone.utc)
     (jobs / "timetable-promote.json").write_text(json.dumps({
         "last_result": "success",
