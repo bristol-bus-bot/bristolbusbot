@@ -32,6 +32,8 @@ NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 COLLECTOR_VERIFY_TIMEOUT_SECONDS = 45
 COLLECTOR_VERIFY_ATTEMPTS = 6
 HEALTH_USER_AGENT = "bristolbusbot-timetable-promoter/1"
+MINIMUM_SEARCH_STOPS = 1000
+SITE_FUNCTIONAL_TIMEOUT_SECONDS = 20
 
 
 class PromotionError(RuntimeError):
@@ -77,6 +79,7 @@ class Candidate:
     sha256: str
     validation: dict[str, object]
     comparison: dict[str, object]
+    tnds_status: str
 
 
 def utcnow() -> datetime:
@@ -174,12 +177,12 @@ class SystemServices:
             check=True, timeout=90)
 
     @staticmethod
-    def _json(url: str) -> dict[str, object]:
+    def _json(url: str, *, timeout: int = 10) -> dict[str, object]:
         request = urllib.request.Request(url, headers={
             "Accept": "application/json",
             "User-Agent": HEALTH_USER_AGENT,
         })
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             value = json.load(response)
         if not isinstance(value, dict):
             raise RuntimeError("health response is not an object")
@@ -199,8 +202,16 @@ class SystemServices:
                     if result.returncode == 0:
                         return True
                 elif component == "site":
-                    if self._json("http://127.0.0.1:5002/healthz").get("status") in {
-                            "ok", "warn"}:
+                    healthy = self._json(
+                        "http://127.0.0.1:5002/healthz").get("status") in {
+                            "ok", "warn"}
+                    search = self._json(
+                        "http://127.0.0.1:5002/api/stops-with-locality",
+                        timeout=SITE_FUNCTIONAL_TIMEOUT_SECONDS,
+                    )
+                    stops = search.get("stops")
+                    if healthy and isinstance(stops, list) \
+                            and len(stops) >= MINIMUM_SEARCH_STOPS:
                         return True
                 else:
                     value = self._json("http://127.0.0.1:3010/api/health")
@@ -305,7 +316,13 @@ class TimetablePromoter:
         recorded_validation = attempt.get("validation")
         if not isinstance(recorded_validation, dict) or validation != recorded_validation:
             raise PromotionError("candidate_changed", "candidate counts differ from shadow success")
-        return Candidate(run_id, commit, actual_hash, validation, comparison)
+        sources = manifest.get("sources")
+        tnds = sources.get("tnds") if isinstance(sources, dict) else None
+        tnds_status = tnds.get("status") if isinstance(tnds, dict) else None
+        if tnds_status not in {"not_needed", "fallback_used"}:
+            raise PromotionError("invalid_manifest", "candidate source decision is missing")
+        return Candidate(
+            run_id, commit, actual_hash, validation, comparison, tnds_status)
 
     @staticmethod
     def _safe_remove(path: Path, allowed_uids: set[int]) -> None:
@@ -352,7 +369,8 @@ class TimetablePromoter:
                 raise PromotionError("candidate_changed", "candidate changed while staging")
             os.replace(temporary, upload)
             staged = validate(
-                upload, minimum_service_days=self.config.minimum_service_days)
+                upload, minimum_service_days=self.config.minimum_service_days,
+                require_stop_routes=True)
             if staged != candidate.validation or sha256_file(upload) != candidate.sha256:
                 raise PromotionError("staging_changed", "root staging validation differs")
         finally:
@@ -479,12 +497,14 @@ class TimetablePromoter:
                 return self._resume_interrupted(candidate, previous_state)
             payload = {
                 "outcome": "no_change",
+                "mode": mode,
                 "finished_at": self.now().isoformat(),
                 "run_id": candidate.run_id,
                 "commit": candidate.commit,
                 "database_sha256": candidate.sha256,
                 "validation": candidate.validation,
                 "comparison": candidate.comparison,
+                "tnds_status": candidate.tnds_status,
                 "last_accepted_run_id": candidate.run_id,
                 "last_accepted_at": self.now().isoformat(),
             }
@@ -494,6 +514,7 @@ class TimetablePromoter:
         started = self.now()
         state: dict[str, object] = {
             "outcome": "running",
+            "mode": mode,
             "started_at": started.isoformat(),
             "run_id": candidate.run_id,
             "commit": candidate.commit,
@@ -501,6 +522,7 @@ class TimetablePromoter:
             "previous_sha256": before_hash,
             "validation": candidate.validation,
             "comparison": candidate.comparison,
+            "tnds_status": candidate.tnds_status,
         }
         self.write_state(state)
         promoted = False

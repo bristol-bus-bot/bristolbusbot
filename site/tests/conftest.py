@@ -83,6 +83,9 @@ def app(tmp_path):
     ])
     g.execute("CREATE TABLE routes (route_id TEXT, agency_id TEXT,"
               " route_short_name TEXT)")
+    g.execute("CREATE TABLE stop_routes (stop_code TEXT NOT NULL,"
+              " route_short_name TEXT NOT NULL,"
+              " PRIMARY KEY (stop_code, route_short_name)) WITHOUT ROWID")
     g.execute("CREATE TABLE agency (agency_id TEXT, agency_noc TEXT)")
     g.execute("CREATE TABLE trips (trip_id TEXT, route_id TEXT, service_id TEXT,"
               " trip_headsign TEXT, direction_id INT,"
@@ -94,6 +97,9 @@ def app(tmp_path):
               " exception_type INT)")
     g.execute("INSERT INTO agency VALUES ('OP1','FBRI')")
     g.execute("INSERT INTO routes VALUES ('R75','OP1','75')")
+    g.executemany("INSERT INTO stop_routes VALUES (?, '75')", [
+        ("0100A",), ("0100B",), ("0100C",),
+    ])
     g.executemany("INSERT INTO trips VALUES (?,?,?,?,?,?)", [
         ("T_OUT", "R75", "WK", "Cribbs Causeway", 0, "VJ_2100"),
         ("T_OUT2", "R75", "WK", "Cribbs Causeway", 0, None),

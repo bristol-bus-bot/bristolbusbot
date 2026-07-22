@@ -60,6 +60,8 @@ tables and `route_shapes`. It removed only unused storage and transient memory:
   raw `shapes` table;
 - remove two redundant left-prefix indexes;
 - stream network downloads and ZIP members rather than holding whole bodies;
+- materialise the compact stop-to-route search lookup during the build rather
+  than joining the full stop-times table on the Pi's first web request;
 - finalize with safe static-database pragmas and SQLite analysis.
 
 These changes still matter with GitHub as the builder: the delivery is smaller,

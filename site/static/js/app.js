@@ -747,20 +747,20 @@
         let fleetByCode = {};   // fleet_code (string) -> fleet entry
         let fleetByReg = {};    // reg plate (uppercase, no spaces) -> fleet entry
 
-        async function fetchSearchStops(retries = 5) {
+        async function fetchSearchStops(retries = 1) {
             try {
                 const res = await fetch('/api/stops-with-locality');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 searchStops = (await res.json()).stops || [];
                 if (searchStops.length === 0 && retries > 0) {
-                    console.warn(`fetchSearchStops: got 0 stops, retrying in 3s (${retries} retries left)`);
-                    setTimeout(() => fetchSearchStops(retries - 1), 3000);
+                    console.warn(`fetchSearchStops: got 0 stops, retrying in 5s (${retries} retries left)`);
+                    setTimeout(() => fetchSearchStops(retries - 1), 5000);
                     return;
                 }
                 console.log(`Loaded ${searchStops.length} stops for search`);
             } catch (e) {
                 console.error(`fetchSearchStops failed (${retries} retries left):`, e);
-                if (retries > 0) setTimeout(() => fetchSearchStops(retries - 1), 3000);
+                if (retries > 0) setTimeout(() => fetchSearchStops(retries - 1), 5000);
                 else console.error('fetchSearchStops: all retries exhausted — search will not work');
             }
         }

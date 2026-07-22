@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path("/var/lib/bristolbusbot/pipeline")
 EXPECTED_FBRI = {"1", "2", "42", "43", "44", "45", "75", "76", "X1", "m1"}
+VALIDATOR_ID = "bbb-timetable-control-v3"
 REQUIRED_COLUMNS = {
     "agency": {"agency_id", "agency_noc"},
     "routes": {"route_id", "agency_id", "route_short_name"},
@@ -25,6 +26,7 @@ REQUIRED_COLUMNS = {
         "route_name", "operator_noc", "direction_id", "variant", "points_json",
     },
 }
+STOP_ROUTES_COLUMNS = {"stop_code", "route_short_name"}
 REQUIRED_INDEXES = {
     "idx_trips_vjc",
     "idx_routes_agency",
@@ -61,7 +63,8 @@ def paths(root: Path = ROOT) -> tuple[Path, Path, Path, Path]:
     )
 
 
-def _validate_schema(connection: sqlite3.Connection) -> None:
+def _validate_schema(connection: sqlite3.Connection, *,
+                     require_stop_routes: bool = False) -> set[str]:
     tables = {
         row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")
@@ -70,7 +73,12 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
     if missing_tables:
         raise RuntimeError(
             "missing required timetable tables: " + ", ".join(missing_tables))
-    for table, required in REQUIRED_COLUMNS.items():
+    columns = dict(REQUIRED_COLUMNS)
+    if "stop_routes" in tables:
+        columns["stop_routes"] = STOP_ROUTES_COLUMNS
+    elif require_stop_routes:
+        raise RuntimeError("missing required timetable tables: stop_routes")
+    for table, required in columns.items():
         actual = {
             row[1] for row in connection.execute(f"PRAGMA table_info({table})")
         }
@@ -86,6 +94,7 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
     if missing_indexes:
         raise RuntimeError(
             "missing required timetable indexes: " + ", ".join(missing_indexes))
+    return tables
 
 
 def _validate_shape_geometry(connection: sqlite3.Connection) -> int:
@@ -119,7 +128,8 @@ def _validate_shape_geometry(connection: sqlite3.Connection) -> int:
 
 
 def validate(path: Path, *, today: date | None = None,
-             minimum_service_days: int = 0) -> dict[str, object]:
+             minimum_service_days: int = 0,
+             require_stop_routes: bool = False) -> dict[str, object]:
     if path.is_symlink() or not path.is_file():
         raise RuntimeError(f"timetable is not a regular file: {path}")
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -130,16 +140,52 @@ def validate(path: Path, *, today: date | None = None,
         mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
         if str(mode).lower() != "delete":
             raise RuntimeError("static timetable must use DELETE journal mode")
-        _validate_schema(connection)
+        tables = _validate_schema(
+            connection, require_stop_routes=require_stop_routes)
         counts = {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in REQUIRED_COLUMNS
         }
+        if "stop_routes" in tables:
+            counts["stop_routes"] = connection.execute(
+                "SELECT COUNT(*) FROM stop_routes").fetchone()[0]
         for table in ("agency", "routes", "stops", "trips", "stop_times"):
             if counts[table] <= 0:
                 raise RuntimeError(f"timetable table {table} is empty")
         if counts["route_shapes"] <= 0:
             raise RuntimeError("timetable contains no route shapes")
+        if "stop_routes" in tables:
+            if counts["stop_routes"] <= 0:
+                raise RuntimeError("timetable contains no precomputed stop routes")
+            invalid_stop_route = connection.execute("""
+                SELECT sr.stop_code, sr.route_short_name
+                FROM stop_routes sr
+                WHERE sr.stop_code = '' OR sr.route_short_name = ''
+                   OR NOT EXISTS (
+                       SELECT 1 FROM stops s
+                       WHERE s.stop_code = sr.stop_code)
+                   OR NOT EXISTS (
+                       SELECT 1 FROM routes r
+                       WHERE r.route_short_name = sr.route_short_name)
+                LIMIT 1
+            """).fetchone()
+            if invalid_stop_route:
+                raise RuntimeError(
+                    "invalid precomputed stop route: "
+                    f"{invalid_stop_route[0]!r}/{invalid_stop_route[1]!r}")
+            missing_stop_route = connection.execute("""
+                SELECT s.stop_code
+                FROM stops s
+                WHERE s.stop_code IS NOT NULL AND s.stop_code != ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM stop_routes sr
+                      WHERE sr.stop_code = s.stop_code)
+                LIMIT 1
+            """).fetchone()
+            if missing_stop_route:
+                raise RuntimeError(
+                    "precomputed stop routes missing stop code: "
+                    f"{missing_stop_route[0]!r}")
         routes = {row[0] for row in connection.execute(
             "SELECT DISTINCT r.route_short_name FROM routes r "
             "JOIN agency a ON r.agency_id=a.agency_id WHERE a.agency_noc='FBRI'")}
@@ -194,7 +240,7 @@ def validate(path: Path, *, today: date | None = None,
             f"latest={latest or 'missing'}, required={minimum_text}")
     if shape_count <= 0:
         raise RuntimeError("timetable contains no route shapes")
-    return {
+    result = {
         "latest_service": latest,
         "first_routes": len(routes),
         "route_shapes": shape_count,
@@ -203,6 +249,9 @@ def validate(path: Path, *, today: date | None = None,
         "stops": counts["stops"],
         "stop_times": counts["stop_times"],
     }
+    if "stop_routes" in counts:
+        result["stop_routes"] = counts["stop_routes"]
+    return result
 
 
 def promote(root: Path = ROOT) -> dict[str, object]:
