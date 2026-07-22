@@ -31,6 +31,12 @@ A candidate database must pass integrity, service-date, required-route and
 route-shape checks before it can replace the active timetable. Promotion is
 atomic and retains the previous database for rollback.
 
+GitHub Actions is the normal heavy-build plane; the Pi is the scheduler and
+production safety plane. The unprivileged delivery service verifies one exact
+default-branch artifact, while a separate fixed-path root service revalidates,
+promotes, restarts consumers, checks health and rolls back. The workstation is
+an attended fallback, not a production scheduling dependency.
+
 ## SQLite and component boundaries
 
 SQLite matches the scale and operating environment of the project. Each
