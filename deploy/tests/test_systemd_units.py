@@ -158,6 +158,7 @@ def test_backup_sandbox_cache_directory_is_created_before_unit_start():
 def test_timetable_shadow_is_unprivileged_sandboxed_and_promotion_free():
     service = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
     timer = (SYSTEMD / "bbb-timetable-shadow.timer").read_text(encoding="utf-8")
+    assert service.startswith("[Unit]\n")
     for setting in (
         "User=@BBB_DEPLOY_USER@",
         "EnvironmentFile=-/etc/bristolbusbot/timetable-delivery.env",
