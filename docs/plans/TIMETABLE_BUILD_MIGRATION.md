@@ -148,9 +148,10 @@ take maintenance lock
 ```
 
 The downloader and parser run unprivileged. The promoter does not download or
-parse untrusted source data. The same maintenance lock is respected by code
-deployment, timetable promotion, backup, and any other conflicting maintenance
-job; timer spacing is convenience, while the lock provides correctness.
+parse untrusted source data. Timetable delivery/promotion, backup, audit rollup
+and other scheduled heavy-I/O jobs share the Pi maintenance lock; timer spacing
+is convenience, while the lock provides correctness. Attended code or layout
+deployments must not be started during a timetable transaction.
 
 ## Automation trigger
 
@@ -196,8 +197,8 @@ in a dedicated GitHub `timetable-build` environment. Only the build step
 receives them. The workflow uses immutable action commit pins, runs with minimum
 repository permissions, never runs pull-request code with secrets, redacts
 credential-bearing errors, and never prints its environment. The initial shadow
-run requires environment approval; that approval gate can be removed only when
-the unattended path is deliberately enabled.
+runs used environment approval; that approval gate was removed deliberately on
+2026-07-22 while the main-branch-only environment policy was retained.
 
 BODS timetable data and TNDS are published under the Open Government Licence,
 so the derived timetable may be delivered through a public-repository artifact
@@ -237,14 +238,17 @@ rebuilds and a restore drill have both succeeded.
 3. [x] Prove content equivalence on Windows from the same cached inputs.
 4. [x] Add the GitHub workflow with manual dispatch only; build and inspect a
    candidate without involving the Pi.
-5. [ ] Install the implemented Pi trigger/downloader in shadow mode; download and validate but
-   never write the fixed upload or live paths.
-6. [ ] Rehearse promotion with a disposable copy and force a health-check failure
-   to prove rollback.
-7. [ ] Observe one manual and two unattended shadow successes.
+5. [x] Install the Pi trigger/downloader in shadow mode; download and validate
+   without writing the fixed upload or live paths.
+6. [x] Rehearse promotion with disposable copies and forced restart/health
+   failures to prove rollback.
+7. [x] Complete two clean attended Pi shadow validations, enable the daily
+   timer, and prove its recent-shadow no-op path. The maintainer chose to proceed
+   without waiting a week for another shadow-only run.
 8. [ ] Enable live promotion and attend the first run.
-9. [ ] After two successful unattended promotions, declare the laptop removed from
-   production duty and update operational documentation.
+9. [ ] Observe unattended promotion in normal operation, then declare the
+   laptop removed from normal production duty; retain it as an emergency
+   fallback.
 
 Rollback at every stage is to disable the new timer/service. The existing
 workstation refresh path remains available throughout.

@@ -79,15 +79,25 @@ must all recover; otherwise the previous database is restored automatically.
 `pipeline/build_timetable.py` is invoked by `push.py`; production promotion
 always goes through the deployment command.
 
-### GitHub timetable delivery shadow
+### Automated GitHub timetable delivery
 
-The shadow delivery is deliberately separate from promotion. GitHub performs
+Download and promotion remain separate privilege boundaries. GitHub performs
 the heavy build; `bbb-timetable-shadow@.service` downloads one exact successful
 default-branch run, safely extracts the three-file parcel, verifies its GitHub
 digest and provenance manifest, validates the database again, and compares its
 counts with the current database. Its systemd sandbox can write only under
 `/var/lib/bristolbusbot/timetable-shadow`, monitoring state and its lock file.
 It has no restart permission, promotion command or writable production path.
+
+After a successful or harmless skipped shadow check, systemd starts the
+separate root `bbb-timetable-promote@auto.service`. Automatic mode remains
+fail-closed until `/etc/bristolbusbot/timetable-promotion-enabled` exists as a
+root-owned regular file with mode `0644`. The promoter accepts no paths: it
+re-verifies the fixed candidate, copies it to fixed production staging, checks
+the hash again, atomically promotes it, restarts the three consumers, and checks
+local and public health. Failure after replacement restores
+`timetable.db.previous`; an automatically rejected candidate is not retried
+until a different candidate arrives.
 
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without
@@ -118,10 +128,28 @@ roughly one fresh GitHub build per week; a failed due run retries the next day.
 The 28-day service-coverage signal remains a safety warning and validator input,
 but a far-future service date never postpones the normal weekly refresh.
 
-While the GitHub `timetable-build` environment still requires a reviewer, a
-newly dispatched run pauses safely for approval. Keep that gate for the first
-attended Pi delivery; remove it only when beginning the explicitly approved
-unattended-shadow evidence window. Disable the timer to roll this stage back.
+Before enabling automatic promotion, run one attended transaction and inspect
+the result:
+
+```sh
+sudo systemctl start bbb-timetable-promote@attended.service
+sudo journalctl -u bbb-timetable-promote@attended.service -n 100 --no-pager
+```
+
+If the live hash, consumer services and public health are correct, enable the
+fixed marker and exercise automatic no-change handling:
+
+```sh
+sudo /usr/local/sbin/bbb-deploy-control timetable-auto-enable
+sudo systemctl start bbb-timetable-promote@auto.service
+```
+
+Emergency stop is immediate and does not disturb the current live timetable:
+
+```sh
+sudo /usr/local/sbin/bbb-deploy-control timetable-auto-disable
+sudo systemctl disable --now bbb-timetable-shadow.timer
+```
 
 ## Layout installation and updates
 

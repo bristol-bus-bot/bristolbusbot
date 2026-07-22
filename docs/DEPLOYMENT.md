@@ -63,12 +63,22 @@ commit. SSH host keys are strictly checked and never auto-accepted.
 
 ## Timetable refreshes
 
-`python deploy/push.py --refresh-timetable` builds the three-layer
-timetable on the workstation, validates it (integrity, service-date
-freshness, expected routes, route shapes — all fail-closed), uploads to
-a fixed staging name, promotes atomically while retaining the previous
-database, then restarts and health-checks the collector, site and bot.
-Any failed consumer restores the previous timetable.
+GitHub Actions is the normal compute plane; the Pi is the scheduler and safety
+plane. The daily `bbb-timetable-shadow.timer` causes a fresh build about every
+six days, downloads only the exact default-branch artifact, and independently
+checks its provenance, hash, schema, service horizon, routes, shapes and row
+count changes. The unprivileged downloader cannot write production data.
+
+A separate fixed-path root service performs the atomic live replacement. It
+retains `timetable.db.previous`, restarts and checks collector, site and bot,
+checks the public endpoint, and restores the old database after any failure.
+Automatic promotion requires a root-owned enable marker and never retries the
+same rejected candidate automatically. Its detailed result and timer job record
+feed aggregate health.
+
+`python deploy/push.py --refresh-timetable` remains the attended workstation
+fallback. It applies the same validation, fixed staging, atomic replacement and
+consumer rollback rules.
 
 ## Backups
 

@@ -50,7 +50,8 @@ done
 
 /usr/bin/python3 "$stage/verify_release.py" --help >/dev/null
 /usr/bin/python3 "$stage/timetable_control.py" validate >/dev/null
-/usr/bin/python3 -m py_compile "$stage/timetable_delivery.py" "$stage/timetable_manifest.py" \
+/usr/bin/python3 -m py_compile "$stage/timetable_delivery.py" "$stage/timetable_promote.py" \
+    "$stage/timetable_manifest.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/configure_timetable_delivery.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
@@ -87,6 +88,7 @@ for destination in \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
+    /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_control.py \
     /etc/sudoers.d/bristolbusbot-deploy \
@@ -186,6 +188,7 @@ install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
 install -o root -g root -m 0755 "$stage/timetable_delivery.py" /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py
+install -o root -g root -m 0755 "$stage/timetable_promote.py" /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py
 install -o root -g root -m 0644 "$stage/timetable_manifest.py" /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py
 install -o root -g root -m 0644 "$stage/timetable_control.py" /usr/local/libexec/bristolbusbot-timetable/timetable_control.py
 

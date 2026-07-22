@@ -86,6 +86,39 @@ case "$action:$component" in
     timetable-rollback:)
         exec /usr/local/sbin/bbb-timetable-control rollback
         ;;
+    timetable-auto-enable:)
+        target=/etc/bristolbusbot/timetable-promotion-enabled
+        candidate=/etc/bristolbusbot/.timetable-promotion-enabled.new
+        test -d /etc/bristolbusbot
+        test ! -L /etc/bristolbusbot
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            test -f "$target"
+            test ! -L "$target"
+            test "$(stat -c %U "$target")" = root
+            test "$(stat -c %G "$target")" = root
+            test "$(stat -c %a "$target")" = 644
+            exit 0
+        fi
+        test ! -e "$candidate"
+        test ! -L "$candidate"
+        install -o root -g root -m 0644 /dev/null "$candidate"
+        printf '%s\n' "enabled=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$candidate"
+        mv -f "$candidate" "$target"
+        exit 0
+        ;;
+    timetable-auto-disable:)
+        target=/etc/bristolbusbot/timetable-promotion-enabled
+        if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+            exit 0
+        fi
+        test -f "$target"
+        test ! -L "$target"
+        test "$(stat -c %U "$target")" = root
+        test "$(stat -c %G "$target")" = root
+        test "$(stat -c %a "$target")" = 644
+        rm -f "$target"
+        exit 0
+        ;;
     tunnel-promote:)
         source=@BBB_DEPLOY_BASE@/incoming/tunnel-config.yml
         target=/etc/bristolbusbot/cloudflared/config.yml

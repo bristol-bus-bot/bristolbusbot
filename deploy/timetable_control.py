@@ -42,6 +42,16 @@ REQUIRED_INDEXES = {
 MAX_SHAPE_VARIANTS = 20
 
 
+def _sync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def paths(root: Path = ROOT) -> tuple[Path, Path, Path, Path]:
     return (
         root / "timetable.db",
@@ -204,6 +214,7 @@ def promote(root: Path = ROOT) -> dict[str, object]:
         os.link(live, previous)
     os.chmod(upload, 0o600)
     os.replace(upload, live)
+    _sync_directory(root)
     return result
 
 
@@ -215,6 +226,7 @@ def rollback(root: Path = ROOT) -> dict[str, object]:
     if live.exists():
         os.replace(live, failed)
     os.replace(previous, live)
+    _sync_directory(root)
     return validate(live)
 
 

@@ -14,7 +14,7 @@ those three numbers cannot disagree because they are the same number.
         collector ──▶ live.db┼── bot (TS) ───────────▶ Bluesky
                 ──▶ audit.db ┴── nightly rollup ─────▶ GitHub Pages (audit)
                 ▲
-        timetable.db  ◀── pipeline (monthly validated build)
+        timetable.db  ◀── GitHub build → Pi validation/promotion
 ```
 
 ## Components
@@ -24,7 +24,7 @@ those three numbers cannot disagree because they are the same number.
 | `collector/` | The only process that talks to BODS. Polls SIRI-VM (positions) and SIRI-SX (disruptions) every 30 s, filters to the WECA boundary by point-in-polygon, matches vehicles to the timetable, computes delays. | Python | Raspberry Pi (systemd) |
 | `site/` | bristolbuses.live — live map and dot-matrix departure board (Flask + Leaflet). Read-only consumer of the collector's output. | Python/JS | Raspberry Pi (gunicorn/systemd) |
 | `bot/` | The Bluesky bot. Reads the collector's event stream, selects an event, generates AI commentary with a persona, posts. | TypeScript | Raspberry Pi (systemd) |
-| `pipeline/` | Offline data jobs: the 3-layer timetable build, fleet refresh, route shapes, audit rollup/export. | Python | Workstation + Pi timers |
+| `pipeline/` | Offline data jobs: the 3-layer timetable build, fleet refresh, route shapes, audit rollup/export. | Python | GitHub Actions + Pi timers; workstation fallback |
 | `audit-site/` | Source of the WECA bus punctuality audit static site, published to a separate GitHub Pages repository. | HTML/CSS/JS | GitHub Pages |
 | `deploy/` | Immutable release deployment, systemd units, health/rollback gates, backups. | Python | Workstation → Pi |
 
@@ -34,7 +34,7 @@ SQLite everywhere, with strict ownership boundaries:
 
 | File | Writer | Readers | Contents |
 |---|---|---|---|
-| `timetable.db` | pipeline (built on the workstation, deployed atomically) | collector, site, bot | GTFS + TransXChange + TNDS schedule data; read-only in production |
+| `timetable.db` | GitHub builds candidates; the Pi validates and promotes atomically | collector, site, bot | GTFS + TransXChange + TNDS schedule data; read-only in production |
 | `live.db` | collector | site, bot | current vehicle state, disruptions (`situations`), corroborated delay `events` for the bot, poller status |
 | `audit.db` | collector + nightly rollup | rollup/export jobs | closest-approach timing-point observations and daily summaries |
 | `app_data.db` | bot | bot | posting history, engagement analytics, bot-local state |
