@@ -1,0 +1,35 @@
++[Unit]
+Description=Bristol Bus Bot GitHub timetable delivery shadow validation (%i)
+Wants=network-online.target
+After=network-online.target bbb-backup.service bbb-audit-rollup.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+EnvironmentFile=-/etc/bristolbusbot/timetable-delivery.env
+LoadCredential=github-token:/etc/bristolbusbot/timetable-delivery.token
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name timetable-shadow --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 75 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py --run-id %i
+TimeoutStartSec=55min
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+CPUWeight=20
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadWritePaths=/var/lib/bristolbusbot/timetable-shadow /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

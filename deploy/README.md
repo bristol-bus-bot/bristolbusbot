@@ -79,13 +79,53 @@ must all recover; otherwise the previous database is restored automatically.
 `pipeline/build_timetable.py` is invoked by `push.py`; production promotion
 always goes through the deployment command.
 
+### GitHub timetable delivery shadow
+
+The shadow delivery is deliberately separate from promotion. GitHub performs
+the heavy build; `bbb-timetable-shadow@.service` downloads one exact successful
+default-branch run, safely extracts the three-file parcel, verifies its GitHub
+digest and provenance manifest, validates the database again, and compares its
+counts with the current database. Its systemd sandbox can write only under
+`/var/lib/bristolbusbot/timetable-shadow`, monitoring state and its lock file.
+It has no restart permission, promotion command or writable production path.
+
+`--install-layout` installs this service but leaves its daily timer disabled
+until its root-only credential files exist. On the Pi, configure them without
+putting the token in shell history:
+
+```sh
+sudo /usr/local/sbin/bbb-configure-timetable-delivery
+sudo systemctl enable --now bbb-timetable-shadow.timer
+```
+
+Use a fine-grained token restricted to `bristol-bus-bot/bristolbusbot`, with
+Actions read/write and no source-code write permission. The helper writes it
+to `/etc/bristolbusbot/timetable-delivery.token` with mode `0600`. systemd
+mounts that token privately into only the short-lived shadow service; it is not
+placed in the service environment. Monitoring records only its expiry date.
+
+Routine timer runs use the `auto` instance. For one attended shadow test of an
+already successful workflow run, use its numeric GitHub run ID:
+
+```sh
+sudo systemctl start bbb-timetable-shadow@RUN_ID.service
+sudo journalctl -u bbb-timetable-shadow@RUN_ID.service --since today
+```
+
+While the GitHub `timetable-build` environment still requires a reviewer, a
+newly dispatched run pauses safely for approval. Keep that gate for the first
+attended Pi delivery; remove it only when beginning the explicitly approved
+unattended-shadow evidence window. Disable the timer to roll this stage back.
+
 ## Layout installation and updates
 
 `python deploy/push.py --install-layout` creates the release/current directories,
 installs the exact sudo allowlist, deployment helpers and release-aware systemd
-units, and verifies every service and timer. Existing `current` release links
-are preserved. Re-run it only when a reviewed helper or unit template changes;
-it backs up and restores the installed units if any health gate fails.
+units, and verifies every enabled service and timer. Existing `current` release
+links are preserved. A newly installed credential-dependent timer may remain
+disabled as documented above. Re-run it only when a reviewed helper or unit
+template changes; it backs up and restores the installed units if any health
+gate fails.
 
 When a unit starts calling a renamed release file, deploy a release containing
 both the old compatibility entry point and the new file before updating the

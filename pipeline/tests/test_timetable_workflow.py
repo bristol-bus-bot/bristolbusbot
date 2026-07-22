@@ -50,6 +50,8 @@ def test_runner_temp_paths_are_set_only_after_the_runner_starts():
     assert 'TMPDIR=$RUNNER_TEMP/bbb-timetable-sources' in prepare_step
     assert 'SQLITE_TMPDIR=$RUNNER_TEMP/bbb-sqlite' in prepare_step
     assert 'BBB_TIMETABLE_DB=$RUNNER_TEMP/bbb-candidate/timetable.db' in prepare_step
+    assert 'BBB_BUILD_STARTED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)' in prepare_step
+    assert '--build-started-utc "$BBB_BUILD_STARTED_UTC"' in text
 
 
 def test_external_actions_are_pinned_to_immutable_commits():

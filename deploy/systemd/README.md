@@ -26,3 +26,9 @@ limits are intentionally not guessed: collect at least seven days, run
 The timer units own all scheduled jobs; there are no project cron commands.
 The unified layout installer verifies every unit before replacing installed
 copies.
+
+`bbb-timetable-shadow.timer` is the one credential-gated exception to automatic
+enablement: the layout installer leaves it disabled until the root-only GitHub
+environment file exists. The timer starts the `@auto` service instance; an
+operator can start `bbb-timetable-shadow@RUN_ID.service` for one attended,
+promotion-free delivery.

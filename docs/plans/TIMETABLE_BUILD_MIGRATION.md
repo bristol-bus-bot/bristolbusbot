@@ -232,18 +232,18 @@ rebuilds and a restore drill have both succeeded.
 
 ## Rollout
 
-1. Correct and commit the plans.
-2. Implement the builder optimizations and stronger validation.
-3. Prove content equivalence on Windows from the same cached inputs.
-4. Add the GitHub workflow with manual dispatch only; build and inspect a
+1. [x] Correct and commit the plans.
+2. [x] Implement the builder optimizations and stronger validation.
+3. [x] Prove content equivalence on Windows from the same cached inputs.
+4. [x] Add the GitHub workflow with manual dispatch only; build and inspect a
    candidate without involving the Pi.
-5. Install the Pi trigger/downloader in shadow mode; download and validate but
+5. [ ] Install the implemented Pi trigger/downloader in shadow mode; download and validate but
    never write the fixed upload or live paths.
-6. Rehearse promotion with a disposable copy and force a health-check failure
+6. [ ] Rehearse promotion with a disposable copy and force a health-check failure
    to prove rollback.
-7. Observe one manual and two unattended shadow successes.
-8. Enable live promotion and attend the first run.
-9. After two successful unattended promotions, declare the laptop removed from
+7. [ ] Observe one manual and two unattended shadow successes.
+8. [ ] Enable live promotion and attend the first run.
+9. [ ] After two successful unattended promotions, declare the laptop removed from
    production duty and update operational documentation.
 
 Rollback at every stage is to disable the new timer/service. The existing
