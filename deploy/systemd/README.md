@@ -35,3 +35,10 @@ exact-run delivery. A successful shadow service chains to the separately
 sandboxed root `bbb-timetable-promote@auto.service`, which remains structurally
 disabled without the root-owned promotion marker. Use
 `bbb-timetable-promote@attended.service` for the first reviewed live swap.
+
+Production status (22 July 2026): the credential, timer and root promotion
+marker are installed; a complete production `auto` delivery and promotion was
+accepted successfully after being manually initiated during commissioning.
+The first timer-triggered due run remains routine evidence. Routine runs use
+`@auto`; attended instances are now diagnostic/recovery tools rather than a
+remaining implementation step.
