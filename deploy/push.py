@@ -536,6 +536,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
     ):
         copy_file(DEPLOY / name, root / name)
     copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
+    copy_file(REPO / "pipeline/timetable_editions.py", root / "timetable_editions.py")
     copy_tree(DEPLOY / "systemd", root / "systemd")
     copy_tree(DEPLOY / "sudoers", root / "sudoers")
     copy_tree(DEPLOY / "tmpfiles", root / "tmpfiles")

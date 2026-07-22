@@ -183,6 +183,8 @@ The current gates remain and are strengthened. A candidate must pass:
 - equality between shape-bearing timetable route/direction keys and
   `route_shapes` keys;
 - no duplicate `(trip_id, stop_sequence)` rows;
+- a recorded route-edition table whose effective windows contain no unresolved
+  replacement-like calendar overlaps;
 - geometry sanity and a conservative variant cap;
 - required tables, columns, and indexes;
 - table-count comparison with the live database, with a documented manual
