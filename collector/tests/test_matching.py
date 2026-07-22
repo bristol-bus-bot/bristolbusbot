@@ -46,6 +46,30 @@ def test_fuzzy_weekend_excluded():
     assert match_fuzzy(cur(), "FBRI", "75", "outbound", sat) is None
 
 
+def test_fuzzy_applies_calendar_date_removals_and_additions():
+    connection = build()
+    connection.execute(
+        "INSERT INTO calendar_dates VALUES ('WK', '20260610', 2)")
+    assert match_fuzzy(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115) is None
+
+    connection.execute(
+        "INSERT INTO calendar VALUES "
+        "('ADDED',0,0,0,0,0,0,0,'20260601','20260630')")
+    connection.execute(
+        "INSERT INTO calendar_dates VALUES ('ADDED', '20260610', 1)")
+    connection.execute(
+        "INSERT INTO trips VALUES "
+        "('T_ADDED','R75F','ADDED','Hengrove','',0,'','',0,NULL)")
+    connection.execute(
+        "INSERT INTO stop_times VALUES "
+        "('T_ADDED','11:15:00','11:15:00','S1',1,'',0,0,NULL,1)")
+    connection.commit()
+    match = match_fuzzy(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115)
+    assert match and match.trip_id == "T_ADDED"
+
+
 def test_night_trip_previous_service_day():
     # 01:30 Thursday wall clock = Wednesday service day's 25:30 trip
     thu_0130 = datetime(2026, 6, 11, 1, 30, tzinfo=LDN)
@@ -65,6 +89,26 @@ def test_exact_tier_gated_and_refuses_hhmm():
     m_on = match_vehicle(c, "FBRI", "75", "outbound", WED_1115, "VJ_75_1115",
                          enable_exact=True)
     assert m_on.tier == "exact"
+
+
+def test_exact_tier_chooses_the_active_timetable_edition():
+    connection = build()
+    connection.execute(
+        "UPDATE calendar SET end_date='20260609' WHERE service_id='WK'")
+    connection.execute(
+        "INSERT INTO calendar VALUES "
+        "('NEW',1,1,1,1,1,0,0,'20260610','20270610')")
+    connection.execute(
+        "INSERT INTO trips VALUES "
+        "('T_NEW','R75F','NEW','Hengrove','',0,'','',0,'VJ_75_1115')")
+    connection.execute(
+        "INSERT INTO stop_times VALUES "
+        "('T_NEW','11:16:00','11:16:00','S1',1,'',0,0,NULL,1)")
+    connection.commit()
+    match = match_vehicle(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115,
+        "VJ_75_1115", enable_exact=True)
+    assert match and match.trip_id == "T_NEW"
 
 
 def test_drop_dont_guess():

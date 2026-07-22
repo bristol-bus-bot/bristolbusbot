@@ -6,8 +6,9 @@ the vehicle. The optional exact journey-code tier is disabled by default
 because some operators publish journey references that are not GTFS codes.
 
 Early-morning searches also consider after-midnight GTFS times from the
-previous service day. Calendar-date exceptions are not currently consulted.
-Ambiguous or geographically implausible candidates are left unmatched.
+previous service day. Calendar-date additions and removals are applied before
+matching. Ambiguous or geographically implausible candidates are left
+unmatched.
 """
 from __future__ import annotations
 
@@ -56,7 +57,9 @@ def _schedule_for(cur, trip_id: str) -> list:
     return cur.fetchall()
 
 
-def match_exact(cur, operator_noc: str, journey_ref: str) -> Match | None:
+def match_exact(cur, operator_noc: str, journey_ref: str,
+                origin_local: datetime | None = None,
+                line_name: str = "") -> Match | None:
     """Tier 0: trips.vehicle_journey_code. Only meaningful for operators whose
     SIRI DatedVehicleJourneyRef is a real journey code (not the HHMM start).
     An HHMM-shaped ref ('1115') is refused outright: it would collide with
@@ -64,16 +67,54 @@ def match_exact(cur, operator_noc: str, journey_ref: str) -> Match | None:
     ref = (journey_ref or "").strip()
     if not ref or not operator_noc or (len(ref) == 4 and ref.isdigit()):
         return None
-    cur.execute(
-        """SELECT t.trip_id, r.route_short_name
-           FROM trips t
-           JOIN routes r ON t.route_id = r.route_id
-           JOIN agency a ON r.agency_id = a.agency_id
-           WHERE t.vehicle_journey_code = ? AND a.agency_noc = ?
-           LIMIT 1""",
-        (ref, operator_noc),
-    )
-    row = cur.fetchone()
+    service_days = [origin_local] if origin_local else [None]
+    if origin_local and origin_local.hour < 6:
+        service_days.insert(0, origin_local - timedelta(days=1))
+    row = None
+    for service_day in service_days:
+        active_sql = ""
+        line_sql = "AND r.route_short_name = ?" if line_name else ""
+        params: list[object] = [ref, operator_noc]
+        if line_name:
+            params.append(line_name)
+        if service_day:
+            date_str = service_day.strftime("%Y%m%d")
+            day_col = DAYS[service_day.weekday()]
+            active_sql = f"""
+               AND (
+                   EXISTS (
+                       SELECT 1 FROM calendar c
+                       WHERE c.service_id=t.service_id
+                         AND c.{day_col}=1
+                         AND c.start_date<=? AND c.end_date>=?
+                         AND NOT EXISTS (
+                             SELECT 1 FROM calendar_dates removed
+                             WHERE removed.service_id=t.service_id
+                               AND removed.date=? AND removed.exception_type=2
+                         )
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM calendar_dates added
+                       WHERE added.service_id=t.service_id
+                         AND added.date=? AND added.exception_type=1
+                   )
+               )
+            """
+            params.extend([date_str, date_str, date_str, date_str])
+        cur.execute(
+            f"""SELECT t.trip_id, r.route_short_name
+                FROM trips t
+                JOIN routes r ON t.route_id = r.route_id
+                JOIN agency a ON r.agency_id = a.agency_id
+                WHERE t.vehicle_journey_code = ? AND a.agency_noc = ?
+                {line_sql}
+                {active_sql}
+                LIMIT 1""",
+            params,
+        )
+        row = cur.fetchone()
+        if row:
+            break
     if not row:
         return None
     schedule = _schedule_for(cur, row[0])
@@ -140,19 +181,36 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
                 FROM trips t
                 JOIN routes r ON t.route_id = r.route_id
                 JOIN agency a ON r.agency_id = a.agency_id
-                JOIN calendar c ON t.service_id = c.service_id
                 JOIN stop_times st ON t.trip_id = st.trip_id
                 WHERE r.route_short_name = ? AND a.agency_noc = ?
                 {dir_clause}
-                AND c.{day_col} = 1
-                AND c.start_date <= ? AND c.end_date >= ?
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM calendar c
+                        WHERE c.service_id=t.service_id
+                          AND c.{day_col}=1
+                          AND c.start_date<=? AND c.end_date>=?
+                          AND NOT EXISTS (
+                              SELECT 1 FROM calendar_dates removed
+                              WHERE removed.service_id=t.service_id
+                                AND removed.date=?
+                                AND removed.exception_type=2
+                          )
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM calendar_dates added
+                        WHERE added.service_id=t.service_id
+                          AND added.date=? AND added.exception_type=1
+                    )
+                )
                 AND st.stop_sequence = 1
                 AND st.departure_time BETWEEN ? AND ?
             """
             params = [line_name, operator_noc]
             if eff_dir is not None:
                 params.append(eff_dir)
-            params.extend([date_str, date_str, lower, upper])
+            params.extend([
+                date_str, date_str, date_str, date_str, lower, upper])
             cur.execute(sql, params)
             rows = cur.fetchall()
             if not rows:
@@ -179,7 +237,8 @@ def match_vehicle(cur, operator_noc: str, line_name: str, direction_ref: str | N
                   vehicle_pos: tuple[float, float] | None = None) -> Match | None:
     """The one entry point. Exact tier only when explicitly enabled."""
     if enable_exact:
-        m = match_exact(cur, operator_noc, journey_ref)
+        m = match_exact(
+            cur, operator_noc, journey_ref, origin_local, line_name)
         if m:
             return m
     return match_fuzzy(cur, operator_noc, line_name, direction_ref, origin_local,

@@ -199,6 +199,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "timetable_delivery.py").is_file()
     assert (extract / "timetable_promote.py").is_file()
     assert (extract / "timetable_manifest.py").is_file()
+    assert (extract / "timetable_editions.py").is_file()
     assert (extract / "systemd/bbb-timetable-shadow@.service").is_file()
     assert (extract / "systemd/bbb-timetable-promote@.service").is_file()
 

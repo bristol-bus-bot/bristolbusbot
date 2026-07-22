@@ -140,11 +140,13 @@ def test_timetable_messages_explain_success_and_safe_rollback():
             "stop_times": 1964503,
             "route_shapes": 413,
             "stop_routes": 12000,
+            "superseded_route_editions": 146,
         },
     })
     assert "54,466 trips" in success
     assert "1,964,503 stop times" in success
     assert "stop search" in success
+    assert "146 overlapping route editions" in success
     assert "run 29913612013" in success
 
     failure = aggregate_health.timetable_failure_message("promotion", {

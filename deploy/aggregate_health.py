@@ -305,6 +305,9 @@ def timetable_success_message(attempt: dict[str, object]) -> str:
         f"{count('stops')} stops · {count('stop_times')} stop times · "
         f"{count('route_shapes')} route shapes",
         f"Stop-search lookup: {count('stop_routes')} stop/route pairs",
+        "Edition safety: "
+        f"{count('superseded_route_editions')} overlapping route editions "
+        "given separate effective windows",
         f"Sources: {source}",
         f"Safety: stop search, collector, site, bot and public health passed; "
         f"previous timetable retained for rollback",
