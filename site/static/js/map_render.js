@@ -1,6 +1,5 @@
 /** Render map icons and popups for vehicles and depots. */
 import { el } from "./util.js";
-import { vehicleCard } from "./vehicle_card.js";
 
 const EV_COLORS = { delayed: "#D4351C", early: "#eab308",
                     waiting: "#1D70B8", punctual: "#00703C" };
@@ -65,68 +64,48 @@ export function depotIcon(livery) {
         iconAnchor: [11, 11], popupAnchor: [0, -11] });
 }
 
-function badgeData(bus) {
-    const out = [];
-    if (bus.isElectric) out.push({ text: "ELECTRIC", cls: "fb-electric" });
-    else if (bus.fuel === "gas") out.push({ text: "BIOGAS", cls: "fb-gas" });
-    if (bus.isDoubleDecker) out.push({ text: "DOUBLE-DECKER" });
-    if (bus.isCoach) out.push({ text: "COACH" });
-    (bus.specialFeatures || []).forEach(f => out.push({ text: String(f) }));
-    return out;
+function tooltipStatus(bus) {
+    if (bus.eventType === "depot")
+        return { text: "at depot", cls: "vs-status-off" };
+    if (bus.waitingAtOrigin || bus.eventType === "waiting")
+        return { text: "waiting to depart", cls: "vs-status-waiting" };
+    const delay = Number.parseInt(bus.delayMinutes, 10) || 0;
+    if (delay >= 4) return { text: `${delay}m late`, cls: "vs-status-late" };
+    if (delay <= -3) return { text: `${Math.abs(delay)}m early`, cls: "vs-status-early" };
+    return { text: "on time", cls: "vs-status-ontime" };
 }
 
-export function busPopup(bus, featuredPost) {
-    // One vehicle card, compact size — identical structure to the modal.
-    const isDepot = bus.eventType === "depot";
-    const actions = [];
-    if (bus.profileUrl)
-        actions.push(el("a", { class: "vc-action", href: bus.profileUrl },
-                        ["View vehicle profile"]));
-    if (!isDepot && featuredPost && featuredPost.postUrl)
-        actions.push(el("a", { class: "vc-action vc-action-bsky",
-                              href: featuredPost.postUrl },
-                        ["Featured on @bristolbusbot.live"]));
-    // hasSchedule = the collector matched this journey THIS poll cycle;
-    // without it the journey ref may be hours old — showing a route or an
-    // "on time" pill from it presents yesterday's timetable as live data
-    if (!isDepot && bus.journeyCode && bus.hasSchedule)
-        actions.push(el("button", {
-            class: "vc-action vc-action-blue",
-            onClick: (ev) => {
-                window.showBusRoute(bus.vehicleRef, bus.line, bus.directionId,
-                    bus.journeyCode, bus.destination,
-                    liveryColor(bus.livery) || "#666",
-                    bus.directionRef || "", bus.originAimedDep || "",
-                    bus.delayMinutes, bus.eventType, bus.operatorRef || "",
-                    bus.tripId || "");
-                const close = ev.target.closest(".leaflet-popup")
-                    ?.querySelector(".leaflet-popup-close-button");
-                if (close) close.click();
-            },
-        }, ["Show Route"]));
-
-    return vehicleCard({
-        line: bus.line,
-        destination: bus.destination,
-        fleetCode: bus.fleetNumber || "",
-        reg: bus.reg,
-        model: bus.model,
-        liveryLeft: bus.livery && bus.livery.left,
-        liveryName: bus.livery && bus.livery.name,
-        branding: bus.branding,
-        blurb: bus.description,
-        badges: badgeData(bus),
-        accent: liveryColor(bus.livery) || "#666",
-        isDepot,
-        depotName: bus.depotName,
-        status: (isDepot || !bus.hasSchedule) ? null : {
-            eventType: bus.eventType,
-            waiting: bus.waitingAtOrigin,
-            delayMinutes: bus.delayMinutes,
-            lastStopName: bus.lastStopName,
-        },
-        actions,
-    }, "compact");
+export function busPopup(bus) {
+    const status = tooltipStatus(bus);
+    const livery = el("div", {
+        class: "bt-livery",
+        title: bus.livery?.name || "Vehicle livery",
+    });
+    livery.style.background = bus.livery?.left || "#7E8582";
+    const destination = bus.eventType === "depot"
+        ? (bus.depotName || "At depot") : (bus.destination || "Unknown destination");
+    const identity = [bus.reg, bus.fleetNumber ? `fleet ${bus.fleetNumber}` : null]
+        .filter(Boolean).join(" / ");
+    return el("div", { class: "bus-tooltip" }, [
+        livery,
+        el("div", { class: "bt-body" }, [
+            el("div", { class: "bt-route" }, [
+                el("strong", { class: "bt-line" }, [bus.line || "Bus"]),
+                el("span", { class: "bt-dest" }, [destination]),
+            ]),
+            el("div", { class: "bt-live" }, [
+                el("span", { class: `vs-status ${status.cls}` }, [status.text]),
+                bus.lastStopName && bus.lastStopName !== "unknown"
+                    ? el("span", { class: "bt-place" }, [`at ${bus.lastStopName}`]) : null,
+            ]),
+            identity ? el("div", { class: "bt-vehicle" }, [identity]) : null,
+            el("button", {
+                class: "bt-details",
+                onClick: () => window.openVehicleSidebar(
+                    bus.vehicleRef, bus.operatorRef),
+            }, ["Journey, vehicle and history"]),
+        ]),
+    ]);
 }
 
 export function stopPopup(stop, onSelect) {

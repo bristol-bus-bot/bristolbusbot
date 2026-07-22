@@ -31,7 +31,8 @@ export function plate(reg, size) {
  *   actions: [HTMLElement] }
  */
 export function vehicleCard(data, mode) {
-    const full = mode === "full";
+    const full = mode !== "compact";
+    const embedded = mode === "embedded";
 
     // header: livery band = operator identity (kept saturated on purpose —
     // the one non-flat element, same in both sizes)
@@ -119,8 +120,10 @@ export function vehicleCard(data, mode) {
             target: "_blank", rel: "noopener",
         }, ["\u{1F4F7} Photos of this bus on Flickr \u2197"]));
 
-    return el("div", { class: `vc vc-${mode}` },
-              [header, el("div", { class: "vc-body" }, body)]);
+    const children = [];
+    if (!embedded) children.push(header);
+    children.push(el("div", { class: "vc-body" }, body));
+    return el("div", { class: `vc vc-${mode}` }, children);
 }
 
 window.BBB = window.BBB || {};

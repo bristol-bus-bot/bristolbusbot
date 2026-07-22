@@ -181,7 +181,11 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
     route_rows = cur.execute(
         f"""SELECT operator, vehicle_ref, route,
                    COUNT(DISTINCT service_date) AS observed_days,
-                   COUNT(*) AS readings
+                   COUNT(*) AS readings,
+                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
+                            THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
+                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
             FROM timepoint_observations
             WHERE service_date IN ({date_ph})
               AND operator IN ({op_ph})
@@ -191,16 +195,61 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
             GROUP BY operator, vehicle_ref, route
             ORDER BY operator, vehicle_ref, readings DESC, route""",
-        (*dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
+        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
+         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchall()
+    routes: dict[tuple[str, str, str], dict] = {}
     for row in route_rows:
         profile = profiles.get((row["operator"], row["vehicle_ref"]))
         if profile is not None:
-            profile["routes"].append({
+            readings = int(row["readings"])
+            on_time = int(row["on_time"] or 0)
+            route = {
                 "route": row["route"],
                 "observed_days": int(row["observed_days"]),
-                "readings": int(row["readings"]),
-            })
+                "readings": readings,
+                "on_time": on_time,
+                "early": int(row["early"] or 0),
+                "late": int(row["late"] or 0),
+                "on_time_pct": round(100 * on_time / readings, 1),
+                "days": [],
+            }
+            profile["routes"].append(route)
+            routes[(row["operator"], row["vehicle_ref"], row["route"])] = route
+
+    day_rows = cur.execute(
+        f"""SELECT operator, vehicle_ref, route, service_date,
+                   COUNT(*) AS readings,
+                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
+                            THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
+                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
+            FROM timepoint_observations
+            WHERE service_date IN ({date_ph})
+              AND operator IN ({op_ph})
+              AND vehicle_ref IS NOT NULL
+              AND route IS NOT NULL AND trim(route) != ''
+              AND observed_delay_s IS NOT NULL
+              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
+            GROUP BY operator, vehicle_ref, route, service_date
+            ORDER BY operator, vehicle_ref, route, service_date DESC""",
+        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
+         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
+    ).fetchall()
+    for row in day_rows:
+        route = routes.get((row["operator"], row["vehicle_ref"], row["route"]))
+        if route is None:
+            continue
+        readings = int(row["readings"])
+        on_time = int(row["on_time"] or 0)
+        route["days"].append({
+            "service_date": row["service_date"],
+            "readings": readings,
+            "on_time": on_time,
+            "early": int(row["early"] or 0),
+            "late": int(row["late"] or 0),
+            "on_time_pct": round(100 * on_time / readings, 1),
+        })
     return list(profiles.values())
 
 
