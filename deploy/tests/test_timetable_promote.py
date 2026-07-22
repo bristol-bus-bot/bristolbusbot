@@ -1,5 +1,6 @@
 import json
 import hashlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from timetable_promote import (
     PromotionConfig,
     PromotionError,
     PromotionSkipped,
+    SystemServices,
     TimetablePromoter,
 )
 
@@ -45,6 +47,21 @@ class FakeServices:
 
     def wait_public(self) -> bool:
         return not self._fails("public_health")
+
+
+def test_collector_health_allows_the_pi_integrity_check_to_finish(monkeypatch):
+    calls = []
+
+    def completed(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", completed)
+
+    assert SystemServices().wait_component("collector") is True
+    assert calls[0][0] == [
+        "/usr/local/libexec/bbb-verify-collector-state", "--max-poll-age", "180"]
+    assert calls[0][1]["timeout"] == 45
 
 
 def promotion_case(tmp_path: Path, *, services=None, fault=None):

@@ -29,6 +29,8 @@ EXPECTED_OWNER = "@BBB_DEPLOY_USER@"
 MINIMUM_SERVICE_DAYS = 14
 COPY_CHUNK = 1024 * 1024
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+COLLECTOR_VERIFY_TIMEOUT_SECONDS = 45
+COLLECTOR_VERIFY_ATTEMPTS = 6
 
 
 class PromotionError(RuntimeError):
@@ -179,7 +181,8 @@ class SystemServices:
         return value
 
     def wait_component(self, component: str) -> bool:
-        attempts, delay = (18, 5) if component == "collector" else (30, 2)
+        attempts, delay = ((COLLECTOR_VERIFY_ATTEMPTS, 5)
+                           if component == "collector" else (30, 2))
         for _ in range(attempts):
             try:
                 if component == "collector":
@@ -187,7 +190,7 @@ class SystemServices:
                         ["/usr/local/libexec/bbb-verify-collector-state",
                          "--max-poll-age", "180"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        check=False, timeout=15)
+                        check=False, timeout=COLLECTOR_VERIFY_TIMEOUT_SECONDS)
                     if result.returncode == 0:
                         return True
                 elif component == "site":
