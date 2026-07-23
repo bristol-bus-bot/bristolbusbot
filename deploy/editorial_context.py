@@ -114,6 +114,46 @@ def _identifier(value: Any, name: str, identifiers: set[str]) -> str:
     return result
 
 
+def _requirements(value: Any, name: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not 1 <= len(value) <= 12:
+        raise EditorialValidationError(
+            f"{name} must contain between 1 and 12 requirement groups")
+    labels: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for index, raw in enumerate(value):
+        requirement_name = f"{name}[{index}]"
+        requirement = _mapping(raw, requirement_name)
+        label = _text(
+            requirement.get("label"), f"{requirement_name}.label", 80)
+        normalised_label = label.lower()
+        if normalised_label in labels:
+            raise EditorialValidationError(
+                f"{name} contains duplicate label: {label}")
+        labels.add(normalised_label)
+        alternatives = requirement.get("alternatives")
+        if not isinstance(alternatives, list) \
+                or not 1 <= len(alternatives) <= 8:
+            raise EditorialValidationError(
+                f"{requirement_name}.alternatives must contain between "
+                "1 and 8 strings")
+        parsed_alternatives = [
+            _text(
+                alternative,
+                f"{requirement_name}.alternatives[{alternative_index}]",
+                80)
+            for alternative_index, alternative in enumerate(alternatives)
+        ]
+        if len({item.lower() for item in parsed_alternatives}) \
+                != len(parsed_alternatives):
+            raise EditorialValidationError(
+                f"{requirement_name}.alternatives contains duplicates")
+        result.append({
+            "label": label,
+            "alternatives": parsed_alternatives,
+        })
+    return result
+
+
 def validate_document(value: Any) -> dict[str, Any]:
     root = _mapping(value, "editorial context")
     if root.get("schema_version") != 1:
@@ -145,6 +185,8 @@ def validate_document(value: Any) -> dict[str, Any]:
             "claim": _text(item.get("claim"), f"{name}.claim", 600),
             "prompt_hint": _text(
                 item.get("prompt_hint"), f"{name}.prompt_hint", 700),
+            "requirements": _requirements(
+                item.get("requirements"), f"{name}.requirements"),
             "active_from": active_from,
             "active_until": active_until,
             "source": _source(item.get("source"), f"{name}.source"),
@@ -185,6 +227,8 @@ def validate_document(value: Any) -> dict[str, Any]:
             "label": _text(item.get("label"), f"{name}.label", 120),
             "prompt_hint": _text(
                 item.get("prompt_hint"), f"{name}.prompt_hint", 700),
+            "requirements": _requirements(
+                item.get("requirements"), f"{name}.requirements"),
             "schedule": parsed_schedule,
             "probability": _number(
                 item.get("probability"), f"{name}.probability", 0, 1),
@@ -220,6 +264,8 @@ def validate_document(value: Any) -> dict[str, Any]:
             "claim": _text(item.get("claim"), f"{name}.claim", 800),
             "prompt_hint": _text(
                 item.get("prompt_hint"), f"{name}.prompt_hint", 800),
+            "requirements": _requirements(
+                item.get("requirements"), f"{name}.requirements"),
             "published_at": published_at,
             "active_from": active_from,
             "expires_at": expires_at,

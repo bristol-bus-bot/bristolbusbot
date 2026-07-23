@@ -279,6 +279,7 @@ export interface AppConfig {
     ai: {
         apiKey: string;
         model: string;
+        pipeline: 'single' | 'legacy';
         dailyLimit: number;
         timeout: number;
         editorialContextPath: string;

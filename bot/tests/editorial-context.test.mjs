@@ -19,6 +19,11 @@ const SOURCE = {
   verified_on: '2026-07-23',
 };
 
+const REQUIREMENTS = [{
+  label: 'approved wording',
+  alternatives: ['approved claim'],
+}];
+
 
 function documentWith({ facts = [], occasions = [], news = [] } = {}) {
   return {
@@ -62,6 +67,7 @@ test('the validator refuses Bee Network claims and non-allowlisted sources', () 
       id: 'bad-bee-claim',
       claim: 'A Bee Network comparison.',
       prompt_hint: 'Do not use.',
+      requirements: REQUIREMENTS,
       active_from: '2026-01-01',
       active_until: '2026-12-31',
       source: SOURCE,
@@ -82,6 +88,7 @@ test('news expires, has a cooldown and cannot exceed its total use limit', () =>
     label: 'Approved news',
     claim: 'A precise approved claim.',
     prompt_hint: 'Use exact dates.',
+    requirements: REQUIREMENTS,
     published_at: '2026-07-22T00:00:00Z',
     active_from: '2026-07-22T00:00:00Z',
     expires_at: '2026-07-30T23:59:59Z',
@@ -127,6 +134,7 @@ test('legacy source-link flags stay private and cannot reach commentary', () => 
     label: 'Approved news',
     claim: 'A precise approved claim.',
     prompt_hint: 'Keep the material qualifications.',
+    requirements: REQUIREMENTS,
     published_at: '2026-07-22T00:00:00Z',
     active_from: '2026-07-22T00:00:00Z',
     expires_at: '2026-07-30T23:59:59Z',
@@ -152,6 +160,7 @@ test('a month-long occasion can be used at most once per day', () => {
     id: 'september-campaign',
     label: 'September campaign',
     prompt_hint: 'A restrained reference.',
+    requirements: REQUIREMENTS,
     schedule: { kind: 'date_range', start: '2026-09-01', end: '2026-09-30' },
     probability: 1,
     max_uses_per_day: 1,
@@ -165,4 +174,73 @@ test('a month-long occasion can be used at most once per day', () => {
   fixture.store.recordPost(null, morning.plus({ hours: 1 }));
   assert.equal(fixture.store.select(morning.plus({ hours: 2 }), []), null);
   assert.equal(fixture.store.select(morning.plus({ days: 1 }), [])?.kind, 'occasion');
+});
+
+
+test('editorial requirements are mandatory, validated and exposed to commentary', () => {
+  const fact = {
+    id: 'approved-fact',
+    claim: 'An approved claim with £12 million.',
+    prompt_hint: 'Keep the figure exact.',
+    requirements: [{
+      label: '£12 million',
+      alternatives: ['£12 million', '£12m'],
+    }],
+    active_from: '2026-01-01',
+    active_until: '2026-12-31',
+    source: SOURCE,
+  };
+  const fixture = makeStore(documentWith({ facts: [fact] }));
+  const selected = fixture.store.select(
+    DateTime.fromISO('2026-07-23T10:00:00', { zone: 'Europe/London' }),
+    [],
+  );
+  assert.deepEqual(selected?.requirements, fact.requirements);
+
+  const missing = structuredClone(fact);
+  delete missing.requirements;
+  assert.throws(
+    () => validateEditorialDocument(documentWith({ facts: [missing] })),
+    /requirements/,
+  );
+
+  const duplicate = structuredClone(fact);
+  duplicate.requirements[0].alternatives = ['£12m', '£12M'];
+  assert.throws(
+    () => validateEditorialDocument(documentWith({ facts: [duplicate] })),
+    /duplicates/,
+  );
+});
+
+
+test('a deferred hook is not consumed and becomes eligible after its short sleep', () => {
+  const fact = {
+    id: 'deferred-fact',
+    claim: 'An approved claim.',
+    prompt_hint: 'Use only when it fits.',
+    requirements: REQUIREMENTS,
+    active_from: '2026-01-01',
+    active_until: '2026-12-31',
+    source: SOURCE,
+  };
+  const fixture = makeStore(documentWith({ facts: [fact] }));
+  const now = DateTime.fromISO('2026-07-23T10:00:00', { zone: 'Europe/London' });
+  const selected = fixture.store.select(now, []);
+  assert.equal(selected?.id, fact.id);
+  fixture.store.recordDeferredPost(selected, now, 6);
+
+  assert.equal(fixture.store.select(now.plus({ hours: 5 }), []), null);
+  assert.equal(fixture.store.select(now.plus({ hours: 7 }), [])?.id, fact.id);
+
+  const usage = JSON.parse(readFileSync(fixture.usagePath, 'utf8'));
+  assert.equal(usage.items[fact.id], undefined);
+  assert.match(usage.deferrals[fact.id], /Z$/);
+
+  const reloaded = new EditorialContextStore(
+    fixture.contextPath,
+    fixture.usagePath,
+    () => 0,
+  );
+  assert.equal(reloaded.select(now.plus({ hours: 5 }), []), null);
+  assert.equal(reloaded.select(now.plus({ hours: 7 }), [])?.id, fact.id);
 });
