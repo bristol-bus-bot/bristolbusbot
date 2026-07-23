@@ -206,6 +206,14 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "timetable_editions.py").is_file()
     assert (extract / "systemd/bbb-timetable-shadow@.service").is_file()
     assert (extract / "systemd/bbb-timetable-promote@.service").is_file()
+    assert (extract / "editorial_context.py").is_file()
+    assert (extract / "editorial_fetch.py").is_file()
+    assert (extract / "editorial_promote.py").is_file()
+    assert (extract / "editorial-context.json").is_file()
+    assert (extract / "systemd/bbb-editorial-fetch.service").is_file()
+    assert (extract / "systemd/bbb-editorial-promote.service").is_file()
+    assert (extract / "systemd/bbb-editorial-refresh.timer").is_file()
+    assert "enable --now bbb-editorial-refresh.timer" in installer
 
 
 def test_layout_update_preserves_existing_current_release_links():

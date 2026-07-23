@@ -50,10 +50,13 @@ done
 
 /usr/bin/python3 "$stage/verify_release.py" --help >/dev/null
 /usr/bin/python3 "$stage/timetable_control.py" validate >/dev/null
+/usr/bin/python3 "$stage/editorial_context.py" \
+    --file "$stage/editorial-context.json" >/dev/null
 /usr/bin/python3 -m py_compile "$stage/timetable_delivery.py" "$stage/timetable_promote.py" \
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
-    "$stage/configure_timetable_delivery.py"
+    "$stage/configure_timetable_delivery.py" "$stage/editorial_context.py" \
+    "$stage/editorial_fetch.py" "$stage/editorial_promote.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
 
 for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
@@ -92,6 +95,9 @@ for destination in \
     /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_editions.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_control.py \
+    /usr/local/libexec/bristolbusbot-editorial/editorial_context.py \
+    /usr/local/libexec/bristolbusbot-editorial/editorial_fetch.py \
+    /usr/local/libexec/bristolbusbot-editorial/editorial_promote.py \
     /etc/sudoers.d/bristolbusbot-deploy \
     /etc/tmpfiles.d/bristolbusbot.conf \
     "$remote_home/bus-audit/publish_to_github.sh"
@@ -155,7 +161,7 @@ wait_site() {
 wait_bot() {
     tries=0
     while [ "$tries" -lt 30 ]; do
-        if /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); assert d.get("success") is True and d.get("runtime") == "systemd"' >/dev/null 2>&1; then
+        if /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); e=d["details"]["healthData"]["application"]["editorialContext"]; assert d.get("success") is True and d.get("runtime") == "systemd" and e.get("loaded") is True' >/dev/null 2>&1; then
             return 0
         fi
         tries=$((tries + 1))
@@ -193,6 +199,10 @@ install -o root -g root -m 0755 "$stage/timetable_promote.py" /usr/local/libexec
 install -o root -g root -m 0644 "$stage/timetable_manifest.py" /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py
 install -o root -g root -m 0644 "$stage/timetable_editions.py" /usr/local/libexec/bristolbusbot-timetable/timetable_editions.py
 install -o root -g root -m 0644 "$stage/timetable_control.py" /usr/local/libexec/bristolbusbot-timetable/timetable_control.py
+install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-editorial
+install -o root -g root -m 0644 "$stage/editorial_context.py" /usr/local/libexec/bristolbusbot-editorial/editorial_context.py
+install -o root -g root -m 0755 "$stage/editorial_fetch.py" /usr/local/libexec/bristolbusbot-editorial/editorial_fetch.py
+install -o root -g root -m 0755 "$stage/editorial_promote.py" /usr/local/libexec/bristolbusbot-editorial/editorial_promote.py
 
 install -o root -g root -m 0440 "$stage/sudoers/bristolbusbot-deploy" /etc/sudoers.d/bristolbusbot-deploy.new
 /usr/sbin/visudo -cf /etc/sudoers.d/bristolbusbot-deploy.new
@@ -204,6 +214,13 @@ for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
 done
 install -o root -g root -m 0644 "$stage/tmpfiles/bristolbusbot.conf" /etc/tmpfiles.d/bristolbusbot.conf
 /usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/bristolbusbot.conf
+if [ ! -e /var/lib/bristolbusbot/editorial/editorial-context.json ]; then
+    install -o root -g "$deploy_user" -m 0640 \
+        "$stage/editorial-context.json" \
+        /var/lib/bristolbusbot/editorial/editorial-context.json
+fi
+/usr/bin/python3 /usr/local/libexec/bristolbusbot-editorial/editorial_context.py \
+    --file /var/lib/bristolbusbot/editorial/editorial-context.json >/dev/null
 
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemctl restart bbb-collector.service
@@ -216,6 +233,7 @@ if ! wait_bot; then echo "bot health wait exhausted" >&2; exit 1; fi
 /usr/bin/systemctl is-active --quiet bbb-collector.service bbb-site.service bbb-bot.service bbb-tunnel.service
 if ! wait_public_site; then echo "public site health wait exhausted" >&2; exit 1; fi
 
+/usr/bin/systemctl enable --now bbb-editorial-refresh.timer
 for timer in "$stage/systemd"/*.timer; do
     timer_name=$(basename "$timer")
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \

@@ -41,6 +41,10 @@ TIMETABLE_TOKEN_WARNING_DAYS = 30
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/actions/runs/{}")
+EDITORIAL_STATE = Path("/var/lib/bristolbusbot/editorial/state.json")
+EDITORIAL_FILE_URL = (
+    "https://github.com/bristol-bus-bot/bristolbusbot/blob/main/"
+    "bot/data/editorial-context.json")
 
 
 def utcnow() -> datetime:
@@ -229,6 +233,49 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
     return result, issues
 
 
+def editorial_refresh_check() -> tuple[dict, list[str]]:
+    enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-editorial-refresh.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    if not enabled:
+        return {"status": "disabled"}, ["job:editorial-refresh"]
+    result: dict[str, object] = {"status": "enabled"}
+    issues: list[str] = []
+    for name in ("editorial-fetch", "editorial-promote"):
+        path = STATE / "jobs" / f"{name}.json"
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+            last_result = job.get("last_result")
+            last_ok = (job.get("last_skipped_at")
+                       if last_result == "skipped"
+                       else job.get("last_success_at"))
+            age_h = age_seconds(last_ok) / 3600 if last_ok else None
+            result[name] = {
+                "result": last_result,
+                "last_ok_at": last_ok,
+                "age_hours": round(age_h, 2) if age_h is not None else None,
+            }
+            if last_result == "failure" or age_h is None or age_h > 2:
+                issues.append(f"job:{name}")
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            result[name] = {"result": "missing", "error": str(exc)}
+            issues.append(f"job:{name}")
+    try:
+        attempt = json.loads(EDITORIAL_STATE.read_text(encoding="utf-8"))
+        result["last_attempt"] = attempt
+        outcome = attempt.get("outcome")
+        finished = attempt.get("finished_at")
+        age_h = age_seconds(finished) / 3600 if finished else None
+        if outcome not in {"accepted", "no_change"} \
+                or age_h is None or age_h > 2:
+            issues.append("job:editorial-promote")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        result["last_attempt"] = {"outcome": "missing", "error": str(exc)}
+        issues.append("job:editorial-promote")
+    return result, issues
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -351,6 +398,39 @@ def timetable_failure_message(kind: str,
     ))
 
 
+def editorial_success_message(attempt: dict[str, object]) -> str:
+    content = attempt.get("content")
+    counts = content if isinstance(content, dict) else {}
+    return "\n".join((
+        ":white_check_mark: *Approved bot information updated*",
+        f"Installed: {_display_time(attempt.get('finished_at'))}",
+        "Contents: "
+        f"{counts.get('facts', '?')} sourced facts · "
+        f"{counts.get('occasions', '?')} calendar items · "
+        f"{counts.get('news', '?')} active or expiring news items",
+        "Safety: schema, source allowlist and expiry rules passed; "
+        "the bot restarted with the exact approved file.",
+        f"GitHub approval source: <{EDITORIAL_FILE_URL}|editorial context on main>",
+    ))
+
+
+def editorial_failure_message(refresh: dict[str, object]) -> str:
+    attempt = refresh.get("last_attempt")
+    attempt = attempt if isinstance(attempt, dict) else {}
+    fetch = refresh.get("editorial-fetch")
+    promote = refresh.get("editorial-promote")
+    return "\n".join((
+        ":rotating_light: *Bot information refresh failed*",
+        f"When checked: {_display_time(utcnow().isoformat())}",
+        f"Fetch: {fetch}",
+        f"Promotion: {promote}",
+        f"Last outcome: {attempt.get('outcome', 'unknown')}",
+        f"Reason: {str(attempt.get('error') or 'See the recorded job and journal')[:300]}",
+        "Safety: the previously approved information remains live; "
+        "an unvalidated or unhealthy update was not accepted.",
+    ))
+
+
 def main() -> int:
     issues: list[str] = []
     services, found = service_checks()
@@ -360,6 +440,8 @@ def main() -> int:
     timetable_delivery, found = timetable_delivery_check()
     issues.extend(found)
     timetable_promotion, found = timetable_promotion_check()
+    issues.extend(found)
+    editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
 
     try:
@@ -422,6 +504,7 @@ def main() -> int:
         "jobs": jobs,
         "timetable_delivery": timetable_delivery,
         "timetable_promotion": timetable_promotion,
+        "editorial_refresh": editorial_refresh,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
         "audit": {"latest_rollup_service_date": audit_day,
@@ -460,6 +543,18 @@ def main() -> int:
         notified_run = accepted_run
         sent_timetable_success = True
 
+    editorial_attempt = editorial_refresh.get("last_attempt")
+    if not isinstance(editorial_attempt, dict):
+        editorial_attempt = {}
+    notified_editorial_blob = str(
+        previous.get("last_editorial_success_blob_sha", ""))
+    accepted_editorial_blob = str(editorial_attempt.get("blob_sha") or "")
+    if editorial_attempt.get("outcome") == "accepted" \
+            and accepted_editorial_blob \
+            and accepted_editorial_blob != notified_editorial_blob:
+        notify(editorial_success_message(editorial_attempt))
+        notified_editorial_blob = accepted_editorial_blob
+
     remaining_opened = list(opened)
     if "job:timetable-promote" in remaining_opened:
         notify(timetable_failure_message("promotion", promotion_attempt))
@@ -469,6 +564,17 @@ def main() -> int:
         notify(timetable_failure_message(
             "shadow", delivery_attempt if isinstance(delivery_attempt, dict) else {}))
         remaining_opened.remove("job:timetable-shadow")
+    editorial_issues = {
+        "job:editorial-refresh",
+        "job:editorial-fetch",
+        "job:editorial-promote",
+    }.intersection(remaining_opened)
+    if editorial_issues:
+        notify(editorial_failure_message(editorial_refresh))
+        remaining_opened = [
+            issue for issue in remaining_opened
+            if issue not in editorial_issues
+        ]
     if remaining_opened:
         notify(":rotating_light: BBB health incident: " + ", ".join(remaining_opened))
 
@@ -488,6 +594,7 @@ def main() -> int:
         "updated_at": utcnow().isoformat(),
         "active": unique_issues,
         "last_timetable_success_run_id": notified_run,
+        "last_editorial_success_blob_sha": notified_editorial_blob,
     })
     print(json.dumps({"status": snapshot["status"], "issues": unique_issues}))
     return 1 if unique_issues else 0

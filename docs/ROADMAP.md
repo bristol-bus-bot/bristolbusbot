@@ -27,6 +27,9 @@ The core system is complete and live:
 - Rare-working detection runs in posting-disabled shadow mode. It stays
   silent by design until 56 complete prior service days of baseline
   exist; that silence is healthy, not a bug.
+- Sourced bot facts and special dates are data rather than prompt code. Official
+  bus-news discovery opens a GitHub approval PR; merged content is bounded by
+  expiry/cooldowns and has a validated, health-gated Pi delivery path.
 
 ## Planned
 

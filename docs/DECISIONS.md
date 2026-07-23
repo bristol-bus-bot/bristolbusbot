@@ -85,6 +85,17 @@ The live map shows only a small, linked audit headline. Detailed statistics and
 caveats remain on the audit site. The headline and vehicle profiles disappear
 when their publication snapshot is stale or below the configured sample gates.
 
+## Editorial approval is a merge, not an AI decision
+
+Facts, occasions and topical news are structured, sourced data. Automation may
+discover a candidate from an allowlisted official source, but it cannot approve
+the wording: only a merge to `main` does that. The bot enforces active windows,
+cooldowns and use limits, while the Pi independently validates, atomically
+promotes, health-checks and rolls back the approved file.
+
+This keeps phone approval simple without giving Slack, an AI model or a
+scheduled job authority to publish a new factual claim.
+
 ## Social-media expansion
 
 Optional Instagram and Threads publishing must run outside the collector and

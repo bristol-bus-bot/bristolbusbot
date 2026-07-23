@@ -26,10 +26,10 @@ machine identity.
 ## Services and timers
 
 Four long-running system-level units — collector, site, bot and the
-named Cloudflare tunnel — plus ten project timers owning the audit
+named Cloudflare tunnel — plus eleven project timers owning the audit
 rollup/publish/snapshot, collector staleness check, twice-daily digest,
 nightly backup, weekly backup-repository check, resource sampling, aggregate
-health and timetable delivery. Unit templates are source-controlled in
+health, timetable delivery and approved editorial refresh. Unit templates are source-controlled in
 `deploy/systemd/` and rendered by `deploy/push.py --install-layout`; do not edit
 live copies. Re-run that command after reviewed unit or deployment-helper
 changes. It preserves the current release links and rolls the installed units
@@ -37,7 +37,9 @@ back if the live health gates fail.
 Units use `Restart=always`, sandboxing (`ProtectSystem=strict`, exact
 `ReadWritePaths`, `IPAddressDeny=any` for networkless jobs) and
 `Persistent=true` timers with locking so delayed or coincident runs are
-safe.
+safe. Cross-privilege lock files are pre-created by `systemd-tmpfiles` as
+root-owned and deploy-group-writable; this prevents a root backup or promoter
+from creating a private lock that later excludes an unprivileged job.
 
 The site binds to loopback and is published only through the named
 tunnel; the bot API binds to loopback and its control endpoints require
@@ -87,6 +89,44 @@ gate; the workstation is retained only as an attended fallback.
 `python deploy/push.py --refresh-timetable` remains the attended workstation
 fallback. It applies the same validation, fixed staging, atomic replacement and
 consumer rollback rules.
+
+## Approved editorial information
+
+The bot's sourced facts, transport occasions and short-lived news are stored in
+`bot/data/editorial-context.json`. GitHub's `editorial-news.yml` checks official
+Department for Transport results and opens a normal pull request for a relevant
+new story. The PR is the approval screen: merge approves the exact wording;
+edit then merge approves the edited wording; close rejects it.
+
+On the Pi, `bbb-editorial-refresh.timer` checks the file on `main` every 30
+minutes. The unprivileged fetcher accepts only the fixed repository, branch and
+path, then applies byte, schema, date, source-host, duplicate-ID and content
+limits. A separate root promoter validates the same bytes again, keeps one
+`.previous` copy, replaces the live file atomically and restarts the bot. It
+accepts the change only when `/api/health` reports the exact promoted SHA-256;
+otherwise it restores the previous file and restart state. Aggregate health
+sends one detailed Slack success or failure transition.
+
+For the first deployment of this feature, deploy the bot release before the
+layout so the restarted service understands the new health field:
+
+```powershell
+python deploy/push.py --component bot
+python deploy/push.py --install-layout
+```
+
+Then verify on the Pi:
+
+```sh
+sudo systemctl start bbb-editorial-fetch.service
+systemctl status bbb-editorial-fetch.service bbb-editorial-promote.service
+systemctl status bbb-editorial-refresh.timer
+curl -fsS http://127.0.0.1:3010/api/health
+```
+
+No GitHub token is stored on the Pi for this path because the approved source
+file is public. A validation, download, restart or digest failure leaves the
+previous approved information live.
 
 ## Backups
 

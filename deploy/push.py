@@ -193,7 +193,7 @@ def populate_release(component: str, root: Path) -> None:
         for name in ("package.json", "package-lock.json"):
             copy_file(REPO / "bot" / name, root / name)
         for name in ("fbribuses.json", "local_flavour.json", "route_details.json",
-                     "stop_localities.json"):
+                     "stop_localities.json", "editorial-context.json"):
             copy_file(REPO / "bot/data" / name, root / name)
         copy_file(REPO / "site/stop_enrichment.json", root / "stop_enrichment.json")
     elif component == "pipeline":
@@ -533,8 +533,11 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "configure_timetable_delivery.py",
+        "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)
+    copy_file(REPO / "bot/data/editorial-context.json",
+              root / "editorial-context.json")
     copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
     copy_file(REPO / "pipeline/timetable_editions.py", root / "timetable_editions.py")
     copy_tree(DEPLOY / "systemd", root / "systemd")
