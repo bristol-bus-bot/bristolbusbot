@@ -12,7 +12,7 @@ DEPLOY = ROOT / "deploy"
 sys.path.insert(0, str(DEPLOY))
 
 from editorial_context import EditorialValidationError, validate_bytes
-from editorial_fetch import REPOSITORY_PATH, stage
+from editorial_fetch import EditorialFetchError, REPOSITORY_PATH, stage
 from editorial_promote import (
     EditorialPromotionError,
     PromotionConfig,
@@ -88,6 +88,22 @@ def test_fetch_stages_exact_validated_github_bytes(tmp_path):
     assert (tmp_path / "incoming" / "editorial-context.json").read_bytes() == raw
     assert record["blob_sha"] == "a" * 40
     assert record["content"]["sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+def test_fetch_accepts_github_line_wrapping_but_rejects_other_characters(
+        tmp_path):
+    raw = valid_raw()
+    wrapped = github_response(raw)
+    encoded = wrapped["content"]
+    wrapped["content"] = "\n".join(
+        encoded[index:index + 60] for index in range(0, len(encoded), 60))
+    stage(tmp_path, wrapped)
+    assert (tmp_path / "incoming" / "editorial-context.json").read_bytes() == raw
+
+    invalid = github_response(raw)
+    invalid["content"] = f"{invalid['content']}!"
+    with pytest.raises(EditorialFetchError, match="invalid base64"):
+        stage(tmp_path, invalid)
 
 
 def test_promoter_accepts_exact_candidate_and_keeps_one_previous_copy(tmp_path):
