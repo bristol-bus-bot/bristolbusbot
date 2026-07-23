@@ -147,7 +147,7 @@ but a far-future service date never postpones the normal weekly refresh.
 
 `bbb-editorial-refresh.timer` checks every 30 minutes for the human-approved
 `bot/data/editorial-context.json` on `main`. The unprivileged fetch unit writes
-only to `/var/lib/bristolbusbot/editorial/incoming`; the separate root promoter
+only to `/var/lib/bristolbusbot-editorial/incoming`; the separate root promoter
 revalidates the fixed candidate, keeps one previous copy, replaces atomically,
 restarts only the bot and verifies the exact SHA-256 through `/api/health`.
 Failures retain or restore the previous approved file.
