@@ -17,7 +17,7 @@ Environment=RUNTIME_MANAGER=systemd
 Environment=ENABLE_FILE_LOGS=false
 Environment=RARE_WORKING_SHADOW=true
 Environment=AUDIT_INTEGRATION_PATH=/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json
-Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot/editorial/editorial-context.json
+Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot-editorial/editorial-context.json
 Environment=EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json
 ExecStart=/usr/bin/node @BBB_DEPLOY_BASE@/current/bot/dist/index.js
 Restart=always

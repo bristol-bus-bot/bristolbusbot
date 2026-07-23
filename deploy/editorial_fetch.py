@@ -25,7 +25,7 @@ API_URL = (
     f"https://api.github.com/repos/{REPOSITORY}/contents/"
     f"{REPOSITORY_PATH}?ref={DEFAULT_BRANCH}"
 )
-EDITORIAL_ROOT = Path("/var/lib/bristolbusbot/editorial")
+EDITORIAL_ROOT = Path("/var/lib/bristolbusbot-editorial")
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 MAX_API_BYTES = 512 * 1024
 

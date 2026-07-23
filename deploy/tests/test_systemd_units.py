@@ -72,7 +72,7 @@ def test_bot_unit_allows_only_its_two_writable_databases():
         "Environment=ENABLE_FILE_LOGS=false",
         "Environment=RARE_WORKING_SHADOW=true",
         "Environment=AUDIT_INTEGRATION_PATH=/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json",
-        "Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot/editorial/editorial-context.json",
+        "Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot-editorial/editorial-context.json",
         "Environment=EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json",
         "MemoryAccounting=yes",
     ):
@@ -219,12 +219,19 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         encoding="utf-8")
     assert (
         "f /run/lock/bristolbusbot/heavy-io.lock "
-        "0660 root @BBB_DEPLOY_USER@ -"
+        "0660 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
     assert (
         "z /run/lock/bristolbusbot/heavy-io.lock "
-        "0660 root @BBB_DEPLOY_USER@ -"
+        "0660 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
+    installer = (SYSTEMD.parent / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert 'if [ -L "$shared_lock" ]' in installer
+    assert 'chown "$deploy_user:$deploy_user" "$shared_lock"' in installer
+    assert 'chmod 0660 "$shared_lock"' in installer
+    assert installer.index('chown "$deploy_user:$deploy_user" "$shared_lock"') \
+        < installer.index("/usr/bin/systemd-tmpfiles --create")
 
 
 def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
@@ -241,15 +248,31 @@ def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
     assert "/run/lock/bristolbusbot/editorial.lock" in promote
     assert "ProtectSystem=strict" in fetch
     assert "ProtectSystem=strict" in promote
+    assert (
+        "ReadWritePaths=/var/lib/bristolbusbot-editorial/incoming "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot"
+    ) in fetch
+    assert (
+        "ReadWritePaths=/var/lib/bristolbusbot-editorial "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot"
+    ) in promote
     assert "OnCalendar=*:0/30" in timer
     assert "Persistent=true" in timer
     tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
         encoding="utf-8")
     assert (
         "f /run/lock/bristolbusbot/editorial.lock "
-        "0660 root @BBB_DEPLOY_USER@ -"
+        "0660 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
     assert (
         "z /run/lock/bristolbusbot/editorial.lock "
-        "0660 root @BBB_DEPLOY_USER@ -"
+        "0660 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+    assert (
+        "d /var/lib/bristolbusbot-editorial "
+        "0750 root @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+    assert (
+        "d /var/lib/bristolbusbot-editorial/incoming "
+        "0750 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
