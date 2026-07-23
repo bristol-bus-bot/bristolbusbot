@@ -43,3 +43,19 @@ test('explicit direct SIRI ingest still requires BODS credentials', () => {
     /BODS_API_KEY/,
   ));
 });
+
+
+test('single-writer Gemini 3.6 is the default with an explicit legacy escape hatch', () => {
+  withEnv({
+    AI_MODEL: undefined,
+    AI_COMMENTARY_PIPELINE: undefined,
+  }, () => {
+    const config = loadConfig();
+    assert.equal(config.ai.model, 'gemini-3.6-flash');
+    assert.equal(config.ai.pipeline, 'single');
+  });
+
+  withEnv({
+    AI_COMMENTARY_PIPELINE: 'legacy',
+  }, () => assert.equal(loadConfig().ai.pipeline, 'legacy'));
+});

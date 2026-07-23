@@ -35,10 +35,16 @@ export interface EditorialSource {
     verified_on: string;
 }
 
+export interface EditorialRequirement {
+    label: string;
+    alternatives: string[];
+}
+
 export interface EditorialFact {
     id: string;
     claim: string;
     prompt_hint: string;
+    requirements: EditorialRequirement[];
     active_from: string;
     active_until: string;
     source: EditorialSource;
@@ -48,6 +54,7 @@ export interface EditorialOccasion {
     id: string;
     label: string;
     prompt_hint: string;
+    requirements: EditorialRequirement[];
     schedule:
         | { kind: 'annual_date'; month: number; day: number }
         | { kind: 'date_range'; start: string; end: string };
@@ -61,6 +68,7 @@ export interface EditorialNews {
     label: string;
     claim: string;
     prompt_hint: string;
+    requirements: EditorialRequirement[];
     published_at: string;
     active_from: string;
     expires_at: string;
@@ -85,6 +93,7 @@ export interface EditorialSelection {
     label: string;
     claim?: string;
     promptHint: string;
+    requirements: EditorialRequirement[];
 }
 
 interface UsageRecord {
@@ -97,6 +106,7 @@ interface UsageState {
     schema_version: 1;
     last_post_was_special: boolean;
     items: Record<string, UsageRecord>;
+    deferrals: Record<string, string>;
 }
 
 export interface EditorialStatus {
@@ -187,6 +197,41 @@ function validateProbability(value: unknown, name: string): number {
     return requireNumber(value, name, 0, 1);
 }
 
+function validateRequirements(value: unknown, name: string): EditorialRequirement[] {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 12) {
+        throw new Error(`${name} must contain between 1 and 12 requirement groups`);
+    }
+    const labels = new Set<string>();
+    return value.map((raw, index) => {
+        const requirement = requireObject(raw, `${name}[${index}]`);
+        const label = requireString(
+            requirement.label,
+            `${name}[${index}].label`,
+            80,
+        );
+        if (labels.has(label.toLowerCase())) {
+            throw new Error(`${name} contains duplicate label: ${label}`);
+        }
+        labels.add(label.toLowerCase());
+        if (!Array.isArray(requirement.alternatives)
+            || requirement.alternatives.length < 1
+            || requirement.alternatives.length > 8) {
+            throw new Error(`${name}[${index}].alternatives must contain between 1 and 8 strings`);
+        }
+        const alternatives = requirement.alternatives.map((alternative, alternativeIndex) =>
+            requireString(
+                alternative,
+                `${name}[${index}].alternatives[${alternativeIndex}]`,
+                80,
+            )
+        );
+        if (new Set(alternatives.map(item => item.toLowerCase())).size !== alternatives.length) {
+            throw new Error(`${name}[${index}].alternatives contains duplicates`);
+        }
+        return { label, alternatives };
+    });
+}
+
 export function validateEditorialDocument(value: unknown): EditorialDocument {
     const root = requireObject(value, 'editorial context');
     if (root.schema_version !== 1) throw new Error('unsupported editorial schema_version');
@@ -212,6 +257,10 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
             id: validateId(fact.id, `facts[${index}].id`, ids),
             claim: requireString(fact.claim, `facts[${index}].claim`, 600),
             prompt_hint: requireString(fact.prompt_hint, `facts[${index}].prompt_hint`, 700),
+            requirements: validateRequirements(
+                fact.requirements,
+                `facts[${index}].requirements`,
+            ),
             active_from: activeFrom,
             active_until: activeUntil,
             source: validateSource(fact.source, `facts[${index}].source`),
@@ -246,6 +295,10 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
             id: validateId(occasion.id, `occasions[${index}].id`, ids),
             label: requireString(occasion.label, `occasions[${index}].label`, 120),
             prompt_hint: requireString(occasion.prompt_hint, `occasions[${index}].prompt_hint`, 700),
+            requirements: validateRequirements(
+                occasion.requirements,
+                `occasions[${index}].requirements`,
+            ),
             schedule: parsedSchedule,
             probability: validateProbability(occasion.probability, `occasions[${index}].probability`),
             max_uses_per_day: maxUses,
@@ -275,6 +328,10 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
             label: requireString(story.label, `news[${index}].label`, 120),
             claim: requireString(story.claim, `news[${index}].claim`, 800),
             prompt_hint: requireString(story.prompt_hint, `news[${index}].prompt_hint`, 800),
+            requirements: validateRequirements(
+                story.requirements,
+                `news[${index}].requirements`,
+            ),
             published_at: publishedAt,
             active_from: activeFrom,
             expires_at: expiresAt,
@@ -289,7 +346,12 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
 }
 
 function emptyUsage(): UsageState {
-    return { schema_version: 1, last_post_was_special: false, items: {} };
+    return {
+        schema_version: 1,
+        last_post_was_special: false,
+        items: {},
+        deferrals: {},
+    };
 }
 
 function loadUsage(path: string): UsageState {
@@ -299,7 +361,22 @@ function loadUsage(path: string): UsageState {
             || !value.items || typeof value.items !== 'object' || Array.isArray(value.items)) {
             throw new Error('unsupported usage state');
         }
-        return value as UsageState;
+        const rawDeferrals = value.deferrals;
+        const deferrals: Record<string, string> = {};
+        if (rawDeferrals && typeof rawDeferrals === 'object' && !Array.isArray(rawDeferrals)) {
+            for (const [id, until] of Object.entries(rawDeferrals)) {
+                if (ID_RE.test(id) && typeof until === 'string'
+                    && DateTime.fromISO(until, { setZone: true }).isValid) {
+                    deferrals[id] = until;
+                }
+            }
+        }
+        return {
+            schema_version: 1,
+            last_post_was_special: value.last_post_was_special,
+            items: value.items as Record<string, UsageRecord>,
+            deferrals,
+        };
     } catch (error: any) {
         if (existsSync(path)) logger.warn('Editorial usage state was ignored', { error: error.message });
         return emptyUsage();
@@ -416,11 +493,13 @@ export class EditorialContextStore {
             && item.schedule.month === now.month
             && item.schedule.day === now.day
             && this.canUseOccasion(item, today)
+            && !this.isDeferred(item.id, now)
         );
         const rangedOccasions = this.document.occasions.filter(item =>
             item.schedule.kind === 'date_range'
             && activeOnDate(item.schedule.start, item.schedule.end, today)
             && this.canUseOccasion(item, today)
+            && !this.isDeferred(item.id, now)
         );
         const occasion = chooseOne(exactOccasions, this.random)
             || chooseOne(rangedOccasions, this.random);
@@ -430,6 +509,7 @@ export class EditorialContextStore {
                 id: occasion.id,
                 label: occasion.label,
                 promptHint: occasion.prompt_hint,
+                requirements: occasion.requirements,
             };
         }
 
@@ -439,7 +519,7 @@ export class EditorialContextStore {
             const belowLimit = !usage || usage.uses < item.max_uses_total;
             const cooledDown = !usage || now.toMillis() - DateTime.fromISO(usage.last_used_at).toMillis()
                 >= item.cooldown_hours * 60 * 60 * 1000;
-            return active && belowLimit && cooledDown;
+            return active && belowLimit && cooledDown && !this.isDeferred(item.id, now);
         });
         const story = chooseOne(eligibleNews, this.random);
         if (story && this.random() < story.probability) {
@@ -449,6 +529,7 @@ export class EditorialContextStore {
                 label: story.label,
                 claim: story.claim,
                 promptHint: story.prompt_hint,
+                requirements: story.requirements,
             };
         }
 
@@ -458,6 +539,7 @@ export class EditorialContextStore {
         if (recentFinancial || this.random() >= 0.20) return null;
         const facts = this.document.facts.filter(item => {
             if (!activeOnDate(item.active_from, item.active_until, today)) return false;
+            if (this.isDeferred(item.id, now)) return false;
             const usage = this.usage.items[item.id];
             return !usage || now.toMillis() - DateTime.fromISO(usage.last_used_at).toMillis()
                 >= 72 * 60 * 60 * 1000;
@@ -470,7 +552,15 @@ export class EditorialContextStore {
             label: 'sourced fact',
             claim: fact.claim,
             promptHint: fact.prompt_hint,
+            requirements: fact.requirements,
         };
+    }
+
+    private isDeferred(id: string, now: DateTime): boolean {
+        const deferredUntil = this.usage.deferrals[id];
+        if (!deferredUntil) return false;
+        const parsed = DateTime.fromISO(deferredUntil, { setZone: true });
+        return parsed.isValid && now.toMillis() < parsed.toMillis();
     }
 
     private canUseOccasion(item: EditorialOccasion, today: string): boolean {
@@ -481,6 +571,7 @@ export class EditorialContextStore {
     recordPost(selection: EditorialSelection | null, now: DateTime): void {
         this.usage.last_post_was_special = selection !== null;
         if (selection) {
+            delete this.usage.deferrals[selection.id];
             const usedAt = now.toUTC().toISO();
             const usedOn = now.toISODate();
             if (usedAt && usedOn) {
@@ -492,6 +583,23 @@ export class EditorialContextStore {
                 };
             }
         }
+        this.persistUsage();
+    }
+
+    recordDeferredPost(
+        selection: EditorialSelection,
+        now: DateTime,
+        deferHours: number = 6,
+    ): void {
+        this.usage.last_post_was_special = false;
+        this.usage.deferrals[selection.id] = now
+            .toUTC()
+            .plus({ hours: deferHours })
+            .toISO()!;
+        this.persistUsage();
+    }
+
+    private persistUsage(): void {
         try {
             atomicWrite(this.usagePath, this.usage);
         } catch (error: any) {
