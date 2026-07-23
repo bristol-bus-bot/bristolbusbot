@@ -170,7 +170,9 @@ def select_candidate(
                 "probability": 0.1,
                 "max_uses_total": 2,
                 "cooldown_hours": 36,
-                "append_source_link": True,
+                # Keep the source for human approval and provenance, never as
+                # text in the public post.
+                "append_source_link": False,
                 "source": {
                     "publisher": "UK Government",
                     "title": title.strip()[:200],

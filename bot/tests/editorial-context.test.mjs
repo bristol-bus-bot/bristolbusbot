@@ -88,7 +88,7 @@ test('news expires, has a cooldown and cannot exceed its total use limit', () =>
     probability: 1,
     max_uses_total: 2,
     cooldown_hours: 36,
-    append_source_link: true,
+    append_source_link: false,
     source: SOURCE,
   }];
   const fixture = makeStore(documentWith({ news }));
@@ -118,6 +118,32 @@ test('news expires, has a cooldown and cannot exceed its total use limit', () =>
     reloaded.select(DateTime.fromISO('2026-08-01T10:00:00', { zone: 'Europe/London' }), []),
     null,
   );
+});
+
+
+test('legacy source-link flags stay private and cannot reach commentary', () => {
+  const news = [{
+    id: 'approved-news',
+    label: 'Approved news',
+    claim: 'A precise approved claim.',
+    prompt_hint: 'Keep the material qualifications.',
+    published_at: '2026-07-22T00:00:00Z',
+    active_from: '2026-07-22T00:00:00Z',
+    expires_at: '2026-07-30T23:59:59Z',
+    probability: 1,
+    max_uses_total: 2,
+    cooldown_hours: 36,
+    append_source_link: true,
+    source: SOURCE,
+  }];
+  const fixture = makeStore(documentWith({ news }));
+  const selection = fixture.store.select(
+    DateTime.fromISO('2026-07-23T10:00:00', { zone: 'Europe/London' }),
+    [],
+  );
+  assert.equal(selection?.kind, 'news');
+  assert.equal('sourceUrl' in selection, false);
+  assert.equal('appendSourceLink' in selection, false);
 });
 
 

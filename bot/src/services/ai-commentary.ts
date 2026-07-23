@@ -18,6 +18,22 @@ import {
     type EditorialSelection,
 } from './editorial-context.js';
 
+export const NEWS_EDITORIAL_VETO = 'SKIP_NEWS';
+
+export function isNewsEditorialVeto(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    const cleaned = value.trim().replace(/^`+|`+$/g, '').trim();
+    return /^SKIP_NEWS[.!]?$/i.test(cleaned);
+}
+
+export function containsWebLink(value: string): boolean {
+    return /(?:https?:\/\/|www\.)\S+/i.test(value);
+}
+
+export function containsSourceReference(value: string): boolean {
+    return containsWebLink(value) || /(?:^|\s)Source\s*:/i.test(value);
+}
+
 // Load stop localities (ward names from geographic boundaries)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -266,17 +282,19 @@ Do not add another corporate statistic, infer causation, or turn a national comp
 TOPICAL NEWS MODE: Briefly connect this live bus observation to one approved current story:
 - APPROVED CLAIM: ${hook.claim}
 - ACCURACY NOTE: ${hook.promptHint}
-Use only that approved claim. Use exact dates instead of "today", "yesterday", "recently" or "just announced". Do not introduce names, numbers or implications not present above.`;
+Use only that approved claim. Preserve every material qualification, but phrase
+the timing naturally and unambiguously. Do not use "today", "yesterday",
+"recently" or "just announced". The story must produce one direct, wry
+connection to the live observation; never bolt a press-release recap onto an
+otherwise unrelated bus sentence. Do not introduce names, numbers or
+implications not present above.`;
         } else if (hook?.kind === 'occasion') {
             editorialContext = `
 SPECIAL DATE (${hook.label}): ${hook.promptHint}
 Make no other historical claim. Weave in a restrained reference only if it fits naturally.`;
         }
 
-        const sourceSuffix = hook?.kind === 'news' && hook.appendSourceLink
-            ? `\n\nSource: ${hook.sourceUrl}`
-            : '';
-        const contentLimit = sourceSuffix ? 300 - sourceSuffix.length : 290;
+        const contentLimit = 290;
         logSummary('info', `🎭 AI Mode: ${hook ? hook.kind.toUpperCase() : 'standard'}`);
 
         try {
@@ -490,7 +508,7 @@ BANNED PATTERNS (these are overused - NEVER use):
 - "One assumes..." or "One wonders..." as a second sentence opener
 
 CONSTRAINTS:
-- Maximum ${Math.max(120, contentLimit - 5)} characters per option${sourceSuffix ? ' (the verified source link is added by code afterwards)' : ''}
+- Maximum ${Math.max(120, contentLimit - 5)} characters per option
 - Exactly 2 complete sentences each
 - Must include: route number, direction, location, delay status
 - British spelling, no emojis, no hashtags
@@ -522,9 +540,10 @@ ${hook?.kind === 'fact' ? `TONE REMINDER (critical — re-read before writing):
 - Short punchy sentences. Let the numbers do the outrage for you.
 - NO vague moralising — always anchor to the single approved fact.` : hook?.kind === 'news' ? `TONE REMINDER (critical — re-read before writing):
 - The current bus observation remains the main subject; the approved story is brief context.
-- State only the approved claim and exact date. No predictions, invented reactions or political biography.
+- Preserve the claim's material qualifications and timing. No predictions, invented reactions or political biography.
+- Find a genuine connection or punchline. A detached announcement in sentence two is a failed draft.
 - Dry and useful, not breathless breaking-news copy.
-- Do not write a source link; the program appends the verified link.` : `TONE REMINDER (critical — re-read before writing):
+- Never include a source URL or "Source:" line; sources are retained privately for verification.` : `TONE REMINDER (critical — re-read before writing):
 - UNDERSTATE, don't overstate. Let the facts be absurd on their own.
 - NO lecturing, NO moralising, NO phrases like "private-sector lethargy", "profit extraction", "consistent unreliability".
 - Think deadpan local news column, not angry op-ed. Wry, clipped, observational.
@@ -628,10 +647,27 @@ OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required stru
                 const recentPostsContext = postsToUse.length > 0
                     ? postsToUse.map((p, i) => `${i + 1}. "${p}"`).join('\n')
                     : 'No recent posts yet.';
+                const newsQualityGate = hook?.kind === 'news' ? `
+
+NEWS QUALITY GATE:
+- Reject a detached "bus observation, then announcement" structure.
+- Require one natural, wry bridge between the observed bus and the story.
+- Reject press-release language or a plain restatement of the approved claim.
+- Reject any lost material qualification, invented implication, source URL or "Source:" line.
+- If no draft clears this gate, do not force the story into the post.` : '';
+                const allFailInstruction = hook?.kind === 'news'
+                    ? `4. If ALL drafts fail, output exactly ${NEWS_EDITORIAL_VETO}`
+                    : '4. If ALL drafts fail criteria, select the least problematic and edit it to fix';
+                const criticTask = hook?.kind === 'news'
+                    ? 'Select the BEST draft, or veto the news angle. Output only the raw post text or the permitted veto.'
+                    : 'Select the BEST draft. Output only the raw post text.';
+                const criticOutput = hook?.kind === 'news'
+                    ? `The post text, or exactly ${NEWS_EDITORIAL_VETO}. No number prefix (1/2/3), labels or explanation.`
+                    : 'The post text only. No number prefix (1/2/3), labels or explanation.';
 
 const criticPrompt = `ROLE: Editor for the Bristol Bus Bot
 
-TASK: Select the BEST draft. Output ONLY the raw post text.
+TASK: ${criticTask}
 
 THREE DRAFTS TO EVALUATE:
 ${drafts}
@@ -641,6 +677,7 @@ REJECTION CRITERIA (immediately disqualify any draft with these):
 - Second sentence starts with "It is a..." or "One assumes/wonders..."
 - Over ${contentLimit} characters
 - Nonsensical or forced contextual connections (e.g., weather "providing comfort")
+${newsQualityGate}
 
 SELECTION CRITERIA (for non-rejected drafts):
 1. STRUCTURAL FRESHNESS: Different opening pattern from recent posts below
@@ -654,9 +691,9 @@ PROCESS:
 1. Apply rejection criteria - eliminate failing drafts
 2. Check remaining drafts don't match recent post openings
 3. Pick the one with sharpest, most natural wit
-4. If ALL drafts fail criteria, select least problematic and edit to fix
+${allFailInstruction}
 
-OUTPUT: The post text only. No number prefix (1/2/3), no labels, no explanation.
+OUTPUT: ${criticOutput}
 Start your response with the first word of the selected post.`;
 
 
@@ -694,8 +731,13 @@ Start your response with the first word of the selected post.`;
                     // Save raw critic output for dashboard
                     this.appState.lastAICriticOutput = final || null;
 
+                    if (hook?.kind === 'news' && isNewsEditorialVeto(final)) {
+                        logSummary('info', 'AI Critic: News angle felt forced; retrying without it');
+                        return this.callGeminiAPI(context, 0, null);
+                    }
+
                     const cleanedBase = this.postProcessText(final || '', context, contentLimit);
-                    const cleaned = cleanedBase ? `${cleanedBase}${sourceSuffix}` : null;
+                    const cleaned = cleanedBase;
 
                     if (cleaned) {
                         // Reject output that exceeds Bluesky's character limit.
@@ -745,9 +787,16 @@ Start your response with the first word of the selected post.`;
                 logSummary('warn', `⚠️ AI Critic failed: ${e.message}, using draft fallback`);
             }
 
+            // News is optional. Without a successful quality decision, generate
+            // an ordinary observation rather than publish the least-bad draft.
+            if (hook?.kind === 'news') {
+                logSummary('info', 'AI Critic: No publishable news draft; retrying without news');
+                return this.callGeminiAPI(context, 0, null);
+            }
+
             // FALLBACK: Use raw drafts if critic failed
             const fallbackBase = this.postProcessText(drafts, context, contentLimit);
-            const fallback = fallbackBase ? `${fallbackBase}${sourceSuffix}` : null;
+            const fallback = fallbackBase;
             if (fallback) {
                 this.editorialContext.recordPost(hook, currentTime);
 
@@ -850,6 +899,11 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
 
         // Strip common AI preamble patterns
         t = t.replace(/^(Here's|Here is|Option \d:|Draft \d:|Selected:|The best option is:?)\s*/i, '').trim();
+
+        if (containsSourceReference(t)) {
+            logSummary('warn', 'AI draft rejected because it contained a public source reference');
+            return null;
+        }
 
         // Flatten whitespace
         t = t.replace(/\s+/g, ' ').trim();
