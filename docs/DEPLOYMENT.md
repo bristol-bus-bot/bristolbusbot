@@ -26,10 +26,10 @@ machine identity.
 ## Services and timers
 
 Four long-running system-level units — collector, site, bot and the
-named Cloudflare tunnel — plus ten project timers owning the audit
+named Cloudflare tunnel — plus eleven project timers owning the audit
 rollup/publish/snapshot, collector staleness check, twice-daily digest,
 nightly backup, weekly backup-repository check, resource sampling, aggregate
-health and timetable delivery. Unit templates are source-controlled in
+health, timetable delivery and approved editorial refresh. Unit templates are source-controlled in
 `deploy/systemd/` and rendered by `deploy/push.py --install-layout`; do not edit
 live copies. Re-run that command after reviewed unit or deployment-helper
 changes. It preserves the current release links and rolls the installed units
@@ -37,7 +37,9 @@ back if the live health gates fail.
 Units use `Restart=always`, sandboxing (`ProtectSystem=strict`, exact
 `ReadWritePaths`, `IPAddressDeny=any` for networkless jobs) and
 `Persistent=true` timers with locking so delayed or coincident runs are
-safe.
+safe. Cross-privilege lock files are pre-created by `systemd-tmpfiles` as
+root-owned and deploy-group-writable; this prevents a root backup or promoter
+from creating a private lock that later excludes an unprivileged job.
 
 The site binds to loopback and is published only through the named
 tunnel; the bot API binds to loopback and its control endpoints require
