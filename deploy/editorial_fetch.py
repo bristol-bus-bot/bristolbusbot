@@ -104,8 +104,12 @@ def decode_contents(value: dict) -> tuple[bytes, str]:
         raise EditorialFetchError("GitHub returned an invalid blob identity")
     if value.get("encoding") != "base64" or not isinstance(value.get("content"), str):
         raise EditorialFetchError("GitHub did not return inline base64 content")
+    encoded = value["content"]
+    if not encoded or re.search(r"[^A-Za-z0-9+/=\r\n]", encoded):
+        raise EditorialFetchError("GitHub returned invalid base64 content")
+    normalized = encoded.replace("\r", "").replace("\n", "")
     try:
-        raw = base64.b64decode(value["content"], validate=True)
+        raw = base64.b64decode(normalized, validate=True)
     except (ValueError, binascii.Error) as exc:
         raise EditorialFetchError("GitHub returned invalid base64 content") from exc
     size = value.get("size")
