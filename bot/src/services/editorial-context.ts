@@ -85,8 +85,6 @@ export interface EditorialSelection {
     label: string;
     claim?: string;
     promptHint: string;
-    sourceUrl: string;
-    appendSourceLink: boolean;
 }
 
 interface UsageRecord {
@@ -432,8 +430,6 @@ export class EditorialContextStore {
                 id: occasion.id,
                 label: occasion.label,
                 promptHint: occasion.prompt_hint,
-                sourceUrl: occasion.source.url,
-                appendSourceLink: false,
             };
         }
 
@@ -453,8 +449,6 @@ export class EditorialContextStore {
                 label: story.label,
                 claim: story.claim,
                 promptHint: story.prompt_hint,
-                sourceUrl: story.source.url,
-                appendSourceLink: story.append_source_link,
             };
         }
 
@@ -476,8 +470,6 @@ export class EditorialContextStore {
             label: 'sourced fact',
             claim: fact.claim,
             promptHint: fact.prompt_hint,
-            sourceUrl: fact.source.url,
-            appendSourceLink: false,
         };
     }
 

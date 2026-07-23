@@ -49,7 +49,8 @@ are never included in a release; the previous code remains the rollback target.
 `data/editorial-context.json` contains sourced claims and their active windows.
 The bot uses at most one special hook in a post and never in consecutive posts.
 Campaigns are limited per day; news has expiry, lifetime-use and cooldown
-limits. News source links are appended by code, and usage survives restarts.
+limits. Sources remain in the approved data for verification but are never
+included in public posts. Usage survives restarts.
 
 GitHub may open a PR for a recent official Department for Transport bus story.
 Merging approves its exact wording; closing rejects it. The Pi checks merged
