@@ -13,6 +13,10 @@ import { getStopEnrichment } from '../utils/stop-name-cleaner.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+    EditorialContextStore,
+    type EditorialSelection,
+} from './editorial-context.js';
 
 // Load stop localities (ward names from geographic boundaries)
 const __filename = fileURLToPath(import.meta.url);
@@ -100,64 +104,7 @@ export class AICommentary {
         "Tone: understated, wry, clipped. You never grandstand or lecture. You just note what's happening and trust your readers to draw the conclusion. " +
         "You cover Bristol, Bath, Weston-super-Mare, and South Gloucestershire.";
 
-    // Editorial mode tracking
-    private lastPostWasEditorial: boolean = false;
-    private readonly editorialChance: number = 0.20; // ~1 in 5 posts
-
-    /**
-     * Check if recent posts contain financial keywords to prevent clustering
-     */
-    private hasRecentFinancialPost(): boolean {
-        return this.appState.recentPosts.slice(-1).some(p =>
-            /shareholder|dividend|£\d+m|CEO|bonus|profit/i.test(p)
-        );
-    }
-
-    // Financial facts pool (randomly sampled for editorial posts)
-    // Sources: FirstGroup FY2025 results (Jun 2025), H1 2026 results (Nov 2025), TfGM, First Bus fare pages
-    // Last verified: March 2026. FY2026 full-year results expected June 2026.
-    private readonly financialFacts: string[] = [
-        "CEO Graham Sutherland earned £3.06m in FY2025 — over 80% from bonuses tied to profit, not punctuality.",
-        "FirstGroup spent £92m on share buybacks in FY2025, then completed another £49m programme by October 2025.",
-        "FirstBus made £96m operating profit in FY2025 with 8.9% margins — hitting 10% in the second half.",
-        "£76m returned to shareholders in just the first half of FY2026 via buybacks and dividends. Regional bus volumes fell 4%.",
-        "Bristol single fares rose to £2.60 in January 2026. Manchester's franchised Bee Network still charges £2.",
-        "Manchester's Bee Network has passed 100 million bus journeys, with patronage up 12-14% since franchising. Bristol has no such plan.",
-        "The CEO's bonus plan weights operating profit heavily. A 20% operational scorecard was only just added in FY2025.",
-        "FirstGroup's adjusted EPS rose 16% in H1 2026 while regional bus passenger numbers dropped 4%. Shareholders up, passengers down.",
-        "WECA Mayor Helen Godwin has the power to franchise Bristol's buses but won't commit — only promising to 'explore' local control.",
-        "FirstGroup's H1 2026 revenue surged 30% to £834m, partly from acquiring London bus operations. Bristol fares rose anyway.",
-        "Manchester hit a record 602,000 bus journeys in a single day under franchising. Bristol's buses are still run for FirstGroup's shareholders.",
-        "FirstGroup returned £142m to shareholders via buybacks in FY2025 alone. Bristol riders got a fare rise to £2.60.",
-    ];
-
-    // Transport calendar: dates a bus bot would celebrate
-    // Each entry: month, day, label, prompt hint
-    // ~50% of posts on matching days will reference the occasion
-    // All dates verified via web search, March 2026
-    private readonly transportCalendar: Array<{ month: number; day: number; label: string; hint: string }> = [
-        // UK & Bristol transport milestones
-        { month: 2, day: 17, label: "London Congestion Charge anniversary", hint: "London's Congestion Charge launched on this day in 2003 under Ken Livingstone. Bristol still debates road pricing." },
-        { month: 4, day: 11, label: "Bristol Blitz ended the trams (1941)", hint: "On Good Friday 1941, a Luftwaffe bomb severed Bristol's tram power supply at Counterslip. Buses replaced them the next morning — and never left. The trams never returned." },
-        { month: 4, day: 17, label: "World Public Transport Day", hint: "It's World Public Transport Day, declared by UITP at the UN. A day to celebrate the humble bus — or at least acknowledge its existence." },
-        { month: 4, day: 30, label: "Bristol Bus Boycott anniversary (1963)", hint: "On this day in 1963, Bristol's bus boycott began — a four-month campaign against the Bristol Omnibus Company's colour bar refusing to hire Black or Asian drivers. It ended 28 August, the same day as MLK's 'I Have a Dream' speech, and helped inspire the Race Relations Act 1966." },
-        { month: 6, day: 3, label: "World Bicycle Day", hint: "It's World Bicycle Day (UN, since 2018). The bus's two-wheeled rival gets its own day. We're not jealous." },
-        { month: 6, day: 22, label: "Windrush Day", hint: "HMT Empire Windrush docked at Tilbury on this day in 1948. From the 1950s, London Transport directly recruited staff from the Caribbean — drivers, conductors, underground workers who kept Britain's transport running. Bristol's own Bus Boycott fought the colour bar that excluded these same communities." },
-        { month: 7, day: 6, label: "London Buses went cashless (2014)", hint: "London buses went cashless on this day in 2014. Bristol's still take cash. Progress moves at different speeds." },
-        { month: 8, day: 9, label: "Bristol's first horse tram (1875)", hint: "On this day in 1875, Charles Challenger boarded the first horse-drawn tram outside the King David Inn on Perry Road for the inaugural run to Redland. Happy birthday, Bristol public transport." },
-        { month: 9, day: 22, label: "World Car Free Day", hint: "It's World Car Free Day. A global event since 2000 encouraging people to leave the car at home. The bus awaits — delays and all." },
-        { month: 9, day: 24, label: "Bee Network launch anniversary (2023)", hint: "Manchester's Bee Network launched its first franchised bus routes on this day in 2023 — Bolton and Wigan first, the first city region outside London to take buses back under public control. Bristol watches from afar." },
-        { month: 9, day: 27, label: "Stockton & Darlington Railway (1825)", hint: "Nothing to do with buses, but the Stockton & Darlington Railway opened on this day in 1825 — the world's first public railway. Buses came later. Much later." },
-        { month: 10, day: 1, label: "Bristol Tramways Company formed (1887)", hint: "The Bristol Tramways and Carriage Company was incorporated on this day in 1887. It later became the Bristol Omnibus Company in 1957 and ran the city's buses for over a century before privatisation." },
-        { month: 10, day: 14, label: "Bristol's first electric tram (1895)", hint: "On this day in 1895, Bristol became the first city in the UK to run electric trams, from Old Market to Kingswood. Once a transport pioneer — now we wait for the 76." },
-        { month: 10, day: 26, label: "UK bus deregulation D-Day (1986)", hint: "The Transport Act 1985 came into force on this day in 1986 — known in the industry as 'D-Day'. All bus services outside London were deregulated. Bristol's buses have been privately run ever since." },
-        { month: 11, day: 26, label: "World Sustainable Transport Day", hint: "It's World Sustainable Transport Day (UN, since 2023). Transport accounts for a quarter of global CO2 emissions. Every electric bus helps — Bristol has a handful." },
-        { month: 12, day: 24, label: "Christmas Eve", hint: "It's Christmas Eve. Skeleton services, festive timetable chaos, and the eternal question of who's driving tomorrow." },
-        { month: 12, day: 25, label: "Christmas Day", hint: "It's Christmas Day. If there's a bus running, someone is working it. Spare a thought." },
-    ];
-
-    // Catch the Bus Month runs all of July (Bus Users UK campaign)
-    private readonly catchTheBusMonth = 7;
+    private readonly editorialContext: EditorialContextStore;
 
     // Thinking levels for Gemini 3 Flash (varies by mode)
     private readonly thinkingLevels = {
@@ -169,6 +116,11 @@ export class AICommentary {
         this.aiConfig = { ...aiConfig };
         this.appState = appState;
         this.weatherService = weatherService;
+        this.editorialContext = new EditorialContextStore(
+            this.aiConfig.editorialContextPath,
+            this.aiConfig.editorialUsagePath,
+        );
+        this.appState.editorialContextStatus = this.editorialContext.getStatus();
 
         logger.info('AI Commentary service initialized', {
             model: this.aiConfig.model,
@@ -176,14 +128,6 @@ export class AICommentary {
             timeout: this.aiConfig.timeout,
             persona: 'Bristol Bus Bot (consistent)'
         });
-    }
-
-    /**
-     * Select N random facts from the financial facts pool
-     */
-    private selectRandomFacts(count: number): string[] {
-        const shuffled = [...this.financialFacts].sort(() => Math.random() - 0.5);
-        return shuffled.slice(0, count);
     }
 
     /**
@@ -296,29 +240,44 @@ export class AICommentary {
      * Call Gemini API with the two-step draft and critic pattern.
      * Includes retry logic tuned for the Pi's flaky network.
      */
-    private async callGeminiAPI(context: AICommentaryContext, retryCount: number = 0): Promise<AICommentaryResult | null> {
+    private async callGeminiAPI(
+        context: AICommentaryContext,
+        retryCount: number = 0,
+        selectedHook?: EditorialSelection | null,
+    ): Promise<AICommentaryResult | null> {
         const timer = new PerformanceTimer('ai_api_call', logger);
         const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${this.aiConfig.model}:generateContent?key=${this.aiConfig.apiKey}`;
+        const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
+        const hook = selectedHook === undefined
+            ? this.editorialContext.select(currentTime, this.appState.recentPosts)
+            : selectedHook;
+        const isEditorialMode = hook !== null;
 
-        // Determine if this post should be editorial mode
-        // Never two editorial posts in a row, and only ~20% chance otherwise
-        let isEditorialMode = false;
-        if (!this.lastPostWasEditorial && !this.hasRecentFinancialPost() && Math.random() < this.editorialChance) {
-            isEditorialMode = true;
-        }
-
-        // Build editorial context if in editorial mode (for draft agent only)
+        // One approved special hook at most: sourced fact, occasion, or news.
         let editorialContext = '';
-        if (isEditorialMode) {
-            const selectedFacts = this.selectRandomFacts(2);
+        if (hook?.kind === 'fact') {
             editorialContext = `
-EDITORIAL MODE: This post holds FirstBus to account using hard financial data. Pick ONE of these facts and make it the centrepiece:
-${selectedFacts.map((f, i) => `- ${f}`).join('\n')}
-Don't just mention the number — contrast it directly with what passengers are experiencing right now. Name the specific figure (£ amount, percentage, CEO pay). The reader should feel the gap between corporate profit and service quality.
-If the service is ON TIME, note it proves the network CAN work — so why are shareholders prioritised over investment?`;
+SOURCED FACT MODE: If it fits this live event, make this single approved fact the centrepiece:
+- CLAIM: ${hook.claim}
+- ACCURACY NOTE: ${hook.promptHint}
+Do not add another corporate statistic, infer causation, or turn a national company figure into a Bristol-only claim. Give credit if the fact is positive.`;
+        } else if (hook?.kind === 'news') {
+            editorialContext = `
+TOPICAL NEWS MODE: Briefly connect this live bus observation to one approved current story:
+- APPROVED CLAIM: ${hook.claim}
+- ACCURACY NOTE: ${hook.promptHint}
+Use only that approved claim. Use exact dates instead of "today", "yesterday", "recently" or "just announced". Do not introduce names, numbers or implications not present above.`;
+        } else if (hook?.kind === 'occasion') {
+            editorialContext = `
+SPECIAL DATE (${hook.label}): ${hook.promptHint}
+Make no other historical claim. Weave in a restrained reference only if it fits naturally.`;
         }
 
-        logSummary('info', `🎭 AI Mode: ${isEditorialMode ? 'EDITORIAL' : 'standard'}`);
+        const sourceSuffix = hook?.kind === 'news' && hook.appendSourceLink
+            ? `\n\nSource: ${hook.sourceUrl}`
+            : '';
+        const contentLimit = sourceSuffix ? 300 - sourceSuffix.length : 290;
+        logSummary('info', `🎭 AI Mode: ${hook ? hook.kind.toUpperCase() : 'standard'}`);
 
         try {
             // Build vehicle detail string (uses BUS_MODEL_BLURBS)
@@ -515,22 +474,6 @@ If the service is ON TIME, note it proves the network CAN work — so why are sh
 
             logSummary('info', `🎭 Bot context: ${this.appState.blueskyFollowerCount} followers, posting update`);
 
-            // Check transport calendar for today's date
-            const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
-            const todayEntry = this.transportCalendar.find(e => e.month === currentTime.month && e.day === currentTime.day);
-            // Also check Catch the Bus Month (all of July)
-            const isCatchTheBusMonth = currentTime.month === this.catchTheBusMonth && !todayEntry;
-            const calendarEntry = todayEntry
-                ? { label: todayEntry.label, hint: todayEntry.hint }
-                : isCatchTheBusMonth
-                    ? { label: "Catch the Bus Month", hint: "July is Catch the Bus Month (Bus Users UK). A campaign encouraging people to try the bus. Whether today's service is encouraging or discouraging that is for you to judge." }
-                    : null;
-            // ~50% of posts on a matching day mention the occasion
-            const useTimeContext = calendarEntry && Math.random() < 0.5;
-            const festiveNote = useTimeContext
-                ? `\n- SPECIAL (${calendarEntry.label}): ${calendarEntry.hint} Weave a brief, dry reference into the post if it fits naturally. Don't force it — a subtle nod is better than a clumsy shoehorn.`
-                : '';
-
             // Drafting: recent posts are omitted because the critic checks repetition.
             const draftPrompt = `ROLE: ${this.botPersona} (${this.appState.blueskyFollowerCount} Bluesky followers)
 
@@ -547,10 +490,10 @@ BANNED PATTERNS (these are overused - NEVER use):
 - "One assumes..." or "One wonders..." as a second sentence opener
 
 CONSTRAINTS:
-- Maximum 285 characters per option (Bluesky limit is 300, need safety margin)
+- Maximum ${Math.max(120, contentLimit - 5)} characters per option${sourceSuffix ? ' (the verified source link is added by code afterwards)' : ''}
 - Exactly 2 complete sentences each
 - Must include: route number, direction, location, delay status
-- British spelling, no emojis, no hashtags${festiveNote}
+- British spelling, no emojis, no hashtags
 
 CURRENT DATE/TIME: ${currentTime.toFormat('EEEE d MMMM yyyy, h:mm a')} (${TARGET_TIMEZONE})
 
@@ -572,12 +515,16 @@ EXAMPLE OPENINGS (for inspiration - vary from these):
 - "Route 24 languishes near Bedminster..."
 - "Near Clifton's boutiques, the A1..."
 
-${isEditorialMode ? `TONE REMINDER (critical — re-read before writing):
+${hook?.kind === 'fact' ? `TONE REMINDER (critical — re-read before writing):
 - You are the underdog holding a corporate giant to account. Be pointed and specific with the financial data.
-- Name the £ figures. Make the reader feel the contrast between boardroom profits and the bus stop in the rain.
+- Name the approved figure accurately, but do not manufacture a contrast the evidence cannot support.
 - Still dry and wry — not shouty. Think dogged local journalist, not angry protester.
 - Short punchy sentences. Let the numbers do the outrage for you.
-- NO vague moralising — always anchor to a specific figure or fact.` : `TONE REMINDER (critical — re-read before writing):
+- NO vague moralising — always anchor to the single approved fact.` : hook?.kind === 'news' ? `TONE REMINDER (critical — re-read before writing):
+- The current bus observation remains the main subject; the approved story is brief context.
+- State only the approved claim and exact date. No predictions, invented reactions or political biography.
+- Dry and useful, not breathless breaking-news copy.
+- Do not write a source link; the program appends the verified link.` : `TONE REMINDER (critical — re-read before writing):
 - UNDERSTATE, don't overstate. Let the facts be absurd on their own.
 - NO lecturing, NO moralising, NO phrases like "private-sector lethargy", "profit extraction", "consistent unreliability".
 - Think deadpan local news column, not angry op-ed. Wry, clipped, observational.
@@ -600,7 +547,7 @@ OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required stru
                 ? this.thinkingLevels.draft.editorial
                 : this.thinkingLevels.draft.normal;
 
-            logSummary('info', `📤 AI Draft: Generating 3 options (${isEditorialMode ? 'EDITORIAL' : 'standard'} mode)`);
+            logSummary('info', `📤 AI Draft: Generating 3 options (${hook?.kind || 'standard'} mode)`);
             logDetailed('info', `[AI_DRAFT] Temp: ${draftTemp}, Thinking: ${draftThinkingLevel}`);
 
             // Build generation config
@@ -626,7 +573,7 @@ OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required stru
                     const retryDelay = (retryCount + 1) * 10000;
                     logSummary('warn', `⚠️ AI Draft: Server error ${draftResp.status}, retrying in ${retryDelay / 1000}s`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1);
+                    return this.callGeminiAPI(context, retryCount + 1, hook);
                 }
 
                 if (errorBody.includes("quota")) {
@@ -692,13 +639,13 @@ ${drafts}
 REJECTION CRITERIA (immediately disqualify any draft with these):
 - Opens with "The [route] is [X] minutes..." pattern
 - Second sentence starts with "It is a..." or "One assumes/wonders..."
-- Over 290 characters
+- Over ${contentLimit} characters
 - Nonsensical or forced contextual connections (e.g., weather "providing comfort")
 
 SELECTION CRITERIA (for non-rejected drafts):
 1. STRUCTURAL FRESHNESS: Different opening pattern from recent posts below
 2. WIT QUALITY: Sharp comedic payoff that lands naturally
-3. TECHNICAL: British English, exactly 2 sentences, under 290 chars${useTimeContext ? '\n4. PRESERVE: Keep any time-context reference (anniversary/occasion) if present — it adds flavour' : ''}
+3. TECHNICAL: British English, exactly 2 sentences, under ${contentLimit} chars${hook ? `\n4. ACCURACY: Preserve the single approved ${hook.kind} hook without adding unsupported details` : ''}
 
 RECENT POSTS (new post must NOT copy their opening pattern):
 ${recentPostsContext}
@@ -747,7 +694,8 @@ Start your response with the first word of the selected post.`;
                     // Save raw critic output for dashboard
                     this.appState.lastAICriticOutput = final || null;
 
-                    const cleaned = this.postProcessText(final || '', context);
+                    const cleanedBase = this.postProcessText(final || '', context, contentLimit);
+                    const cleaned = cleanedBase ? `${cleanedBase}${sourceSuffix}` : null;
 
                     if (cleaned) {
                         // Reject output that exceeds Bluesky's character limit.
@@ -767,8 +715,7 @@ Start your response with the first word of the selected post.`;
                                 logSummary('info', `✅ AI Critic: "${cleaned}" (${cleaned.length} chars)`);
                             }
 
-                            // Track editorial mode for next post (only on success)
-                            this.lastPostWasEditorial = isEditorialMode;
+                            this.editorialContext.recordPost(hook, currentTime);
 
                             timer.complete({
                                 responseTime: timer.getElapsed(),
@@ -787,7 +734,8 @@ Start your response with the first word of the selected post.`;
                                     tokenCount: cleaned.length,
                                     model: this.aiConfig.model,
                                     temperature: 0.2,
-                                    editorialMode: isEditorialMode
+                                    editorialMode: isEditorialMode,
+                                    editorialKind: hook?.kind,
                                 }
                             };
                         }
@@ -798,10 +746,10 @@ Start your response with the first word of the selected post.`;
             }
 
             // FALLBACK: Use raw drafts if critic failed
-            const fallback = this.postProcessText(drafts, context);
+            const fallbackBase = this.postProcessText(drafts, context, contentLimit);
+            const fallback = fallbackBase ? `${fallbackBase}${sourceSuffix}` : null;
             if (fallback) {
-                // Track editorial mode for next post (only on success)
-                this.lastPostWasEditorial = isEditorialMode;
+                this.editorialContext.recordPost(hook, currentTime);
 
                 this.appState.lastAIResponse = fallback;
                 this.appState.recentPosts.push(fallback);
@@ -818,7 +766,8 @@ Start your response with the first word of the selected post.`;
                         tokenCount: fallback.length,
                         model: this.aiConfig.model,
                         temperature: 0.9,
-                        editorialMode: isEditorialMode
+                        editorialMode: isEditorialMode,
+                        editorialKind: hook?.kind,
                     }
                 };
             }
@@ -828,6 +777,7 @@ Start your response with the first word of the selected post.`;
             const vehicleBit = this.buildVehicleOneLiner(context) || 'Plain livery, standard spec.';
             const s2 = `Vehicle notes: ${vehicleBit}`;
             const templateFallback = this.fitToLimit(`${s1} ${s2}`, 280);
+            this.editorialContext.recordPost(null, currentTime);
 
             logDetailed('warn', `[AI_FALLBACK] Using template: "${templateFallback}"`);
 
@@ -848,7 +798,7 @@ Start your response with the first word of the selected post.`;
                     const retryDelay = (retryCount + 1) * 10000; // 10s, 20s
                     logSummary('warn', `⏱️ AI: Timeout ${this.aiConfig.timeout}ms for ${context.event.line}, retrying in ${retryDelay / 1000}s (attempt ${retryCount + 1}/2)`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1);
+                    return this.callGeminiAPI(context, retryCount + 1, hook);
                 }
                 logDetailed('warn', `[AI_TIMEOUT] Final timeout after ${retryCount + 1} attempts`);
                 return null;
@@ -859,7 +809,7 @@ Start your response with the first word of the selected post.`;
                     const retryDelay = 5000;
                     logSummary('warn', `AI network error, retrying in ${retryDelay / 1000}s`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1);
+                    return this.callGeminiAPI(context, retryCount + 1, hook);
                 }
                 logDetailed('error', `[AI_NETWORK] Max retries exceeded: ${error.message}`);
                 return null;
@@ -888,7 +838,11 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
     return bits.join(', ') || null;
 }
 
-    private postProcessText(text: string, context: AICommentaryContext): string | null {
+    private postProcessText(
+        text: string,
+        context: AICommentaryContext,
+        limit: number = 290,
+    ): string | null {
         if (!text) return null;
 
         // Strip any leading draft number prefix (critic sometimes includes these)
@@ -963,12 +917,12 @@ if (parts.length >= 2) {
 }
 
         // Hard character cap - enforce Bluesky's 300 char limit with safety margin
-        t = this.fitToLimit(t, 290);
+        t = this.fitToLimit(t, limit);
 
         // Final safety check - if still over limit, hard truncate
         if (t.length > 300) {
             logSummary('warn', `⚠️ Post still ${t.length} chars after fitToLimit, hard truncating to 300`);
-            t = this.fitToLimit(t, 300);
+            t = this.fitToLimit(t, Math.min(300, limit));
         }
 
         // ultra-short sanity
