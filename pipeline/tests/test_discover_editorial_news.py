@@ -50,7 +50,7 @@ def test_selects_recent_bus_story_and_builds_bounded_approval_item():
     assert candidate["url"].startswith("https://www.gov.uk/")
     assert item["max_uses_total"] == 2
     assert item["cooldown_hours"] == 36
-    assert item["append_source_link"] is True
+    assert item["append_source_link"] is False
     assert item["expires_at"] == "2026-07-29T08:00:00Z"
 
 
