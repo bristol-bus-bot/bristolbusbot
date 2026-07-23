@@ -215,6 +215,16 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     delivery = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
     assert "flock -n -E 75" in backup
     assert "flock -w 900 -E 75" in delivery
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
+        encoding="utf-8")
+    assert (
+        "f /run/lock/bristolbusbot/heavy-io.lock "
+        "0660 root @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+    assert (
+        "z /run/lock/bristolbusbot/heavy-io.lock "
+        "0660 root @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
 
 
 def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
@@ -233,3 +243,13 @@ def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
     assert "ProtectSystem=strict" in promote
     assert "OnCalendar=*:0/30" in timer
     assert "Persistent=true" in timer
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
+        encoding="utf-8")
+    assert (
+        "f /run/lock/bristolbusbot/editorial.lock "
+        "0660 root @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+    assert (
+        "z /run/lock/bristolbusbot/editorial.lock "
+        "0660 root @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
