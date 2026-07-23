@@ -82,6 +82,18 @@ def test_validator_rejects_unapproved_claim_and_source():
         validate_bytes(json.dumps(value).encode())
 
 
+def test_validator_requires_bounded_machine_checkable_terms():
+    value = json.loads(valid_raw())
+    del value["facts"][0]["requirements"]
+    with pytest.raises(EditorialValidationError, match="requirements"):
+        validate_bytes(json.dumps(value).encode())
+
+    value = json.loads(valid_raw())
+    value["news"][0]["requirements"][0]["alternatives"] = []
+    with pytest.raises(EditorialValidationError, match="alternatives"):
+        validate_bytes(json.dumps(value).encode())
+
+
 def test_fetch_stages_exact_validated_github_bytes(tmp_path):
     raw = valid_raw()
     record = stage(tmp_path, github_response(raw))

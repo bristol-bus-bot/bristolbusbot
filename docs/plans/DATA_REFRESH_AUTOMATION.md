@@ -65,8 +65,11 @@ regenerate or remove them until their policy above changes deliberately.
 
 The editorial context is a deliberately separate policy class: machines may
 discover an official GOV.UK candidate and deliver an approved file, but only a
-human merge can add wording to `main`. Expiry, cooldown and use limits are
-enforced by the consumer even if a later refresh is missed.
+human merge can add wording and machine-checkable factual requirements to
+`main`. The discovery PR derives an initial subject/figure/date checklist for
+review; the checked-in alternatives remain the human-approved publication
+contract. Expiry, cooldown, deferral and use limits are enforced by the
+consumer even if a later refresh is missed.
 
 ## Target architecture
 

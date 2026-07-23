@@ -102,7 +102,9 @@ jobs:
             echo "**Automatic expiry:** ${EXPIRES_AT}"
             echo
             echo "The bot may use it at most twice, with at least 36 hours between uses,"
-            echo "and will append the official source link itself."
+            echo "The official source stays private and is never appended to the post."
+            echo "Review the generated machine checklist in requirements; edit its"
+            echo "phrasing before merging if the bot should be allowed natural alternatives."
             echo
             echo "- Merge this PR to approve the exact wording."
             echo "- Edit it before merging if the summary needs nuance."

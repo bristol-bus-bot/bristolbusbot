@@ -17,6 +17,22 @@ import {
     EditorialContextStore,
     type EditorialSelection,
 } from './editorial-context.js';
+import {
+    WRITER_RESPONSE_SCHEMA,
+    VERIFIER_RESPONSE_SCHEMA,
+    cleanEditorialPost,
+    containsSourceReference,
+    containsWebLink,
+    parseEditorialVerifierOutput,
+    parseEditorialWriterOutput,
+    validateCommentaryCandidate,
+    type EditorialWriterOutput,
+} from './editorial-commentary-policy.js';
+
+export {
+    containsSourceReference,
+    containsWebLink,
+} from './editorial-commentary-policy.js';
 
 export const NEWS_EDITORIAL_VETO = 'SKIP_NEWS';
 
@@ -26,12 +42,50 @@ export function isNewsEditorialVeto(value: unknown): boolean {
     return /^SKIP_NEWS[.!]?$/i.test(cleaned);
 }
 
-export function containsWebLink(value: string): boolean {
-    return /(?:https?:\/\/|www\.)\S+/i.test(value);
+class GeminiRequestError extends Error {
+    constructor(
+        message: string,
+        readonly status?: number,
+        readonly quotaExceeded: boolean = false,
+    ) {
+        super(message);
+        this.name = 'GeminiRequestError';
+    }
 }
 
-export function containsSourceReference(value: string): boolean {
-    return containsWebLink(value) || /(?:^|\s)Source\s*:/i.test(value);
+function describeGeminiError(body: string): string {
+    try {
+        const parsed = JSON.parse(body) as {
+            error?: { message?: unknown; status?: unknown };
+        };
+        const message = typeof parsed.error?.message === 'string'
+            ? parsed.error.message.replace(/\s+/g, ' ').trim()
+            : '';
+        const status = typeof parsed.error?.status === 'string'
+            ? parsed.error.status
+            : '';
+        return [status, message].filter(Boolean).join(': ').slice(0, 500);
+    } catch {
+        return '';
+    }
+}
+
+export function buildGeminiStructuredGenerationConfig(
+    schema: object,
+    temperature: number,
+    thinkingLevel: string,
+): object {
+    return {
+        temperature,
+        thinkingConfig: { thinkingLevel },
+        responseFormat: {
+            text: {
+                // This field is an API enum, not a free-form MIME-type string.
+                mimeType: 'APPLICATION_JSON',
+                schema,
+            },
+        },
+    };
 }
 
 // Load stop localities (ward names from geographic boundaries)
@@ -125,7 +179,8 @@ export class AICommentary {
     // Thinking levels for Gemini 3 Flash (varies by mode)
     private readonly thinkingLevels = {
         draft: { normal: "LOW", editorial: "MEDIUM" },
-        critic: { normal: "MINIMAL", editorial: "MINIMAL" }  // Critic stays minimal in both modes
+        critic: { normal: "MINIMAL", editorial: "MINIMAL" },
+        verifier: "LOW",
     };
 
     constructor(aiConfig: any, appState: ApplicationState, weatherService: WeatherService) {
@@ -252,11 +307,595 @@ export class AICommentary {
         };
     }
 
-    /**
-     * Call Gemini API with the two-step draft and critic pattern.
-     * Includes retry logic tuned for the Pi's flaky network.
-     */
     private async callGeminiAPI(
+        context: AICommentaryContext,
+        retryCount: number = 0,
+        selectedHook?: EditorialSelection | null,
+    ): Promise<AICommentaryResult | null> {
+        if (this.aiConfig.pipeline === 'legacy') {
+            return this.callGeminiAPILegacy(context, retryCount, selectedHook);
+        }
+        return this.callSingleWriterGemini(context, retryCount, selectedHook);
+    }
+
+    /**
+     * One model writes the finished post. Code then checks all mechanical facts,
+     * and a non-writing verifier can only pass or fail an editorial candidate.
+     */
+    private async callSingleWriterGemini(
+        context: AICommentaryContext,
+        retryCount: number = 0,
+        selectedHook?: EditorialSelection | null,
+    ): Promise<AICommentaryResult | null> {
+        const timer = new PerformanceTimer('ai_api_call', logger);
+        const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
+        const hook = selectedHook === undefined
+            ? this.editorialContext.select(currentTime, this.appState.recentPosts)
+            : selectedHook;
+
+        try {
+            const recentPosts = await this.getRecentPostsForWriter();
+            let writer = await this.requestWriter(
+                context,
+                currentTime,
+                hook,
+                recentPosts,
+            );
+            let prepared = this.prepareWriterCandidate(writer, context, hook);
+
+            // A factual candidate gets one tightly scoped correction attempt.
+            // The checker supplies the omissions; no second model rewrites it.
+            if (hook && writer.hookUsed && prepared.issues.length > 0) {
+                logSummary(
+                    'warn',
+                    `AI editorial draft failed ${prepared.issues.length} deterministic check(s); retrying once`,
+                );
+                writer = await this.requestWriter(
+                    context,
+                    currentTime,
+                    hook,
+                    recentPosts,
+                    prepared.issues,
+                );
+                prepared = this.prepareWriterCandidate(writer, context, hook);
+            }
+
+            if (prepared.issues.length > 0) {
+                logDetailed(
+                    'warn',
+                    `[AI_POLICY] Candidate rejected: ${prepared.issues.join('; ')}`,
+                );
+                if (hook) {
+                    writer = await this.requestWriter(
+                        context,
+                        currentTime,
+                        null,
+                        recentPosts,
+                        ['The editorial hook was deferred. Write a clean ordinary bus post.'],
+                    );
+                    prepared = this.prepareWriterCandidate(writer, context, null);
+                }
+            }
+
+            if (!prepared.post || prepared.issues.length > 0) {
+                return this.singleWriterTemplateFallback(
+                    context,
+                    hook,
+                    currentTime,
+                    timer,
+                );
+            }
+
+            if (hook && writer.hookUsed) {
+                const verifierPrompt = this.buildVerifierPrompt(
+                    context,
+                    hook,
+                    prepared.post,
+                    currentTime,
+                );
+                this.appState.lastAICriticPrompt = verifierPrompt;
+                let verified = false;
+                try {
+                    const rawVerifier = await this.requestGeminiStructured(
+                        verifierPrompt,
+                        VERIFIER_RESPONSE_SCHEMA,
+                        0,
+                        this.thinkingLevels.verifier,
+                    );
+                    this.appState.lastAICriticOutput = rawVerifier;
+                    const verifier = parseEditorialVerifierOutput(rawVerifier);
+                    verified = verifier.verdict === 'PASS';
+                    if (!verified) {
+                        logDetailed(
+                            'warn',
+                            `[AI_VERIFIER] Editorial post failed: ${verifier.reasons.join('; ')}`,
+                        );
+                    }
+                } catch (error: any) {
+                    this.appState.lastAICriticOutput = `Verifier error: ${error.message}`;
+                    logDetailed(
+                        'warn',
+                        `[AI_VERIFIER] Failed closed: ${error.message}`,
+                    );
+                }
+
+                if (!verified) {
+                    writer = await this.requestWriter(
+                        context,
+                        currentTime,
+                        null,
+                        recentPosts,
+                        ['The editorial hook did not pass factual verification. Write an ordinary post without it.'],
+                    );
+                    prepared = this.prepareWriterCandidate(writer, context, null);
+                    if (!prepared.post || prepared.issues.length > 0) {
+                        return this.singleWriterTemplateFallback(
+                            context,
+                            hook,
+                            currentTime,
+                            timer,
+                        );
+                    }
+                    writer = { ...writer, hookUsed: false };
+                }
+            } else {
+                this.appState.lastAICriticPrompt = hook
+                    ? 'Verifier not called: the writer deferred the editorial hook.'
+                    : 'Verifier not required for an ordinary post.';
+                this.appState.lastAICriticOutput = 'Not called.';
+            }
+
+            return this.completeSingleWriterPost(
+                prepared.post,
+                context,
+                hook,
+                Boolean(hook && writer.hookUsed),
+                currentTime,
+                timer,
+            );
+        } catch (error: any) {
+            timer.fail(error);
+            const retryableStatus = error instanceof GeminiRequestError
+                && [429, 500, 502, 503, 504].includes(error.status || 0);
+            const retryableNetwork = error.name === 'AbortError'
+                || ['ECONNRESET', 'ENOTFOUND', 'ETIMEDOUT'].includes(error.code)
+                || /network|timeout/i.test(error.message);
+            const retryableStructure = error instanceof SyntaxError
+                || /writer response|verifier response|Gemini returned no text/i.test(error.message);
+
+            if (error instanceof GeminiRequestError && error.quotaExceeded) {
+                logger.warn('[AI_QUOTA] Gemini API quota exceeded. Will try again next cycle.');
+                return null;
+            }
+            if ((retryableStatus || retryableNetwork || retryableStructure)
+                && retryCount < 2) {
+                const delay = (retryCount + 1) * 3000;
+                logSummary(
+                    'warn',
+                    `AI single-writer request failed; retrying in ${delay / 1000}s`,
+                );
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.callSingleWriterGemini(
+                    context,
+                    retryCount + 1,
+                    hook,
+                );
+            }
+            logSummary(
+                'error',
+                `AI single-writer failed for ${context.event.line}: ${error.message}`,
+            );
+            return null;
+        }
+    }
+
+    private async getRecentPostsForWriter(): Promise<string[]> {
+        if (this.socialMediaManager) {
+            try {
+                const posts = await this.socialMediaManager.fetchRecentPostsFromBluesky(3);
+                if (Array.isArray(posts) && posts.length > 0) {
+                    return posts.slice(0, 3);
+                }
+            } catch (error: any) {
+                logDetailed(
+                    'warn',
+                    `[AI_WRITER] Could not fetch recent Bluesky posts: ${error.message}`,
+                );
+            }
+        }
+        return this.appState.recentPosts.slice(-3);
+    }
+
+    private async requestWriter(
+        context: AICommentaryContext,
+        currentTime: DateTime,
+        hook: EditorialSelection | null,
+        recentPosts: string[],
+        corrections: string[] = [],
+    ): Promise<EditorialWriterOutput> {
+        const prompt = this.buildSingleWriterPrompt(
+            context,
+            currentTime,
+            hook,
+            recentPosts,
+            corrections,
+        );
+        this.appState.lastAIDraftPrompt = prompt;
+        this.appState.lastAIPrompt = prompt;
+        this.appState.lastWeatherContext = context.weatherContext || null;
+        const raw = await this.requestGeminiStructured(
+            prompt,
+            WRITER_RESPONSE_SCHEMA,
+            1,
+            hook
+                ? this.thinkingLevels.draft.editorial
+                : this.thinkingLevels.draft.normal,
+        );
+        this.appState.lastAIDraftOutput = raw;
+        return parseEditorialWriterOutput(raw);
+    }
+
+    private async requestGeminiStructured(
+        prompt: string,
+        schema: object,
+        temperature: number,
+        thinkingLevel: string,
+    ): Promise<string> {
+        const model = encodeURIComponent(this.aiConfig.model);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const response = await httpFetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': this.aiConfig.apiKey,
+            },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: buildGeminiStructuredGenerationConfig(
+                    schema,
+                    temperature,
+                    thinkingLevel,
+                ),
+            }),
+            timeoutMs: this.aiConfig.timeout,
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            const detail = describeGeminiError(body);
+            throw new GeminiRequestError(
+                `Gemini HTTP ${response.status}${detail ? `: ${detail}` : ''}`,
+                response.status,
+                /quota/i.test(body),
+            );
+        }
+        const payload = await response.json() as any;
+        const parts = payload.candidates?.[0]?.content?.parts;
+        const text = Array.isArray(parts)
+            ? parts
+                .filter((part: any) => typeof part?.text === 'string')
+                .map((part: any) => part.text)
+                .join('\n')
+                .trim()
+            : '';
+        if (!text) throw new Error('Gemini returned no text');
+        return text;
+    }
+
+    private prepareWriterCandidate(
+        writer: EditorialWriterOutput,
+        context: AICommentaryContext,
+        hook: EditorialSelection | null,
+    ): { post: string | null; issues: string[] } {
+        const post = cleanEditorialPost(writer.post);
+        if (!post) {
+            return {
+                post: null,
+                issues: ['post was empty or contained a public source reference'],
+            };
+        }
+        return {
+            post,
+            issues: validateCommentaryCandidate(
+                post,
+                context.event,
+                hook,
+                writer.hookUsed,
+            ),
+        };
+    }
+
+    private buildSingleWriterPrompt(
+        context: AICommentaryContext,
+        currentTime: DateTime,
+        hook: EditorialSelection | null,
+        recentPosts: string[],
+        corrections: string[],
+    ): string {
+        const event = context.event;
+        const eventStatus = event.eventType === 'punctual'
+            ? 'on time'
+            : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
+        const details: string[] = [];
+        const bus = event.busDetails;
+        if (bus?.vehicle_type?.name) {
+            const attributes = [
+                bus.vehicle_type.double_decker ? 'double-decker' : '',
+                bus.vehicle_type.electric ? 'electric' : '',
+            ].filter(Boolean).join(', ');
+            details.push(
+                `Vehicle: ${bus.vehicle_type.name}${attributes ? ` (${attributes})` : ''}`,
+            );
+            const blurb = BUS_MODEL_BLURBS[bus.vehicle_type.name];
+            if (blurb) details.push(`Vehicle notes: ${blurb}`);
+        }
+        if (bus?.livery?.name) details.push(`Livery: ${bus.livery.name}`);
+        if (bus?.garage?.name) details.push(`Garage: ${bus.garage.name}`);
+
+        const enrichedStop = event.lastStopCode
+            ? getStopEnrichment()[event.lastStopCode]
+            : null;
+        const locality = event.lastStopCode
+            ? stopLocalities[event.lastStopCode]
+            : null;
+        if (enrichedStop?.street) details.push(`Street: ${enrichedStop.street}`);
+        if (enrichedStop?.locality) details.push(`Locality: ${enrichedStop.locality}`);
+        if (enrichedStop?.local_authority) {
+            details.push(`Local authority: ${enrichedStop.local_authority}`);
+        }
+        if (locality) {
+            const neighbourhood = findNeighbourhood(locality.lat, locality.lon);
+            if (neighbourhood) {
+                details.push(`Neighbourhood: ${neighbourhood.name}`);
+                if (neighbourhood.data.flavour) {
+                    details.push(`Local colour: ${neighbourhood.data.flavour}`);
+                }
+            }
+        }
+
+        const routeInfo = this.appState.routeDetails[event.line];
+        if (routeInfo?.headsigns?.length >= 2) {
+            details.push(
+                `Route runs between ${routeInfo.headsigns[0]} and ${routeInfo.headsigns[1]}`,
+            );
+        } else if (routeInfo?.route_name) {
+            details.push(`Route name: ${routeInfo.route_name}`);
+        }
+        const directionKey = event.direction.toLowerCase().includes('inbound')
+            ? 'inbound'
+            : 'outbound';
+        const routeStops = routeInfo?.directions?.[directionKey] || [];
+        const stopIndex = routeStops.findIndex(
+            (stop: any) => stop.name === event.lastStopName,
+        );
+        if (stopIndex >= 0) {
+            details.push(`Position: stop ${stopIndex + 1} of ${routeStops.length}`);
+        }
+        if (context.weatherContext) details.push(`Weather: ${context.weatherContext}`);
+        details.push(`Time of day: ${context.timeContext}`);
+
+        const performance = context.networkStatus.performance;
+        const observed = performance.onTime + performance.delayed + performance.early;
+        if (observed > 0) {
+            details.push(
+                `Network: ${performance.percentages.onTime}% on time, `
+                + `${performance.percentages.delayed}% delayed, `
+                + `average delay ${context.networkStatus.averageDelay} minutes`,
+            );
+        }
+        if (context.history) {
+            details.push(
+                `Recent trend: ${context.history.trend}; previous delay `
+                + `${context.history.lastReportedDelay} minutes`,
+            );
+        }
+
+        const requirements = hook
+            ? hook.requirements.map(requirement =>
+                `- ${requirement.label}: include one of ${requirement.alternatives.map(
+                    alternative => JSON.stringify(alternative),
+                ).join(' / ')}`
+            ).join('\n')
+            : '';
+        const editorial = hook
+            ? `OPTIONAL APPROVED EDITORIAL HOOK:
+Kind: ${hook.kind}
+Label: ${hook.label}
+${hook.claim ? `Approved claim: ${hook.claim}` : ''}
+Accuracy note: ${hook.promptHint}
+
+Make one serious attempt to use this hook. Difficulty alone is not a reason to
+drop it. Use it only when there is an honest relationship to this particular
+bus observation. If there is a factual, operator or relevance mismatch, omit
+the hook entirely and set hook_used to false. Never publish it as a detached
+announcement after a bus sentence.
+
+If hook_used is true, every checklist item below must appear in the post:
+${requirements}`
+            : `NO EDITORIAL HOOK:
+Write the strongest ordinary observation. Set hook_used to false.`;
+        const recent = recentPosts.length > 0
+            ? recentPosts.map((post, index) => `${index + 1}. ${post}`).join('\n')
+            : 'No recent posts are available.';
+        const correctionBlock = corrections.length > 0
+            ? `CORRECTION REQUIRED:
+The previous attempt failed these mechanical checks. Fix every item:
+${corrections.map(issue => `- ${issue}`).join('\n')}`
+            : '';
+
+        return `You are writing one finished Bluesky post.
+
+VOICE:
+${this.botPersona}
+
+LIVE OBSERVATION:
+- Route: ${event.line}
+- Direction: ${event.direction}
+- Exact observed status: ${eventStatus}
+- Exact location: ${event.lastStopName}
+- Current time: ${currentTime.toFormat('EEEE d MMMM yyyy, h:mm a')} (${TARGET_TIMEZONE})
+
+OPTIONAL TRUE DETAILS (choose only what genuinely helps):
+${details.length > 0 ? details.map(detail => `- ${detail}`).join('\n') : '- No extra details'}
+
+${editorial}
+
+WRITING RULES:
+- The live bus remains the subject and the source of the wit.
+- Sound like this bot, not a transport status template or press release.
+- Prefer one clean comic idea over cramming in every detail.
+- Include route, direction, exact location and exact observed status naturally.
+- One or two complete sentences, maximum 300 characters.
+- British spelling. No emojis, hashtags, links or source lines.
+- Do not invent passenger behaviour, causes, reactions or corporate facts.
+- Do not say one observed bus caused or proves a company-wide statistic.
+- Preserve company/national/local scope and completed-versus-announced actions.
+- Give genuine credit when the bus or an approved fact is positive.
+- Avoid opening like the recent posts below.
+
+RECENT POSTS:
+${recent}
+
+${correctionBlock}
+
+Return only the requested JSON object.`;
+    }
+
+    private buildVerifierPrompt(
+        context: AICommentaryContext,
+        hook: EditorialSelection,
+        post: string,
+        currentTime: DateTime,
+    ): string {
+        const event = context.event;
+        const status = event.eventType === 'punctual'
+            ? 'on time'
+            : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
+        const evidence: string[] = [
+            `Route ${event.line}`,
+            event.direction,
+            status,
+            event.lastStopName || 'unknown location',
+            `current time ${currentTime.toFormat('EEEE d MMMM yyyy, h:mm a')} (${TARGET_TIMEZONE})`,
+        ];
+        const bus = event.busDetails;
+        if (bus?.vehicle_type?.name) {
+            evidence.push(`vehicle ${bus.vehicle_type.name}`);
+        }
+        if (bus?.vehicle_type?.double_decker) evidence.push('double-decker');
+        if (bus?.vehicle_type?.electric) evidence.push('electric');
+        if (bus?.livery?.name) evidence.push(`livery ${bus.livery.name}`);
+        if (bus?.garage?.name) evidence.push(`garage ${bus.garage.name}`);
+        if (context.weatherContext) evidence.push(`weather ${context.weatherContext}`);
+        return `You are a narrow factual verifier. Do not rewrite the prose and
+do not judge its humour.
+
+LIVE OBSERVATION:
+${evidence.join('; ')}.
+
+APPROVED MATERIAL:
+${hook.claim || hook.label}
+Accuracy note: ${hook.promptHint}
+
+MACHINE CHECKLIST ALREADY PASSED:
+${hook.requirements.map(requirement => `- ${requirement.label}`).join('\n')}
+
+PROPOSED POST:
+${post}
+
+Return FAIL if the post changes a material figure, date, direction or
+qualification; turns a company/national result into a Bristol-only result;
+claims this bus caused or proves the editorial fact; introduces unsupported
+factual material; or misstates the live observation. Otherwise return PASS.
+Return only the requested JSON object.`;
+    }
+
+    private completeSingleWriterPost(
+        post: string,
+        context: AICommentaryContext,
+        selectedHook: EditorialSelection | null,
+        hookUsed: boolean,
+        currentTime: DateTime,
+        timer: PerformanceTimer,
+    ): AICommentaryResult {
+        if (selectedHook && hookUsed) {
+            this.editorialContext.recordPost(selectedHook, currentTime);
+        } else if (selectedHook) {
+            this.editorialContext.recordDeferredPost(
+                selectedHook,
+                currentTime,
+                selectedHook.kind === 'occasion' ? 2 : 6,
+            );
+        } else {
+            this.editorialContext.recordPost(null, currentTime);
+        }
+
+        this.appState.lastAIResponse = post;
+        this.appState.recentPosts.push(post);
+        if (this.appState.recentPosts.length > 5) this.appState.recentPosts.shift();
+
+        const editorialPublished = Boolean(selectedHook && hookUsed);
+        const persona = editorialPublished
+            ? 'Bristol Bus Bot (Editorial verified)'
+            : 'Bristol Bus Bot (Single writer)';
+        logSummary(
+            'info',
+            `AI single writer: "${post}"${selectedHook && !hookUsed ? ' [HOOK DEFERRED]' : ''}`,
+        );
+        timer.complete({
+            responseTime: timer.getElapsed(),
+            textLength: post.length,
+            persona,
+            eventType: context.event.eventType,
+            route: context.event.line,
+        });
+        return {
+            text: post,
+            persona,
+            confidence: editorialPublished ? 0.98 : 0.92,
+            responseTime: timer.getElapsed(),
+            metadata: {
+                tokenCount: post.length,
+                model: this.aiConfig.model,
+                temperature: 1,
+                editorialMode: editorialPublished,
+                editorialKind: editorialPublished ? selectedHook?.kind : undefined,
+            },
+        };
+    }
+
+    private singleWriterTemplateFallback(
+        context: AICommentaryContext,
+        selectedHook: EditorialSelection | null,
+        currentTime: DateTime,
+        timer: PerformanceTimer,
+    ): AICommentaryResult {
+        const event = context.event;
+        const status = event.eventType === 'punctual'
+            ? 'on time'
+            : `${Math.abs(event.delayMinutes)} min ${event.eventType === 'early' ? 'early' : 'late'}`;
+        const first = `Route ${event.line} is ${status} at ${event.lastStopName}, heading ${event.direction}.`;
+        const vehicle = this.buildVehicleOneLiner(context);
+        const post = this.fitToLimit(
+            vehicle ? `${first} Vehicle notes: ${vehicle}.` : first,
+            280,
+        );
+        this.appState.lastAICriticPrompt = 'Verifier not called: template fallback.';
+        this.appState.lastAICriticOutput = 'Not called.';
+        return this.completeSingleWriterPost(
+            post,
+            context,
+            selectedHook,
+            false,
+            currentTime,
+            timer,
+        );
+    }
+
+    /**
+     * Retained as an emergency deployment switch while the single-writer
+     * pipeline proves itself in production.
+     */
+    private async callGeminiAPILegacy(
         context: AICommentaryContext,
         retryCount: number = 0,
         selectedHook?: EditorialSelection | null,
@@ -592,7 +1231,7 @@ OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required stru
                     const retryDelay = (retryCount + 1) * 10000;
                     logSummary('warn', `⚠️ AI Draft: Server error ${draftResp.status}, retrying in ${retryDelay / 1000}s`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1, hook);
+                    return this.callGeminiAPILegacy(context, retryCount + 1, hook);
                 }
 
                 if (errorBody.includes("quota")) {
@@ -733,7 +1372,7 @@ Start your response with the first word of the selected post.`;
 
                     if (hook?.kind === 'news' && isNewsEditorialVeto(final)) {
                         logSummary('info', 'AI Critic: News angle felt forced; retrying without it');
-                        return this.callGeminiAPI(context, 0, null);
+                        return this.callGeminiAPILegacy(context, 0, null);
                     }
 
                     const cleanedBase = this.postProcessText(final || '', context, contentLimit);
@@ -791,7 +1430,7 @@ Start your response with the first word of the selected post.`;
             // an ordinary observation rather than publish the least-bad draft.
             if (hook?.kind === 'news') {
                 logSummary('info', 'AI Critic: No publishable news draft; retrying without news');
-                return this.callGeminiAPI(context, 0, null);
+                return this.callGeminiAPILegacy(context, 0, null);
             }
 
             // FALLBACK: Use raw drafts if critic failed
@@ -847,7 +1486,7 @@ Start your response with the first word of the selected post.`;
                     const retryDelay = (retryCount + 1) * 10000; // 10s, 20s
                     logSummary('warn', `⏱️ AI: Timeout ${this.aiConfig.timeout}ms for ${context.event.line}, retrying in ${retryDelay / 1000}s (attempt ${retryCount + 1}/2)`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1, hook);
+                    return this.callGeminiAPILegacy(context, retryCount + 1, hook);
                 }
                 logDetailed('warn', `[AI_TIMEOUT] Final timeout after ${retryCount + 1} attempts`);
                 return null;
@@ -858,7 +1497,7 @@ Start your response with the first word of the selected post.`;
                     const retryDelay = 5000;
                     logSummary('warn', `AI network error, retrying in ${retryDelay / 1000}s`);
                     await new Promise(r => setTimeout(r, retryDelay));
-                    return this.callGeminiAPI(context, retryCount + 1, hook);
+                    return this.callGeminiAPILegacy(context, retryCount + 1, hook);
                 }
                 logDetailed('error', `[AI_NETWORK] Max retries exceeded: ${error.message}`);
                 return null;
