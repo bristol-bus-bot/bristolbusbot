@@ -1,0 +1,12 @@
+[Unit]
+Description=Check GitHub for approved Bristol Bus Bot editorial updates
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=2min
+Unit=bbb-editorial-fetch.service
+
+[Install]
+WantedBy=timers.target

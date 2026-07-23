@@ -1,0 +1,117 @@
+name: Propose official bus news
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 */6 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: editorial-news-discovery
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Read stories already approved or rejected
+        id: reviewed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          reviewed=$(gh pr list --state all --limit 100 --json body \
+            --jq '[.[].body | try capture("editorial-source:(?<id>[0-9a-f]{16})") catch empty | .id] | join(",")')
+          echo "source_ids=${reviewed}" >> "$GITHUB_OUTPUT"
+
+      - name: Find one recent official bus story
+        id: discover
+        shell: bash
+        run: |
+          set +e
+          python pipeline/discover_editorial_news.py \
+            --excluded-source-ids "${{ steps.reviewed.outputs.source_ids }}" \
+            --github-output "$GITHUB_OUTPUT"
+          code=$?
+          set -e
+          if [ "$code" -eq 75 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the complete proposed context
+        if: steps.discover.outputs.found == 'true'
+        run: python deploy/editorial_context.py --file bot/data/editorial-context.json
+
+      - name: Skip a story already reviewed in GitHub
+        if: steps.discover.outputs.found == 'true'
+        id: duplicate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_ID: ${{ steps.discover.outputs.source_id }}
+        shell: bash
+        run: |
+          count=$(gh pr list --state all \
+            --search "editorial-source:${SOURCE_ID} in:body" \
+            --json number --jq 'length')
+          if [ "$count" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the approval pull request
+        if: >-
+          steps.discover.outputs.found == 'true' &&
+          steps.duplicate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STORY_ID: ${{ steps.discover.outputs.id }}
+          SOURCE_ID: ${{ steps.discover.outputs.source_id }}
+          STORY_TITLE: ${{ steps.discover.outputs.title }}
+          STORY_URL: ${{ steps.discover.outputs.url }}
+          EXPIRES_AT: ${{ steps.discover.outputs.expires_at }}
+        shell: bash
+        run: |
+          branch="automation/editorial-news-${STORY_ID}-${GITHUB_RUN_ID}"
+          git config user.name "bristol-bus-bot editorial automation"
+          git config user.email "bristol-bus-bot@users.noreply.github.com"
+          git switch -c "$branch"
+          git add bot/data/editorial-context.json
+          git commit -m "Propose approved news context: ${STORY_TITLE}"
+          git push origin "HEAD:${branch}"
+          {
+            echo "GitHub found a recent official Department for Transport bus story."
+            echo
+            echo "**Story:** ${STORY_TITLE}"
+            echo
+            echo "**Official source:** ${STORY_URL}"
+            echo
+            echo "**Automatic expiry:** ${EXPIRES_AT}"
+            echo
+            echo "The bot may use it at most twice, with at least 36 hours between uses,"
+            echo "and will append the official source link itself."
+            echo
+            echo "- Merge this PR to approve the exact wording."
+            echo "- Edit it before merging if the summary needs nuance."
+            echo "- Close it to reject the story; it will not be proposed again."
+            echo
+            echo "<!-- editorial-source:${SOURCE_ID} -->"
+          } > editorial-pr-body.md
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "[editorial approval] ${STORY_TITLE}" \
+            --body-file editorial-pr-body.md

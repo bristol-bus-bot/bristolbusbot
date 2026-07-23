@@ -55,6 +55,14 @@ export class ApplicationState {
 
     // Recent post history for variety tracking
     public recentPosts: string[] = [];
+    public editorialContextStatus: {
+        loaded: boolean;
+        path: string;
+        sha256: string | null;
+        updated_at: string | null;
+        counts: { facts: number; occasions: number; news: number };
+        error?: string;
+    } | null = null;
 
     // Rolling event window for persistent network statistics (survives collector clearing)
     private rollingEventWindow: Array<{ event: BusEvent, timestamp: number }> = [];

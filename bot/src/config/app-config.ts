@@ -34,6 +34,10 @@ export function loadConfig(): AppConfig {
         || path.join(process.cwd(), 'timetable.db');
     const APP_DATA_DB_FILE = process.env.APP_DATA_DB_PATH
         || path.join(process.cwd(), 'app_data.db');
+    const EDITORIAL_CONTEXT_FILE = process.env.EDITORIAL_CONTEXT_PATH
+        || path.join(process.cwd(), 'editorial-context.json');
+    const EDITORIAL_USAGE_FILE = process.env.EDITORIAL_USAGE_PATH
+        || path.join(path.dirname(APP_DATA_DB_FILE), 'editorial-usage.json');
     const WITTY_COMMENTS_FILE = 'witty_comments.json';
     const FBRI_BUSES_FILE = 'fbribuses.json';
     const ZEN_COMMENTS_FILE = 'zen_comments.json';
@@ -80,7 +84,9 @@ export function loadConfig(): AppConfig {
             apiKey: AI_API_KEY || '',
             model: process.env.AI_MODEL || 'gemini-2.5-pro',
             dailyLimit: AI_DAILY_CALL_LIMIT,
-            timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10) // Increased from 30s to 75s for Pi network
+            timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
+            editorialContextPath: EDITORIAL_CONTEXT_FILE,
+            editorialUsagePath: EDITORIAL_USAGE_FILE,
         },
 
         weather: {

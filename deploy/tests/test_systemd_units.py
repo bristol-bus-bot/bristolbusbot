@@ -72,6 +72,8 @@ def test_bot_unit_allows_only_its_two_writable_databases():
         "Environment=ENABLE_FILE_LOGS=false",
         "Environment=RARE_WORKING_SHADOW=true",
         "Environment=AUDIT_INTEGRATION_PATH=/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json",
+        "Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot/editorial/editorial-context.json",
+        "Environment=EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json",
         "MemoryAccounting=yes",
     ):
         assert setting in source
@@ -213,3 +215,21 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     delivery = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
     assert "flock -n -E 75" in backup
     assert "flock -w 900 -E 75" in delivery
+
+
+def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
+    fetch = (SYSTEMD / "bbb-editorial-fetch.service").read_text(encoding="utf-8")
+    promote = (SYSTEMD / "bbb-editorial-promote.service").read_text(
+        encoding="utf-8")
+    timer = (SYSTEMD / "bbb-editorial-refresh.timer").read_text(encoding="utf-8")
+    assert "User=@BBB_DEPLOY_USER@" in fetch
+    assert "OnSuccess=bbb-editorial-promote.service" in fetch
+    assert "editorial_fetch.py" in fetch
+    assert "User=root" in promote
+    assert "editorial_promote.py" in promote
+    assert "/run/lock/bristolbusbot/editorial.lock" in fetch
+    assert "/run/lock/bristolbusbot/editorial.lock" in promote
+    assert "ProtectSystem=strict" in fetch
+    assert "ProtectSystem=strict" in promote
+    assert "OnCalendar=*:0/30" in timer
+    assert "Persistent=true" in timer

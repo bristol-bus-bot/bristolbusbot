@@ -38,6 +38,7 @@ SQLite everywhere, with strict ownership boundaries:
 | `live.db` | collector | site, bot | current vehicle state, disruptions (`situations`), corroborated delay `events` for the bot, poller status |
 | `audit.db` | collector + nightly rollup | rollup/export jobs | closest-approach timing-point observations and daily summaries |
 | `app_data.db` | bot | bot | posting history, engagement analytics, bot-local state |
+| `editorial-context.json` | human-approved on GitHub; Pi validates and promotes | bot | sourced facts, occasions and expiring news |
 
 The bot's only write to `live.db` is marking events consumed
 (`consumed_by_bot_at`); it never deletes rows. The site writes nothing.
@@ -108,7 +109,7 @@ durable state lives in a dedicated state directory. See
 ## Operations and automation
 
 Four long-running services keep collection, the website, the bot and the
-Cloudflare tunnel alive. Ten project timers own resource sampling, aggregate
+Cloudflare tunnel alive. Project timers own resource sampling, aggregate
 health, staleness checks, digests, backups, audit publication and timetable
 delivery; the project has no cron jobs.
 
@@ -121,8 +122,11 @@ rebuild remains routine evidence rather than an implementation dependency. A
 failed source, workflow, download, validator, restart or functional health
 check leaves or restores the previous timetable.
 
-Code releases, operating-system upgrades, boundary editions and curated
-content remain deliberate human actions. Fleet, locality and AI-description
+Facts and news remain human decisions, but their discovery and safe delivery
+are automated: an official-source candidate becomes eligible only after a
+GitHub PR merge, then the Pi validates, atomically promotes and health-gates it.
+Code releases, operating-system upgrades and boundary editions remain
+deliberate human actions. Fleet, locality and AI-description
 refreshes are later phases of `docs/plans/DATA_REFRESH_AUTOMATION.md`; they must
 not be described as automated until their own candidate, validation and
 rollback contracts have been deployed and proved.

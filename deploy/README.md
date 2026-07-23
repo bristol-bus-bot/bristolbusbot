@@ -143,6 +143,28 @@ roughly one fresh GitHub build per week; a failed due run retries the next day.
 The 28-day service-coverage signal remains a safety warning and validator input,
 but a far-future service date never postpones the normal weekly refresh.
 
+### Approved editorial delivery
+
+`bbb-editorial-refresh.timer` checks every 30 minutes for the human-approved
+`bot/data/editorial-context.json` on `main`. The unprivileged fetch unit writes
+only to `/var/lib/bristolbusbot/editorial/incoming`; the separate root promoter
+revalidates the fixed candidate, keeps one previous copy, replaces atomically,
+restarts only the bot and verifies the exact SHA-256 through `/api/health`.
+Failures retain or restore the previous approved file.
+
+Deploy the compatible bot before installing this layout for the first time:
+
+```powershell
+python deploy/push.py --component bot
+python deploy/push.py --install-layout
+```
+
+The installer validates and seeds the durable file, then enables the timer.
+No credential is needed because only a public file from the fixed repository,
+branch and path is accepted. Aggregate health records both jobs and sends a
+single detailed Slack message when a new blob is accepted or a transition
+fails.
+
 Before enabling automatic promotion, run one attended transaction and inspect
 the result:
 

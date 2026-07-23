@@ -88,6 +88,44 @@ gate; the workstation is retained only as an attended fallback.
 fallback. It applies the same validation, fixed staging, atomic replacement and
 consumer rollback rules.
 
+## Approved editorial information
+
+The bot's sourced facts, transport occasions and short-lived news are stored in
+`bot/data/editorial-context.json`. GitHub's `editorial-news.yml` checks official
+Department for Transport results and opens a normal pull request for a relevant
+new story. The PR is the approval screen: merge approves the exact wording;
+edit then merge approves the edited wording; close rejects it.
+
+On the Pi, `bbb-editorial-refresh.timer` checks the file on `main` every 30
+minutes. The unprivileged fetcher accepts only the fixed repository, branch and
+path, then applies byte, schema, date, source-host, duplicate-ID and content
+limits. A separate root promoter validates the same bytes again, keeps one
+`.previous` copy, replaces the live file atomically and restarts the bot. It
+accepts the change only when `/api/health` reports the exact promoted SHA-256;
+otherwise it restores the previous file and restart state. Aggregate health
+sends one detailed Slack success or failure transition.
+
+For the first deployment of this feature, deploy the bot release before the
+layout so the restarted service understands the new health field:
+
+```powershell
+python deploy/push.py --component bot
+python deploy/push.py --install-layout
+```
+
+Then verify on the Pi:
+
+```sh
+sudo systemctl start bbb-editorial-fetch.service
+systemctl status bbb-editorial-fetch.service bbb-editorial-promote.service
+systemctl status bbb-editorial-refresh.timer
+curl -fsS http://127.0.0.1:3010/api/health
+```
+
+No GitHub token is stored on the Pi for this path because the approved source
+file is public. A validation, download, restart or digest failure leaves the
+previous approved information live.
+
 ## Backups
 
 Nightly encrypted restic snapshots to a dedicated local drive, copied to

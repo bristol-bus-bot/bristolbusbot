@@ -52,6 +52,7 @@ policy.
 | `stop_localities.json` | timetable stops + ONS boundaries | site, bot | triggered Pi derivation |
 | `stop_enrichment.json` | legacy/open-data enrichment | site, bot | versioned/manual until generator is restored and tested |
 | `local_flavour.json` | curated editorial geography | bot | versioned/manual; never auto-overwrite |
+| `editorial-context.json` | sourced facts, calendar and approved news | bot | GitHub merge approval; Pi validates/promotes |
 | `route_details.json` | derived route context; generator not in current public source | bot | keep versioned until a reproducible generator exists |
 | `weca_boundary.geojson` | ONS geography, four features | site | manual approval, versioned |
 | `weca_boundary_dissolved.geojson` | same geography, dissolved polygon | timetable builder, site | same approved boundary transaction |
@@ -61,6 +62,11 @@ policy.
 automated merely because they are JSON. Their current sources and ownership are
 not equivalent. The master audit reports their presence and age, but no job may
 regenerate or remove them until their policy above changes deliberately.
+
+The editorial context is a deliberately separate policy class: machines may
+discover an official GOV.UK candidate and deliver an approved file, but only a
+human merge can add wording to `main`. Expiry, cooldown and use limits are
+enforced by the consumer even if a later refresh is missed.
 
 ## Target architecture
 

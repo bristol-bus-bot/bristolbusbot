@@ -234,6 +234,7 @@ export interface AICommentaryResult {
         model: string;
         temperature: number;
         editorialMode?: boolean;
+        editorialKind?: 'fact' | 'occasion' | 'news';
     };
 }
 
@@ -280,6 +281,8 @@ export interface AppConfig {
         model: string;
         dailyLimit: number;
         timeout: number;
+        editorialContextPath: string;
+        editorialUsagePath: string;
     };
     weather: {
         apiKey: string;
