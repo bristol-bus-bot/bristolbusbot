@@ -83,6 +83,11 @@ The bot keeps its brain (persona, commentary, posting judgement, rate
 limits) and has no plumbing: its production input is the collector's
 `events` table (`bot/src/ingest/event-reader.ts`). Its control API binds
 to loopback only and control endpoints require a bearer token. The
+commentary path uses one Gemini 3.6 writer. Approved editorial material carries
+literal alternative-term checklists; deterministic observation and checklist
+gates run before a separate factual verifier that cannot rewrite the post.
+Hooks that do not fit are deferred without being consumed, so a corporate fact
+cannot become a detached addendum merely to satisfy a posting slot. The
 legacy direct-SIRI ingest path still exists behind `INGEST_MODE=siri` as
 an explicit diagnostic fallback, never a default.
 

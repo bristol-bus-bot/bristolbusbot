@@ -25,6 +25,14 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 BUS_RE = re.compile(r"\b(bus|buses|coach|coaches)\b", re.IGNORECASE)
 ID_PART_RE = re.compile(r"[^a-z0-9]+")
 ALLOWED_NEWS_FORMATS = {"news_story", "press_release"}
+MATERIAL_TOKEN_RE = re.compile(
+    r"£\s?\d+(?:\.\d+)?\s*(?:million|billion|m|bn)?"
+    r"|\b\d+(?:\.\d+)?%"
+    r"|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|"
+    r"September|October|November|December)\s+\d{4}\b"
+    r"|\b20\d{2}\b",
+    re.IGNORECASE,
+)
 
 
 class NoNewsCandidate(RuntimeError):
@@ -99,6 +107,55 @@ def safe_id(title: str, url: str) -> str:
     return f"govuk-{slug}-{source_id(url)[:8]}"
 
 
+def _bounded_phrase(value: str, maximum: int = 80) -> str:
+    value = " ".join(value.split()).strip().rstrip(".")
+    if len(value) <= maximum:
+        return value
+    shortened = value[:maximum + 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return shortened or value[:maximum]
+
+
+def build_requirements(title: str, claim: str) -> list[dict[str, object]]:
+    """Create a conservative first checklist for the human approval PR.
+
+    Exact figures and dates are mechanically retained. The title provides a
+    bounded subject phrase; reviewers can replace it with more natural
+    alternatives before merging.
+    """
+    requirements: list[dict[str, object]] = [{
+        "label": "approved story subject",
+        "alternatives": [_bounded_phrase(title)],
+    }]
+    occupied: list[tuple[int, int]] = []
+    for match in MATERIAL_TOKEN_RE.finditer(claim):
+        if any(start <= match.start() < end for start, end in occupied):
+            continue
+        token = " ".join(match.group(0).split())
+        normalised = token.lower()
+        if any(
+                normalised == str(alternative).lower()
+                for requirement in requirements
+                for alternative in requirement["alternatives"]):
+            continue
+        alternatives = [token]
+        money = re.fullmatch(
+            r"(£\s?\d+(?:\.\d+)?)\s*(million|billion)",
+            token,
+            re.IGNORECASE,
+        )
+        if money:
+            suffix = "m" if money.group(2).lower() == "million" else "bn"
+            alternatives.append(f"{money.group(1).replace(' ', '')}{suffix}")
+        requirements.append({
+            "label": _bounded_phrase(f"approved detail {token}"),
+            "alternatives": alternatives,
+        })
+        occupied.append(match.span())
+        if len(requirements) >= 9:
+            break
+    return requirements
+
+
 def select_candidate(
     search: dict,
     context: dict,
@@ -164,6 +221,7 @@ def select_candidate(
                     "Use exact dates, make no prediction, and do not add facts from "
                     "outside this claim."
                 ),
+                "requirements": build_requirements(title, claim),
                 "published_at": published.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "active_from": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),

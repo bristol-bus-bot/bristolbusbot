@@ -6,6 +6,11 @@
       "id": "bristol-single-fare-2026",
       "claim": "A First Bus adult single in Bristol is £2.60 from 1 January 2026.",
       "prompt_hint": "Use the exact £2.60 fare only when a fare comparison genuinely fits the live bus event.",
+      "requirements": [
+        { "label": "£2.60 fare", "alternatives": ["£2.60"] },
+        { "label": "adult single", "alternatives": ["adult single", "single fare"] },
+        { "label": "Bristol scope", "alternatives": ["Bristol"] }
+      ],
       "active_from": "2026-01-01",
       "active_until": "2026-12-31",
       "source": {
@@ -20,6 +25,13 @@
       "id": "firstbus-profit-fy2026",
       "claim": "First Bus adjusted operating profit rose 7% to £102.8 million in FY2026.",
       "prompt_hint": "Contrast the £102.8 million figure with the observed service, without implying that one individual bus proves a company-wide trend.",
+      "requirements": [
+        { "label": "First Bus scope", "alternatives": ["First Bus"] },
+        { "label": "adjusted operating profit", "alternatives": ["adjusted operating profit"] },
+        { "label": "7% rise", "alternatives": ["rose 7%", "up 7%", "7% rise"] },
+        { "label": "£102.8 million", "alternatives": ["£102.8 million", "£102.8m"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -34,6 +46,14 @@
       "id": "regional-bus-margin-fy2026",
       "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
       "prompt_hint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
+      "requirements": [
+        { "label": "Regional Bus scope", "alternatives": ["Regional Bus"] },
+        { "label": "8.8% margin", "alternatives": ["8.8%"] },
+        { "label": "9.7% comparison", "alternatives": ["9.7%"] },
+        { "label": "falling direction", "alternatives": ["down from", "fell from", "fallen from", "lower than"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] },
+        { "label": "FY2025", "alternatives": ["FY2025"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -48,6 +68,14 @@
       "id": "regional-bus-passengers-fy2026",
       "claim": "FirstGroup recorded 390.4 million Regional Bus passenger journeys in FY2026, down from 403.3 million in FY2025.",
       "prompt_hint": "Use the exact annual totals. Do not present this national Regional Bus figure as Bristol-only data.",
+      "requirements": [
+        { "label": "Regional Bus scope", "alternatives": ["Regional Bus"] },
+        { "label": "390.4 million journeys", "alternatives": ["390.4 million", "390.4m"] },
+        { "label": "403.3 million comparison", "alternatives": ["403.3 million", "403.3m"] },
+        { "label": "falling direction", "alternatives": ["down from", "fell from", "fallen from", "lower than"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] },
+        { "label": "FY2025", "alternatives": ["FY2025"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -62,6 +90,13 @@
       "id": "firstgroup-shareholder-returns-fy2026",
       "claim": "FirstGroup returned £89 million to shareholders through dividends and its FY2026 £50 million buyback, then announced a further £100 million buyback.",
       "prompt_hint": "Keep the completed £89 million return separate from the newly announced £100 million programme.",
+      "requirements": [
+        { "label": "£89 million returned", "alternatives": ["returned £89 million", "returned £89m", "£89 million return", "£89m return"] },
+        { "label": "£50 million FY2026 buyback", "alternatives": ["£50 million buyback", "£50m buyback"] },
+        { "label": "£100 million announcement", "alternatives": ["announced a further £100 million", "announced another £100 million", "announced a £100 million", "announced a further £100m", "announced another £100m", "announced a £100m"] },
+        { "label": "shareholder scope", "alternatives": ["shareholders"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -76,6 +111,13 @@
       "id": "firstgroup-revenue-fy2026",
       "claim": "FirstGroup adjusted revenue rose 25% to £1.716 billion in FY2026.",
       "prompt_hint": "This is a FirstGroup-wide figure, not Bristol or First Bus revenue.",
+      "requirements": [
+        { "label": "FirstGroup scope", "alternatives": ["FirstGroup"] },
+        { "label": "adjusted revenue", "alternatives": ["adjusted revenue"] },
+        { "label": "25% rise", "alternatives": ["rose 25%", "up 25%", "25% rise"] },
+        { "label": "£1.716 billion", "alternatives": ["£1.716 billion", "£1.716bn"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -90,6 +132,14 @@
       "id": "firstgroup-ceo-pay-fy2026",
       "claim": "FirstGroup chief executive Graham Sutherland received £2.974 million total remuneration in FY2026, including £2.337 million of annual bonus and long-term incentive awards.",
       "prompt_hint": "Say total remuneration, not salary. His salary was £605,700; £2.337 million came from the two variable-pay columns.",
+      "requirements": [
+        { "label": "Graham Sutherland", "alternatives": ["Graham Sutherland"] },
+        { "label": "total remuneration", "alternatives": ["total remuneration"] },
+        { "label": "£2.974 million", "alternatives": ["£2.974 million", "£2.974m"] },
+        { "label": "£2.337 million variable pay", "alternatives": ["£2.337 million", "£2.337m"] },
+        { "label": "bonus and incentive awards", "alternatives": ["bonus and long-term incentive", "bonus and incentive awards", "bonus and LTIP"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -104,6 +154,13 @@
       "id": "firstbus-service-measures-fy2026",
       "claim": "FirstGroup said Regional Bus lost mileage fell from 1.8% to 1.5% in FY2026 and its Net Promoter Score rose from 11 to 17.",
       "prompt_hint": "This is a positive operational result. Give credit where it is due and do not claim it describes today's one observed journey.",
+      "requirements": [
+        { "label": "Regional Bus scope", "alternatives": ["Regional Bus"] },
+        { "label": "lost mileage improvement", "alternatives": ["lost mileage fell from 1.8% to 1.5%", "lost mileage down from 1.8% to 1.5%"] },
+        { "label": "Net Promoter Score", "alternatives": ["Net Promoter Score", "NPS"] },
+        { "label": "score rose from 11 to 17", "alternatives": ["rose from 11 to 17", "up from 11 to 17"] },
+        { "label": "FY2026", "alternatives": ["FY2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -118,6 +175,14 @@
       "id": "firstbus-electrification-fy2026",
       "claim": "FirstGroup reported about £190 million of accelerated capital expenditure, principally on First Bus electrification, with 26% of its UK bus fleet zero-emission by March 2026.",
       "prompt_hint": "This is another positive result. Do not imply all Bristol buses are zero-emission.",
+      "requirements": [
+        { "label": "about £190 million", "alternatives": ["about £190 million", "around £190 million", "about £190m", "around £190m"] },
+        { "label": "First Bus electrification", "alternatives": ["First Bus electrification"] },
+        { "label": "26% zero-emission", "alternatives": ["26%"] },
+        { "label": "UK fleet scope", "alternatives": ["UK bus fleet", "UK fleet"] },
+        { "label": "zero-emission", "alternatives": ["zero-emission", "zero emission"] },
+        { "label": "March 2026", "alternatives": ["March 2026"] }
+      ],
       "active_from": "2026-06-18",
       "active_until": "2027-06-17",
       "source": {
@@ -134,6 +199,11 @@
       "id": "bristol-bus-boycott",
       "label": "Bristol Bus Boycott anniversary",
       "prompt_hint": "On 30 April 1963, the Bristol Bus Boycott began its challenge to the Bristol Omnibus Company's colour bar. If used, be respectful and factual rather than jokey.",
+      "requirements": [
+        { "label": "Bristol Bus Boycott", "alternatives": ["Bristol Bus Boycott"] },
+        { "label": "30 April 1963", "alternatives": ["30 April 1963"] },
+        { "label": "colour bar", "alternatives": ["colour bar"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 4,
@@ -152,6 +222,9 @@
       "id": "world-bicycle-day",
       "label": "World Bicycle Day",
       "prompt_hint": "The United Nations observes World Bicycle Day on 3 June. A brief friendly nod to another form of sustainable transport is enough.",
+      "requirements": [
+        { "label": "World Bicycle Day", "alternatives": ["World Bicycle Day"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 6,
@@ -170,6 +243,10 @@
       "id": "windrush-day",
       "label": "Windrush Day",
       "prompt_hint": "National Windrush Day is 22 June. If used, recognise the Windrush generation's contribution to Britain, including public transport, without turning it into a punchline.",
+      "requirements": [
+        { "label": "Windrush Day", "alternatives": ["Windrush Day"] },
+        { "label": "Windrush generation", "alternatives": ["Windrush generation"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 6,
@@ -188,6 +265,11 @@
       "id": "london-buses-cashless",
       "label": "London buses went cashless",
       "prompt_hint": "London's bus network became cash-free on 6 July 2014. Keep any comparison practical and do not imply Bristol no longer accepts cash.",
+      "requirements": [
+        { "label": "London scope", "alternatives": ["London"] },
+        { "label": "cash-free buses", "alternatives": ["cash-free", "cashless"] },
+        { "label": "6 July 2014", "alternatives": ["6 July 2014"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 7,
@@ -206,6 +288,10 @@
       "id": "catch-the-bus-month-2026",
       "label": "Catch the Bus Month",
       "prompt_hint": "Bus Users UK runs Catch the Bus Month throughout September 2026. Mention it at most once in a day and only when it naturally fits the observed service.",
+      "requirements": [
+        { "label": "Catch the Bus Month", "alternatives": ["Catch the Bus Month"] },
+        { "label": "September 2026", "alternatives": ["September 2026"] }
+      ],
       "schedule": {
         "kind": "date_range",
         "start": "2026-09-01",
@@ -224,6 +310,9 @@
       "id": "world-car-free-day",
       "label": "World Car Free Day",
       "prompt_hint": "World Car Free Day is observed on 22 September. Keep the reference about giving alternatives a try, not scolding people who need cars.",
+      "requirements": [
+        { "label": "World Car Free Day", "alternatives": ["World Car Free Day", "World Car-Free Day"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 9,
@@ -242,6 +331,11 @@
       "id": "uk-bus-deregulation",
       "label": "UK bus deregulation anniversary",
       "prompt_hint": "The Transport Act 1985 bus deregulation provisions took effect on 26 October 1986 outside London. Keep the distinction between the 1985 Act and its 1986 commencement.",
+      "requirements": [
+        { "label": "Transport Act 1985", "alternatives": ["Transport Act 1985"] },
+        { "label": "26 October 1986", "alternatives": ["26 October 1986"] },
+        { "label": "outside London", "alternatives": ["outside London"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 10,
@@ -260,6 +354,9 @@
       "id": "world-sustainable-transport-day",
       "label": "World Sustainable Transport Day",
       "prompt_hint": "The United Nations observes World Sustainable Transport Day on 26 November. A restrained mention of buses as public infrastructure is enough.",
+      "requirements": [
+        { "label": "World Sustainable Transport Day", "alternatives": ["World Sustainable Transport Day"] }
+      ],
       "schedule": {
         "kind": "annual_date",
         "month": 11,
@@ -281,6 +378,13 @@
       "label": "England £2 bus fare cap announced",
       "claim": "On 22 July 2026, the government announced that participating bus services in England outside London will have a £2 cap on single fares from 1 January 2027 until the end of 2027.",
       "prompt_hint": "Use the exact dates. Do not say the cap applies now, and do not say today or yesterday. Bristol's current First Bus adult single is £2.60, from the separately sourced fare fact.",
+      "requirements": [
+        { "label": "£2 cap", "alternatives": ["£2 cap", "fares capped at £2", "£2 fare cap"] },
+        { "label": "participating services", "alternatives": ["participating services", "participating bus services"] },
+        { "label": "England outside London", "alternatives": ["England outside London"] },
+        { "label": "starts 1 January 2027", "alternatives": ["from 1 January 2027", "starts 1 January 2027", "starting 1 January 2027"] },
+        { "label": "ends with 2027", "alternatives": ["until the end of 2027", "throughout 2027", "until 31 December 2027"] }
+      ],
       "published_at": "2026-07-22T00:00:00Z",
       "active_from": "2026-07-22T00:00:00Z",
       "expires_at": "2026-08-06T23:59:59Z",

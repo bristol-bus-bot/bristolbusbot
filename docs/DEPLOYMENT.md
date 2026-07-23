@@ -95,8 +95,22 @@ consumer rollback rules.
 The bot's sourced facts, transport occasions and short-lived news are stored in
 `bot/data/editorial-context.json`. GitHub's `editorial-news.yml` checks official
 Department for Transport results and opens a normal pull request for a relevant
-new story. The PR is the approval screen: merge approves the exact wording;
-edit then merge approves the edited wording; close rejects it.
+new story. The PR is the approval screen: merge approves the claim and its
+machine-checkable `requirements`; edit then merge approves the edited version;
+close rejects it. The discovery job supplies a conservative first checklist of
+the title, figures and dates. Reviewers should add or improve natural
+alternatives before merging when a material scope or qualification is not
+captured automatically. Source URLs remain private provenance and are never
+appended to public posts.
+
+Gemini 3.6 Flash writes one finished post. Ordinary posts take one model call.
+For an editorial post, code first requires the route, direction, stop, observed
+timing and every approved requirement group, then a separate non-writing
+verifier may only pass or fail the facts. A failed or unsuitable hook is not
+counted as used: the bot publishes an ordinary observation and defers that hook
+for six hours (two hours for a date-specific occasion). The emergency
+`AI_COMMENTARY_PIPELINE=legacy` environment setting restores the previous
+writer/critic path without a code rollback; `single` is the default.
 
 On the Pi, `bbb-editorial-refresh.timer` checks the file on `main` every 30
 minutes. The unprivileged fetcher accepts only the fixed repository, branch and

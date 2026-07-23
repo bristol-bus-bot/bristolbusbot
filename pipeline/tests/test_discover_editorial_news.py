@@ -10,6 +10,7 @@ sys.path.insert(0, str(PIPELINE))
 
 from discover_editorial_news import (
     NoNewsCandidate,
+    build_requirements,
     select_candidate,
     source_id,
 )
@@ -52,6 +53,35 @@ def test_selects_recent_bus_story_and_builds_bounded_approval_item():
     assert item["cooldown_hours"] == 36
     assert item["append_source_link"] is False
     assert item["expires_at"] == "2026-07-29T08:00:00Z"
+    assert item["requirements"] == [{
+        "label": "approved story subject",
+        "alternatives": ["New bus funding announced"],
+    }]
+
+
+def test_builds_human_editable_requirements_for_material_figures_and_dates():
+    requirements = build_requirements(
+        "New bus fare cap",
+        "A £100 million fund starts on 1 January 2027 with fares down 25%.",
+    )
+    assert requirements == [
+        {
+            "label": "approved story subject",
+            "alternatives": ["New bus fare cap"],
+        },
+        {
+            "label": "approved detail £100 million",
+            "alternatives": ["£100 million", "£100m"],
+        },
+        {
+            "label": "approved detail 1 January 2027",
+            "alternatives": ["1 January 2027"],
+        },
+        {
+            "label": "approved detail 25%",
+            "alternatives": ["25%"],
+        },
+    ]
 
 
 def test_skips_known_rejected_bee_and_stale_stories_before_next_candidate():

@@ -51,6 +51,9 @@ export function loadConfig(): AppConfig {
     
     // AI constants with environment variable override for Pi optimization
     const AI_DAILY_CALL_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '2000', 10);
+    const AI_COMMENTARY_PIPELINE = process.env.AI_COMMENTARY_PIPELINE === 'legacy'
+        ? 'legacy'
+        : 'single';
     
     // Social media constants with environment variable override for Pi optimization
     const BLUESKY_POST_LIMIT = parseInt(process.env.BLUESKY_DAILY_LIMIT || '300', 10);
@@ -82,7 +85,8 @@ export function loadConfig(): AppConfig {
         
         ai: {
             apiKey: AI_API_KEY || '',
-            model: process.env.AI_MODEL || 'gemini-2.5-pro',
+            model: process.env.AI_MODEL || 'gemini-3.6-flash',
+            pipeline: AI_COMMENTARY_PIPELINE,
             dailyLimit: AI_DAILY_CALL_LIMIT,
             timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
             editorialContextPath: EDITORIAL_CONTEXT_FILE,
