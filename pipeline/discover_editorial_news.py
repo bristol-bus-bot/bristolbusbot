@@ -24,6 +24,7 @@ SEARCH_URL = "https://www.gov.uk/api/search.json?" + urllib.parse.urlencode({
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 BUS_RE = re.compile(r"\b(bus|buses|coach|coaches)\b", re.IGNORECASE)
 ID_PART_RE = re.compile(r"[^a-z0-9]+")
+ALLOWED_NEWS_FORMATS = {"news_story", "press_release"}
 
 
 class NoNewsCandidate(RuntimeError):
@@ -122,8 +123,12 @@ def select_candidate(
         title = raw.get("title")
         description = raw.get("description")
         link = raw.get("link")
+        news_format = raw.get("format")
         if not all(isinstance(value, str) and value.strip()
                    for value in (title, description, link)):
+            continue
+        if news_format not in ALLOWED_NEWS_FORMATS \
+                or not link.startswith("/government/news/"):
             continue
         combined = f"{title} {description}"
         if not BUS_RE.search(combined) or "bee network" in combined.lower():

@@ -18,10 +18,17 @@ from discover_editorial_news import (
 NOW = datetime(2026, 7, 23, 12, tzinfo=timezone.utc)
 
 
-def result(title, description, link, published="2026-07-22T08:00:00Z"):
+def result(
+    title,
+    description,
+    link,
+    published="2026-07-22T08:00:00Z",
+    news_format="press_release",
+):
     return {
         "title": title,
         "description": description,
+        "format": news_format,
         "link": link,
         "public_timestamp": published,
     }
@@ -94,3 +101,24 @@ def test_raises_skip_outcome_when_no_relevant_story_exists():
             {"facts": [], "occasions": [], "news": []},
             now=NOW,
         )
+
+
+def test_ignores_recently_updated_guidance_and_selects_genuine_news():
+    candidate = select_candidate(
+        {"results": [
+            result(
+                "£3 national bus fare cap",
+                "A list of routes in the existing scheme.",
+                "/guidance/3-national-bus-fare-cap",
+                news_format="detailed_guide",
+            ),
+            result(
+                "A genuine new bus announcement",
+                "A newly announced change to bus services.",
+                "/government/news/genuine-new-bus-announcement",
+            ),
+        ]},
+        {"facts": [], "occasions": [], "news": []},
+        now=NOW,
+    )
+    assert candidate["title"] == "A genuine new bus announcement"
