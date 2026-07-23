@@ -26,6 +26,8 @@ def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch
         aggregate_health, "timetable_delivery_check", lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(
         aggregate_health, "timetable_promotion_check", lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(
+        aggregate_health, "editorial_refresh_check", lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
     monkeypatch.setattr(aggregate_health, "notify", messages.append)
     monkeypatch.setattr(
@@ -188,6 +190,9 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
     monkeypatch.setattr(
         aggregate_health, "timetable_promotion_check",
         lambda: ({"status": "enabled", "last_attempt": attempt}, []))
+    monkeypatch.setattr(
+        aggregate_health, "editorial_refresh_check",
+        lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
     monkeypatch.setattr(aggregate_health, "notify", messages.append)
     monkeypatch.setattr(

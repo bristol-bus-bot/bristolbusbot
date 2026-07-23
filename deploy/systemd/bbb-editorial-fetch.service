@@ -1,0 +1,30 @@
+[Unit]
+Description=Fetch and validate approved Bristol Bus Bot editorial context
+Wants=network-online.target
+After=network-online.target
+OnSuccess=bbb-editorial-promote.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name editorial-fetch -- /usr/bin/flock -w 120 /run/lock/bristolbusbot/editorial.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-editorial/editorial_fetch.py
+TimeoutStartSec=3min
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadWritePaths=/var/lib/bristolbusbot/editorial /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

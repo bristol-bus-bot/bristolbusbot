@@ -109,6 +109,7 @@ export class HealthMonitor {
                     totalMemory: Math.round(os.totalmem() / 1024 / 1024)
                 },
                 application: {
+                    editorialContext: this.appState.editorialContextStatus,
                     dailyStats: {
                         postsToday: this.appState.postsTodayCount,
                         aiCallsToday: this.appState.aiCallsToday,

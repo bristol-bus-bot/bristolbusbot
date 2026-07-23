@@ -1,6 +1,6 @@
 // Posting, rate limiting and engagement tracking for social platforms.
 
-import { BskyAgent } from '@atproto/api';
+import { BskyAgent, RichText } from '@atproto/api';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
@@ -132,8 +132,16 @@ export class SocialMediaManager {
                             password: this.socialConfig.appPassword
                         });
 
+                        // Detect URL/mention facets so an approved source URL is
+                        // a real clickable link rather than decorative text.
+                        const richText = new RichText({ text: finalPostText });
+                        await richText.detectFacets(this.bskyAgent);
+
                         // Make the actual post and capture the response URI
-                        const postResponse = await this.bskyAgent.post({ text: finalPostText });
+                        const postResponse = await this.bskyAgent.post({
+                            text: richText.text,
+                            facets: richText.facets,
+                        });
 
                         // Extract the post rkey from the AT Protocol URI (at://did:plc:xxx/app.bsky.feed.post/rkey)
                         const postUri = postResponse?.uri || '';
