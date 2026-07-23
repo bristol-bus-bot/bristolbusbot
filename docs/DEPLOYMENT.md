@@ -38,8 +38,8 @@ Units use `Restart=always`, sandboxing (`ProtectSystem=strict`, exact
 `ReadWritePaths`, `IPAddressDeny=any` for networkless jobs) and
 `Persistent=true` timers with locking so delayed or coincident runs are
 safe. Cross-privilege lock files are pre-created by `systemd-tmpfiles` as
-root-owned and deploy-group-writable; this prevents a root backup or promoter
-from creating a private lock that later excludes an unprivileged job.
+deploy-user-owned coordination files; root jobs reuse those inodes rather than
+creating private locks that later exclude an unprivileged job.
 
 The site binds to loopback and is published only through the named
 tunnel; the bot API binds to loopback and its control endpoints require
