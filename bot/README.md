@@ -27,7 +27,7 @@ INGEST_MODE=events
 LIVE_DB_PATH=/var/lib/bristolbusbot/collector/live.db
 PORT=3010
 BSKY_HANDLE=bristolbusbot.live
-EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot/editorial/editorial-context.json
+EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot-editorial/editorial-context.json
 EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json
 ```
 

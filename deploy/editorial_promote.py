@@ -18,7 +18,7 @@ from typing import Callable
 from editorial_context import EditorialValidationError, validate_bytes
 
 
-EDITORIAL_ROOT = Path("/var/lib/bristolbusbot/editorial")
+EDITORIAL_ROOT = Path("/var/lib/bristolbusbot-editorial")
 BOT_HEALTH = "http://127.0.0.1:3010/api/health"
 DEPLOY_USER = "@BBB_DEPLOY_USER@"
 SHA_RE = re.compile(r"[0-9a-f]{40}")

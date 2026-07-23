@@ -41,7 +41,7 @@ TIMETABLE_TOKEN_WARNING_DAYS = 30
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/actions/runs/{}")
-EDITORIAL_STATE = Path("/var/lib/bristolbusbot/editorial/state.json")
+EDITORIAL_STATE = Path("/var/lib/bristolbusbot-editorial/state.json")
 EDITORIAL_FILE_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/blob/main/"
     "bot/data/editorial-context.json")

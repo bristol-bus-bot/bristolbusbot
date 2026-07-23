@@ -213,14 +213,27 @@ for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
     install -o root -g root -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done
 install -o root -g root -m 0644 "$stage/tmpfiles/bristolbusbot.conf" /etc/tmpfiles.d/bristolbusbot.conf
+for shared_lock in \
+    /run/lock/bristolbusbot/heavy-io.lock \
+    /run/lock/bristolbusbot/editorial.lock
+do
+    if [ -L "$shared_lock" ] || { [ -e "$shared_lock" ] && [ ! -f "$shared_lock" ]; }; then
+        echo "unsafe shared lock path: $shared_lock" >&2
+        exit 1
+    fi
+    if [ -e "$shared_lock" ]; then
+        chown "$deploy_user:$deploy_user" "$shared_lock"
+        chmod 0660 "$shared_lock"
+    fi
+done
 /usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/bristolbusbot.conf
-if [ ! -e /var/lib/bristolbusbot/editorial/editorial-context.json ]; then
+if [ ! -e /var/lib/bristolbusbot-editorial/editorial-context.json ]; then
     install -o root -g "$deploy_user" -m 0640 \
         "$stage/editorial-context.json" \
-        /var/lib/bristolbusbot/editorial/editorial-context.json
+        /var/lib/bristolbusbot-editorial/editorial-context.json
 fi
 /usr/bin/python3 /usr/local/libexec/bristolbusbot-editorial/editorial_context.py \
-    --file /var/lib/bristolbusbot/editorial/editorial-context.json >/dev/null
+    --file /var/lib/bristolbusbot-editorial/editorial-context.json >/dev/null
 
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemctl restart bbb-collector.service
