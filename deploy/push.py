@@ -200,6 +200,11 @@ def populate_release(component: str, root: Path) -> None:
         for pattern in ("*.py", "*.json", "*.geojson", "requirements-runtime.txt"):
             for path in (REPO / "pipeline").glob(pattern):
                 copy_file(path, root / path.name)
+        # Geography is an audited, versioned input.  Pin the site's canonical
+        # copy into the pipeline release so the networkless rollup cannot
+        # silently depend on another component's live symlink.
+        copy_file(REPO / "site/stop_localities.json",
+                  root / "stop_localities.json")
         copy_tree(REPO / "audit-site", root / "audit_site_assets")
         copy_file(REPO / "LICENSE", root / "LICENSE")
         copy_file(REPO / "docs/AUDIT_METHODOLOGY.md",
@@ -321,6 +326,8 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
         return (
             f"{cd} && python3 -m venv venv && "
             "venv/bin/pip install -q -r requirements-runtime.txt && "
+            "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
+            "load_geo_index()' && "
             "chmod 0755 publish_to_github.sh"
         )
     raise RuntimeError(f"no setup command for {component}")
