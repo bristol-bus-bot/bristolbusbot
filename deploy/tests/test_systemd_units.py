@@ -129,6 +129,7 @@ def test_rollup_is_networkless_and_publish_does_not_repeat_it():
     assert "audit_rollup.py" not in publish
     assert 'install -m 0644 "$AUDIT_DIR/LICENSE" LICENSE' in publish
     assert 'install -m 0644 "$ASSET_DIR/README.md" README.md' in publish
+    assert 'install -m 0644 "$ASSET_DIR/favicon.svg" docs/favicon.svg' in publish
     assert 'install -m 0644 "$AUDIT_DIR/AUDIT_METHODOLOGY.md" AUDIT_METHODOLOGY.md' in publish
     assert "git add LICENSE README.md AUDIT_METHODOLOGY.md" in publish
 

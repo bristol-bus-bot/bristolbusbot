@@ -34,6 +34,7 @@ install -m 0644 "$AUDIT_SITE_DIR/audit_data.json" docs/audit_data.json
 install -m 0644 "$ASSET_DIR/index.html" docs/index.html
 install -m 0644 "$ASSET_DIR/app.js" docs/app.js
 install -m 0644 "$ASSET_DIR/styles.css" docs/styles.css
+install -m 0644 "$ASSET_DIR/favicon.svg" docs/favicon.svg
 install -d -m 0755 docs/fonts
 install -m 0644 "$ASSET_DIR/fonts/overpass-latin.woff2" docs/fonts/overpass-latin.woff2
 install -m 0644 "$ASSET_DIR/fonts/jetbrains-mono-latin.woff2" docs/fonts/jetbrains-mono-latin.woff2
@@ -41,8 +42,8 @@ install -m 0644 "$AUDIT_DIR/LICENSE" LICENSE
 install -m 0644 "$AUDIT_DIR/AUDIT_METHODOLOGY.md" AUDIT_METHODOLOGY.md
 install -m 0644 "$ASSET_DIR/README.md" README.md
 
-if [ -n "$(git status --porcelain -- LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/fonts)" ]; then
-    git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/fonts
+if [ -n "$(git status --porcelain -- LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/fonts)" ]; then
+    git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/fonts
     git commit -m "Data update $(date -u +%Y-%m-%dT%H:%MZ)"
     git push origin main
     echo "Published."
