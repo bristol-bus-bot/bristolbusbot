@@ -189,7 +189,7 @@
 
         /* --- Mobile layout --- */
         @media (max-width: 768px) {
-            header { height: 40px !important; padding: 0 8px !important; }
+            .site-header { height: 40px !important; padding: 0 8px !important; }
             #logo-sign { height: 28px !important; }
 
             /* Compact header stats: hide labels, tighten gaps, hide depot separator */
