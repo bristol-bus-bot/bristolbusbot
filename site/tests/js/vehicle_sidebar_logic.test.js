@@ -14,11 +14,23 @@ test("audit service dates are formatted for people and malformed values fail clo
 
 test("live status wording uses the public punctuality thresholds", () => {
     assert.deepEqual(statusPresentation(null), {
-        text: "not currently running", cls: "vs-status-off",
+        text: "not currently running",
+        longText: "not currently running",
+        cls: "vs-status-off",
+        shape: "vs-shape-off",
     });
-    assert.equal(statusPresentation({ eventType: "depot" }).text, "at depot");
-    assert.equal(statusPresentation({ waitingAtOrigin: true }).text, "waiting to depart");
+    assert.deepEqual(
+        statusPresentation({ eventType: "depot" }),
+        {
+            text: "at depot", longText: "at depot",
+            cls: "vs-status-off", shape: "vs-shape-off",
+        },
+    );
+    assert.equal(
+        statusPresentation({ waitingAtOrigin: true }).shape,
+        "vs-shape-waiting",
+    );
     assert.equal(statusPresentation({ delayMinutes: 3 }).text, "on time");
-    assert.equal(statusPresentation({ delayMinutes: 4 }).text, "4m late");
-    assert.equal(statusPresentation({ delayMinutes: -3 }).text, "3m early");
+    assert.equal(statusPresentation({ delayMinutes: 4 }).longText, "4 minutes late");
+    assert.equal(statusPresentation({ delayMinutes: -3 }).longText, "3 minutes early");
 });

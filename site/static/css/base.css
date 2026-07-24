@@ -1,5 +1,5 @@
 /* Core site layout and shared component styles. */
-        body { font-family: 'Overpass', -apple-system, BlinkMacSystemFont, sans-serif; font-weight: 500; }
+        body { font-family: var(--font-sans); font-weight: 500; }
 
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -15,7 +15,7 @@
             border-radius: 12px !important;
             box-shadow: var(--shadow-popup) !important;
             padding: 0 !important;
-            font-family: 'Overpass', sans-serif !important;
+            font-family: var(--font-sans) !important;
             font-weight: 500 !important;
         }
         .leaflet-popup-content { margin: 0 !important; }
@@ -115,10 +115,10 @@
 
         /* bot quote terminal readout */
         .bot-quote {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: var(--font-matrix);
             color: #f59e0b;
-            text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
-            font-size: 10.5px;
+            text-shadow: none;
+            font-size: var(--t-body);
             line-height: 1.4;
             letter-spacing: 0.02em;
         }
@@ -128,9 +128,9 @@
             display: inline-block;
             padding: 1px 6px;
             border-radius: 3px;
-            font-size: 9px;
+            font-size: 11px;
             font-weight: 600;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: var(--font-mono);
             letter-spacing: 0.03em;
         }
 
@@ -161,14 +161,14 @@
             letter-spacing: 0.05em;
         }
         .uk-plate-flag-mark {
-            font-size: 9px;
+            font-size: 11px;
             opacity: 0.85;
             margin-bottom: 3px;
             letter-spacing: 0;
         }
         .uk-plate-text {
             color: #000;
-            font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+            font-family: var(--font-mono);
             font-weight: 800;
             letter-spacing: 0.06em;
             padding: 0 16px;
@@ -181,8 +181,8 @@
         .uk-plate-lg .uk-plate-text { font-size: 26px; }
         .uk-plate-md { height: 38px; }
         .uk-plate-md .uk-plate-text { font-size: 20px; }
-        .uk-plate-md .uk-plate-flag { font-size: 10px; min-width: 28px; padding: 0 6px; }
-        .uk-plate-md .uk-plate-flag-mark { font-size: 8px; }
+        .uk-plate-md .uk-plate-flag { font-size: 11px; min-width: 28px; padding: 0 6px; }
+        .uk-plate-md .uk-plate-flag-mark { font-size: 11px; }
 
         /* --- Bottom sheet drag handle (hidden on desktop) --- */
         .sheet-handle { display: none; }
@@ -193,7 +193,7 @@
             #logo-sign { height: 28px !important; }
 
             /* Compact header stats: hide labels, tighten gaps, hide depot separator */
-            #header-stats { gap: 6px !important; margin-left: 8px !important; padding-left: 8px !important; font-size: 9px !important; }
+            #header-stats { gap: 6px !important; margin-left: 8px !important; padding-left: 8px !important; font-size: 11px !important; }
             #header-stats .stat-label { display: none !important; }
             #header-stats .depot-stat { border-left: none !important; padding-left: 0 !important; }
 

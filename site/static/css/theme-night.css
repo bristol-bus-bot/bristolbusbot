@@ -1,0 +1,73 @@
+/* Night mode inverts neutral chrome while keeping road-sign colours vivid. */
+[data-theme="night"] {
+  color-scheme: dark;
+
+  --bg: #171b21;
+  --bg-live: #171b21;
+  --header: #202730;
+  --surface-1: #202730;
+  --surface-2: #2a323c;
+  --surface-3: #333c47;
+  --line: #38414c;
+  --line-2: #4a5462;
+
+  --fg-1: #ffffff;
+  --fg-2: #b3bcc6;
+  --fg-3: #a7b3bf;
+
+  --led-bg: #0b0c0d;
+  --led-edge: rgba(245, 158, 11, 0.30);
+  --sign-edge: #e7ecf1;
+
+  --ev-ontime: #4ade80;
+  --ev-early: #fbbf24;
+  --ev-late: #fb7a63;
+  --ev-origin: #6fb2ea;
+  --ev-depot: #b4bdc7;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #fb7a63;
+
+  --tint-ontime: #0f2e20;
+  --tint-early: #33301f;
+  --tint-late: #3a2422;
+  --tint-origin: #16293c;
+  --tint-depot: #2a323c;
+  --edge-ontime: rgba(74, 222, 128, 0.35);
+  --edge-early: rgba(251, 191, 36, 0.35);
+  --edge-late: rgba(251, 122, 99, 0.40);
+  --edge-origin: rgba(111, 178, 234, 0.35);
+  --edge-depot: #4a5462;
+
+  --toggle-brown: #d69e4a;
+  --toggle-brown-ink: #241a08;
+
+  --shadow-popup: 0 1px 2px rgba(0, 0, 0, 0.50),
+                  0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 2px 6px rgba(0, 0, 0, 0.55),
+                  0 16px 40px rgba(0, 0, 0, 0.50);
+  --shadow-sheet: 0 -1px 0 var(--line-2),
+                  0 -8px 28px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="night"] #map {
+  background: #1f242b;
+}
+
+[data-theme="night"] .leaflet-control-zoom a {
+  background: var(--surface-2) !important;
+  color: var(--fg-1) !important;
+}
+
+[data-theme="night"] .leaflet-control-zoom a:hover {
+  background: var(--surface-3) !important;
+}
+
+[data-theme="night"] .leaflet-control-attribution {
+  background: rgba(23, 27, 33, 0.86) !important;
+  color: var(--fg-2) !important;
+}
+
+[data-theme="night"] .leaflet-control-attribution a {
+  color: #7dc4ff !important;
+}
