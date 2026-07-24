@@ -96,6 +96,13 @@ def test_route_focus_does_not_fade_vehicle_markers():
     assert "applyRouteViewFocus" in app_js
 
 
+def test_mobile_site_header_rule_does_not_resize_profile_headers():
+    base_css = (SITE_ROOT / "static" / "css" / "base.css").read_text(
+        encoding="utf-8")
+    assert ".site-header { height: 40px !important;" in base_css
+    assert not re.search(r"(?m)^\s*header\s*\{\s*height:\s*40px", base_css)
+
+
 def test_forwarded_http_redirects_to_https(app, client):
     app.config["BBB"].enforce_https = True
     try:
