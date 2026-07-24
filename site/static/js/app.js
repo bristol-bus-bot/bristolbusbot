@@ -1,6 +1,8 @@
 /* Main browser application: map state, data refresh and user interactions. */
         let map = null;
+        let tileLayer = null;
         let busMarkers = new Map();
+        let busByRef = new Map();
         let stopMarkers = new Map();
         let selectedStopCode = null;
         let refreshInterval = null;
@@ -14,10 +16,18 @@
         let activeRouteLineLayers = [];   // Polyline layers for route search view
         let activeRouteVehicleRefs = [];  // Vehicle refs highlighted in route view
         let activeRoutePathLoading = false;
+        const TILE_URLS = {
+            day: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        };
+
+        function currentTheme() {
+            return document.documentElement.dataset.theme === 'night' ? 'night' : 'day';
+        }
 
         function initMap() {
             map = L.map('map', { zoomControl: true }).setView([51.4545, -2.5879], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            tileLayer = L.tileLayer(TILE_URLS[currentTheme()], {
                 attribution: '&copy; OpenStreetMap &copy; CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
@@ -52,96 +62,7 @@
             return best;
         }
 
-        // Extract multiple unique, visible colours from livery gradient
-        function extractLiveryColors(livery) {
-            if (!livery || !livery.left) return { primary: null, secondary: null, all: [] };
-            const matches = livery.left.match(/#[0-9a-fA-F]{3,6}/g) || [];
-            // Filter out transparent-ish and near-black/white colours, deduplicate
-            const seen = new Set();
-            const visible = matches.filter(c => {
-                const lower = c.toLowerCase();
-                if (seen.has(lower)) return false;
-                if (lower === '#000' || lower === '#000000' || lower === '#0000') return false;
-                if (lower === '#fff' || lower === '#ffffff') return false;
-                seen.add(lower);
-                return true;
-            });
-            return {
-                primary: visible[0] || null,
-                secondary: visible[1] || visible[0] || null,
-                all: visible
-            };
-        }
-
-        function createBusIcon(eventType, livery, bearing, isFeatured) {
-            // UK transport palette: road sign green, GOV.UK red, amber, TfL blue
-            const color = eventType === 'delayed' ? '#D4351C' :
-                          eventType === 'early' ? '#eab308' :
-                          eventType === 'waiting' ? '#1D70B8' : '#00703C';
-            const liveryColor = extractLiveryColor(livery) || '#7E8582';
-
-            const size = isFeatured ? 36 : 28;
-            const center = size / 2;
-            const coreR = isFeatured ? 10 : 8;
-            const liveryR = coreR + 3;
-
-            // Outer livery ring — solid, distinct per operator
-            const liveryRing = `<circle cx="${center}" cy="${center}" r="${liveryR}" fill="none" stroke="${liveryColor}" stroke-width="3"/>`;
-            const featuredRing = ''; // featured glow handled via CSS class
-            // Subtle drop shadow for depth
-            const shadow = `<circle cx="${center}" cy="${center + 0.8}" r="${coreR}" fill="#000" opacity="0.3"/>`;
-
-            let bearingIndicator;
-            if (bearing !== null && bearing !== undefined) {
-                // Crisp geometric chevron pointing up, rotated by bearing
-                const chevH = isFeatured ? 5.5 : 4.5;
-                const chevW = isFeatured ? 5 : 4;
-                bearingIndicator = `
-                    <g transform="rotate(${bearing} ${center} ${center})">
-                        <path d="M${center - chevW} ${center + chevH * 0.3} L${center} ${center - chevH} L${center + chevW} ${center + chevH * 0.3}"
-                              fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/>
-                    </g>`;
-            } else {
-                // Solid central dot when no bearing
-                bearingIndicator = `<circle cx="${center}" cy="${center}" r="2.5" fill="#fff"/>`;
-            }
-
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-                    ${featuredRing}
-                    ${liveryRing}
-                    ${shadow}
-                    <circle cx="${center}" cy="${center}" r="${coreR}" fill="${color}"/>
-                    ${bearingIndicator}
-                </svg>`;
-
-            return L.divIcon({
-                html: svg,
-                className: isFeatured ? 'bus-marker featured' : 'bus-marker',
-                iconSize: [size, size],
-                iconAnchor: [center, center],
-                popupAnchor: [0, -center]
-            });
-        }
-
-        function createDepotIcon(livery) {
-            const liveryColor = extractLiveryColor(livery) || '#7E8582';
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
-                    <circle cx="11" cy="11" r="9" fill="none" stroke="${liveryColor}" stroke-width="2" opacity="0.4"/>
-                    <circle cx="11" cy="11" r="5.5" fill="#7E8582" opacity="0.6"/>
-                    <circle cx="11" cy="11" r="2" fill="#555"/>
-                </svg>
-            `;
-            return L.divIcon({
-                html: svg,
-                className: 'bus-marker',
-                iconSize: [22, 22],
-                iconAnchor: [11, 11],
-                popupAnchor: [0, -11]
-            });
-        }
-
+        // Small, deliberately quiet marker for stops.
         function createStopIcon(isSelected) {
             const size = isSelected ? 10 : 6;
             const color = isSelected ? '#b48800' : '#8b949e';
@@ -390,8 +311,62 @@
             animateStraightLine(marker, targetLat, targetLng, duration);
         }
 
+        function markerVisual(bus) {
+            if (bus.eventType === 'depot') {
+                return {
+                    key: `depot|${bus.livery?.left || ''}`,
+                    zOffset: 100,
+                    build: () => window.BBB.depotIcon(bus.livery),
+                };
+            }
+
+            const featured = Boolean(busbotPosts[bus.vehicleRef]);
+            const options = {};
+            let mode = 'normal';
+            let zOffset = featured ? 1500 : 1000;
+            if (activeRouteVehicleRef) {
+                const selected = bus.vehicleRef === activeRouteVehicleRef;
+                options.hollow = !selected;
+                options.emphasized = selected;
+                mode = selected ? 'vehicle-selected' : 'vehicle-other';
+                zOffset = selected ? 1800 : 400;
+            } else if (activeRouteLine) {
+                const selected = window.BBB.isBusOnRoute(bus, activeRouteLine);
+                options.hollow = !selected;
+                if (selected) options.ringColor = '#1D70B8';
+                mode = selected ? `route-${activeRouteLine}` : 'route-other';
+                zOffset = selected ? 1600 : 400;
+            }
+            const key = [
+                bus.eventType, bus.waitingAtOrigin, bus.bearing,
+                bus.livery?.left || '', featured, mode,
+            ].join('|');
+            return {
+                key,
+                zOffset,
+                build: () => window.BBB.busIcon(bus, featured, options),
+            };
+        }
+
+        function syncMarkerAppearance(marker, bus, force = false) {
+            if (!marker || !bus) return;
+            const visual = markerVisual(bus);
+            if (force || marker._bbbIconKey !== visual.key) {
+                marker.setIcon(visual.build());
+                marker._bbbIconKey = visual.key;
+            }
+            marker.setZIndexOffset(visual.zOffset);
+        }
+
+        function syncAllMarkerAppearances(force = false) {
+            busMarkers.forEach((marker, ref) => {
+                syncMarkerAppearance(marker, busByRef.get(ref), force);
+            });
+        }
+
         function updateBusMarkers(buses) {
-            const current = new Set(buses.map(b => b.vehicleRef));
+            busByRef = new Map(buses.map(bus => [bus.vehicleRef, bus]));
+            const current = new Set(busByRef.keys());
 
             busMarkers.forEach((marker, ref) => {
                 if (!current.has(ref)) {
@@ -401,41 +376,22 @@
             });
 
             buses.forEach(bus => {
-                const { vehicleRef, operatorRef, line, destination, latitude, longitude,
-                        delayMinutes, eventType, waitingAtOrigin, livery, model, fleetNumber,
-                        reg, lastStopName, bearing, description,
-                        fuel, isDoubleDecker, isElectric, isCoach, specialFeatures, garage, branding,
-                        atDepot, depotName, directionId, journeyCode, directionRef, originAimedDep, hasSchedule } = bus;
+                const popup = window.BBB.busPopup(bus, busbotPosts[bus.vehicleRef]);
 
-                // Build the marker and popup for this vehicle.
-                let icon, zOffset;
-                if (eventType === 'depot') {
-                    icon = window.BBB.depotIcon(livery);
-                    zOffset = 100;
-                } else {
-                    const isFeatured = !!busbotPosts[vehicleRef];
-                    icon = window.BBB.busIcon(bus, isFeatured);
-                    zOffset = isFeatured ? 1500 : 1000;
-                }
-                const popup = window.BBB.busPopup(bus, busbotPosts[vehicleRef]);
-
-                if (busMarkers.has(vehicleRef)) {
-                    const m = busMarkers.get(vehicleRef);
-                    animateMarker(m, latitude, longitude, 12000, line, directionId, vehicleRef, operatorRef);
-                    m.setIcon(icon);
+                if (busMarkers.has(bus.vehicleRef)) {
+                    const m = busMarkers.get(bus.vehicleRef);
+                    animateMarker(m, bus.latitude, bus.longitude, 12000, bus.line,
+                                  bus.directionId, bus.vehicleRef, bus.operatorRef);
+                    syncMarkerAppearance(m, bus);
                     m.setPopupContent(popup);
                 } else {
-                    const m = L.marker([latitude, longitude], {
-                        icon: icon,
-                        zIndexOffset: zOffset
+                    const visual = markerVisual(bus);
+                    const m = L.marker([bus.latitude, bus.longitude], {
+                        icon: visual.build(),
+                        zIndexOffset: visual.zOffset
                     }).addTo(map).bindPopup(popup);
-                    busMarkers.set(vehicleRef, m);
-                }
-
-                // Maintain dimming if a route is focused
-                if (activeRouteVehicleRef) {
-                    const el = busMarkers.get(vehicleRef)?.getElement();
-                    if (el) el.style.opacity = vehicleRef === activeRouteVehicleRef ? '1' : '0.2';
+                    m._bbbIconKey = visual.key;
+                    busMarkers.set(bus.vehicleRef, m);
                 }
             });
 
@@ -646,9 +602,9 @@
                     console.log(`fetchBuses: ${latestBusData.length} buses (was ${_lastBusCount})`);
                 }
                 _lastBusCount = latestBusData.length;
-                // If route view is active, maintain dimming and refresh sidebar
+                // If route view is active, maintain focus and refresh the sidebar.
                 if (activeRouteLine) {
-                    applyRouteViewDimming();
+                    applyRouteViewFocus();
                     refreshRouteViewSidebar();
                 }
                 if (vehicleSidebarState?.bus) {
@@ -660,8 +616,8 @@
                         vehicleSidebarState.schedule = null;
                         vehicleSidebarState.scheduleLoading = false;
                     }
-                    // Journey content benefits from the live refresh.  Avoid
-                    // rebuilding an open history accordion every 15 seconds.
+                    // Journey content benefits from the live refresh. Avoid
+                    // rebuilding an open record disclosure every 15 seconds.
                     if (!refreshed || vehicleSidebarState.activeTab === 'journey')
                         renderVehicleSidebarState();
                 }
@@ -742,7 +698,7 @@
                 sidebar.style.width = '20px';
                 icon.innerHTML = '<polyline points="15 18 9 12 15 6"/>'; // safe: static constant
             } else {
-                sidebar.style.width = '480px';
+                sidebar.style.width = '440px';
                 icon.innerHTML = '<polyline points="9 18 15 12 9 6"/>'; // safe: static constant
             }
             // Leaflet needs to know the map size changed
@@ -1076,28 +1032,14 @@
         function updateToggleBtn(id, active) {
             const btn = document.getElementById(id);
             if (!btn) return;
-            if (active) {
-                btn.style.border = '1.5px solid #794400';
-                btn.style.background = '#794400';
-                btn.style.color = '#fff';
-                btn.classList.add('toggle-active');
-            } else {
-                btn.style.border = '1.5px solid rgba(121,68,0,0.35)';
-                btn.style.background = 'transparent';
-                btn.style.color = '#794400';
-                btn.classList.remove('toggle-active');
-            }
+            btn.classList.toggle('toggle-active', active);
+            btn.setAttribute('aria-pressed', String(active));
             // Sync mobile FAB
             const fabId = id === 'toggle-polylines-btn' ? 'fab-polylines' : 'fab-boundary';
             const fab = document.getElementById(fabId);
             if (fab) {
-                if (active) {
-                    fab.style.background = '#794400';
-                    fab.style.color = '#fff';
-                } else {
-                    fab.style.background = '#ffffff';
-                    fab.style.color = '#794400';
-                }
+                fab.classList.toggle('toggle-active', active);
+                fab.setAttribute('aria-pressed', String(active));
             }
         }
 
@@ -1119,13 +1061,9 @@
             activeRouteStopMarkers.forEach(m => map.removeLayer(m));
             activeRouteStopMarkers = [];
 
-            // Restore all bus marker opacity
             if (activeRouteVehicleRef) {
-                busMarkers.forEach((m) => {
-                    const el = m.getElement();
-                    if (el) { el.style.opacity = '1'; el.style.transition = 'opacity 0.3s'; }
-                });
                 activeRouteVehicleRef = null;
+                syncAllMarkerAppearances();
             }
 
             if (!keepSidebar && routeViewActive) {
@@ -1339,10 +1277,7 @@
 
             if (bus) {
                 activeRouteVehicleRef = bus.vehicleRef;
-                busMarkers.forEach((marker, ref) => {
-                    marker.getElement()?.style.setProperty(
-                        'opacity', ref === bus.vehicleRef ? '1' : '.18');
-                });
+                syncAllMarkerAppearances();
             }
             const profileApiUrl = vehicle.profile_api_url || bus?.profileApiUrl;
             const state = {
@@ -1500,7 +1435,7 @@
 
             // Show the live buses immediately while a missing TNDS route path
             // is reconstructed from representative matched journeys.
-            applyRouteViewDimming();
+            applyRouteViewFocus();
             buildRouteViewSidebar();
             const mobile = isMobile();
             if (mobile)
@@ -1550,18 +1485,14 @@
             }
         }
 
-        function applyRouteViewDimming() {
+        function applyRouteViewFocus() {
             if (!activeRouteLine) return;
 
             activeRouteVehicleRefs = [];
-            busMarkers.forEach((m, ref) => {
-                const bus = latestBusData.find(b => b.vehicleRef === ref);
+            busMarkers.forEach((marker, ref) => {
+                const bus = busByRef.get(ref);
                 const isMatch = window.BBB.isBusOnRoute(bus, activeRouteLine);
-                const el = m.getElement();
-                if (el) {
-                    el.style.opacity = isMatch ? '1' : '0.15';
-                    el.style.transition = 'opacity 0.3s';
-                }
+                syncMarkerAppearance(marker, bus);
                 if (isMatch) activeRouteVehicleRefs.push(ref);
             });
         }
@@ -1602,7 +1533,7 @@
 
         function refreshRouteViewSidebar() {
             if (!activeRouteLine) return;
-            applyRouteViewDimming();
+            applyRouteViewFocus();
             buildRouteViewSidebar();
         }
 
@@ -1613,14 +1544,8 @@
             activeRouteLine = null;
             activeRoutePathLoading = false;
 
-            // Restore all bus marker opacity
-            if (activeRouteVehicleRefs.length > 0) {
-                busMarkers.forEach((m) => {
-                    const el = m.getElement();
-                    if (el) { el.style.opacity = '1'; el.style.transition = 'opacity 0.3s'; }
-                });
-                activeRouteVehicleRefs = [];
-            }
+            activeRouteVehicleRefs = [];
+            syncAllMarkerAppearances();
 
             if (!keepSidebar && routeViewActive) {
                 routeViewActive = false;
@@ -1643,52 +1568,144 @@
             return window.matchMedia('(max-width: 768px)').matches;
         }
 
+        const SHEET_STATES = ['expanded', 'peek', 'collapsed'];
+
+        function updateSheetHandle() {
+            const handle = document.getElementById('sheet-handle');
+            if (!handle) return;
+            const expanded = sheetState === 'expanded';
+            handle.setAttribute('aria-expanded', String(expanded));
+            handle.setAttribute('aria-label', expanded
+                ? 'Collapse departures panel'
+                : 'Expand departures panel');
+        }
+
         function setSheetState(state) {
             if (!isMobile()) return;
-            sheetState = state;
-            if (state !== 'collapsed' && map) map.closePopup(); // one-layer rule
+            sheetState = SHEET_STATES.includes(state) ? state : 'collapsed';
+            if (sheetState !== 'collapsed' && map) map.closePopup(); // one-layer rule
             const sidebar = document.getElementById('sidebar');
+            sidebar.style.removeProperty('transform');
+            sidebar.style.removeProperty('transition');
             sidebar.classList.remove('sheet-peek', 'sheet-expanded');
-            if (state === 'peek') sidebar.classList.add('sheet-peek');
-            else if (state === 'expanded') sidebar.classList.add('sheet-expanded');
-            setTimeout(() => map.invalidateSize(), 350);
+            if (sheetState === 'peek') sidebar.classList.add('sheet-peek');
+            else if (sheetState === 'expanded') sidebar.classList.add('sheet-expanded');
+            updateSheetHandle();
+            const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            setTimeout(() => map.invalidateSize(), reduced ? 0 : 340);
         }
 
         function initSheetDrag() {
             const handle = document.getElementById('sheet-handle');
-            if (!handle) return;
-            let touchStartY = 0;
-            let touchEndY = 0;
+            const sidebar = document.getElementById('sidebar');
+            if (!handle || !sidebar) return;
+            let drag = null;
+            let suppressClick = false;
 
-            handle.addEventListener('touchstart', (e) => {
-                touchStartY = e.touches[0].clientY;
-                touchEndY = touchStartY;
-            }, { passive: true });
+            const offsets = () => {
+                const height = sidebar.getBoundingClientRect().height;
+                return {
+                    expanded: 0,
+                    peek: height * 0.60,
+                    collapsed: Math.max(0, height - 56),
+                };
+            };
+            const moveOne = direction => {
+                const index = SHEET_STATES.indexOf(sheetState);
+                const next = Math.max(0, Math.min(
+                    SHEET_STATES.length - 1, index + direction));
+                setSheetState(SHEET_STATES[next]);
+            };
 
-            handle.addEventListener('touchmove', (e) => {
-                touchEndY = e.touches[0].clientY;
-            }, { passive: true });
-
-            handle.addEventListener('touchend', () => {
-                const dy = touchEndY - touchStartY;
-                if (dy < -40) {
-                    // Swiped UP
-                    if (sheetState === 'collapsed') setSheetState('peek');
-                    else if (sheetState === 'peek') setSheetState('expanded');
-                } else if (dy > 40) {
-                    // Swiped DOWN
-                    if (sheetState === 'expanded') setSheetState('peek');
-                    else if (sheetState === 'peek') setSheetState('collapsed');
-                }
+            handle.addEventListener('pointerdown', event => {
+                if (!isMobile()
+                    || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+                    return;
+                drag = {
+                    pointerId: event.pointerId,
+                    startY: event.clientY,
+                    startOffset: offsets()[sheetState],
+                    previousY: event.clientY,
+                    previousT: performance.now(),
+                    velocity: 0,
+                    moved: false,
+                };
+                handle.setPointerCapture?.(event.pointerId);
+                sidebar.style.transition = 'none';
             });
 
-            // Also allow click to cycle: collapsed→peek, peek→expanded
+            handle.addEventListener('pointermove', event => {
+                if (!drag || event.pointerId !== drag.pointerId) return;
+                const now = performance.now();
+                const elapsed = Math.max(1, now - drag.previousT);
+                drag.velocity = (event.clientY - drag.previousY) / elapsed;
+                drag.previousY = event.clientY;
+                drag.previousT = now;
+                drag.moved ||= Math.abs(event.clientY - drag.startY) > 6;
+                const points = offsets();
+                const offset = Math.max(points.expanded, Math.min(
+                    points.collapsed,
+                    drag.startOffset + event.clientY - drag.startY));
+                sidebar.style.transform = `translateY(${offset}px)`;
+            });
+
+            const finishDrag = event => {
+                if (!drag || event.pointerId !== drag.pointerId) return;
+                const points = offsets();
+                const endY = event.type === 'pointercancel'
+                    ? drag.previousY
+                    : Number.isFinite(event.clientY)
+                    ? event.clientY
+                    : drag.previousY;
+                const currentOffset = Math.max(points.expanded, Math.min(
+                    points.collapsed,
+                    drag.startOffset + endY - drag.startY));
+                let next;
+                if (Math.abs(drag.velocity) > 0.5) {
+                    const currentIndex = SHEET_STATES.indexOf(sheetState);
+                    const direction = drag.velocity > 0 ? 1 : -1;
+                    next = SHEET_STATES[Math.max(0, Math.min(
+                        SHEET_STATES.length - 1, currentIndex + direction))];
+                } else {
+                    next = SHEET_STATES.reduce((best, state) =>
+                        Math.abs(points[state] - currentOffset)
+                            < Math.abs(points[best] - currentOffset) ? state : best,
+                    SHEET_STATES[0]);
+                }
+                suppressClick = drag.moved;
+                drag = null;
+                setSheetState(next);
+            };
+            handle.addEventListener('pointerup', finishDrag);
+            handle.addEventListener('pointercancel', finishDrag);
+
             handle.addEventListener('click', () => {
                 if (!isMobile()) return;
+                if (suppressClick) {
+                    suppressClick = false;
+                    return;
+                }
                 if (sheetState === 'collapsed') setSheetState('peek');
                 else if (sheetState === 'peek') setSheetState('expanded');
                 else setSheetState('collapsed');
             });
+            handle.addEventListener('keydown', event => {
+                if (!isMobile()) return;
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    moveOne(-1);
+                } else if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    moveOne(1);
+                } else if (event.key === 'Home') {
+                    event.preventDefault();
+                    setSheetState('expanded');
+                } else if (event.key === 'End') {
+                    event.preventDefault();
+                    setSheetState('collapsed');
+                }
+            });
+            updateSheetHandle();
         }
 
         // --- Geolocation ---
@@ -1761,6 +1778,11 @@
             on('fab-boundary', 'click', toggleBoundaryBtn);
             on('geolocate-btn', 'click', geolocateUser);
             on('sidebar-toggle', 'click', toggleSidebar);
+            document.addEventListener('bbb:themechange', event => {
+                const theme = event.detail?.theme === 'night' ? 'night' : 'day';
+                if (tileLayer) tileLayer.setUrl(TILE_URLS[theme]);
+                syncAllMarkerAppearances(true);
+            });
 
             const search = document.getElementById('stop-search');
             if (search) {
@@ -1795,24 +1817,6 @@
                 });
             }
 
-            const logo = document.getElementById('logo-sign');
-            if (logo) {
-                const border = logo.querySelector('#logo-border');
-                logo.addEventListener('mouseenter', () => border?.setAttribute('stroke', '#1b2027'));
-                logo.addEventListener('mouseleave', () => border?.setAttribute('stroke', '#7E8582'));
-            }
-            const bsky = document.getElementById('bsky-link');
-            if (bsky) {
-                bsky.addEventListener('mouseenter', () => { bsky.style.color = '#0085ff'; });
-                bsky.addEventListener('mouseleave', () => { bsky.style.color = '#0069c9'; });
-            }
-            const geolocate = document.getElementById('geolocate-btn');
-            if (geolocate) {
-                geolocate.addEventListener('mouseenter', () => { geolocate.style.color = '#1b2027'; });
-                geolocate.addEventListener('mouseleave', () => {
-                    geolocate.style.color = geolocate.dataset.activeColor || '#5b6672';
-                });
-            }
         }
 
         // init
@@ -1870,6 +1874,9 @@
             if (!isMobile()) {
                 const sidebar = document.getElementById('sidebar');
                 sidebar.classList.remove('sheet-peek', 'sheet-expanded');
+                sidebar.style.removeProperty('transform');
+                sidebar.style.removeProperty('transition');
                 sheetState = 'collapsed';
+                updateSheetHandle();
             }
         });

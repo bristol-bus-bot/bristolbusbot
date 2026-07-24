@@ -1,14 +1,22 @@
-Overpass
-Version 4.000
-Copyright 2021 The Overpass Project Authors
-(https://github.com/RedHatOfficial/Overpass)
+Google Sans Flex
+Version 4.005
+Copyright 2015 Google LLC. All Rights Reserved.
+Source: https://fonts.google.com/specimen/Google+Sans+Flex
 
-JetBrains Mono
-Version 2.211
-Copyright 2020 The JetBrains Mono Project Authors
-(https://github.com/JetBrains/JetBrainsMono)
+Google Sans Code
+Version 7.000
+Copyright 2025 The Google Sans Code Project Authors
+Source: https://github.com/googlefonts/googlesans-code
 
-Both font files are distributed under the SIL Open Font License, Version 1.1.
+Bitcount Grid Double
+Version 1.001
+Copyright 2024 The Bitcount Project Authors
+Source: https://github.com/petrvanblokland/TYPETR-Bitcount
+
+The web files are WOFF2 subsets of the original variable fonts. Unused
+scripts and variation axes were removed for delivery performance; the font
+names and copyright metadata are retained. All three fonts are distributed
+under the SIL Open Font License, Version 1.1.
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

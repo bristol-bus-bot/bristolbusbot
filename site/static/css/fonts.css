@@ -1,18 +1,26 @@
-/* Self-hosted variable fonts. The files contain the complete weight ranges
-   used by the site, so the browser does not synthesise intermediate weights.
-   Licences are retained alongside the font files. */
+/* Self-hosted, browser-optimised subsets. Licences and source provenance are
+   retained alongside the font files. */
 @font-face {
-  font-family: "Overpass";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url("../fonts/overpass-variable.0a1c9727.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Google Sans Flex";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("../fonts/jetbrains-mono-variable.83c005d4.woff2") format("woff2");
+  font-optical-sizing: auto;
+  src: url("../fonts/google-sans-flex-variable.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Google Sans Code";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/google-sans-code-variable.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Bitcount Grid Double";
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url("../fonts/bitcount-grid-double-variable.woff2") format("woff2-variations");
 }

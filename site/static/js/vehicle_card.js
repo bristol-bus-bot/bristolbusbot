@@ -57,8 +57,6 @@ export function vehicleCard(data, mode) {
     }
     const header = el("div", { class: "vc-head" }, headKids);
     header.style.background = data.liveryLeft || "#2a2a2a";
-    if (data.isDepot || data.withdrawn || (full && !data.status))
-        header.style.opacity = "0.6";
 
     const body = [];
     // 1. plate — SAME element both sizes (md compact / lg full)

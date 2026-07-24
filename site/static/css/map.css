@@ -5,23 +5,23 @@
 .pp-line-sm { font-size: 16px; }
 .pp-dest { font-size: 11px; color: rgba(255,255,255,.85);
            text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 500; }
-.pp-depot-name { font-size: 10px; color: rgba(255,255,255,.7);
+.pp-depot-name { font-size: 11px; color: rgba(255,255,255,.7);
                  text-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 600;
                  letter-spacing: .03em; }
 .pp-body { padding: 10px 14px 12px; }
 .pp-status-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .pp-status { display: inline-block; padding: 2px 7px; border-radius: var(--r-sm);
-             font-size: 10px; font-weight: 700; }
+             font-size: 11px; font-weight: 700; }
 .pp-punctual { color: var(--ev-ontime); background: var(--tint-ontime); }
 .pp-early    { color: var(--ev-early); background: var(--tint-early); }
 .pp-delayed  { color: var(--ev-late); background: var(--tint-late); }
 .pp-waiting  { color: var(--ev-origin); background: var(--tint-origin); }
-.pp-at { font-size: 10px; color: var(--fg-3); }
+.pp-at { font-size: 11px; color: var(--fg-3); }
 .pp-identity { border-left: 3px solid var(--line-2); padding-left: 10px; margin-bottom: 8px; }
 .pp-model { color: var(--fg-1); font-size: 11px; font-weight: 600; }
-.pp-reg { font-size: 9.5px; font-family: var(--font-mono); color: var(--fg-3);
+.pp-reg { font-size: var(--t-small); font-family: var(--font-mono); color: var(--fg-3);
           margin-top: 2px; }
-.pp-livery { font-size: 9px; color: var(--fg-3); margin-top: 1px; }
+.pp-livery { font-size: 11px; color: var(--fg-3); margin-top: 1px; }
 .pp-quote { margin-bottom: 8px; padding: 6px 8px; background: var(--led-bg);
             border-radius: var(--r-sm); }
 .pp-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
@@ -31,12 +31,12 @@
 .pp-featured { display: flex; align-items: center; gap: 6px; padding: 6px 10px;
                margin-bottom: 8px; border-radius: var(--r-sm);
                border: 1px solid rgba(0,133,255,.2); background: rgba(0,133,255,.07);
-               color: #0085ff; font-size: 10px; font-weight: 600;
+               color: #0085ff; font-size: 11px; font-weight: 600;
                text-decoration: none; font-family: var(--font-sans); }
 .pp-featured:hover { background: rgba(0,133,255,.15); }
 .pp-route-btn { width: 100%; padding: 5px 0; border-radius: var(--r-sm);
                 border: 1px solid rgba(29,112,184,.2); background: rgba(29,112,184,.08);
-                color: var(--uk-blue); font-size: 10px; font-weight: 600;
+                color: var(--uk-blue); font-size: 11px; font-weight: 600;
                 cursor: pointer; font-family: var(--font-sans);
                 transition: background .15s; }
 .pp-route-btn:hover { background: rgba(29,112,184,.2); }
@@ -45,9 +45,9 @@
 .sp-head { background: var(--uk-green); border: 1px solid var(--uk-grey);
            border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 10px 14px; }
 .sp-name { font-size: 13px; font-weight: 700; color: #fff; }
-.sp-street { font-size: 10px; color: rgba(255,255,255,.7); margin-top: 1px; }
-.sp-loc { font-size: 9px; color: rgba(255,255,255,.5); margin-top: 1px; }
-.sp-code { font-size: 9px; font-family: var(--font-mono); color: var(--uk-yellow);
+.sp-street { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 1px; }
+.sp-loc { font-size: 11px; color: rgba(255,255,255,.5); margin-top: 1px; }
+.sp-code { font-size: 11px; font-family: var(--font-mono); color: var(--uk-yellow);
            opacity: .7; margin-top: 2px; }
 .sp-body { padding: 10px 14px; }
 .sp-btn { width: 100%; padding: 7px; border-radius: var(--r-sm); font-size: 11px;
@@ -65,7 +65,7 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             max-width: 200px; }
 .vp-pill { display: inline-block; padding: 2px 8px; border-radius: var(--r-sm);
-           font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+           font-size: 11px; font-weight: 700; letter-spacing: .06em; }
 .vp-pill-withdrawn { background: var(--tint-late); color: var(--uk-red); }
 .vp-pill-live { background: var(--tint-ontime); color: var(--uk-green); }
 .vp-pill-off { background: var(--surface-2); color: var(--fg-2); }
@@ -74,19 +74,19 @@
 .vp-named { background: var(--led-bg); border-left: 3px solid var(--amber);
             padding: 6px 10px; margin-bottom: 12px;
             border-radius: 0 var(--r-sm) var(--r-sm) 0; }
-.vp-named-label { color: var(--uk-grey); font-size: 8px; font-weight: 700;
+.vp-named-label { color: var(--uk-grey); font-size: 11px; font-weight: 700;
                   letter-spacing: .08em; text-transform: uppercase; }
 .vp-named-name { color: var(--amber); font-size: 13px; font-weight: 600;
                  font-family: var(--font-mono); margin-top: 1px; }
 .vp-model { color: var(--fg-1); font-size: 13px; font-weight: 600; }
-.vp-code { font-size: 10px; font-family: var(--font-mono); color: var(--fg-3);
+.vp-code { font-size: 11px; font-family: var(--font-mono); color: var(--fg-3);
            margin-top: 3px; }
-.vp-meta { font-size: 10px; color: var(--fg-2); margin-top: 2px; }
+.vp-meta { font-size: 11px; color: var(--fg-2); margin-top: 2px; }
 .vp-quote { margin-bottom: 10px; padding: 7px 10px; }
 .vp-notes { padding: 7px 10px; background: var(--surface-2); border-radius: var(--r-sm);
-            border-left: 2px solid var(--line-2); font-size: 10px; color: var(--fg-2);
+            border-left: 2px solid var(--line-2); font-size: 11px; color: var(--fg-2);
             line-height: 1.45; margin-bottom: 10px; }
-.vp-notes-label { color: var(--fg-3); font-size: 8px; font-weight: 700;
+.vp-notes-label { color: var(--fg-3); font-size: 11px; font-weight: 700;
                   letter-spacing: .08em; text-transform: uppercase;
                   display: block; margin-bottom: 2px; }
 .vp-live { margin-top: 12px; padding: 9px 12px; border-radius: var(--r-md);
@@ -95,7 +95,7 @@
 .vp-live-route { color: var(--fg-1); font-size: 11px; font-family: var(--font-mono);
                  margin-top: 3px; }
 .vp-live-route strong { color: var(--fg-1); }
-.vp-at { font-size: 10px; color: var(--fg-2); }
+.vp-at { font-size: 11px; color: var(--fg-2); }
 .vp-punctual { background: var(--tint-ontime); color: var(--ev-ontime); }
 .vp-punctual-bg { background: var(--tint-ontime); border-color: rgba(0,112,60,.25); }
 .vp-early { background: var(--tint-early); color: var(--ev-early); }
