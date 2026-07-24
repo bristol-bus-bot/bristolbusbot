@@ -143,7 +143,7 @@ def build_day(cur, service_date):
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"audit.db not found at {AUDIT_DB}")
-        return
+        return 1
 
     conn = sqlite3.connect(AUDIT_DB)
     conn.row_factory = sqlite3.Row
@@ -153,12 +153,12 @@ def main():
         cur.execute("SELECT DISTINCT service_date FROM daily_overall_summary ORDER BY service_date")
     except sqlite3.OperationalError:
         print("No rollup tables yet, run: python audit_rollup.py")
-        return
+        return 1
 
     dates = [row[0] for row in cur.fetchall()]
     if not dates:
         print("No rollup rows yet.")
-        return
+        return 1
 
     days = [build_day(cur, sd) for sd in dates]
 
@@ -185,7 +185,8 @@ def main():
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, indent=2)
     print(f"Wrote {OUT_FILE}  ({len(dates)} day(s), operators: {', '.join(o['code'] for o in operators)})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
