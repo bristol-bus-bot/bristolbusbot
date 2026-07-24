@@ -15,40 +15,56 @@ export function liveryColor(livery) {
     return m ? m[0] : null;
 }
 
-function corePath(eventType, c, r) {
+function corePath(eventType, c, r, hollow = false) {
+    const outline = "var(--sign-edge, #7E8582)";
+    if (hollow) {
+        const common = `fill="none" stroke="${outline}" stroke-width="2.4"`;
+        if (eventType === "delayed")
+            return `<rect x="${c - r * 0.82}" y="${c - r * 0.82}" width="${r * 1.64}" height="${r * 1.64}" rx="1.5" ${common}/>`;
+        if (eventType === "early")
+            return `<rect x="${c - r * 0.78}" y="${c - r * 0.78}" width="${r * 1.56}" height="${r * 1.56}" rx="1.5" ${common} transform="rotate(45 ${c} ${c})"/>`;
+        return `<circle cx="${c}" cy="${c}" r="${r}" ${common}/>`;
+    }
+    const edge = `stroke="${outline}" stroke-width="1.2"`;
     // Each state has a distinct marker shape as well as a colour.
     if (eventType === "delayed")   // square
-        return `<rect x="${c - r * 0.82}" y="${c - r * 0.82}" width="${r * 1.64}" height="${r * 1.64}" rx="1.5" fill="${EV_COLORS.delayed}"/>`;
+        return `<rect x="${c - r * 0.82}" y="${c - r * 0.82}" width="${r * 1.64}" height="${r * 1.64}" rx="1.5" fill="${EV_COLORS.delayed}" ${edge}/>`;
     if (eventType === "early")     // diamond
-        return `<rect x="${c - r * 0.78}" y="${c - r * 0.78}" width="${r * 1.56}" height="${r * 1.56}" rx="1.5" fill="${EV_COLORS.early}" transform="rotate(45 ${c} ${c})"/>`;
+        return `<rect x="${c - r * 0.78}" y="${c - r * 0.78}" width="${r * 1.56}" height="${r * 1.56}" rx="1.5" fill="${EV_COLORS.early}" ${edge} transform="rotate(45 ${c} ${c})"/>`;
     if (eventType === "waiting")   // hollow circle
-        return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.waiting}"/>`
+        return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.waiting}" ${edge}/>`
              + `<circle cx="${c}" cy="${c}" r="${r * 0.45}" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.9"/>`;
-    return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.punctual}"/>`;
+    return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.punctual}" ${edge}/>`;
 }
 
-export function busIcon(bus, isFeatured) {
+export function busIcon(bus, isFeatured, options = {}) {
     const eventType = String(bus.waitingAtOrigin ? "waiting" : bus.eventType);
-    const ring = liveryColor(bus.livery) || "#7E8582";
-    const size = isFeatured ? 36 : 28;
+    const hollow = Boolean(options.hollow);
+    const ring = hollow
+        ? "var(--sign-edge, #7E8582)"
+        : (options.ringColor || liveryColor(bus.livery) || "#7E8582");
+    const emphasized = Boolean(isFeatured || options.emphasized);
+    const size = emphasized ? 36 : 28;
     const c = size / 2;
-    const coreR = isFeatured ? 10 : 8;
+    const coreR = emphasized ? 10 : 8;
     const bearing = Number.isFinite(Number(bus.bearing)) ? Number(bus.bearing) : null;
-    const chevH = isFeatured ? 5.5 : 4.5, chevW = isFeatured ? 5 : 4;
+    const chevH = emphasized ? 5.5 : 4.5, chevW = emphasized ? 5 : 4;
     const pointer = bearing !== null
         ? `<g transform="rotate(${bearing} ${c} ${c})">
              <path d="M${c - chevW} ${c + chevH * 0.3} L${c} ${c - chevH} L${c + chevW} ${c + chevH * 0.3}"
-                   fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="square"/></g>`
-        : (eventType === "waiting" ? "" : `<circle cx="${c}" cy="${c}" r="2.5" fill="#fff"/>`);
+                   fill="none" stroke="${hollow ? "var(--sign-edge, #7E8582)" : "#fff"}" stroke-width="2.5" stroke-linecap="square"/></g>`
+        : (eventType === "waiting" ? ""
+            : `<circle cx="${c}" cy="${c}" r="2.5" fill="${hollow ? "var(--sign-edge, #7E8582)" : "#fff"}"/>`);
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
             <circle cx="${c}" cy="${c}" r="${coreR + 3}" fill="none" stroke="${ring}" stroke-width="3"/>
-            <circle cx="${c}" cy="${c + 0.8}" r="${coreR}" fill="#000" opacity="0.3"/>
-            ${corePath(eventType, c, coreR)}
+            ${corePath(eventType, c, coreR, hollow)}
             ${pointer}
         </svg>`;
     return L.divIcon({ html: svg,
-                       className: isFeatured ? "bus-marker featured" : "bus-marker",
+                       className: ["bus-marker", isFeatured ? "featured" : "",
+                                   options.emphasized ? "focused" : ""]
+                           .filter(Boolean).join(" "),
                        iconSize: [size, size], iconAnchor: [c, c],
                        popupAnchor: [0, -c] });
 }
@@ -57,9 +73,9 @@ export function depotIcon(livery) {
     const ring = liveryColor(livery) || "#7E8582";
     return L.divIcon({
         html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
-                 <circle cx="11" cy="11" r="9" fill="none" stroke="${ring}" stroke-width="2" opacity="0.4"/>
-                 <circle cx="11" cy="11" r="5.5" fill="#7E8582" opacity="0.6"/>
-                 <circle cx="11" cy="11" r="2" fill="#555"/></svg>`,
+                 <circle cx="11" cy="11" r="9" fill="none" stroke="${ring}" stroke-width="2"/>
+                 <circle cx="11" cy="11" r="5.5" fill="#7E8582" stroke="var(--sign-edge, #7E8582)" stroke-width="1"/>
+                 <circle cx="11" cy="11" r="2" fill="#495049"/></svg>`,
         className: "bus-marker depot", iconSize: [22, 22],
         iconAnchor: [11, 11], popupAnchor: [0, -11] });
 }
@@ -84,8 +100,6 @@ export function busPopup(bus) {
     livery.style.background = bus.livery?.left || "#7E8582";
     const destination = bus.eventType === "depot"
         ? (bus.depotName || "At depot") : (bus.destination || "Unknown destination");
-    const identity = [bus.reg, bus.fleetNumber ? `fleet ${bus.fleetNumber}` : null]
-        .filter(Boolean).join(" / ");
     return el("div", { class: "bus-tooltip" }, [
         livery,
         el("div", { class: "bt-body" }, [
@@ -98,12 +112,11 @@ export function busPopup(bus) {
                 bus.lastStopName && bus.lastStopName !== "unknown"
                     ? el("span", { class: "bt-place" }, [`at ${bus.lastStopName}`]) : null,
             ]),
-            identity ? el("div", { class: "bt-vehicle" }, [identity]) : null,
             el("button", {
                 class: "bt-details",
                 onClick: () => window.openVehicleSidebar(
                     bus.vehicleRef, bus.operatorRef),
-            }, ["Journey, vehicle and history"]),
+            }, ["Journey, vehicle and record"]),
         ]),
     ]);
 }
@@ -118,7 +131,7 @@ export function stopPopup(stop, onSelect) {
         el("div", { class: "sp-head" }, head),
         el("div", { class: "sp-body" }, [
             el("button", { class: "sp-btn", onClick: () => onSelect(stop.stop_code) },
-               ["VIEW DEPARTURES"]),
+               ["View departures"]),
         ]),
     ]);
 }

@@ -1,7 +1,7 @@
 /* Header status chips and search focus. */
 .stat-chip { display: inline-flex; align-items: center; gap: 5px;
              padding: 3px 10px; border-radius: var(--r-pill);
-             font-size: 10px; font-weight: 700; }
+             font-size: 11px; font-weight: 700; }
 .stat-chip .stat-label { font-weight: 500; opacity: .8; }
 .stat-ontime { background: var(--tint-ontime); color: var(--ev-ontime); }
 .stat-early  { background: var(--tint-early);  color: var(--ev-early); }
@@ -19,7 +19,7 @@
    live counters and grouped with the timestamp and social link. */
 .audit-headline-link {
     color: #005ea5;
-    font-family: "Overpass", sans-serif;
+    font-family: var(--font-sans);
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
@@ -39,7 +39,7 @@
     .audit-headline-link {
         padding-left: 0;
         border-left: 0;
-        font-size: 9px;
+        font-size: 11px;
     }
     .audit-headline-full { display: none; }
     .audit-headline-compact { display: inline; }
