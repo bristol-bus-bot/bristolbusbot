@@ -72,7 +72,9 @@ def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
     if component == "pipeline":
         assert (extract / "audit_integration.py").is_file()
         assert (extract / "audit_promote.py").is_file()
+        assert (extract / "stop_localities.json").is_file()
         assert (extract / "audit_site_assets/index.html").is_file()
+        assert (extract / "audit_site_assets/favicon.svg").is_file()
         assert (extract / "audit_site_assets/README.md").is_file()
         assert (extract / "LICENSE").is_file()
         assert (extract / "AUDIT_METHODOLOGY.md").is_file()
