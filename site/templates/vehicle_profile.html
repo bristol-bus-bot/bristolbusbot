@@ -6,14 +6,29 @@
 <main class="profile-shell">
     <nav class="profile-nav" aria-label="Back links">
         <a href="/">← Track buses live</a>
-        <a href="{{ audit_url }}">Full audit and method ↗</a>
+        <div class="profile-nav-actions">
+            <a href="{{ audit_url }}">Full audit and method ↗</a>
+            <button class="theme-toggle" type="button" data-theme-toggle
+                    aria-label="Night mode" aria-pressed="false"
+                    title="Switch to night mode">
+                <span class="theme-icon" aria-hidden="true"></span>
+            </button>
+        </div>
     </nav>
 
     <article class="profile-card">
         <header class="profile-header">
-            <p class="profile-kicker">Observed vehicle profile</p>
-            <h1>{% if details.reg %}{{ details.reg }}{% else %}Bus {{ public_code }}{% endif %}</h1>
-            <p>{{ profile.operator_name }}{% if details.fleetNumber %} · fleet {{ details.fleetNumber }}{% endif %}</p>
+            <div class="profile-header-copy">
+                <p class="profile-kicker">Observed vehicle profile</p>
+                <h1>Vehicle {{ public_code }}</h1>
+                <p>{{ profile.operator_name }}{% if details.fleetNumber %} · fleet {{ details.fleetNumber }}{% endif %}</p>
+            </div>
+            {% if details.reg %}
+            <div class="uk-plate uk-plate-lg profile-plate" aria-label="Registration {{ details.reg }}">
+                <div class="uk-plate-flag"><span class="uk-plate-flag-mark">●</span>UK</div>
+                <div class="uk-plate-text">{{ details.reg }}</div>
+            </div>
+            {% endif %}
         </header>
 
         {% if active %}

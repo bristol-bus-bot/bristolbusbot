@@ -3,7 +3,7 @@
   margin: 0;
   color: #1b2027;
   background: #f4f5f7;
-  font-family: "Overpass", sans-serif;
+  font-family: var(--font-sans);
 }
 
 .profile-shell {
@@ -50,7 +50,7 @@
 .profile-kicker {
   margin: 0 0 6px;
   color: #9fd8bd;
-  font: 700 0.72rem "JetBrains Mono", monospace;
+  font: 700 0.72rem var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -96,7 +96,7 @@
 }
 
 .profile-stat-grid strong {
-  font: 700 1.4rem "JetBrains Mono", monospace;
+  font: 700 1.4rem var(--font-mono);
 }
 
 .profile-stat-grid span {

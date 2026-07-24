@@ -1,4 +1,8 @@
 import re
+from pathlib import Path
+
+
+SITE_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_security_headers(client):
@@ -44,8 +48,9 @@ def test_content_versioned_asset_graph(client, app):
 
 def test_versioned_static_assets_are_immutable(client):
     for path in (
-        "/static/fonts/overpass-variable.0a1c9727.woff2",
-        "/static/fonts/jetbrains-mono-variable.83c005d4.woff2",
+        "/static/fonts/google-sans-flex-variable.woff2",
+        "/static/fonts/google-sans-code-variable.woff2",
+        "/static/fonts/bitcount-grid-double-variable.woff2",
         "/static/vendor/leaflet-1.9.4/leaflet.a7837102.css",
         "/static/vendor/leaflet-1.9.4/leaflet.85d455b4.js",
     ):
@@ -53,6 +58,42 @@ def test_versioned_static_assets_are_immutable(client):
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == (
             "public, max-age=31536000, immutable")
+
+
+def test_theme_controls_are_self_hosted_and_csp_safe(client):
+    page = client.get("/").get_data(as_text=True)
+    assert re.search(r"/assets/[0-9a-f]{12}/js/theme_bootstrap\.js", page)
+    assert re.search(r"/assets/[0-9a-f]{12}/js/theme_control\.js", page)
+    assert "data-theme-toggle" in page
+    assert "onclick=" not in page
+
+
+def test_refreshed_type_system_has_no_microtext_or_legacy_fonts():
+    styles = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (SITE_ROOT / "static" / "css").glob("*.css")
+    )
+    assert not re.search(r"font-size:\s*(?:8|9|10)(?:\.\d+)?px", styles)
+    assert "Overpass" not in styles
+    assert "JetBrains Mono" not in styles
+
+    font_css = (SITE_ROOT / "static" / "css" / "fonts.css").read_text(
+        encoding="utf-8")
+    for filename in (
+        "google-sans-flex-variable.woff2",
+        "google-sans-code-variable.woff2",
+        "bitcount-grid-double-variable.woff2",
+    ):
+        assert filename in font_css
+        assert (SITE_ROOT / "static" / "fonts" / filename).is_file()
+
+
+def test_route_focus_does_not_fade_vehicle_markers():
+    app_js = (SITE_ROOT / "static" / "js" / "app.js").read_text(
+        encoding="utf-8")
+    assert "style.opacity" not in app_js
+    assert "applyRouteViewDimming" not in app_js
+    assert "applyRouteViewFocus" in app_js
 
 
 def test_forwarded_http_redirects_to_https(app, client):

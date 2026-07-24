@@ -42,7 +42,7 @@ function departureRow(dep, locateBus) {
                 el("div", { class: "src-row" }, isLive
                     ? [el("span", { class: "livedot", "aria-hidden": "true" }),
                        el("span", { class: "src-tag src-live" }, ["LIVE"])]
-                    : [el("span", { class: "src-tag src-sched" }, ["SCHED"])]),
+                    : [el("span", { class: "src-tag src-sched" }, ["TIMETABLED"])]),
             ]),
         ]),
         el("div", {
@@ -103,13 +103,24 @@ export function renderBoard(liveData, schedData, ctx) {
     const host = document.getElementById("departures-list");
     const merged = mergeDepartures(liveData.departures || [],
                                    schedData.scheduled_departures || []);
+    host.removeAttribute("role");
     if (!merged.length) {
         replaceContent(host, el("div", { class: "board-empty" },
-                                ["no upcoming departures"]));
+            [
+                el("strong", {}, ["Nothing scheduled from here for a while."]),
+                el("span", {}, ["Not a fault — just the timetable being honest for once."]),
+            ]));
         return;
     }
-    host.setAttribute("role", "list");
-    replaceContents(host, merged.map(d => departureRow(d, ctx.locateBus)));
+    const rows = el("div", { class: "board-rows", role: "list" },
+        merged.map(d => departureRow(d, ctx.locateBus)));
+    replaceContents(host, [
+        el("div", { class: "board-head" }, [
+            el("span", { class: "board-head-title" }, ["NEXT DEPARTURES"]),
+            el("span", { class: "board-head-note" }, ["15s refresh"]),
+        ]),
+        rows,
+    ]);
     const next = merged[0];
     announce(`Departures for ${stopName} updated. Next: ${next.line} to ` +
              `${next.destination}, ${next.source === "live" && next.eta_mins <= 0
