@@ -328,6 +328,8 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
             "venv/bin/pip install -q -r requirements-runtime.txt && "
             "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
             "load_geo_index()' && "
+            "venv/bin/python3 -c 'from audit_fleet import load_fleet_index; "
+            "load_fleet_index()' && "
             "chmod 0755 publish_to_github.sh"
         )
     raise RuntimeError(f"no setup command for {component}")
