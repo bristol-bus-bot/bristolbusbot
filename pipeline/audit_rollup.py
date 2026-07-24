@@ -34,6 +34,7 @@ DISTANCE_GATE_M = 150
 ON_TIME_LOW_S = -60
 ON_TIME_HIGH_S = 359
 RAW_RETENTION_DAYS = 95
+MIN_GEO_MATCH_PCT = 90.0
 
 DELAY_BUCKETS = [
     "early_5plus",
@@ -534,6 +535,25 @@ def rollup_geo(conn, date_str, operators, label, geo_index):
     return len(buckets)
 
 
+def geography_match_stats(conn, date_str, operators, geo_index):
+    """Measure lookup coverage before any summary rows are changed."""
+    cur = conn.cursor()
+    op_ph = ",".join("?" for _ in operators)
+    cur.execute(
+        f"""SELECT stop_code FROM timepoint_observations
+            WHERE service_date = ? AND operator IN ({op_ph})
+              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
+        (date_str, *operators, DISTANCE_GATE_M),
+    )
+    eligible = matched = 0
+    for (stop_code,) in cur.fetchall():
+        eligible += 1
+        if geo_for(geo_index, stop_code):
+            matched += 1
+    pct = round(100.0 * matched / eligible, 1) if eligible else None
+    return {"eligible": eligible, "matched": matched, "pct": pct}
+
+
 def rollup_fleet(conn, date_str, operators, label, fleet_index):
     """Aggregate in-gate readings by vehicle model (with electric flag and the
     service numbers each model runs), for the given operator set, into
@@ -648,6 +668,17 @@ def main():
 
     conn = sqlite3.connect(AUDIT_DB)
     init_summary_tables(conn)
+    geo_index = load_geo_index()
+    geo_match = geography_match_stats(
+        conn, date_str, SHOW_OPERATORS, geo_index
+    )
+    if (geo_match["eligible"]
+            and geo_match["pct"] < MIN_GEO_MATCH_PCT):
+        raise RuntimeError(
+            "audit geography matched only "
+            f"{geo_match['matched']}/{geo_match['eligible']} readings "
+            f"({geo_match['pct']}%; minimum {MIN_GEO_MATCH_PCT}%)"
+        )
 
     print(f"Rolling up WECA operators for {date_str}...")
     for op in SHOW_OPERATORS:
@@ -656,14 +687,14 @@ def main():
     print(f"[{NETWORK_LABEL}] whole network")
     print_report(rollup(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL))
 
-    geo_index = load_geo_index()
-    if geo_index:
-        for op in SHOW_OPERATORS:
-            rollup_geo(conn, date_str, [op], op, geo_index)
-        n = rollup_geo(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index)
-        print(f"  geography: {n} area/ward groups rolled up.")
-    else:
-        print("  geography: stop_localities.json not found, skipped.")
+    for op in SHOW_OPERATORS:
+        rollup_geo(conn, date_str, [op], op, geo_index)
+    n = rollup_geo(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index)
+    match_text = (
+        f"{geo_match['matched']}/{geo_match['eligible']} readings matched"
+        if geo_match["eligible"] else "no eligible readings"
+    )
+    print(f"  geography: {n} area/ward groups rolled up; {match_text}.")
 
     fleet_index = load_fleet_index()
     if fleet_index:
