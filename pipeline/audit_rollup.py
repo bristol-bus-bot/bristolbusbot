@@ -654,7 +654,7 @@ def rollup_frequency(conn, date_str, operators, label):
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"ERROR: audit.db not found at {AUDIT_DB} (run the collector first).")
-        return
+        return 1
 
     raw_args = sys.argv[1:]
     no_prune = "--no-prune" in raw_args
@@ -664,11 +664,12 @@ def main():
         date_str = resolve_date(positional)
     except ValueError:
         print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
-        return
+        return 2
 
     conn = sqlite3.connect(AUDIT_DB)
     init_summary_tables(conn)
     geo_index = load_geo_index()
+    fleet_index = load_fleet_index()
     geo_match = geography_match_stats(
         conn, date_str, SHOW_OPERATORS, geo_index
     )
@@ -696,14 +697,10 @@ def main():
     )
     print(f"  geography: {n} area/ward groups rolled up; {match_text}.")
 
-    fleet_index = load_fleet_index()
-    if fleet_index:
-        for op in SHOW_OPERATORS:
-            rollup_fleet(conn, date_str, [op], op, fleet_index)
-        n = rollup_fleet(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, fleet_index)
-        print(f"  fleet: {n} models rolled up.")
-    else:
-        print("  fleet: fbribuses.json not found, skipped.")
+    for op in SHOW_OPERATORS:
+        rollup_fleet(conn, date_str, [op], op, fleet_index)
+    n = rollup_fleet(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, fleet_index)
+    print(f"  fleet: {n} models rolled up.")
 
     for op in SHOW_OPERATORS:
         rollup_frequency(conn, date_str, [op], op)
@@ -717,7 +714,8 @@ def main():
             print(f"  pruned {pruned} raw observations older than {cutoff} (rollups kept).")
 
     conn.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
