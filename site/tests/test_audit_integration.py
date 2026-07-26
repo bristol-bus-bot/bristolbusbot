@@ -5,9 +5,23 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from app.services.audit_integration import AuditIntegration
+from app.routes.pages import _delay_plot
 
 
 SLUG = "fbri-0123456789ab"
+
+
+def test_server_delay_plot_keeps_zero_inside_the_on_time_band():
+    profile = {
+        "readings": 6,
+        "delay_bins_s": [-600, -60, 0, 360, 1200],
+        "delay_counts": [1, 1, 1, 1, 1, 1],
+    }
+    plot = _delay_plot(profile)
+    assert plot["zero_pct"] > plot["on_time_start_pct"]
+    assert plot["zero_pct"] < (
+        plot["on_time_start_pct"] + plot["on_time_width_pct"])
+    assert _delay_plot({**profile, "readings": 7}) is None
 
 
 def install_snapshot(app, tmp_path, *, published_at=None, readings=45):
@@ -37,10 +51,20 @@ def install_snapshot(app, tmp_path, *, published_at=None, readings=45):
             "early": 5,
             "late": 10,
             "on_time_pct": 66.7,
+            "delay_bins_s": [
+                -600, -300, -180, -120, -60, 0, 60, 120, 180,
+                240, 300, 360, 480, 600, 900, 1200,
+            ],
+            "delay_counts": [
+                0, 0, 0, 0, 5, 0, 30, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0,
+            ],
             "routes": [{
                 "route": "75", "observed_days": 3, "readings": 45,
                 "on_time": 30, "early": 5, "late": 10,
                 "on_time_pct": 66.7,
+                "delay_counts": [
+                    0, 0, 0, 0, 5, 0, 30, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0,
+                ],
                 "days": [{
                     "service_date": "20260716", "readings": 15,
                     "on_time": 10, "early": 1, "late": 4,
@@ -81,12 +105,15 @@ def test_compact_headline_and_vehicle_links_use_fresh_published_snapshot(
     assert b"66.7%" in profile.data
     assert b"45" in profile.data
     assert b"16 July 2026" in profile.data
+    assert b"profile-delay-chart" in profile.data
+    assert b"One dot per timing-point reading" in profile.data
     assert b"Full audit and method" in profile.data
 
     profile_data = client.get(f"/api/vehicle-profiles/{SLUG}")
     assert profile_data.status_code == 200
     assert profile_data.get_json()["profile"]["routes"][0]["days"][0][
         "service_date"] == "20260716"
+    assert sum(profile_data.get_json()["profile"]["delay_counts"]) == 45
     assert profile_data.headers["Cache-Control"] == "no-cache"
 
 

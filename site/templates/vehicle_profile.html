@@ -44,6 +44,39 @@
 
         <section aria-labelledby="performance-title">
             <h2 id="performance-title">Measured punctuality</h2>
+            {% if profile.delay_plot %}
+            <figure class="profile-delay-figure">
+                <div class="profile-delay-heading">
+                    <strong>Minutes from timetable</strong>
+                    <span>{{ '{:,}'.format(profile.readings) }} readings</span>
+                </div>
+                <p class="profile-delay-caption">
+                    {% if profile.delay_plot.unit == 1 %}One dot per timing-point reading{% else %}One dot per {{ profile.delay_plot.unit }} timing-point readings{% endif %}
+                </p>
+                <div class="profile-delay-chart" role="img"
+                     aria-label="{{ profile.readings }} timing-point readings: {{ profile.early }} early, {{ profile.on_time }} on time, {{ profile.late }} late">
+                    <span class="profile-delay-band" aria-hidden="true"
+                          style="left:{{ profile.delay_plot.on_time_start_pct }}%;width:{{ profile.delay_plot.on_time_width_pct }}%"></span>
+                    <span class="profile-delay-zero" aria-hidden="true"
+                          style="left:{{ profile.delay_plot.zero_pct }}%"></span>
+                    {% for column in profile.delay_plot.columns %}
+                    {% if column.dots %}
+                    <span class="profile-delay-stack" aria-hidden="true"
+                          style="left:{{ column.left_pct }}%">
+                        {% for unused in range(column.dots) %}<i class="profile-delay-dot is-{{ column.kind }}"></i>{% endfor %}
+                    </span>
+                    {% endif %}
+                    {% endfor %}
+                    <span class="profile-delay-axis" aria-hidden="true"></span>
+                    <span class="profile-delay-zero-label" aria-hidden="true"
+                          style="left:{{ profile.delay_plot.zero_pct }}%">0</span>
+                    <span class="profile-delay-labels" aria-hidden="true">
+                        <span>{{ profile.delay_plot.minimum_minutes }} early</span>
+                        <span>on time</span>
+                        <span>+{{ profile.delay_plot.maximum_minutes }} late</span>
+                    </span>
+                </div>
+            {% endif %}
             <div class="profile-stat-grid">
                 <div><strong>{{ profile.on_time_pct }}%</strong><span>on time</span></div>
                 <div><strong>{{ '{:,}'.format(profile.readings) }}</strong><span>timing-point readings</span></div>
@@ -54,6 +87,7 @@
                 On time means between 1 minute early and 5 min 59 s late,
                 measured within 150 m of a timing point.
             </p>
+            {% if profile.delay_plot %}</figure>{% endif %}
         </section>
 
         <section aria-labelledby="routes-title">
@@ -63,8 +97,25 @@
                 <li>
                     <details{% if loop.first %} open{% endif %}>
                         <summary>
-                            <strong>{{ route.route }}</strong>
-                            <span>{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
+                            <strong class="profile-route-badge">{{ route.route }}</strong>
+                            <span class="profile-route-result">{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
+                            {% if route.delay_plot %}
+                            <span class="profile-delay-chart is-compact" role="img"
+                                  aria-label="{{ route.readings }} timing-point readings: {{ route.early }} early, {{ route.on_time }} on time, {{ route.late }} late">
+                                <span class="profile-delay-band" aria-hidden="true"
+                                      style="left:{{ route.delay_plot.on_time_start_pct }}%;width:{{ route.delay_plot.on_time_width_pct }}%"></span>
+                                <span class="profile-delay-zero" aria-hidden="true"
+                                      style="left:{{ route.delay_plot.zero_pct }}%"></span>
+                                {% for column in route.delay_plot.columns %}
+                                {% if column.dots %}
+                                <span class="profile-delay-stack" aria-hidden="true"
+                                      style="left:{{ column.left_pct }}%">
+                                    {% for unused in range(column.dots) %}<i class="profile-delay-dot is-{{ column.kind }}"></i>{% endfor %}
+                                </span>
+                                {% endif %}
+                                {% endfor %}
+                            </span>
+                            {% endif %}
                         </summary>
                         {% if route.days %}
                         <div class="profile-route-days">
@@ -77,7 +128,7 @@
                             {% endfor %}
                         </div>
                         {% else %}
-                        <p class="profile-route-empty">Daily detail will appear after the next audit refresh.</p>
+                        <p class="profile-route-empty">No daily observations published.</p>
                         {% endif %}
                     </details>
                 </li>
@@ -92,11 +143,6 @@
         </section>
         {% endif %}
 
-        <footer class="profile-disclosure">
-            This is an aggregate of public open-data observations, not a movement history
-            or a verdict on the vehicle. Route allocation, traffic and operating conditions
-            all affect the result. <a href="{{ audit_url }}">Read the full method and limitations.</a>
-        </footer>
     </article>
 </main>
 {% endblock %}

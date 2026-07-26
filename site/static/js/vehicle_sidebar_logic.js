@@ -43,3 +43,56 @@ export function statusPresentation(bus) {
         cls: "vs-status-ontime", shape: "vs-shape-ontime",
     };
 }
+
+/** Build a bounded dot-strip model from the aggregate audit histogram. */
+export function delayDotColumns(
+    edgesInput, countsInput, maxDots = 600, maxColumnDots = 30,
+) {
+    const edges = Array.isArray(edgesInput) ? edgesInput.map(Number) : [];
+    const counts = Array.isArray(countsInput) ? countsInput.map(Number) : [];
+    if (edges.length < 2 || counts.length !== edges.length + 1
+            || edges.some((value, index) => !Number.isFinite(value)
+                || (index > 0 && value <= edges[index - 1]))
+            || counts.some(value => !Number.isInteger(value) || value < 0))
+        return null;
+
+    const total = counts.reduce((sum, value) => sum + value, 0);
+    if (!total) return null;
+    const minS = edges[0];
+    const maxS = edges[edges.length - 1];
+    const range = maxS - minS;
+    const largestBucket = Math.max(...counts);
+    const unit = Math.max(
+        1,
+        Math.ceil(total / Math.max(1, maxDots)),
+        Math.ceil(largestBucket / Math.max(1, maxColumnDots)),
+    );
+    const percentage = value => Math.max(
+        0, Math.min(100, ((value - minS) / range) * 100));
+    const centres = counts.map((_, index) => {
+        if (index === 0) return minS;
+        if (index === edges.length) return maxS;
+        return (edges[index - 1] + edges[index]) / 2;
+    });
+
+    return {
+        total,
+        unit,
+        axis: {
+            minimumSeconds: minS,
+            maximumSeconds: maxS,
+            zeroPct: percentage(0),
+            onTimeStartPct: percentage(-60),
+            onTimeEndPct: percentage(360),
+        },
+        columns: counts.map((count, index) => {
+            const centre = centres[index];
+            return {
+                count,
+                dots: count ? Math.ceil(count / unit) : 0,
+                leftPct: percentage(centre),
+                kind: centre < -60 ? "early" : centre >= 360 ? "late" : "on-time",
+            };
+        }),
+    };
+}

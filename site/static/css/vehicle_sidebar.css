@@ -81,24 +81,68 @@
 .vs-stop-time small { margin-left: 4px; color: var(--fg-3); font-size: 7px; text-decoration: line-through; }
 .vc-embedded .vc-body { padding: 0; }
 .vc-embedded .vc-model { font-size: 13px; }
-.vs-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
-.vs-metric { display: grid; gap: 3px; padding: 10px 8px; border-radius: var(--r-md);
-             background: var(--surface-2); }
-.vs-metric strong { color: var(--fg-1); font: 750 16px var(--font-mono); }
-.vs-metric span { color: var(--fg-2); font-size: 11px; }
-.vs-method-note, .vs-disclosure { color: var(--fg-2); font-size: 11px; line-height: 1.45; }
-.vs-method-note { margin: 12px 2px; }
-.vs-route-history { margin-top: 7px; overflow: hidden; border: 1px solid var(--line);
-                    border-radius: var(--r-md); background: var(--surface-1); }
-.vs-route-history summary { display: grid; grid-template-columns: auto minmax(0,1fr) auto;
-                            gap: 9px; align-items: center; min-height: 44px; padding: 0 11px;
+.vs-delay-figure { display: grid; gap: 7px; margin: 0 0 14px; }
+.vs-delay-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.vs-delay-heading strong { color: var(--fg-1); font-size: var(--t-lead); }
+.vs-delay-heading span, .vs-delay-caption { color: var(--fg-2); font-size: var(--t-small); }
+.vs-delay-caption { margin: 0; }
+.vs-delay-chart { position: relative; height: 170px; overflow: hidden;
+                  border: 1px solid var(--line); border-radius: 7px;
+                  background: var(--surface-2); }
+.vs-delay-band { position: absolute; top: 0; bottom: 25px; background: var(--tint-ontime); }
+.vs-delay-zero { position: absolute; top: 0; bottom: 25px; width: 2px;
+                 background: var(--uk-green); transform: translateX(-1px); }
+.vs-delay-axis { position: absolute; right: 0; bottom: 25px; left: 0;
+                 height: 1px; background: var(--line-2); }
+.vs-delay-stack { position: absolute; bottom: 29px; display: flex;
+                  flex-direction: column-reverse; gap: 1px; transform: translateX(-50%); }
+.vs-delay-dot { display: block; width: 4px; height: 4px; flex: none; border-radius: 50%; }
+.vs-delay-dot-early { background: var(--uk-blue); }
+.vs-delay-dot-on-time { background: var(--uk-green); }
+.vs-delay-dot-late { background: var(--uk-red); }
+.vs-delay-zero-label { position: absolute; bottom: 5px; color: var(--fg-2);
+                       font: 700 var(--t-label) var(--font-mono); transform: translateX(-50%); }
+.vs-delay-axis-labels { position: absolute; right: 8px; bottom: 5px; left: 8px;
+                        display: flex; justify-content: space-between; color: var(--fg-2);
+                        font: 700 var(--t-label) var(--font-mono); }
+.vs-delay-axis-labels span:nth-child(2) { color: var(--ev-ontime); }
+.vs-delay-chart.is-compact { width: 104px; height: 26px; flex: none;
+                             border: 0; border-radius: 4px; }
+.vs-delay-chart.is-compact .vs-delay-band,
+.vs-delay-chart.is-compact .vs-delay-zero { bottom: 0; }
+.vs-delay-chart.is-compact .vs-delay-axis { display: none; }
+.vs-delay-stack.is-compact { bottom: 4px; gap: 1px; }
+.vs-delay-stack.is-compact .vs-delay-dot { width: 5px; height: 5px; }
+.vs-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+.vs-metric { display: grid; gap: 3px; min-width: 0; padding: 0; }
+.vs-metric strong { color: var(--fg-1); font: 800 var(--t-h1) var(--font-mono); }
+.vs-metric span { color: var(--fg-2); font-size: var(--t-small); }
+.vs-method-note { margin: 12px 0 15px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+                  color: var(--fg-2); font-size: var(--t-small); line-height: 1.45; }
+.vs-route-heading { display: flex; align-items: baseline; justify-content: space-between;
+                    gap: 10px; margin-bottom: 8px; }
+.vs-route-heading strong { color: var(--fg-1); font-size: var(--t-lead); }
+.vs-route-heading span { color: var(--fg-2); font-size: var(--t-small); }
+.vs-route-list { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; }
+.vs-route-history { margin: 0; overflow: hidden; border-bottom: 1px solid var(--line);
+                    background: var(--surface-1); }
+.vs-route-history:last-child { border-bottom: 0; }
+.vs-route-history summary { display: grid;
+                            grid-template-columns: minmax(44px,auto) minmax(0,1fr) auto;
+                            gap: 10px; align-items: center; min-height: 52px; padding: 7px 11px;
                             cursor: pointer; list-style: none; }
+.vs-route-history.has-delay-plot summary {
+  grid-template-columns: minmax(44px,auto) minmax(0,1fr) 104px auto;
+}
 .vs-route-history summary::-webkit-details-marker { display: none; }
 .vs-route-history summary::after { content: "+"; color: var(--fg-3); font-size: 16px; }
 .vs-route-history[open] summary::after { content: "-"; }
-.vs-route-history summary strong { color: var(--fg-1); font-size: 13px; }
-.vs-route-history summary span { overflow: hidden; color: var(--fg-2); font-size: 11px;
-                                 text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.vs-route-badge { display: grid; min-width: 44px; height: 32px; place-items: center;
+                  padding: 0 7px; border: 1px solid #b39b00; border-radius: 5px;
+                  background: var(--uk-yellow); color: #00512c; font-size: var(--t-lead); }
+.vs-route-history summary .vs-route-result { overflow: hidden; color: var(--fg-2);
+                                             font-size: var(--t-small); text-overflow: ellipsis;
+                                             white-space: nowrap; }
 .vs-day-list { border-top: 1px solid var(--line); }
 .vs-day { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
           min-height: 34px; padding: 0 11px; border-top: 1px solid var(--line); }
@@ -108,7 +152,6 @@
 .vs-day small { color: var(--fg-3); font-size: 11px; }
 .vs-day-empty { margin: 0; padding: 10px 11px; border-top: 1px solid var(--line);
                 color: var(--fg-3); font-size: 11px; }
-.vs-disclosure { margin: 13px 2px 9px; }
 .vs-profile-link { display: block; padding: 9px; border-radius: var(--r-md);
                    background: var(--tint-origin); color: var(--uk-blue);
                    text-align: center; text-decoration: none; font-size: 11px; font-weight: 700; }
