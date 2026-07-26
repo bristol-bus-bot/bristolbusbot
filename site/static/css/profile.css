@@ -71,6 +71,113 @@
   font-size: 1.1rem;
 }
 
+.profile-delay-figure {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.profile-delay-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-delay-heading > strong { font-size: var(--t-lead); }
+.profile-delay-heading > span,
+.profile-delay-caption { color: var(--fg-2); font-size: var(--t-small); }
+.profile-delay-caption { margin: 0; }
+
+.profile-delay-chart {
+  position: relative;
+  height: 270px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.profile-delay-band {
+  position: absolute;
+  top: 0;
+  bottom: 25px;
+  background: var(--tint-ontime);
+}
+
+.profile-delay-zero {
+  position: absolute;
+  top: 0;
+  bottom: 25px;
+  width: 2px;
+  background: var(--uk-green);
+  transform: translateX(-1px);
+}
+
+.profile-delay-axis {
+  position: absolute;
+  right: 0;
+  bottom: 25px;
+  left: 0;
+  height: 1px;
+  background: var(--line-2);
+}
+
+.profile-delay-stack {
+  position: absolute;
+  bottom: 29px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  transform: translateX(-50%);
+}
+
+.profile-delay-dot {
+  display: block;
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.profile-delay-dot.is-early { background: var(--uk-blue); }
+.profile-delay-dot.is-on-time { background: var(--uk-green); }
+.profile-delay-dot.is-late { background: var(--uk-red); }
+
+.profile-delay-zero-label {
+  position: absolute;
+  bottom: 5px;
+  color: var(--fg-2);
+  font: 700 var(--t-label) var(--font-mono);
+  transform: translateX(-50%);
+}
+
+.profile-delay-labels {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  left: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg-2);
+  font: 700 var(--t-label) var(--font-mono);
+}
+
+.profile-delay-labels span:nth-child(2) { color: var(--ev-ontime); }
+
+.profile-delay-chart.is-compact {
+  width: 104px;
+  height: 26px;
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+}
+
+.profile-delay-chart.is-compact .profile-delay-band,
+.profile-delay-chart.is-compact .profile-delay-zero { bottom: 0; }
+.profile-delay-chart.is-compact .profile-delay-stack { bottom: 4px; }
+.profile-delay-chart.is-compact .profile-delay-dot { width: 5px; height: 5px; }
+
 .profile-live {
   color: #074c2c;
   background: #e7f6ed;
@@ -81,13 +188,12 @@
 .profile-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 18px;
+  margin-top: 8px;
 }
 
 .profile-stat-grid div {
-  padding: 15px;
-  border-radius: 10px;
-  background: #f1f3f5;
+  padding: 0;
 }
 
 .profile-stat-grid strong,
@@ -114,23 +220,27 @@
 
 .profile-routes {
   display: grid;
-  gap: 8px;
+  gap: 0;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   list-style: none;
 }
 
 .profile-routes li {
   overflow: hidden;
-  border-radius: 8px;
-  background: #f6f7f8;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-1);
 }
+.profile-routes li:last-child { border-bottom: 0; }
 
 .profile-routes details { width: 100%; }
 
 .profile-routes summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(44px, auto) minmax(0, 1fr) 104px auto;
   gap: 12px;
   align-items: center;
   min-height: 46px;
@@ -143,7 +253,11 @@
 .profile-routes summary::after { content: "+"; color: #59636e; font-size: 1.2rem; }
 .profile-routes details[open] summary::after { content: "−"; }
 .profile-routes span { color: #59636e; font-size: 0.82rem; }
-.profile-routes summary span { overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.profile-routes summary .profile-route-result { overflow: hidden; text-align: left;
+                                                  text-overflow: ellipsis; white-space: nowrap; }
+.profile-route-badge { display: grid; min-width: 44px; height: 32px; place-items: center;
+                       padding: 0 7px; border: 1px solid #b39b00; border-radius: 5px;
+                       background: var(--uk-yellow); color: #00512c; }
 
 .profile-route-days { border-top: 1px solid #e3e6e9; background: #fff; }
 .profile-route-days > div {
@@ -168,9 +282,10 @@
   .profile-card > section,
   .profile-disclosure,
   .profile-header { padding-left: 18px; padding-right: 18px; }
-  .profile-stat-grid { grid-template-columns: 1fr; }
-  .profile-routes summary { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
-  .profile-routes summary span { font-size: 0.72rem; }
+  .profile-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .profile-stat-grid strong { font-size: var(--t-h3); }
+  .profile-routes summary { grid-template-columns: minmax(44px, auto) minmax(0, 1fr) 104px auto; gap: 8px; }
+  .profile-routes summary .profile-route-result { font-size: 0.72rem; }
   .profile-route-days > div { grid-template-columns: 1fr auto; gap: 8px; }
   .profile-route-days small { grid-column: 1 / -1; margin-top: -8px; padding-bottom: 8px; }
 }

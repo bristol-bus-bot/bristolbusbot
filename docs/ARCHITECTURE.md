@@ -98,7 +98,10 @@ summaries; a separate networked job pushes the data file to the audit
 site's GitHub Pages repository. The integration snapshot the live site
 reads (headline percentage, vehicle profiles, rare-working evidence) is
 promoted only after that push succeeds, so the live site can never cite a
-publication run that failed. If the snapshot is more than 48 hours old
+publication run that failed. Vehicle profiles include compact signed-delay
+histograms generated in the same grouped database pass as their daily totals;
+the site can draw deviation strips without receiving raw observations or
+adding another audit-database scan. If the snapshot is more than 48 hours old
 the site hides the audit headline and profile pages entirely — stale
 data degrades to absence, not to a broken or misleading figure.
 Methodology and its limitations: `docs/AUDIT_METHODOLOGY.md`.

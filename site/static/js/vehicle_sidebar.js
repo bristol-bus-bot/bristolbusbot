@@ -2,7 +2,11 @@
 import { el, replaceContent } from "./util.js";
 import { liveryColor } from "./map_render.js";
 import { plate } from "./vehicle_card.js";
-import { formatServiceDate, statusPresentation } from "./vehicle_sidebar_logic.js";
+import {
+    delayDotColumns,
+    formatServiceDate,
+    statusPresentation,
+} from "./vehicle_sidebar_logic.js";
 
 const TAB_ORDER = ["journey", "vehicle", "record"];
 
@@ -218,28 +222,120 @@ function metric(value, label) {
     ]);
 }
 
+function setStyles(node, values) {
+    Object.entries(values).forEach(([name, value]) => {
+        node.style.setProperty(name, value);
+    });
+    return node;
+}
+
+function delayDots(model, compact = false) {
+    return model.columns.flatMap(column => {
+        if (!column.dots) return [];
+        const dots = Array.from({ length: column.dots }, () => el("span", {
+            class: `vs-delay-dot vs-delay-dot-${column.kind}`,
+            "aria-hidden": "true",
+        }));
+        return [setStyles(el("span", {
+            class: compact ? "vs-delay-stack is-compact" : "vs-delay-stack",
+            "aria-hidden": "true",
+        }, dots), { left: `${column.leftPct}%` })];
+    });
+}
+
+function delayPlot(profile, { compact = false } = {}) {
+    const model = delayDotColumns(
+        profile?.delay_bins_s,
+        profile?.delay_counts,
+        compact ? 42 : 600,
+        compact ? 3 : 30,
+    );
+    if (!model || model.total !== Number(profile?.readings)) return null;
+    const band = setStyles(el("span", {
+        class: "vs-delay-band", "aria-hidden": "true",
+    }), {
+        left: `${model.axis.onTimeStartPct}%`,
+        width: `${model.axis.onTimeEndPct - model.axis.onTimeStartPct}%`,
+    });
+    const zero = setStyles(el("span", {
+        class: "vs-delay-zero", "aria-hidden": "true",
+    }), { left: `${model.axis.zeroPct}%` });
+    const minimum = Math.round(model.axis.minimumSeconds / 60);
+    const maximum = Math.round(model.axis.maximumSeconds / 60);
+    const ariaLabel = `${model.total} timing-point readings: `
+        + `${profile.early} early, ${profile.on_time} on time, ${profile.late} late`;
+    const chart = el("div", {
+        class: compact ? "vs-delay-chart is-compact" : "vs-delay-chart",
+        role: "img",
+        "aria-label": ariaLabel,
+    }, [
+        band,
+        zero,
+        ...delayDots(model, compact),
+        el("span", { class: "vs-delay-axis", "aria-hidden": "true" }),
+        compact ? null : setStyles(el("span", {
+            class: "vs-delay-zero-label", "aria-hidden": "true",
+        }, ["0"]), { left: `${model.axis.zeroPct}%` }),
+        compact ? null : el("span", {
+            class: "vs-delay-axis-labels", "aria-hidden": "true",
+        }, [
+            el("span", {}, [`${minimum} early`]),
+            el("span", {}, ["on time"]),
+            el("span", {}, [`+${maximum} late`]),
+        ]),
+    ]);
+    return { chart, model };
+}
+
+function delayFigure(profile) {
+    const plot = delayPlot(profile);
+    if (!plot) return null;
+    const dotLabel = plot.model.unit === 1
+        ? "One dot per timing-point reading"
+        : `One dot per ${plot.model.unit} timing-point readings`;
+    return el("figure", { class: "vs-delay-figure" }, [
+        el("div", { class: "vs-delay-heading" }, [
+            el("strong", {}, ["Minutes from timetable"]),
+            el("span", {}, [`${Number(profile.readings || 0).toLocaleString()} readings`]),
+        ]),
+        el("p", { class: "vs-delay-caption" }, [dotLabel]),
+        plot.chart,
+    ]);
+}
+
+function routeDelayPlot(route, delayBins) {
+    const plot = delayPlot({ ...route, delay_bins_s: delayBins }, { compact: true });
+    return plot?.chart || null;
+}
+
 function recordPanel(ctx) {
     if (ctx.profileLoading)
         return emptyState("Loading observed record", "Reading the latest published audit snapshot.");
     if (!ctx.profile) {
-        return emptyState("Not enough observations yet",
-            "Profiles appear after at least two service days and 30 timing-point readings.");
+        return emptyState("Record unavailable",
+            "Fewer than 2 service days or 30 timing-point readings.");
     }
 
     const profile = ctx.profile;
     const root = el("div", { class: "vs-history" }, [
+        delayFigure(profile),
         el("div", { class: "vs-metrics" }, [
             metric(`${profile.on_time_pct}%`, "on time"),
             metric(Number(profile.readings || 0).toLocaleString(), "readings"),
             metric(profile.observed_days, "service days"),
         ]),
         el("p", { class: "vs-method-note" }, [
-            `Observed ${formatServiceDate(profile.measurement_start)} to ${formatServiceDate(profile.through_date)}. `,
-            "On time means 1 minute early to 5 min 59 s late at a timing point.",
+            `${formatServiceDate(profile.measurement_start)} to ${formatServiceDate(profile.through_date)} | `,
+            "on time = 1 min early to 5 min 59 s late at a timing point",
+        ]),
+        el("div", { class: "vs-route-heading" }, [
+            el("strong", {}, ["Routes observed"]),
+            el("span", {}, ["most measured"]),
         ]),
     ]);
 
     const routes = Array.isArray(profile.routes) ? profile.routes : [];
+    const routeList = el("div", { class: "vs-route-list" });
     routes.forEach((route, index) => {
         const summaryParts = [
             `${route.observed_days} day${route.observed_days === 1 ? "" : "s"}`,
@@ -247,17 +343,21 @@ function recordPanel(ctx) {
         ];
         if (route.on_time_pct !== undefined)
             summaryParts.unshift(`${route.on_time_pct}% on time`);
-        const details = el("details", { class: "vs-route-history" }, [
+        const routePlot = routeDelayPlot(route, profile.delay_bins_s);
+        const details = el("details", {
+            class: routePlot ? "vs-route-history has-delay-plot" : "vs-route-history",
+        }, [
             el("summary", {}, [
-                el("strong", {}, [route.route]),
-                el("span", {}, [summaryParts.join(" · ")]),
+                el("strong", { class: "vs-route-badge" }, [route.route]),
+                el("span", { class: "vs-route-result" }, [summaryParts.join(" · ")]),
+                routePlot,
             ]),
         ]);
         if (index === 0) details.open = true;
         const days = Array.isArray(route.days) ? route.days : [];
         if (!days.length) {
             details.appendChild(el("p", { class: "vs-day-empty" },
-                ["Daily detail will appear after the next audit refresh."]));
+                ["No daily observations published."]));
         } else {
             const dayList = el("div", { class: "vs-day-list" });
             days.forEach(day => {
@@ -269,13 +369,10 @@ function recordPanel(ctx) {
             });
             details.appendChild(dayList);
         }
-        root.appendChild(details);
+        routeList.appendChild(details);
     });
+    if (routes.length) root.appendChild(routeList);
 
-    root.appendChild(el("p", { class: "vs-disclosure" }, [
-        "These are aggregate public-data observations, not a continuous movement history. ",
-        "Traffic, route allocation and operating conditions all affect the result.",
-    ]));
     if (ctx.profileUrl) {
         root.appendChild(el("a", {
             class: "vs-profile-link",

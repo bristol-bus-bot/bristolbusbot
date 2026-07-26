@@ -28,6 +28,13 @@ PROFILE_DAYS = 56
 PROFILE_MIN_DAYS = 2
 PROFILE_MIN_READINGS = 30
 HEADLINE_MIN_READINGS = 30
+# Signed delay buckets used by the live site's deviation strip.  The edges are
+# deliberately denser around the on-time window and coarser in the tails.  A
+# histogram remains aggregate data and is far smaller than exporting readings.
+DELAY_BIN_EDGES_S = (
+    -600, -300, -180, -120, -60, 0, 60, 120, 180,
+    240, 300, 360, 480, 600, 900, 1200,
+)
 RARE_LOOKBACK_DAYS = 56
 RARE_MIN_VEHICLE_DAYS = 20
 RARE_MIN_ROUTE_DAYS = 10
@@ -116,118 +123,54 @@ def _profile_dates(completed_dates: list[str]) -> list[str]:
     return eligible[-PROFILE_DAYS:]
 
 
+def _histogram_select_sql(column: str = "observed_delay_s") -> str:
+    conditions = [f"{column} < {DELAY_BIN_EDGES_S[0]}"]
+    conditions.extend(
+        f"{column} >= {low} AND {column} < {high}"
+        for low, high in zip(DELAY_BIN_EDGES_S, DELAY_BIN_EDGES_S[1:])
+    )
+    conditions.append(f"{column} >= {DELAY_BIN_EDGES_S[-1]}")
+    return ",\n                   ".join(
+        f"SUM(CASE WHEN {condition} THEN 1 ELSE 0 END) AS delay_bin_{index}"
+        for index, condition in enumerate(conditions)
+    )
+
+
+def _histogram_from_row(row: sqlite3.Row) -> list[int]:
+    return [
+        int(row[f"delay_bin_{index}"] or 0)
+        for index in range(len(DELAY_BIN_EDGES_S) + 1)
+    ]
+
+
+def _add_counts(target: list[int], source: list[int]) -> None:
+    for index, value in enumerate(source):
+        target[index] += value
+
+
+def _empty_delay_counts() -> list[int]:
+    return [0] * (len(DELAY_BIN_EDGES_S) + 1)
+
+
 def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
     dates = _profile_dates(completed_dates)
     if not dates:
         return []
     date_ph = _placeholders(dates)
     op_ph = _placeholders(SHOW_OPERATORS)
-    rows = cur.execute(
-        f"""SELECT operator, vehicle_ref,
-                   MIN(service_date) AS first_date,
-                   MAX(service_date) AS last_date,
-                   COUNT(DISTINCT service_date) AS observed_days,
-                   COUNT(*) AS readings,
-                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
-                            THEN 1 ELSE 0 END) AS on_time,
-                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
-                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
-            FROM timepoint_observations
-            WHERE service_date IN ({date_ph})
-              AND operator IN ({op_ph})
-              AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
-              AND route IS NOT NULL AND trim(route) != ''
-              AND observed_delay_s IS NOT NULL
-              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
-            GROUP BY operator, vehicle_ref
-            HAVING COUNT(DISTINCT service_date) >= ? AND COUNT(*) >= ?
-            ORDER BY operator, vehicle_ref""",
-        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
-         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M,
-         PROFILE_MIN_DAYS, PROFILE_MIN_READINGS),
-    ).fetchall()
-
-    profiles: dict[tuple[str, str], dict] = {}
-    slugs: set[str] = set()
-    for row in rows:
-        operator, vehicle_ref = row["operator"], row["vehicle_ref"]
-        slug = _slug(operator, vehicle_ref)
-        if slug in slugs:
-            raise RuntimeError(f"vehicle profile slug collision: {slug}")
-        slugs.add(slug)
-        readings = int(row["readings"])
-        on_time = int(row["on_time"] or 0)
-        profiles[(operator, vehicle_ref)] = {
-            "slug": slug,
-            "operator": operator,
-            "operator_name": OPERATOR_NAMES.get(operator, operator),
-            # This materialised file stays on the Pi.  The ref is needed to
-            # join the aggregate to fresh live state; no movements are exposed.
-            "vehicle_ref": vehicle_ref,
-            "measurement_start": row["first_date"],
-            "through_date": row["last_date"],
-            "observed_days": int(row["observed_days"]),
-            "readings": readings,
-            "on_time": on_time,
-            "early": int(row["early"] or 0),
-            "late": int(row["late"] or 0),
-            "on_time_pct": round(100 * on_time / readings, 1),
-            "routes": [],
-        }
-
-    if not profiles:
-        return []
-
-    route_rows = cur.execute(
-        f"""SELECT operator, vehicle_ref, route,
-                   COUNT(DISTINCT service_date) AS observed_days,
-                   COUNT(*) AS readings,
-                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
-                            THEN 1 ELSE 0 END) AS on_time,
-                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
-                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
-            FROM timepoint_observations
-            WHERE service_date IN ({date_ph})
-              AND operator IN ({op_ph})
-              AND vehicle_ref IS NOT NULL
-              AND route IS NOT NULL AND trim(route) != ''
-              AND observed_delay_s IS NOT NULL
-              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
-            GROUP BY operator, vehicle_ref, route
-            ORDER BY operator, vehicle_ref, readings DESC, route""",
-        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
-         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
-    ).fetchall()
-    routes: dict[tuple[str, str, str], dict] = {}
-    for row in route_rows:
-        profile = profiles.get((row["operator"], row["vehicle_ref"]))
-        if profile is not None:
-            readings = int(row["readings"])
-            on_time = int(row["on_time"] or 0)
-            route = {
-                "route": row["route"],
-                "observed_days": int(row["observed_days"]),
-                "readings": readings,
-                "on_time": on_time,
-                "early": int(row["early"] or 0),
-                "late": int(row["late"] or 0),
-                "on_time_pct": round(100 * on_time / readings, 1),
-                "days": [],
-            }
-            profile["routes"].append(route)
-            routes[(row["operator"], row["vehicle_ref"], row["route"])] = route
-
+    histogram_sql = _histogram_select_sql()
     day_rows = cur.execute(
         f"""SELECT operator, vehicle_ref, route, service_date,
                    COUNT(*) AS readings,
                    SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
                             THEN 1 ELSE 0 END) AS on_time,
                    SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
-                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
+                   SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late,
+                   {histogram_sql}
             FROM timepoint_observations
             WHERE service_date IN ({date_ph})
               AND operator IN ({op_ph})
-              AND vehicle_ref IS NOT NULL
+              AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
               AND route IS NOT NULL AND trim(route) != ''
               AND observed_delay_s IS NOT NULL
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
@@ -236,21 +179,121 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
         (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
          *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchall()
+
+    candidates: dict[tuple[str, str], dict] = {}
     for row in day_rows:
-        route = routes.get((row["operator"], row["vehicle_ref"], row["route"]))
-        if route is None:
-            continue
+        operator = row["operator"]
+        vehicle_ref = row["vehicle_ref"]
+        route_name = row["route"]
+        service_date = row["service_date"]
         readings = int(row["readings"])
         on_time = int(row["on_time"] or 0)
+        early = int(row["early"] or 0)
+        late = int(row["late"] or 0)
+        delay_counts = _histogram_from_row(row)
+
+        profile = candidates.setdefault((operator, vehicle_ref), {
+            "operator": operator,
+            "vehicle_ref": vehicle_ref,
+            "dates": set(),
+            "readings": 0,
+            "on_time": 0,
+            "early": 0,
+            "late": 0,
+            "delay_counts": _empty_delay_counts(),
+            "routes": {},
+        })
+        profile["dates"].add(service_date)
+        profile["readings"] += readings
+        profile["on_time"] += on_time
+        profile["early"] += early
+        profile["late"] += late
+        _add_counts(profile["delay_counts"], delay_counts)
+
+        route = profile["routes"].setdefault(route_name, {
+            "route": route_name,
+            "dates": set(),
+            "readings": 0,
+            "on_time": 0,
+            "early": 0,
+            "late": 0,
+            "delay_counts": _empty_delay_counts(),
+            "days": [],
+        })
+        route["dates"].add(service_date)
+        route["readings"] += readings
+        route["on_time"] += on_time
+        route["early"] += early
+        route["late"] += late
+        _add_counts(route["delay_counts"], delay_counts)
         route["days"].append({
-            "service_date": row["service_date"],
+            "service_date": service_date,
             "readings": readings,
             "on_time": on_time,
-            "early": int(row["early"] or 0),
-            "late": int(row["late"] or 0),
+            "early": early,
+            "late": late,
             "on_time_pct": round(100 * on_time / readings, 1),
         })
-    return list(profiles.values())
+
+    profiles: list[dict] = []
+    slugs: set[str] = set()
+    for (operator, vehicle_ref), candidate in sorted(candidates.items()):
+        observed_dates = sorted(candidate["dates"])
+        readings = candidate["readings"]
+        if (len(observed_dates) < PROFILE_MIN_DAYS
+                or readings < PROFILE_MIN_READINGS):
+            continue
+        slug = _slug(operator, vehicle_ref)
+        if slug in slugs:
+            raise RuntimeError(f"vehicle profile slug collision: {slug}")
+        slugs.add(slug)
+        routes = []
+        sorted_routes = sorted(
+            candidate["routes"].values(),
+            key=lambda item: (-item["readings"], item["route"]),
+        )
+        for route in sorted_routes:
+            route_readings = route["readings"]
+            if sum(route["delay_counts"]) != route_readings:
+                raise RuntimeError(
+                    f"delay histogram mismatch: {operator}/{vehicle_ref}/{route['route']}")
+            routes.append({
+                "route": route["route"],
+                "observed_days": len(route["dates"]),
+                "readings": route_readings,
+                "on_time": route["on_time"],
+                "early": route["early"],
+                "late": route["late"],
+                "on_time_pct": round(
+                    100 * route["on_time"] / route_readings, 1),
+                "delay_counts": route["delay_counts"],
+                "days": sorted(
+                    route["days"],
+                    key=lambda item: item["service_date"], reverse=True),
+            })
+        if sum(candidate["delay_counts"]) != readings:
+            raise RuntimeError(
+                f"delay histogram mismatch: {operator}/{vehicle_ref}")
+        profiles.append({
+            "slug": slug,
+            "operator": operator,
+            "operator_name": OPERATOR_NAMES.get(operator, operator),
+            # This materialised file stays on the Pi.  The ref is needed to
+            # join the aggregate to fresh live state; no movements are exposed.
+            "vehicle_ref": vehicle_ref,
+            "measurement_start": observed_dates[0],
+            "through_date": observed_dates[-1],
+            "observed_days": len(observed_dates),
+            "readings": readings,
+            "on_time": candidate["on_time"],
+            "early": candidate["early"],
+            "late": candidate["late"],
+            "on_time_pct": round(100 * candidate["on_time"] / readings, 1),
+            "delay_bins_s": list(DELAY_BIN_EDGES_S),
+            "delay_counts": candidate["delay_counts"],
+            "routes": routes,
+        })
+    return profiles
 
 
 def _init_evidence_table(conn: sqlite3.Connection) -> None:
