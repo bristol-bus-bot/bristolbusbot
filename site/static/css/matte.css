@@ -1252,12 +1252,12 @@ span.vs-stop-name {
 }
 
 .vs-metrics {
-  gap: 8px;
+  gap: 16px;
 }
 
 .vs-metric {
-  padding: 12px 9px;
-  border: 1px solid var(--line);
+  padding: 0;
+  border: 0;
 }
 
 .vs-metric strong {
@@ -1265,8 +1265,7 @@ span.vs-stop-name {
 }
 
 .vs-metric span,
-.vs-method-note,
-.vs-disclosure {
+.vs-method-note {
   font-size: var(--t-small);
 }
 
@@ -1274,11 +1273,11 @@ span.vs-stop-name {
   min-height: 48px;
 }
 
-.vs-route-history summary strong {
+.vs-route-badge {
   font-size: var(--t-body);
 }
 
-.vs-route-history summary span,
+.vs-route-result,
 .vs-day time,
 .vs-day span,
 .vs-day small,
@@ -1384,8 +1383,8 @@ span.vs-stop-name {
 }
 
 .profile-stat-grid div {
-  border: 1px solid var(--line);
-  background: var(--bg);
+  border: 0;
+  background: transparent;
 }
 
 .profile-stat-grid strong {
@@ -1403,10 +1402,8 @@ span.vs-stop-name {
   font-size: var(--t-small);
 }
 
-.profile-routes li,
-.profile-disclosure {
-  background: var(--surface-2);
-}
+.profile-routes li { background: var(--surface-1); }
+.profile-disclosure { background: var(--surface-2); }
 
 .profile-routes summary {
   min-height: 48px;
@@ -1616,7 +1613,7 @@ span.vs-stop-name {
   }
 
   .vs-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .vs-details {
@@ -1664,5 +1661,9 @@ span.vs-stop-name {
   .profile-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .profile-stat-grid strong {
+    font-size: var(--t-h3);
   }
 }
