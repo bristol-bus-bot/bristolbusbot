@@ -81,9 +81,11 @@ The public audit uses the DfT timing-point on-time band of −60 to +359 seconds
 Definitions, limitations and measurement changes are published in
 [`AUDIT_METHODOLOGY.md`](AUDIT_METHODOLOGY.md).
 
-The live map shows only a small, linked audit headline. Detailed statistics and
-caveats remain on the audit site. The headline and vehicle profiles disappear
-when their publication snapshot is stale or below the configured sample gates.
+The live map shows a small, linked audit headline. Vehicle profiles show
+aggregate signed-delay distributions, route totals and service-day totals;
+the full methodology and limitations remain on the audit site. The headline
+and vehicle profiles disappear when their publication snapshot is stale or
+below the configured sample gates.
 
 ## Editorial approval is a merge, not an AI decision
 

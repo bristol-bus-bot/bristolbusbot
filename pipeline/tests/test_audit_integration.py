@@ -97,11 +97,19 @@ def test_headline_is_count_weighted_and_profile_gate_is_enforced():
     assert profile["observed_days"] == 3
     assert profile["readings"] == 45
     assert profile["slug"] == integration._slug("FBRI", "FBRI-100")
+    assert profile["delay_bins_s"] == list(integration.DELAY_BIN_EDGES_S)
+    assert profile["delay_counts"] == [
+        0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0,
+    ]
+    assert sum(profile["delay_counts"]) == profile["readings"]
     assert profile["routes"] == [
         {
             "route": "75", "observed_days": 3, "readings": 45,
             "on_time": 30, "early": 0, "late": 15,
             "on_time_pct": 66.7,
+            "delay_counts": [
+                0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0,
+            ],
             "days": [
                 {"service_date": "20260716", "readings": 15,
                  "on_time": 10, "early": 0, "late": 5,
@@ -115,6 +123,32 @@ def test_headline_is_count_weighted_and_profile_gate_is_enforced():
             ],
         }
     ]
+
+
+def test_delay_histogram_respects_signed_on_time_boundaries():
+    conn = database()
+    completed = ["20260714", "20260715"]
+    add_completed(conn, completed)
+    delays = [
+        -601, -600, -61, -60, -1, 0, 59, 60,
+        299, 300, 359, 360, 599, 600, 1200,
+    ]
+    for day in completed:
+        for number, delay in enumerate(delays):
+            add_observation(conn, day, "FBRI-BOUNDARY", "75", number,
+                            delay=delay)
+    conn.commit()
+
+    profile = integration.build_payload(conn, completed[-1])["profiles"][0]
+
+    assert profile["readings"] == 30
+    assert profile["early"] == 6
+    assert profile["on_time"] == 16
+    assert profile["late"] == 8
+    assert profile["delay_counts"] == [
+        2, 2, 0, 0, 2, 4, 4, 2, 0, 0, 2, 4, 2, 2, 2, 0, 2,
+    ]
+    assert sum(profile["delay_counts"]) == profile["readings"]
 
 
 def test_rare_detector_fails_closed_without_56_prior_completed_days():
