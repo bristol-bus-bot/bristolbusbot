@@ -307,12 +307,12 @@ export function weeklyDistributionSvg(data, css = '') {
     <text x="72" y="918" class="mono" font-size="23" font-weight="750" fill="${COLORS.boardMuted}">10+ min early</text>
     <text x="${(bandX + bandWidth / 2).toFixed(1)}" y="918" text-anchor="middle" class="mono" font-size="23" font-weight="750" fill="${COLORS.liveGreen}">on time</text>
     <text x="1008" y="918" text-anchor="end" class="mono" font-size="23" font-weight="750" fill="${COLORS.boardMuted}">20+ min late</text>
-    <text x="72" y="1070" class="mono" font-size="46" font-weight="800" fill="${COLORS.boardInk}">${xml(typicalResult)}</text>
+    <text x="72" y="1070" class="mono" font-size="40" font-weight="800" fill="${COLORS.boardInk}">${xml(typicalResult)}</text>
     <text x="72" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">typical result</text>
-    <text x="400" y="1070" class="mono" font-size="42" font-weight="800" fill="${COLORS.boardInk}">${xml(middleRange)}</text>
-    <text x="400" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">8 in 10 readings</text>
-    <text x="780" y="1070" class="mono" font-size="58" font-weight="800" fill="${COLORS.liveGreen}">${Number(data.onTimePct).toFixed(1)}<tspan font-size="32">%</tspan></text>
-    <text x="780" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time</text>
+    <text x="390" y="1070" class="mono" font-size="34" font-weight="800" fill="${COLORS.boardInk}">${xml(middleRange)}</text>
+    <text x="390" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">8 in 10 readings</text>
+    <text x="790" y="1070" class="mono" font-size="50" font-weight="800" fill="${COLORS.liveGreen}">${Number(data.onTimePct).toFixed(1)}<tspan font-size="28">%</tspan></text>
+    <text x="790" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
     <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time: 1 min early to 5 min 59 s late</text>
@@ -352,7 +352,9 @@ export function validatePack(pack) {
   } else if (counts.some(value => !Number.isInteger(Number(value)) || Number(value) < 0)
       || counts.reduce((sum, value) => sum + Number(value), 0) !== Number(week.readings)) {
     errors.push('busWeek delay distribution must match readings');
-  } else if (counts.slice(5, 11).reduce((sum, value) => sum + Number(value), 0)
+  // bisect_right puts -60..-1 in bin 5 and 300..359 in bin 11.
+  // Both ends belong to the published -60..359 second on-time band.
+  } else if (counts.slice(5, 12).reduce((sum, value) => sum + Number(value), 0)
       !== Number(week.onTimeReadings)) {
     errors.push('busWeek delay distribution must match onTimeReadings');
   }
