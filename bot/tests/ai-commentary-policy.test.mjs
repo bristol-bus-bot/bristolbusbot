@@ -10,6 +10,7 @@ import {
 import {
   cleanEditorialPost,
   missingEditorialRequirements,
+  operatorDisplayName,
   parseEditorialVerifierOutput,
   parseEditorialWriterOutput,
   validateCommentaryCandidate,
@@ -17,6 +18,7 @@ import {
 
 
 const EVENT = {
+  operatorRef: 'FBRI',
   timestamp: '2026-07-23T20:00:00Z',
   vehicleRef: 'FBRI-39461',
   datedJourneyRef: 'journey-1',
@@ -110,7 +112,7 @@ test('Gemini structured output uses the REST enum expected by responseFormat', (
 
 test('the deterministic gate preserves editorial figures and action states', () => {
   const valid = (
-    'The outbound 21 reaches Newbridge five minutes early. '
+    'First Bristol’s outbound 21 reaches Newbridge five minutes early. '
     + 'FirstGroup returned £89m including a £50m buyback, then announced a £100m buyback.'
   );
   assert.deepEqual(
@@ -119,7 +121,7 @@ test('the deterministic gate preserves editorial figures and action states', () 
   );
 
   const missingCompletedBuyback = (
-    'The outbound 21 reaches Newbridge five minutes early. '
+    'First Bristol’s outbound 21 reaches Newbridge five minutes early. '
     + 'FirstGroup returned £89m, then announced a £100m buyback.'
   );
   assert.deepEqual(
@@ -143,7 +145,7 @@ test('the deterministic gate preserves editorial figures and action states', () 
 
 test('ordinary candidates still require the observed route, place, direction and timing', () => {
   const valid = (
-    'The outbound 21 reaches Newbridge five minutes early. '
+    'First Bristol’s outbound 21 reaches Newbridge five minutes early. '
     + 'An admirable burst of enthusiasm, unless you were still walking to the stop.'
   );
   assert.deepEqual(validateCommentaryCandidate(valid, EVENT, null, false), []);
@@ -157,6 +159,35 @@ test('ordinary candidates still require the observed route, place, direction and
   assert.match(
     validateCommentaryCandidate(missingDirection, EVENT, null, false).join(' '),
     /outbound direction/,
+  );
+  const missingOperator = valid.replace('First Bristol’s ', 'The ');
+  assert.match(
+    validateCommentaryCandidate(missingOperator, EVENT, null, false).join(' '),
+    /missing operator First Bristol/,
+  );
+  assert.deepEqual(
+    validateCommentaryCandidate(
+      valid.replace('First Bristol’s', 'First Bus’s'), EVENT, null, false,
+    ),
+    [],
+  );
+});
+
+test('operator identities distinguish First Bristol from Stagecoach West', () => {
+  assert.equal(operatorDisplayName('FBRI'), 'First Bristol');
+  assert.equal(operatorDisplayName('SCGL'), 'Stagecoach West');
+  assert.equal(operatorDisplayName('unknown'), null);
+  const stagecoach = { ...EVENT, operatorRef: 'SCGL' };
+  const valid = 'Stagecoach West’s outbound 21 reaches Newbridge five minutes early.';
+  assert.deepEqual(validateCommentaryCandidate(valid, stagecoach, null, false), []);
+  assert.match(
+    validateCommentaryCandidate(
+      valid.replace('Stagecoach West’s', 'First Bristol’s'),
+      stagecoach,
+      null,
+      false,
+    ).join(' '),
+    /missing operator Stagecoach West/,
   );
 });
 

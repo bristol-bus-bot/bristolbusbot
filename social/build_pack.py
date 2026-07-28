@@ -29,6 +29,37 @@ def _operator_name(audit: dict, operator: str) -> str:
     return "WECA network" if operator == "ALL" else operator
 
 
+def _operator_names(audit: dict) -> dict[str, str]:
+    return {
+        str(item["code"]): str(item["name"])
+        for item in audit.get("operators") or []
+        if item.get("code") and item.get("name")
+    }
+
+
+def _operator_comparison(audit: dict, days: list[dict]) -> list[dict]:
+    comparison = []
+    for item in audit.get("operators") or []:
+        operator = str(item.get("code") or "")
+        if not operator or operator == "ALL":
+            continue
+        readings = on_time = 0
+        for day in days:
+            overall = (((day.get("by_operator") or {}).get(operator) or {})
+                       .get("overall") or {})
+            readings += int(overall.get("readings_in_gate") or 0)
+            on_time += int(overall.get("on_time") or 0)
+        if readings:
+            comparison.append({
+                "operatorCode": operator,
+                "operatorName": str(item.get("name") or operator),
+                "readings": readings,
+                "onTime": on_time,
+                "onTimePct": round(100 * on_time / readings, 1),
+            })
+    return comparison
+
+
 def _powertrain_summary(days: list[dict], operator: str,
                         total_readings: int) -> dict:
     groups = {
@@ -123,6 +154,7 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
             long_term_target_pct - on_time_pct, 1),
     }
     week["powertrain"] = _powertrain_summary(days, operator, readings)
+    week["operatorComparison"] = _operator_comparison(audit, days)
     return week
 
 
@@ -224,7 +256,8 @@ def _recent_departures(conn: sqlite3.Connection | None, post: dict,
 
 
 def build_bot_said(recent: dict,
-                   audit_conn: sqlite3.Connection | None = None) -> dict:
+                   audit_conn: sqlite3.Connection | None = None,
+                   operator_names: dict[str, str] | None = None) -> dict:
     posts = recent.get("posts") if isinstance(recent, dict) else None
     if not isinstance(posts, list):
         raise ValueError("recent-post input has no posts list")
@@ -247,6 +280,8 @@ def build_bot_said(recent: dict,
             "delayMinutes": math.floor(seconds / 60 + 0.5),
             "vehicleRef": str(post["vehicleRef"]),
             "operatorRef": str(post["operatorRef"]),
+            "operatorName": (operator_names or {}).get(
+                str(post["operatorRef"]), str(post["operatorRef"])),
             "journeyRef": str(post["journeyRef"]),
             "stopCode": str(post.get("stopCode") or ""),
         }
@@ -265,7 +300,8 @@ def build_pack(audit: dict, recent: dict,
         week["distribution"] = build_distribution(audit_conn, audit, week)
     return {
         "generatedAt": (now or datetime.now(timezone.utc)).isoformat(),
-        "botSaid": build_bot_said(recent, audit_conn),
+        "botSaid": build_bot_said(
+            recent, audit_conn, _operator_names(audit)),
         "busWeek": week,
     }
 

@@ -9,7 +9,7 @@ npm run generate -- --input pack.json --output previews
 ```
 
 The input is a JSON object with `botSaid` and `busWeek` objects. See
-`examples/demo-pack.json` for the shape. The output directory contains six
+`examples/demo-pack.json` for the shape. The output directory contains seven
 1080 x 1350 JPEGs plus `manifest.json`, which carries captions, per-slide alt
 text and the source facts used for review:
 
@@ -18,9 +18,12 @@ text and the source facts used for review:
 3. actual performance against WECA's targets;
 4. the weekly day-by-day detail;
 5. the weekly delay distribution; and
-6. electric versus diesel / other readings and punctuality.
+6. electric versus diesel / other readings and punctuality; and
+7. the same week's results separated by operator.
 
-Files 2–6 are one ordered Instagram carousel, not separate posts.
+Files 2–7 are one ordered Instagram carousel, not separate posts. Every card
+names its operator; a whole-network pack is labelled `WECA network` rather
+than implying that its result belongs to First Bristol or another company.
 
 For production-shaped input, first run `build_pack.py` against the published
 `audit_data.json`, the bot's loopback `/api/recent-posts` response and, when
