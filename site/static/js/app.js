@@ -10,7 +10,7 @@
         let routeShapesData = {};  // "OPERATOR_line_direction" key -> { route, operator, direction, points }
         let routeShapeLayers = []; // Leaflet polyline layers
         let latestBusData = [];    // Raw bus array from last /api/buses fetch
-        let busbotPosts = {};      // vehicleRef -> { postUrl, postText, timestamp } for featured buses
+        let busbotPosts = {};      // operator + vehicle -> exact current-journey post
         let routeIndex = {};       // "OPERATOR_line" -> [{ key, operator, route, direction, points }]
         let activeRouteLine = null;       // Currently selected route key e.g. "FBRI_9"
         let activeRouteLineLayers = [];   // Polyline layers for route search view
@@ -20,6 +20,10 @@
             day: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
             night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         };
+
+        function featuredPostFor(bus) {
+            return window.BBB.featuredPostForBus(busbotPosts, bus);
+        }
 
         function currentTheme() {
             return document.documentElement.dataset.theme === 'night' ? 'night' : 'day';
@@ -320,7 +324,7 @@
                 };
             }
 
-            const featured = Boolean(busbotPosts[bus.vehicleRef]);
+            const featured = Boolean(featuredPostFor(bus));
             const options = {};
             let mode = 'normal';
             let zOffset = featured ? 1500 : 1000;
@@ -376,7 +380,7 @@
             });
 
             buses.forEach(bus => {
-                const popup = window.BBB.busPopup(bus, busbotPosts[bus.vehicleRef]);
+                const popup = window.BBB.busPopup(bus, featuredPostFor(bus));
 
                 if (busMarkers.has(bus.vehicleRef)) {
                     const m = busMarkers.get(bus.vehicleRef);
@@ -987,23 +991,12 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 const posts = data.posts || [];
-                const newPosts = {};
-
-                // Posts arrive with exact vehicleRef from the busbot API
-                posts.forEach(post => {
-                    if (!post.postUrl || !post.vehicleRef) return;
-                    if (!newPosts[post.vehicleRef]) {
-                        newPosts[post.vehicleRef] = {
-                            postUrl: post.postUrl,
-                            postText: post.postText,
-                            timestamp: post.timestamp
-                        };
-                    }
-                });
-
-                busbotPosts = newPosts;
+                // The server has already matched the current journey; the
+                // browser repeats the exact identity check before display.
+                busbotPosts = window.BBB.buildFeaturedPostIndex(posts);
                 const count = Object.keys(busbotPosts).length;
                 if (count > 0) console.log(`Matched ${count} busbot posts to active buses`);
+                if (latestBusData.length) updateBusMarkers(latestBusData);
             } catch (e) {
                 console.error('fetch busbot posts failed:', e);
             }
@@ -1138,7 +1131,7 @@
                     ...state,
                     description: pickDescriptionFor(state.vehicle, state.bus)
                         || state.bus?.description || null,
-                    featuredPost: state.bus ? busbotPosts[state.bus.vehicleRef] : null,
+                    featuredPost: state.bus ? featuredPostFor(state.bus) : null,
                     profileUrl: state.vehicle.profile_url || state.bus?.profileUrl,
                     onClose: closeVehicleSidebar,
                     onTabChange: tab => {

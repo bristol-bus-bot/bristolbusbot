@@ -153,7 +153,13 @@ export class SocialMediaManager {
 
                         // Store engagement analytics with vehicle ref and post URI
                         if (this.databaseManager) {
-                            await this.databaseManager.storeEngagementRecord(postText, busEvent.eventType, busEvent.significance, busEvent.vehicleRef, postUri);
+                            await this.databaseManager.storeEngagementRecord({
+                                postContent: finalPostText,
+                                postType: busEvent.eventType,
+                                significance: busEvent.significance,
+                                postUri,
+                                event: busEvent,
+                            });
                         }
 
                         const previousCount = this.appState.postsTodayCount;

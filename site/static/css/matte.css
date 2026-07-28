@@ -796,6 +796,16 @@ body {
   font: 800 var(--t-body) var(--font-sans);
 }
 
+.bt-featured {
+  color: var(--ev-origin);
+  font-size: var(--t-small);
+}
+
+.vs-bot-post {
+  border-color: var(--edge-origin);
+  background: var(--tint-origin);
+}
+
 .bus-marker.focused {
   z-index: 2;
 }
