@@ -255,11 +255,11 @@ Pilot shape:
   (SVG templates in the site's road-sign/matte/LED visual language,
   rendered with `resvg` and `sharp` — ARM64 smoke test still applies), captions, alt
   text, and the data-gate results that prove every number.
-- During laptop testing, Codex can upload the files to the existing Slack
-  DM. An unattended Pi job would need a narrowly scoped Slack app token with
+- During laptop testing, the maintainer can upload the files to the existing
+  Slack DM. An unattended Pi job would need a narrowly scoped Slack app token with
   `files:write`; an incoming webhook can notify but cannot upload files.
   Generated packs and tokens stay out of Git.
-- **Tom posts them natively from the phone.** Posting is the approval —
+- **The maintainer posts them natively from the phone.** Posting is the approval —
   no Slack buttons, no state machine, no Meta app, no public media URLs,
   no token lifecycle. The native app also permits formats the API makes
   painful (Stories, polls) at zero engineering cost.
@@ -268,7 +268,7 @@ Pilot shape:
   editorial safeguards apply to every card.
 
 Start posting as soon as a reviewed draft pack is ready. Review the pilot after
-eight weeks; this is an evaluation window, not a pre-launch wait. If the account resonates (steady saves/shares,
+eight weeks; this is an evaluation window, not a wait before launch. If the account resonates (steady saves/shares,
 follower growth, anything organic), *then* build the publishing
 automation — and when that day comes, approval reuses the editorial
 pattern the project already trusts: drafts land as a GitHub PR, merge is

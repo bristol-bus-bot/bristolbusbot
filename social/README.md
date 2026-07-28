@@ -43,8 +43,8 @@ step can be added later, but its output must remain a review-only suggestion.
 
 ## Slack delivery
 
-During laptop testing, Codex can upload the rendered JPEGs directly to the
-existing Slack DM. For unattended Pi delivery, the existing incoming webhook
+During laptop testing, the maintainer can upload the rendered JPEGs directly
+to the existing Slack DM. For unattended Pi delivery, the existing incoming webhook
 can announce that a pack exists but cannot upload its image files. The minimal
 future setup is a narrowly scoped Slack app token with `files:write`, stored in
 a root-readable credential file, using Slack's external-upload flow. The token
