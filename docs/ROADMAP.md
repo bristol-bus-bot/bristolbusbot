@@ -46,15 +46,22 @@ In rough order, each gated on the one before where it matters:
    Social failures must be unable to affect the collector, site, audit
    or Bluesky — killing the social service leaves everything else
    healthy. No deployment target exists until the service is implemented.
+   The repository contains the read-only selector and exact successful-post
+   handoff needed to evaluate this; the isolated service and timer are still to
+   be built and deployed.
 3. **Threads as a curated mirror.** Reuses the exact final Bluesky text
-   (no second AI call, no second BODS consumer), capped at one qualifying
-   post per rolling hour with significance and cooldown gates. Runs
-   logging-only in shadow before going live.
+   (no second AI call, no second BODS consumer), selected by a significance
+   budget with route cooldowns and a hard ceiling of 15 posts per day. Runs
+   logging-only for at least one complete service day and 50 decisions before
+   thresholds are chosen and publishing is built.
 4. **Instagram as a visual editorial product.** Branded data cards
-   generated from the audit archive, with every post human-approved for
-   the first 30 days. Numbers are deterministic; AI garnishes, never
-   generates figures. Full editorial and technical specification:
-   `docs/plans/SOCIAL_EXPANSION_PLAN.md`.
+   generated from the audit archive and posted manually during the pilot.
+   Numbers are deterministic; AI may suggest caption garnish but never
+   generates or changes figures. Full editorial and technical specification:
+   `docs/plans/SOCIAL_EXPANSION_PLAN_V2.md`.
+   The manual generator emits a regular observation card plus a weekly
+   three-slide carousel. It remains review-only: no Meta credentials or
+   publishing path exist.
 5. **Longer tail** (unordered): depot
    allocation visualisation, an open read-only API, SIRI-SX disruption
    posts once a verifiable source/corroboration contract exists for

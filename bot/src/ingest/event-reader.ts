@@ -89,6 +89,8 @@ export class EventReader {
             delayMinutes, DateTime.fromISO(row.created_at).setZone(TARGET_TIMEZONE));
         const busDetails = this.delayAnalyzer.extractBusDetails(row.vehicle_ref || '');
         return {
+            collectorEventId: row.id,
+            operatorRef: row.operator_ref,
             timestamp: row.created_at,
             vehicleRef: row.vehicle_ref,
             datedJourneyRef: row.journey_ref || '',
@@ -96,11 +98,15 @@ export class EventReader {
             direction: row.direction || '',
             originAimedDepartureTimeStr: row.origin_aimed_departure || '',
             delayMinutes,
+            delaySeconds: row.delay_seconds,
             lastStopCode: row.stop_code || '',
             lastStopTime: '',
             lastStopName: row.stop_name || undefined,
             eventType,
             significance: analysis.type === 'ignore' ? 0 : analysis.score,
+            source: row.source,
+            corroboration: row.corroboration,
+            lowConfidence: Boolean(row.low_confidence),
             busDetails: busDetails ?? undefined,
             location: (row.lat != null && row.lon != null)
                 ? { latitude: row.lat, longitude: row.lon } : undefined,

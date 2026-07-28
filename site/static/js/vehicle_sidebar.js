@@ -76,6 +76,15 @@ function detailRow(label, value) {
     ];
 }
 
+function formatPostTime(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    }).format(date);
+}
+
 function vehiclePanel(ctx) {
     const vehicle = ctx.vehicle || {};
     const bus = ctx.bus;
@@ -118,15 +127,24 @@ function vehiclePanel(ctx) {
         ]));
     }
 
-    const links = [];
-    if (ctx.featuredPost?.postUrl) {
-        links.push(el("a", {
-            class: "vc-action vc-action-bsky",
-            href: ctx.featuredPost.postUrl,
-            target: "_blank",
-            rel: "noopener",
-        }, ["Featured on @bristolbusbot.live"]));
+    if (ctx.featuredPost?.postUrl && ctx.featuredPost?.postText) {
+        content.push(el("aside", { class: "vs-bot-post" }, [
+            el("div", { class: "vs-bot-post-head" }, [
+                el("span", {}, ["@bristolbusbot.live said"]),
+                el("time", { datetime: ctx.featuredPost.timestamp || "" }, [
+                    formatPostTime(ctx.featuredPost.timestamp),
+                ]),
+            ]),
+            el("blockquote", {}, [ctx.featuredPost.postText]),
+            el("a", {
+                href: ctx.featuredPost.postUrl,
+                target: "_blank",
+                rel: "noopener",
+            }, ["Open the Bluesky post ↗"]),
+        ]));
     }
+
+    const links = [];
     if (reg) {
         links.push(el("a", {
             class: "vc-action vc-action-flickr",
@@ -372,6 +390,35 @@ function recordPanel(ctx) {
         routeList.appendChild(details);
     });
     if (routes.length) root.appendChild(routeList);
+
+    const mentions = Array.isArray(profile.bot_mentions)
+        ? profile.bot_mentions : [];
+    if (mentions.length) {
+        const mentionList = el("div", { class: "vs-mention-list" });
+        mentions.forEach(mention => {
+            mentionList.appendChild(el("article", { class: "vs-mention" }, [
+                el("div", { class: "vs-mention-head" }, [
+                    el("strong", {}, [mention.route ? `Route ${mention.route}` : "Bot post"]),
+                    el("time", { datetime: mention.posted_at || "" }, [
+                        formatPostTime(mention.posted_at),
+                    ]),
+                ]),
+                el("p", {}, [mention.text || ""]),
+                el("a", {
+                    href: mention.post_url,
+                    target: "_blank",
+                    rel: "noopener",
+                }, ["Open on Bluesky ↗"]),
+            ]));
+        });
+        root.appendChild(el("div", { class: "vs-mentions" }, [
+            el("div", { class: "vs-route-heading" }, [
+                el("strong", {}, ["Mentioned by the bot"]),
+                el("span", {}, [`${mentions.length} post${mentions.length === 1 ? "" : "s"}`]),
+            ]),
+            mentionList,
+        ]));
+    }
 
     if (ctx.profileUrl) {
         root.appendChild(el("a", {

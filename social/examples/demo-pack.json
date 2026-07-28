@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-07-28T12:00:00Z",
+  "botSaid": {
+    "postText": "Route 75 has reached Bedminster five minutes late, which is enough time for the timetable to develop plausible deniability.",
+    "postUrl": "https://bsky.app/profile/bristolbusbot.live",
+    "route": "75",
+    "stop": "Bedminster Parade",
+    "observedAt": "2026-07-28T11:54:00Z",
+    "delayMinutes": 5,
+    "vehicleRef": "FBRI-00000",
+    "recentDepartures": [
+      { "delaySeconds": -270 },
+      { "delaySeconds": -170 },
+      { "delaySeconds": -45 },
+      { "delaySeconds": 20 },
+      { "delaySeconds": 25 },
+      { "delaySeconds": 90 },
+      { "delaySeconds": 95 },
+      { "delaySeconds": 160 },
+      { "delaySeconds": 245 },
+      { "delaySeconds": 250 },
+      { "delaySeconds": 255 },
+      { "delaySeconds": 320 },
+      { "delaySeconds": 325 },
+      { "delaySeconds": 390 },
+      { "delaySeconds": 300, "isCurrent": true },
+      { "delaySeconds": 440 },
+      { "delaySeconds": 445 },
+      { "delaySeconds": 560 },
+      { "delaySeconds": 680 },
+      { "delaySeconds": 790 }
+    ]
+  },
+  "busWeek": {
+    "startDate": "2026-07-20",
+    "endDate": "2026-07-26",
+    "onTimePct": 67.4,
+    "onTimeReadings": 8378,
+    "readings": 12431,
+    "serviceDays": 7,
+    "daily": [65.1, 68.4, 66.8, 70.2, 67.9, 69.1, 64.7],
+    "distribution": {
+      "binEdgesSeconds": [-600, -300, -180, -120, -60, 0, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200],
+      "counts": [50, 100, 250, 400, 500, 900, 1200, 1500, 1700, 1600, 1478, 900, 650, 450, 300, 200, 253],
+      "medianDelaySeconds": 120,
+      "p10DelaySeconds": -120,
+      "p90DelaySeconds": 480
+    }
+  }
+}

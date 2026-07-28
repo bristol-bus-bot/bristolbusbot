@@ -1,5 +1,8 @@
 # Instagram and Threads design proposal
 
+> Superseded by `SOCIAL_EXPANSION_PLAN_V2.md`. Retained as the original design
+> record; use V2 for current sequencing, formats and rollout decisions.
+
 Status: proposed and explicitly deferred until Phases B-F of
 `DATA_REFRESH_AUTOMATION.md` are complete. This document expands the
 social-media items in

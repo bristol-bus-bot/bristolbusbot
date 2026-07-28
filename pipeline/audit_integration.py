@@ -45,6 +45,8 @@ RARE_MIN_POINTS = 3
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_AUDIT_DB = Path(os.getenv("BBB_AUDIT_DB", HERE / "audit.db"))
+DEFAULT_BOT_DB = Path(os.getenv(
+    "BBB_BOT_APP_DATA_DB", "/var/lib/bristolbusbot/bot/app_data.db"))
 DEFAULT_OUTPUT = Path(os.getenv(
     "BBB_AUDIT_INTEGRATION_PENDING",
     "/var/lib/bristolbusbot/collector/audit_integration.pending.json",
@@ -152,7 +154,71 @@ def _empty_delay_counts() -> list[int]:
     return [0] * (len(DELAY_BIN_EDGES_S) + 1)
 
 
-def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
+def _post_url(post_uri: object) -> str | None:
+    value = str(post_uri or "")
+    if not value.startswith("at://") or "/app.bsky.feed.post/" not in value:
+        return None
+    rkey = value.rsplit("/", 1)[-1]
+    if not rkey or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_~" for char in rkey):
+        return None
+    return f"https://bsky.app/profile/bristolbusbot.live/post/{rkey}"
+
+
+def _bot_mentions(path: Path | None) -> dict[tuple[str, str], list[dict]]:
+    """Read up to ten known public posts per vehicle from the bot's database."""
+    if path is None or not path.is_file():
+        return {}
+    connection = None
+    try:
+        connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        columns = {
+            row[1] for row in connection.execute(
+                "PRAGMA table_info(engagement_analytics)")
+        }
+        required = {
+            "operator_ref", "vehicle_ref", "post_uri", "post_content",
+            "post_type", "timestamp", "line",
+        }
+        if not required.issubset(columns):
+            return {}
+        rows = connection.execute(
+            """SELECT operator_ref, vehicle_ref, post_uri, post_content,
+                      post_type, timestamp, line
+                 FROM engagement_analytics
+                WHERE operator_ref IS NOT NULL AND trim(operator_ref) != ''
+                  AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
+                  AND post_uri IS NOT NULL AND trim(post_uri) != ''
+                  AND post_content IS NOT NULL AND trim(post_content) != ''
+                ORDER BY timestamp DESC"""
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        if connection is not None:
+            connection.close()
+
+    mentions: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        key = (str(row["operator_ref"]), str(row["vehicle_ref"]))
+        target = mentions.setdefault(key, [])
+        if len(target) >= 10:
+            continue
+        url = _post_url(row["post_uri"])
+        if not url:
+            continue
+        target.append({
+            "post_url": url,
+            "text": str(row["post_content"])[:400],
+            "posted_at": str(row["timestamp"]),
+            "route": str(row["line"] or "")[:20],
+            "post_type": str(row["post_type"] or "")[:30],
+        })
+    return mentions
+
+
+def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
+              mentions: dict[tuple[str, str], list[dict]] | None = None) -> list[dict]:
     dates = _profile_dates(completed_dates)
     if not dates:
         return []
@@ -292,6 +358,7 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str]) -> list[dict]:
             "delay_bins_s": list(DELAY_BIN_EDGES_S),
             "delay_counts": candidate["delay_counts"],
             "routes": routes,
+            "bot_mentions": (mentions or {}).get((operator, vehicle_ref), []),
         })
     return profiles
 
@@ -493,13 +560,14 @@ def _rare_workings(conn: sqlite3.Connection, completed_dates: list[str],
 
 
 def build_payload(conn: sqlite3.Connection, through_date: str,
-                  *, now: datetime | None = None) -> dict:
+                  *, now: datetime | None = None,
+                  bot_db: Path | None = None) -> dict:
     conn.row_factory = sqlite3.Row
     completed = _completed_dates(conn.cursor(), through_date)
     if not completed:
         raise RuntimeError(f"no completed audit rollup on or before {through_date}")
     actual_through = completed[-1]
-    profiles = _profiles(conn.cursor(), completed)
+    profiles = _profiles(conn.cursor(), completed, _bot_mentions(bot_db))
     generated = (now or datetime.now(timezone.utc)).astimezone(
         timezone.utc).isoformat()
     return {
@@ -544,13 +612,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--through", required=True,
                         help="latest completed service date (YYYYMMDD)")
     parser.add_argument("--audit-db", type=Path, default=DEFAULT_AUDIT_DB)
+    parser.add_argument("--bot-db", type=Path, default=DEFAULT_BOT_DB)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args(argv)
     datetime.strptime(args.through, "%Y%m%d")
     conn = sqlite3.connect(args.audit_db)
     conn.execute("PRAGMA busy_timeout=10000")
     try:
-        payload = build_payload(conn, args.through)
+        payload = build_payload(conn, args.through, bot_db=args.bot_db)
     finally:
         conn.close()
     write_atomic(args.output, payload)

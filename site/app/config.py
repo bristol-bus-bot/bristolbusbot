@@ -47,6 +47,11 @@ class Config:
         os.getenv("BBB_AUDIT_MAX_AGE_S", "172800")))
     stale_vehicle_seconds: int = field(default_factory=lambda: int(
         os.getenv("BBB_STALE_VEHICLE_S", "90")))
+    bot_recent_posts_url: str = field(default_factory=lambda: os.getenv(
+        "BBB_BOT_RECENT_POSTS_URL",
+        "http://127.0.0.1:3010/api/recent-posts?limit=20"))
+    featured_post_max_age_minutes: int = field(default_factory=lambda: int(
+        os.getenv("BBB_FEATURED_POST_MAX_AGE_MIN", "240")))
     enforce_https: bool = field(default_factory=lambda: _env_bool(
         "BBB_ENFORCE_HTTPS", False))
     public_hosts: tuple[str, ...] = ("bristolbuses.live", "www.bristolbuses.live")
