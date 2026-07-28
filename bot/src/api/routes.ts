@@ -650,10 +650,24 @@ export class APIRoutes {
             const enriched = posts.map(p => {
                 const rkey = p.postUri.split('/').pop() || '';
                 return {
+                    eventId: p.collectorEventId,
+                    operatorRef: p.operatorRef,
                     vehicleRef: p.vehicleRef,
+                    line: p.line,
+                    journeyRef: p.journeyRef,
+                    originAimedDeparture: p.originAimedDeparture,
+                    eventTimestamp: p.eventTimestamp,
+                    delaySeconds: p.delaySeconds,
+                    direction: p.direction,
+                    stopCode: p.stopCode,
+                    stopName: p.stopName,
+                    source: p.source,
+                    corroboration: p.corroboration,
+                    lowConfidence: p.lowConfidence,
                     postUrl: rkey ? `https://bsky.app/profile/${handle}/post/${rkey}` : null,
-                    postContent: p.postContent,
+                    postText: p.postContent,
                     postType: p.postType,
+                    significance: p.significance,
                     timestamp: p.timestamp
                 };
             });

@@ -155,6 +155,16 @@
 .vs-profile-link { display: block; padding: 9px; border-radius: var(--r-md);
                    background: var(--tint-origin); color: var(--uk-blue);
                    text-align: center; text-decoration: none; font-size: 11px; font-weight: 700; }
+.vs-mentions { margin-top: 16px; }
+.vs-mention-list { display: grid; gap: 8px; }
+.vs-mention { padding: 10px 11px; border: 1px solid var(--edge-origin);
+              border-radius: var(--r-md); background: var(--tint-origin); }
+.vs-mention-head { display: flex; justify-content: space-between; gap: 8px;
+                   color: var(--fg-1); font-size: var(--t-label); }
+.vs-mention-head time { color: var(--fg-3); }
+.vs-mention p { margin: 7px 0; color: var(--fg-2);
+                font-size: var(--t-small); line-height: 1.45; }
+.vs-mention a { color: var(--uk-blue); font-size: var(--t-small); font-weight: 800; }
 
 /* The map tooltip is only a live journey summary; detail belongs above. */
 .bus-tooltip { width: 250px; overflow: hidden; border-radius: 14px; background: var(--surface-1); }
@@ -165,12 +175,24 @@
 .bt-dest { overflow: hidden; color: var(--fg-2); font-size: 11px;
            text-overflow: ellipsis; white-space: nowrap; }
 .bt-live { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.bt-featured { display: block; margin-top: 8px; color: var(--uk-blue);
+               font-size: var(--t-small); font-weight: 750; text-decoration: none; }
 .bt-place { overflow: hidden; color: var(--fg-3); font-size: 11px;
             text-overflow: ellipsis; white-space: nowrap; }
 .bt-vehicle { margin-top: 9px; color: var(--fg-2); font: 650 9px var(--font-mono); }
 .bt-details { width: 100%; min-height: 36px; margin-top: 10px; border: 0;
               border-radius: var(--r-md); background: var(--tint-origin); color: var(--uk-blue);
               font: 750 10px var(--font-sans); cursor: pointer; }
+.vs-bot-post { display: grid; gap: 8px; margin-top: 14px; padding: 12px;
+               border: 1px solid var(--edge-origin); border-radius: var(--r-md);
+               background: var(--tint-origin); }
+.vs-bot-post-head { display: flex; justify-content: space-between; gap: 8px;
+                    color: var(--ev-origin); font-size: var(--t-label); font-weight: 800; }
+.vs-bot-post-head time { color: var(--fg-3); font-weight: 600; }
+.vs-bot-post blockquote { margin: 0; color: var(--fg-1);
+                          font: 600 var(--t-body)/1.45 var(--font-sans); }
+.vs-bot-post a { color: var(--uk-blue); font-size: var(--t-small);
+                 font-weight: 800; text-decoration: none; }
 .leaflet-popup:has(.bus-tooltip) .leaflet-popup-close-button { color: var(--fg-2) !important;
                                                                background: rgba(255,255,255,.88) !important; }
 

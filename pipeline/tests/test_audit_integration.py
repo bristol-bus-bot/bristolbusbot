@@ -151,6 +151,42 @@ def test_delay_histogram_respects_signed_on_time_boundaries():
     assert sum(profile["delay_counts"]) == profile["readings"]
 
 
+def test_vehicle_profile_includes_only_posts_with_exact_operator_identity(tmp_path):
+    conn = database()
+    completed = ["20260714", "20260715"]
+    add_completed(conn, completed)
+    for day in completed:
+        for number in range(15):
+            add_observation(conn, day, "FBRI-100", "75", number)
+    conn.commit()
+
+    bot_db = tmp_path / "app_data.db"
+    bot = sqlite3.connect(bot_db)
+    bot.execute(
+        """CREATE TABLE engagement_analytics (
+               operator_ref TEXT, vehicle_ref TEXT, post_uri TEXT,
+               post_content TEXT, post_type TEXT, timestamp TEXT, line TEXT
+           )""")
+    bot.executemany("INSERT INTO engagement_analytics VALUES (?,?,?,?,?,?,?)", [
+        ("FBRI", "FBRI-100", "at://did:plc:test/app.bsky.feed.post/newest",
+         "Exact published text", "delay", "2026-07-15T12:00:00Z", "75"),
+        ("OTHER", "FBRI-100", "at://did:plc:test/app.bsky.feed.post/wrong",
+         "Wrong operator", "delay", "2026-07-15T11:00:00Z", "75"),
+    ])
+    bot.commit()
+    bot.close()
+
+    profile = integration.build_payload(
+        conn, completed[-1], bot_db=bot_db)["profiles"][0]
+    assert profile["bot_mentions"] == [{
+        "post_url": "https://bsky.app/profile/bristolbusbot.live/post/newest",
+        "text": "Exact published text",
+        "posted_at": "2026-07-15T12:00:00Z",
+        "route": "75",
+        "post_type": "delay",
+    }]
+
+
 def test_rare_detector_fails_closed_without_56_prior_completed_days():
     conn = database()
     completed = dates_ending(date(2026, 7, 17), 56)

@@ -18,6 +18,14 @@ def _display_service_date(value: str) -> str:
     return f"{parsed.day} {parsed.strftime('%B %Y')}"
 
 
+def _display_post_time(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return f"{parsed.day} {parsed.strftime('%b %Y, %H:%M')}"
+    except (AttributeError, ValueError):
+        return ""
+
+
 def _delay_plot(profile: dict, *, compact: bool = False) -> dict | None:
     try:
         edges = [int(value) for value in profile.get("delay_bins_s", [])]
@@ -108,6 +116,7 @@ def vehicle_profile(slug: str):
         measurement_start_label=_display_service_date(profile["measurement_start"]),
         through_date_label=_display_service_date(profile["through_date"]),
         display_service_date=_display_service_date,
+        display_post_time=_display_post_time,
         audit_url="https://bristol-bus-bot.github.io/weca-bus-audit/",
     )
 

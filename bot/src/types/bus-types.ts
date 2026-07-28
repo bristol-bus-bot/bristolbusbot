@@ -4,6 +4,9 @@ import { DateTime } from 'luxon';
 
 // Core bus event types
 export interface BusEvent {
+    /** Collector provenance. Optional so direct-SIRI/test events remain valid. */
+    collectorEventId?: number;
+    operatorRef?: string;
     timestamp: string;
     vehicleRef: string;
     datedJourneyRef: string;
@@ -11,12 +14,16 @@ export interface BusEvent {
     direction: string;
     originAimedDepartureTimeStr: string;
     delayMinutes: number;
+    delaySeconds?: number;
     lastStopCode: string;
     lastStopTime: string;
     lastStopName?: string;
     weight?: number;
     eventType: 'delay' | 'early' | 'punctual';
     significance: number;
+    source?: string;
+    corroboration?: number;
+    lowConfidence?: boolean;
     busDetails?: BusVehicleDetails;
     location?: {
         latitude: number;

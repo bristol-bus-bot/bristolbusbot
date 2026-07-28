@@ -276,6 +276,16 @@
 
 .profile-disclosure { margin: 0; background: #fafafa; }
 
+.profile-mentions { display: grid; gap: 10px; }
+.profile-mentions article { padding: 14px 16px; border: 1px solid var(--edge-origin);
+                            border-radius: var(--r-md); background: var(--tint-origin); }
+.profile-mentions article > div { display: flex; justify-content: space-between;
+                                  gap: 12px; color: var(--fg-2); font-size: var(--t-small); }
+.profile-mentions time { color: var(--fg-3); }
+.profile-mentions blockquote { margin: 10px 0; color: var(--fg-1);
+                               font: 600 var(--t-body)/1.5 var(--font-sans); }
+.profile-mentions a { font-size: var(--t-small); }
+
 @media (max-width: 560px) {
   .profile-shell { width: min(100% - 18px, 760px); padding-top: 14px; }
   .profile-nav { font-size: 0.78rem; }

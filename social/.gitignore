@@ -1,0 +1,6 @@
+previews/
+*.local.json
+node_modules/
+.pytest_cache/
+__pycache__/
+*.pyc
