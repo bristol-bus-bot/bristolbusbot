@@ -41,6 +41,14 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
             "by_operator": {
                 "ALL": {"overall": dict(overall), "fleet": fleet},
                 "FBRI": {"overall": dict(overall), "fleet": fleet},
+                "SCGL": {
+                    "overall": {
+                        "readings_in_gate": 80,
+                        "on_time": 52,
+                        "on_time_pct": 65.0,
+                    },
+                    "fleet": fleet,
+                },
             },
         })
     return {
@@ -49,6 +57,7 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
         "operators": [
             {"code": "ALL", "name": "WECA network"},
             {"code": "FBRI", "name": "First Bristol"},
+            {"code": "SCGL", "name": "Stagecoach West"},
         ],
         "target_pct": 95,
         "target_year": 2030,
@@ -76,6 +85,16 @@ def test_pack_uses_exact_counts_and_successful_post_provenance():
     assert pack["busWeek"]["onTimePct"] == 61.5
     assert pack["busWeek"]["operatorCode"] == "FBRI"
     assert pack["busWeek"]["operatorName"] == "First Bristol"
+    assert pack["busWeek"]["operatorComparison"] == [
+        {
+            "operatorCode": "FBRI", "operatorName": "First Bristol",
+            "readings": 1400, "onTime": 861, "onTimePct": 61.5,
+        },
+        {
+            "operatorCode": "SCGL", "operatorName": "Stagecoach West",
+            "readings": 560, "onTime": 364, "onTimePct": 65.0,
+        },
+    ]
     assert pack["busWeek"]["targetPct"] == 82
     assert pack["busWeek"]["targetGapPoints"] == 20.5
     assert pack["busWeek"]["longTermTargetPct"] == 95
@@ -87,6 +106,7 @@ def test_pack_uses_exact_counts_and_successful_post_provenance():
     assert pack["busWeek"]["powertrain"]["dieselOther"]["onTimePct"] == 70.0
     assert pack["busWeek"]["serviceDays"] == 7
     assert pack["botSaid"]["postText"] == "Exact final Bluesky text."
+    assert pack["botSaid"]["operatorName"] == "First Bristol"
     assert pack["botSaid"]["stop"] == "Bedminster Parade"
     assert pack["botSaid"]["delayMinutes"] == 6
     assert pack["botSaid"]["recentDepartures"] == [

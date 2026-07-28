@@ -99,6 +99,28 @@ const GENERIC_LOCATION_WORDS = new Set([
     'street',
 ]);
 
+const OPERATOR_IDENTITIES: Record<string, { name: string; aliases: string[] }> = {
+    FBRI: { name: 'First Bristol', aliases: ['First Bristol', 'First Bus'] },
+    SCGL: { name: 'Stagecoach West', aliases: ['Stagecoach West', 'Stagecoach'] },
+    LEMB: { name: 'The Big Lemon', aliases: ['The Big Lemon', 'Big Lemon'] },
+    ABUS: { name: 'Abus', aliases: ['Abus'] },
+    CTCO: { name: 'CT Coaches', aliases: ['CT Coaches'] },
+    TYSW: { name: 'Taylors Travel', aliases: ['Taylors Travel'] },
+};
+
+export function operatorDisplayName(operatorRef?: string): string | null {
+    if (!operatorRef) return null;
+    return OPERATOR_IDENTITIES[operatorRef.trim().toUpperCase()]?.name || null;
+}
+
+function hasOperator(post: string, operatorRef?: string): boolean {
+    if (!operatorRef) return true;
+    const identity = OPERATOR_IDENTITIES[operatorRef.trim().toUpperCase()];
+    if (!identity) return true;
+    const normalisedPost = normalise(post);
+    return identity.aliases.some(alias => normalisedPost.includes(normalise(alias)));
+}
+
 function requireObject(value: unknown, name: string): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error(`${name} must be an object`);
@@ -266,6 +288,10 @@ export function validateCommentaryCandidate(
         issues.push('post contains an emoji');
     }
     if (!hasRoute(post, event.line)) issues.push(`post is missing route ${event.line}`);
+    const operatorName = operatorDisplayName(event.operatorRef);
+    if (operatorName && !hasOperator(post, event.operatorRef)) {
+        issues.push(`post is missing operator ${operatorName}`);
+    }
     if (!new RegExp(`\\b${escapeRegExp(event.direction)}\\b`, 'i').test(post)) {
         issues.push(`post is missing ${event.direction} direction`);
     }
