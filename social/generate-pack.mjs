@@ -164,13 +164,14 @@ function squareGrid(onTime) {
 export function busWeekSvg(data, css = '') {
   const onTime = Math.max(0, Math.min(100, Math.round(Number(data.onTimePct))));
   const notOnTime = 100 - onTime;
+  const scope = String(data.operatorName || 'Bristol buses');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <style>${css}</style>
     <defs><pattern id="led-dots-b" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-b)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">BRISTOL BUSES · ${xml(formatDate(data.startDate).toUpperCase())}–${xml(formatDate(data.endDate).toUpperCase())}</text>
+    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(formatDate(data.startDate).toUpperCase())}–${xml(formatDate(data.endDate).toUpperCase())}</text>
     <text x="72" y="220" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${notOnTime} in every 100</text>
     <text x="72" y="310" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">weren't on time.</text>
     ${squareGrid(onTime)}
@@ -181,7 +182,53 @@ export function busWeekSvg(data, css = '') {
     <text x="570" y="1172" class="mono" font-size="20" font-weight="650" fill="${COLORS.boardMuted}">each square = 1% · ${xml(Number(data.readings).toLocaleString('en-GB'))} readings</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
-    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${xml(Number(data.onTimePct).toFixed(1))}% · ${xml(data.serviceDays)} days measured</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${Number(data.onTimePct).toFixed(1)}% · ${xml(data.serviceDays)} days measured</text>
+  </svg>`;
+}
+
+export function weeklyTargetSvg(data, css = '') {
+  const actual = Number(data.onTimePct);
+  const target = Number(data.targetPct);
+  const longTarget = Number(data.longTermTargetPct);
+  const gap = Number(data.targetGapPoints);
+  const longGap = Number(data.longTermTargetGapPoints);
+  const barX = 100;
+  const barWidth = 880;
+  const actualX = barX + barWidth * actual / 100;
+  const targetX = barX + barWidth * target / 100;
+  const longTargetX = barX + barWidth * longTarget / 100;
+  const scope = String(data.operatorName || 'Bristol buses');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <style>${css}</style>
+    <defs><pattern id="led-dots-target" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
+    <rect width="1080" height="1350" fill="#0d0f11"/>
+    <rect width="1080" height="1350" fill="url(#led-dots-target)"/>
+    <rect width="1080" height="12" fill="${COLORS.amber}"/>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · WECA TARGET</text>
+    <text x="72" y="228" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${gap.toFixed(1)} points short.</text>
+    <text x="72" y="302" font-size="30" fill="${COLORS.boardMuted}">Latest published annual area target</text>
+    <rect x="72" y="372" width="936" height="530" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
+    <text x="100" y="438" class="mono" font-size="22" font-weight="750" fill="${COLORS.boardMuted}">0–100% ON-TIME SCALE</text>
+    <rect x="${barX}" y="548" width="${barWidth}" height="72" rx="8" fill="#666c73"/>
+    <rect x="${barX}" y="548" width="${(barWidth * actual / 100).toFixed(1)}" height="72" rx="8" fill="${COLORS.liveGreen}"/>
+    <line x1="${targetX.toFixed(1)}" y1="514" x2="${targetX.toFixed(1)}" y2="654" stroke="${COLORS.amber}" stroke-width="8"/>
+    <line x1="${longTargetX.toFixed(1)}" y1="530" x2="${longTargetX.toFixed(1)}" y2="638" stroke="${COLORS.boardInk}" stroke-width="4"/>
+    <text x="${actualX.toFixed(1)}" y="682" text-anchor="middle" class="mono" font-size="24" font-weight="800" fill="${COLORS.liveGreen}">${actual.toFixed(1)}% ACTUAL</text>
+    <text x="${targetX.toFixed(1)}" y="506" text-anchor="middle" class="mono" font-size="24" font-weight="800" fill="${COLORS.amber}">${target.toFixed(0)}% TARGET</text>
+    <text x="${longTargetX.toFixed(1)}" y="682" text-anchor="end" class="mono" font-size="21" font-weight="750" fill="${COLORS.boardInk}">${longTarget.toFixed(0)}% BY 2030</text>
+    <line x1="100" y1="744" x2="980" y2="744" stroke="rgba(255,255,255,.14)" stroke-width="2"/>
+    <text x="100" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.liveGreen}">${actual.toFixed(1)}%</text>
+    <text x="100" y="866" font-size="24" fill="${COLORS.boardMuted}">First Bristol actual</text>
+    <text x="430" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.amber}">${target.toFixed(0)}%</text>
+    <text x="430" y="866" font-size="24" fill="${COLORS.boardMuted}">latest WECA target</text>
+    <text x="745" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.boardInk}">${longTarget.toFixed(0)}%</text>
+    <text x="745" y="866" font-size="24" fill="${COLORS.boardMuted}">goal by 2030</text>
+    <rect x="72" y="962" width="936" height="144" rx="12" fill="rgba(245,158,11,.10)" stroke="rgba(245,158,11,.42)" stroke-width="2"/>
+    <text x="104" y="1024" class="matrix" font-size="23" font-weight="750" fill="${COLORS.amber}">THE LONG-TERM GAP</text>
+    <text x="104" y="1080" font-size="38" font-weight="750" fill="${COLORS.boardInk}">${longGap.toFixed(1)} percentage points to the 2030 goal.</text>
+    <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
+    <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time: 1 min early to 5 min 59 s late</text>
   </svg>`;
 }
 
@@ -211,6 +258,7 @@ export function weeklyDaysSvg(data, css = '') {
   const axisMaximum = Math.min(100, Math.ceil(maximum) + 1);
   const axisRange = Math.max(1, axisMaximum - axisMinimum);
   const average = Number(data.onTimePct);
+  const scope = String(data.operatorName || 'Bristol buses');
   const highestIndex = values.indexOf(maximum);
   const lowestIndex = values.indexOf(minimum);
   const yFor = value => 725 - ((value - axisMinimum) / axisRange) * 255;
@@ -233,7 +281,7 @@ export function weeklyDaysSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-c)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">BRISTOL BUSES · DAILY RESULTS</text>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · DAILY RESULTS</text>
     <text x="72" y="216" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Best day: ${days[highestIndex].dayLong}.</text>
     <text x="72" y="294" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Worst: ${days[lowestIndex].dayLong}.</text>
     <rect x="72" y="360" width="936" height="520" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
@@ -245,10 +293,11 @@ export function weeklyDaysSvg(data, css = '') {
     ${plot}
     <rect x="72" y="930" width="936" height="166" rx="12" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
     <text x="100" y="977" class="mono" font-size="19" font-weight="750" fill="${COLORS.boardMuted}">WHOLE 0–100% SCALE</text>
-    <rect x="100" y="1000" width="230" height="34" rx="5" fill="#666c73"/>
-    <rect x="100" y="1000" width="${(230 * average / 100).toFixed(1)}" height="34" rx="5" fill="${COLORS.liveGreen}"/>
-    <text x="382" y="1008" font-size="30" font-weight="750" fill="${COLORS.boardInk}">${average.toFixed(1)}% on time</text>
-    <text x="382" y="1051" font-size="24" fill="${COLORS.boardMuted}">${xml(Number(data.readings).toLocaleString('en-GB'))} readings over ${xml(data.serviceDays)} days</text>
+    <rect x="100" y="1000" width="430" height="34" rx="5" fill="#666c73"/>
+    <rect x="100" y="1000" width="${(430 * average / 100).toFixed(1)}" height="34" rx="5" fill="${COLORS.liveGreen}"/>
+    <text x="100" y="1071" class="mono" font-size="20" font-weight="750" fill="${COLORS.boardInk}">${average.toFixed(1)}% OBSERVED</text>
+    <text x="580" y="1013" font-size="28" font-weight="750" fill="${COLORS.boardInk}">${xml(Number(data.readings).toLocaleString('en-GB'))} readings</text>
+    <text x="580" y="1057" font-size="23" fill="${COLORS.boardMuted}">over ${xml(data.serviceDays)} service days</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
     <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${xml(formatDate(data.startDate))}–${xml(formatDate(data.endDate))}</text>
@@ -277,7 +326,7 @@ export function weeklyDistributionSvg(data, css = '') {
   const maximum = Math.max(...counts, 1);
   const barWidth = (936 - (counts.length - 1) * 4) / counts.length;
   const onTimeStart = 5;
-  const onTimeEnd = 11;
+  const onTimeEnd = 12;
   const bandX = 72 + onTimeStart * (barWidth + 4);
   const bandWidth = (onTimeEnd - onTimeStart) * barWidth + (onTimeEnd - onTimeStart - 1) * 4;
   const bars = counts.map((count, index) => {
@@ -290,16 +339,18 @@ export function weeklyDistributionSvg(data, css = '') {
   const median = Number(distribution.medianDelaySeconds);
   const typicalResult = timingWords(median);
   const middleRange = `${signedMinutes(distribution.p10DelaySeconds)} to ${signedMinutes(distribution.p90DelaySeconds)} min`;
+  const p90Minutes = Math.abs(Number(distribution.p90DelaySeconds) / 60).toFixed(1);
+  const scope = String(data.operatorName || 'Bristol buses');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <style>${css}</style>
     <defs><pattern id="led-dots-d" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-d)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.8" fill="${COLORS.amber}">WEEK OF ${xml(formatDate(data.startDate).toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
-    <text x="72" y="210" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Typical result:</text>
-    <text x="72" y="286" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">${xml(typicalResult)}.</text>
-    <text x="72" y="350" font-size="28" fill="#b8b3a7">The bars show how early or late the buses were.</text>
+    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.8" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
+    <text x="72" y="210" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">1 in 10 was over</text>
+    <text x="72" y="286" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">${xml(p90Minutes)} min late.</text>
+    <text x="72" y="350" font-size="28" fill="#b8b3a7">The bars show how early or late the readings were.</text>
     <rect x="${bandX.toFixed(1)}" y="430" width="${bandWidth.toFixed(1)}" height="436" fill="rgba(52,211,153,.12)"/>
     <line x1="${bandX.toFixed(1)}" y1="430" x2="${bandX.toFixed(1)}" y2="866" stroke="${COLORS.liveGreen}" stroke-width="3"/>
     ${bars}
@@ -316,6 +367,52 @@ export function weeklyDistributionSvg(data, css = '') {
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
     <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time: 1 min early to 5 min 59 s late</text>
+  </svg>`;
+}
+
+export function weeklyPowertrainSvg(data, css = '') {
+  const powertrain = data.powertrain;
+  const electric = powertrain.electric;
+  const other = powertrain.dieselOther;
+  const electricShare = Number(electric.sharePct);
+  const electricOnTime = Number(electric.onTimePct);
+  const otherOnTime = Number(other.onTimePct);
+  const difference = Math.abs(Number(powertrain.onTimeDifferencePoints));
+  const circumference = 2 * Math.PI * 170;
+  const electricArc = circumference * electricShare / 100;
+  const scope = String(data.operatorName || 'Bristol buses');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <style>${css}</style>
+    <defs><pattern id="led-dots-power" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
+    <rect width="1080" height="1350" fill="#0d0f11"/>
+    <rect width="1080" height="1350" fill="url(#led-dots-power)"/>
+    <rect width="1080" height="12" fill="${COLORS.amber}"/>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ELECTRIC VS DIESEL</text>
+    <text x="72" y="218" font-size="78" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${electricShare.toFixed(1)}% of readings</text>
+    <text x="72" y="302" font-size="78" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">were electric.</text>
+    <rect x="72" y="374" width="936" height="548" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
+    <circle cx="300" cy="650" r="170" fill="none" stroke="#666c73" stroke-width="68"/>
+    <circle cx="300" cy="650" r="170" fill="none" stroke="${COLORS.liveGreen}" stroke-width="68" stroke-dasharray="${electricArc.toFixed(1)} ${(circumference - electricArc).toFixed(1)}" transform="rotate(-90 300 650)"/>
+    <text x="300" y="638" text-anchor="middle" class="mono" font-size="68" font-weight="850" fill="${COLORS.liveGreen}">${electricShare.toFixed(0)}%</text>
+    <text x="300" y="688" text-anchor="middle" font-size="26" font-weight="700" fill="${COLORS.boardInk}">electric</text>
+    <text x="300" y="726" text-anchor="middle" font-size="22" fill="${COLORS.boardMuted}">share of readings</text>
+    <circle cx="572" cy="502" r="10" fill="${COLORS.liveGreen}"/>
+    <text x="598" y="510" class="matrix" font-size="23" font-weight="750" fill="${COLORS.liveGreen}">ELECTRIC</text>
+    <text x="572" y="584" class="mono" font-size="54" font-weight="850" fill="${COLORS.boardInk}">${electricOnTime.toFixed(1)}%</text>
+    <text x="572" y="624" font-size="24" fill="${COLORS.boardMuted}">on time</text>
+    <text x="572" y="672" class="mono" font-size="22" font-weight="650" fill="${COLORS.boardInk}">${xml(Number(electric.readings).toLocaleString('en-GB'))} readings</text>
+    <line x1="572" y1="718" x2="956" y2="718" stroke="rgba(255,255,255,.14)" stroke-width="2"/>
+    <circle cx="572" cy="770" r="10" fill="${COLORS.boardInk}"/>
+    <text x="598" y="778" class="matrix" font-size="23" font-weight="750" fill="${COLORS.boardInk}">DIESEL / OTHER</text>
+    <text x="572" y="850" class="mono" font-size="54" font-weight="850" fill="${COLORS.boardInk}">${otherOnTime.toFixed(1)}%</text>
+    <text x="760" y="848" font-size="24" fill="${COLORS.boardMuted}">on time</text>
+    <text x="760" y="887" class="mono" font-size="22" font-weight="650" fill="${COLORS.boardInk}">${xml(Number(other.readings).toLocaleString('en-GB'))} readings</text>
+    <rect x="72" y="980" width="936" height="128" rx="12" fill="rgba(255,255,255,.035)" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
+    <text x="104" y="1032" class="matrix" font-size="22" font-weight="750" fill="${COLORS.boardMuted}">ON-TIME DIFFERENCE</text>
+    <text x="104" y="1082" font-size="36" font-weight="750" fill="${COLORS.boardInk}">${difference.toFixed(1)} percentage points apart.</text>
+    <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
+    <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">${xml(Number(powertrain.identifiedReadings).toLocaleString('en-GB'))} identified readings</text>
   </svg>`;
 }
 
@@ -341,6 +438,14 @@ export function validatePack(pack) {
   if (!week || Number(week.readings) < 1000) errors.push('busWeek requires at least 1,000 readings');
   if (!week || !Number.isFinite(Number(week.onTimeReadings))) errors.push('busWeek requires onTimeReadings');
   if (!week || !Array.isArray(week.daily) || week.daily.length !== 7) errors.push('busWeek requires seven daily percentages');
+  if (!week?.operatorCode || !week?.operatorName) errors.push('busWeek requires operator identity');
+  if (!Number.isFinite(Number(week?.targetPct)) || Number(week.targetPct) <= 0
+      || Number(week.targetPct) > 100) errors.push('busWeek requires a valid targetPct');
+  if (!Number.isFinite(Number(week?.targetGapPoints))) errors.push('busWeek requires targetGapPoints');
+  if (!Number.isFinite(Number(week?.longTermTargetPct))
+      || Number(week.longTermTargetPct) < Number(week.targetPct)
+      || Number(week.longTermTargetPct) > 100) errors.push('busWeek requires a valid longTermTargetPct');
+  if (!Number.isFinite(Number(week?.longTermTargetGapPoints))) errors.push('busWeek requires longTermTargetGapPoints');
   const distribution = week?.distribution;
   const edges = distribution?.binEdgesSeconds;
   const counts = distribution?.counts;
@@ -361,6 +466,17 @@ export function validatePack(pack) {
   for (const field of ['medianDelaySeconds', 'p10DelaySeconds', 'p90DelaySeconds']) {
     if (!Number.isFinite(Number(distribution?.[field]))) errors.push(`busWeek distribution requires ${field}`);
   }
+  const powertrain = week?.powertrain;
+  if (!powertrain || Number(powertrain.identifiedReadings) < 1000) {
+    errors.push('busWeek requires at least 1,000 fleet-matched readings');
+  }
+  for (const group of ['electric', 'dieselOther']) {
+    if (!Number.isFinite(Number(powertrain?.[group]?.readings))
+        || !Number.isFinite(Number(powertrain?.[group]?.sharePct))
+        || !Number.isFinite(Number(powertrain?.[group]?.onTimePct))) {
+      errors.push(`busWeek powertrain requires complete ${group} figures`);
+    }
+  }
   if (errors.length) throw new Error(errors.join('; '));
 }
 
@@ -368,7 +484,7 @@ export function manifest(pack, files) {
   const bot = pack.botSaid;
   const week = pack.busWeek;
   return {
-    schema: 2,
+    schema: 3,
     generatedAt: pack.generatedAt || new Date().toISOString(),
     drafts: [
       {
@@ -382,23 +498,36 @@ export function manifest(pack, files) {
         slides: [
           {
             role: 'headline', file: files.weeklyHeadline,
-            altText: `Weekly bus figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings.`,
+            altText: `${week.operatorName} weekly figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings.`,
+          },
+          {
+            role: 'target', file: files.weeklyTarget,
+            altText: `${week.operatorName} recorded ${Number(week.onTimePct).toFixed(1)} percent on time, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target. WECA's longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030, a gap of ${Number(week.longTermTargetGapPoints).toFixed(1)} points.`,
           },
           {
             role: 'daily-detail', file: files.weeklyDays,
-            altText: `Daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}.`,
+            altText: `${week.operatorName} daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}.`,
           },
           {
             role: 'distribution', file: files.weeklyDistribution,
-            altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} bus readings were. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes. ${Number(week.onTimePct).toFixed(1)} percent were on time.`,
+            altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} ${week.operatorName} readings were. One in ten was more than ${Math.abs(Number(week.distribution.p90DelaySeconds) / 60).toFixed(1)} minutes late. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes.`,
+          },
+          {
+            role: 'powertrain', file: files.weeklyPowertrain,
+            altText: `${Number(week.powertrain.electric.sharePct).toFixed(1)} percent of ${Number(week.powertrain.identifiedReadings).toLocaleString('en-GB')} identified ${week.operatorName} readings were from electric buses. Electric buses were on time in ${Number(week.powertrain.electric.onTimePct).toFixed(1)} percent of readings, compared with ${Number(week.powertrain.dieselOther.onTimePct).toFixed(1)} percent for diesel and other buses, a difference of ${Math.abs(Number(week.powertrain.onTimeDifferencePoints)).toFixed(1)} percentage points.`,
           },
         ],
-        caption: `${Number(week.onTimePct).toFixed(1)}% of bus timetable checks were on time from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
+        caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
         sources: {
+          operatorCode: week.operatorCode, operatorName: week.operatorName,
+          targetPct: week.targetPct, targetGapPoints: week.targetGapPoints,
+          longTermTargetPct: week.longTermTargetPct,
+          longTermTargetGapPoints: week.longTermTargetGapPoints,
           startDate: week.startDate, endDate: week.endDate,
           readings: week.readings, onTimeReadings: week.onTimeReadings,
           dailyOnTimePct: week.daily,
           delayDistribution: week.distribution,
+          powertrain: week.powertrain,
         },
       },
     ],
@@ -437,14 +566,18 @@ async function main() {
   const names = {
     botSaid: '01-the-bot-said.jpg',
     weeklyHeadline: '02-weekly-headline.jpg',
-    weeklyDays: '03-weekly-days.jpg',
-    weeklyDistribution: '04-weekly-distribution.jpg',
+    weeklyTarget: '03-weekly-target.jpg',
+    weeklyDays: '04-weekly-days.jpg',
+    weeklyDistribution: '05-weekly-distribution.jpg',
+    weeklyPowertrain: '06-weekly-powertrain.jpg',
   };
   await Promise.all([
     sharp(render(botSaidSvg(pack.botSaid, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.botSaid)),
     sharp(render(busWeekSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyHeadline)),
+    sharp(render(weeklyTargetSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyTarget)),
     sharp(render(weeklyDaysSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
     sharp(render(weeklyDistributionSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDistribution)),
+    sharp(render(weeklyPowertrainSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyPowertrain)),
   ]);
   await fs.writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest(pack, names), null, 2)}\n`);
   process.stdout.write(`Wrote ${output}: ${Object.values(names).join(', ')}, manifest.json\n`);

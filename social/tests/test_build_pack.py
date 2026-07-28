@@ -24,14 +24,37 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
             "late": readings - on_time - 20,
             "on_time_pct": round(100 * on_time / readings, 1),
         }
+        fleet = [
+            {
+                "model": "Electric model", "electric": True,
+                "fuel": "electric", "readings_in_gate": 80,
+                "on_time": 50, "on_time_pct": 62.5,
+            },
+            {
+                "model": "Diesel model", "electric": False,
+                "fuel": "diesel", "readings_in_gate": 100,
+                "on_time": 70, "on_time_pct": 70.0,
+            },
+        ]
         days.append({
             "service_date": f"202607{day:02d}",
             "by_operator": {
-                "ALL": {"overall": dict(overall)},
-                "FBRI": {"overall": dict(overall)},
+                "ALL": {"overall": dict(overall), "fleet": fleet},
+                "FBRI": {"overall": dict(overall), "fleet": fleet},
             },
         })
-    return {"days": days}
+    return {
+        "operator": "FBRI",
+        "operator_name": "First Bristol",
+        "operators": [
+            {"code": "ALL", "name": "WECA network"},
+            {"code": "FBRI", "name": "First Bristol"},
+        ],
+        "target_pct": 95,
+        "target_year": 2030,
+        "current_target_pct": 82,
+        "days": days,
+    }
 
 
 def recent_payload():
@@ -51,6 +74,17 @@ def test_pack_uses_exact_counts_and_successful_post_provenance():
         now=datetime(2026, 7, 28, tzinfo=timezone.utc))
     assert pack["busWeek"]["readings"] == 1400
     assert pack["busWeek"]["onTimePct"] == 61.5
+    assert pack["busWeek"]["operatorCode"] == "FBRI"
+    assert pack["busWeek"]["operatorName"] == "First Bristol"
+    assert pack["busWeek"]["targetPct"] == 82
+    assert pack["busWeek"]["targetGapPoints"] == 20.5
+    assert pack["busWeek"]["longTermTargetPct"] == 95
+    assert pack["busWeek"]["longTermTargetGapPoints"] == 33.5
+    assert pack["busWeek"]["powertrain"]["identifiedReadings"] == 1260
+    assert pack["busWeek"]["powertrain"]["unidentifiedReadings"] == 140
+    assert pack["busWeek"]["powertrain"]["electric"]["sharePct"] == 44.4
+    assert pack["busWeek"]["powertrain"]["electric"]["onTimePct"] == 62.5
+    assert pack["busWeek"]["powertrain"]["dieselOther"]["onTimePct"] == 70.0
     assert pack["busWeek"]["serviceDays"] == 7
     assert pack["botSaid"]["postText"] == "Exact final Bluesky text."
     assert pack["botSaid"]["stop"] == "Bedminster Parade"
@@ -107,6 +141,12 @@ def test_weekly_distribution_uses_raw_rows_and_matches_rollup_counts():
     assert sum(distribution["counts"]) == week["readings"]
     assert distribution["medianDelaySeconds"] == 120
     assert distribution["p90DelaySeconds"] == 600
+
+
+def test_week_can_explicitly_build_the_whole_network():
+    week = build_pack.build_week(audit_payload(), "ALL")
+    assert week["operatorCode"] == "ALL"
+    assert week["operatorName"] == "WECA network"
 
 
 def test_week_gate_rejects_gaps_and_small_samples():

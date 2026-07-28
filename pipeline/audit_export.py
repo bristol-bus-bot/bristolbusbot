@@ -26,6 +26,9 @@ OUT_FILE = os.path.join(OUT_DIR, "audit_data.json")
 
 AREA = "WECA"
 TARGET_PCT = 95
+TARGET_YEAR = 2030
+CURRENT_TARGET_PCT = 82
+CURRENT_TARGET_SOURCE = "West of England Enhanced Partnership Scheme V7.02 (July 2025)"
 ON_TIME_BAND = "1 minute early to 5 min 59s late (DfT statistical definition)"
 
 OVERALL_COLS = [
@@ -102,7 +105,7 @@ def build_operator(cur, service_date, operator):
     try:
         cur.execute(
             """SELECT model, electric, fuel, vehicles, readings_in_gate,
-                      on_time_pct, mean_delay_s, median_delay_s, routes_json
+                      on_time, on_time_pct, mean_delay_s, median_delay_s, routes_json
                FROM daily_fleet_summary WHERE service_date = ? AND operator = ?
                ORDER BY readings_in_gate DESC""",
             (service_date, operator),
@@ -118,6 +121,7 @@ def build_operator(cur, service_date, operator):
                 "fuel": r["fuel"],
                 "vehicles": r["vehicles"],
                 "readings_in_gate": r["readings_in_gate"],
+                "on_time": r["on_time"],
                 "on_time_pct": r["on_time_pct"],
                 "median_delay_s": r["median_delay_s"],
                 "routes": model_routes,
@@ -176,6 +180,9 @@ def main():
         "operator_name": "First Bristol",
         "operators": operators,
         "target_pct": TARGET_PCT,
+        "target_year": TARGET_YEAR,
+        "current_target_pct": CURRENT_TARGET_PCT,
+        "current_target_source": CURRENT_TARGET_SOURCE,
         "on_time_band": ON_TIME_BAND,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "days": days,
