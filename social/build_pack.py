@@ -22,7 +22,15 @@ def _service_date(value: str) -> datetime:
     return datetime.strptime(value, "%Y%m%d").replace(tzinfo=timezone.utc)
 
 
-def build_week(audit: dict) -> dict:
+def _operator_name(audit: dict, operator: str) -> str:
+    for item in audit.get("operators") or []:
+        if item.get("code") == operator and item.get("name"):
+            return str(item["name"])
+    return "WECA network" if operator == "ALL" else operator
+
+
+def build_week(audit: dict, operator: str | None = None) -> dict:
+    operator = operator or audit.get("operator") or "ALL"
     days = sorted(audit.get("days") or [], key=lambda day: day.get("service_date", ""))
     if len(days) < 7:
         raise ValueError("Bus Week requires seven published daily rollups")
@@ -34,10 +42,11 @@ def build_week(audit: dict) -> dict:
 
     overall = []
     for day in days:
-        network = (day.get("by_operator") or {}).get("ALL")
-        values = (network or {}).get("overall") if network else None
+        operator_rollup = (day.get("by_operator") or {}).get(operator)
+        values = (operator_rollup or {}).get("overall") if operator_rollup else None
         if not isinstance(values, dict):
-            raise ValueError(f"{day['service_date']} has no ALL network rollup")
+            raise ValueError(
+                f"{day['service_date']} has no {operator} operator rollup")
         if any(values.get(field) is None for field in
                ("readings_in_gate", "on_time", "on_time_pct")):
             raise ValueError(f"{day['service_date']} lacks exact weekly count fields")
@@ -47,14 +56,27 @@ def build_week(audit: dict) -> dict:
     on_time = sum(int(item["on_time"]) for item in overall)
     if readings < 1000:
         raise ValueError("Bus Week requires at least 1,000 timing-point readings")
+    target_pct = float(audit.get("current_target_pct", 82))
+    long_term_target_pct = float(audit.get("target_pct", 95))
+    target_year = int(audit.get("target_year", 2030))
+    on_time_pct = round(100 * on_time / readings, 1)
     return {
+        "operatorCode": operator,
+        "operatorName": _operator_name(audit, operator),
         "startDate": parsed[0].date().isoformat(),
         "endDate": parsed[-1].date().isoformat(),
-        "onTimePct": round(100 * on_time / readings, 1),
+        "onTimePct": on_time_pct,
         "onTimeReadings": on_time,
         "readings": readings,
         "serviceDays": 7,
         "daily": [float(item["on_time_pct"]) for item in overall],
+        "targetPct": target_pct,
+        "targetLabel": "latest WECA area target",
+        "targetGapPoints": round(target_pct - on_time_pct, 1),
+        "longTermTargetPct": long_term_target_pct,
+        "longTermTargetLabel": f"WECA {target_year} goal",
+        "longTermTargetGapPoints": round(
+            long_term_target_pct - on_time_pct, 1),
     }
 
 
@@ -74,13 +96,15 @@ def build_distribution(conn: sqlite3.Connection, audit: dict,
                        week: dict) -> dict:
     start_key = week["startDate"].replace("-", "")
     end_key = week["endDate"].replace("-", "")
-    operators = sorted({
-        operator
-        for day in audit.get("days") or []
-        if start_key <= str(day.get("service_date") or "") <= end_key
-        for operator in (day.get("by_operator") or {})
-        if operator != "ALL"
-    })
+    selected_operator = week.get("operatorCode") or "ALL"
+    operators = ([selected_operator] if selected_operator != "ALL" else
+                 sorted({
+                     operator
+                     for day in audit.get("days") or []
+                     if start_key <= str(day.get("service_date") or "") <= end_key
+                     for operator in (day.get("by_operator") or {})
+                     if operator != "ALL"
+                 }))
     if not operators:
         raise ValueError("weekly delay distribution has no operators")
     placeholders = ",".join("?" for _ in operators)
@@ -188,8 +212,9 @@ def build_bot_said(recent: dict,
 
 def build_pack(audit: dict, recent: dict,
                now: datetime | None = None,
-               audit_conn: sqlite3.Connection | None = None) -> dict:
-    week = build_week(audit)
+               audit_conn: sqlite3.Connection | None = None,
+               operator: str | None = None) -> dict:
+    week = build_week(audit, operator)
     if audit_conn is not None:
         week["distribution"] = build_distribution(audit_conn, audit, week)
     return {
@@ -204,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--audit-json", type=Path, required=True)
     parser.add_argument("--recent-posts-json", type=Path, required=True)
     parser.add_argument("--audit-db", type=Path)
+    parser.add_argument(
+        "--operator",
+        help="operator code for weekly cards (defaults to audit JSON selection)")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     audit = json.loads(args.audit_json.read_text(encoding="utf-8"))
@@ -214,7 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{args.audit_db.resolve().as_uri()}?mode=ro", uri=True
     ) if args.audit_db else None
     try:
-        pack = build_pack(audit, recent, audit_conn=conn)
+        pack = build_pack(
+            audit, recent, audit_conn=conn, operator=args.operator)
     finally:
         if conn is not None:
             conn.close()

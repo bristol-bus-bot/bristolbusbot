@@ -25,7 +25,8 @@ For production-shaped input, first run `build_pack.py` against the published
 available, `--audit-db` pointing at the collector's local audit database. A
 complete weekly carousel requires `--audit-db`; it supplies the aggregate
 delay distribution used by slide 4. The builder
-requires seven consecutive network rollups, at least 1,000 readings and a
+uses the operator selected in `audit_data.json`, requires seven consecutive
+rollups, at least 1,000 readings and a
 successful bot post with exact journey, stop and event-time provenance.
 The audit database supplies up to 20 real recent observations at the selected
 stop for the quote card's receipt strip. Without it, the card explicitly shows
@@ -37,6 +38,11 @@ python build_pack.py --audit-json audit_data.json `
   --output pack.json
 npm run generate -- --input pack.json --output previews
 ```
+
+Pass `--operator ALL` for a whole-network carousel, or another published
+operator code to override the audit JSON selection. Weekly cards carry WECA's
+latest published annual area-wide target, the observed shortfall, and the
+long-term 95% by 2030 goal.
 
 Gemini is not involved in rendering or numbers. An optional caption-writing
 step can be added later, but its output must remain a review-only suggestion.

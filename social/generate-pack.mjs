@@ -164,24 +164,33 @@ function squareGrid(onTime) {
 export function busWeekSvg(data, css = '') {
   const onTime = Math.max(0, Math.min(100, Math.round(Number(data.onTimePct))));
   const notOnTime = 100 - onTime;
+  const target = Number(data.targetPct);
+  const gap = Number(data.targetGapPoints);
+  const targetX = 180 + 720 * target / 100;
+  const longTarget = Number(data.longTermTargetPct);
+  const longTargetX = 180 + 720 * longTarget / 100;
+  const scope = String(data.operatorName || 'Bristol buses');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <style>${css}</style>
     <defs><pattern id="led-dots-b" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-b)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">BRISTOL BUSES · ${xml(formatDate(data.startDate).toUpperCase())}–${xml(formatDate(data.endDate).toUpperCase())}</text>
-    <text x="72" y="220" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${notOnTime} in every 100</text>
-    <text x="72" y="310" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">weren't on time.</text>
+    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(formatDate(data.startDate).toUpperCase())}–${xml(formatDate(data.endDate).toUpperCase())}</text>
+    <text x="72" y="220" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${Number(data.onTimePct).toFixed(1)}% on time.</text>
+    <text x="72" y="310" font-size="82" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${gap.toFixed(1)} points short.</text>
     ${squareGrid(onTime)}
-    <rect x="72" y="1148" width="28" height="28" rx="5" fill="${COLORS.liveGreen}"/>
-    <text x="116" y="1172" font-size="26" font-weight="700" fill="${COLORS.boardInk}">${onTime} on time</text>
-    <rect x="315" y="1148" width="28" height="28" rx="5" fill="rgba(255,107,87,.12)" stroke="${COLORS.lateRed}" stroke-width="3"/>
-    <text x="359" y="1172" font-size="24" font-weight="700" fill="${COLORS.boardInk}">${notOnTime} not on time</text>
-    <text x="570" y="1172" class="mono" font-size="20" font-weight="650" fill="${COLORS.boardMuted}">each square = 1% · ${xml(Number(data.readings).toLocaleString('en-GB'))} readings</text>
-    <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
+    <text x="180" y="1138" class="mono" font-size="21" font-weight="750" fill="${COLORS.boardInk}">${Number(data.onTimePct).toFixed(1)}% OBSERVED</text>
+    <text x="900" y="1138" text-anchor="end" class="mono" font-size="21" font-weight="750" fill="${COLORS.amber}">${xml(String(data.targetLabel || 'WECA target').toUpperCase())} ${target.toFixed(0)}%</text>
+    <rect x="180" y="1155" width="720" height="28" rx="5" fill="rgba(255,107,87,.18)" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+    <rect x="180" y="1155" width="${(720 * Number(data.onTimePct) / 100).toFixed(1)}" height="28" rx="5" fill="${COLORS.liveGreen}"/>
+    <line x1="${targetX.toFixed(1)}" y1="1147" x2="${targetX.toFixed(1)}" y2="1192" stroke="${COLORS.amber}" stroke-width="5"/>
+    <line x1="${longTargetX.toFixed(1)}" y1="1151" x2="${longTargetX.toFixed(1)}" y2="1187" stroke="${COLORS.boardInk}" stroke-width="3"/>
+    <text x="180" y="1217" class="mono" font-size="19" font-weight="650" fill="${COLORS.boardMuted}">100 squares · ${xml(Number(data.readings).toLocaleString('en-GB'))} readings</text>
+    <text x="900" y="1217" text-anchor="end" class="mono" font-size="18" font-weight="750" fill="${COLORS.amber}">GAP ${gap.toFixed(1)} POINTS · ${longTarget.toFixed(0)}% BY 2030</text>
+    <line x1="72" y1="1234" x2="1008" y2="1234" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
-    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${xml(Number(data.onTimePct).toFixed(1))}% · ${xml(data.serviceDays)} days measured</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${notOnTime} in 100 not on time</text>
   </svg>`;
 }
 
@@ -211,6 +220,11 @@ export function weeklyDaysSvg(data, css = '') {
   const axisMaximum = Math.min(100, Math.ceil(maximum) + 1);
   const axisRange = Math.max(1, axisMaximum - axisMinimum);
   const average = Number(data.onTimePct);
+  const target = Number(data.targetPct);
+  const targetX = 100 + 430 * target / 100;
+  const longTarget = Number(data.longTermTargetPct);
+  const longTargetX = 100 + 430 * longTarget / 100;
+  const scope = String(data.operatorName || 'Bristol buses');
   const highestIndex = values.indexOf(maximum);
   const lowestIndex = values.indexOf(minimum);
   const yFor = value => 725 - ((value - axisMinimum) / axisRange) * 255;
@@ -233,7 +247,7 @@ export function weeklyDaysSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-c)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">BRISTOL BUSES · DAILY RESULTS</text>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · DAILY RESULTS</text>
     <text x="72" y="216" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Best day: ${days[highestIndex].dayLong}.</text>
     <text x="72" y="294" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Worst: ${days[lowestIndex].dayLong}.</text>
     <rect x="72" y="360" width="936" height="520" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
@@ -245,10 +259,14 @@ export function weeklyDaysSvg(data, css = '') {
     ${plot}
     <rect x="72" y="930" width="936" height="166" rx="12" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
     <text x="100" y="977" class="mono" font-size="19" font-weight="750" fill="${COLORS.boardMuted}">WHOLE 0–100% SCALE</text>
-    <rect x="100" y="1000" width="230" height="34" rx="5" fill="#666c73"/>
-    <rect x="100" y="1000" width="${(230 * average / 100).toFixed(1)}" height="34" rx="5" fill="${COLORS.liveGreen}"/>
-    <text x="382" y="1008" font-size="30" font-weight="750" fill="${COLORS.boardInk}">${average.toFixed(1)}% on time</text>
-    <text x="382" y="1051" font-size="24" fill="${COLORS.boardMuted}">${xml(Number(data.readings).toLocaleString('en-GB'))} readings over ${xml(data.serviceDays)} days</text>
+    <rect x="100" y="1000" width="430" height="34" rx="5" fill="#666c73"/>
+    <rect x="100" y="1000" width="${(430 * average / 100).toFixed(1)}" height="34" rx="5" fill="${COLORS.liveGreen}"/>
+    <line x1="${targetX.toFixed(1)}" y1="990" x2="${targetX.toFixed(1)}" y2="1044" stroke="${COLORS.amber}" stroke-width="5"/>
+    <line x1="${longTargetX.toFixed(1)}" y1="996" x2="${longTargetX.toFixed(1)}" y2="1038" stroke="${COLORS.boardInk}" stroke-width="3"/>
+    <text x="100" y="1071" class="mono" font-size="20" font-weight="750" fill="${COLORS.boardInk}">${average.toFixed(1)}% OBSERVED</text>
+    <text x="530" y="1071" text-anchor="end" class="mono" font-size="20" font-weight="750" fill="${COLORS.amber}">${target.toFixed(0)}% TARGET</text>
+    <text x="580" y="1013" font-size="28" font-weight="750" fill="${COLORS.boardInk}">${Number(data.targetGapPoints).toFixed(1)} points short</text>
+    <text x="580" y="1057" font-size="23" fill="${COLORS.boardMuted}">${longTarget.toFixed(0)}% goal by 2030</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
     <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${xml(formatDate(data.startDate))}–${xml(formatDate(data.endDate))}</text>
@@ -277,7 +295,7 @@ export function weeklyDistributionSvg(data, css = '') {
   const maximum = Math.max(...counts, 1);
   const barWidth = (936 - (counts.length - 1) * 4) / counts.length;
   const onTimeStart = 5;
-  const onTimeEnd = 11;
+  const onTimeEnd = 12;
   const bandX = 72 + onTimeStart * (barWidth + 4);
   const bandWidth = (onTimeEnd - onTimeStart) * barWidth + (onTimeEnd - onTimeStart - 1) * 4;
   const bars = counts.map((count, index) => {
@@ -290,16 +308,18 @@ export function weeklyDistributionSvg(data, css = '') {
   const median = Number(distribution.medianDelaySeconds);
   const typicalResult = timingWords(median);
   const middleRange = `${signedMinutes(distribution.p10DelaySeconds)} to ${signedMinutes(distribution.p90DelaySeconds)} min`;
+  const p90Minutes = Math.abs(Number(distribution.p90DelaySeconds) / 60).toFixed(1);
+  const scope = String(data.operatorName || 'Bristol buses');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <style>${css}</style>
     <defs><pattern id="led-dots-d" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-d)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.8" fill="${COLORS.amber}">WEEK OF ${xml(formatDate(data.startDate).toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
-    <text x="72" y="210" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Typical result:</text>
-    <text x="72" y="286" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">${xml(typicalResult)}.</text>
-    <text x="72" y="350" font-size="28" fill="#b8b3a7">The bars show how early or late the buses were.</text>
+    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.8" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
+    <text x="72" y="210" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">1 in 10 was over</text>
+    <text x="72" y="286" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">${xml(p90Minutes)} min late.</text>
+    <text x="72" y="350" class="matrix" font-size="23" font-weight="700" letter-spacing="1.6" fill="${COLORS.amber}">${xml(String(data.targetLabel || 'WECA target').toUpperCase())}: ${Number(data.targetPct).toFixed(0)}% SHOULD BE IN THE GREEN BAND</text>
     <rect x="${bandX.toFixed(1)}" y="430" width="${bandWidth.toFixed(1)}" height="436" fill="rgba(52,211,153,.12)"/>
     <line x1="${bandX.toFixed(1)}" y1="430" x2="${bandX.toFixed(1)}" y2="866" stroke="${COLORS.liveGreen}" stroke-width="3"/>
     ${bars}
@@ -315,7 +335,7 @@ export function weeklyDistributionSvg(data, css = '') {
     <text x="790" y="1112" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
-    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time: 1 min early to 5 min 59 s late</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="21" font-weight="650" fill="${COLORS.amber}">${Number(data.onTimePct).toFixed(1)}% · ${Number(data.targetGapPoints).toFixed(1)} short of ${Number(data.targetPct).toFixed(0)}% · ${Number(data.longTermTargetPct).toFixed(0)}% by 2030</text>
   </svg>`;
 }
 
@@ -341,6 +361,14 @@ export function validatePack(pack) {
   if (!week || Number(week.readings) < 1000) errors.push('busWeek requires at least 1,000 readings');
   if (!week || !Number.isFinite(Number(week.onTimeReadings))) errors.push('busWeek requires onTimeReadings');
   if (!week || !Array.isArray(week.daily) || week.daily.length !== 7) errors.push('busWeek requires seven daily percentages');
+  if (!week?.operatorCode || !week?.operatorName) errors.push('busWeek requires operator identity');
+  if (!Number.isFinite(Number(week?.targetPct)) || Number(week.targetPct) <= 0
+      || Number(week.targetPct) > 100) errors.push('busWeek requires a valid targetPct');
+  if (!Number.isFinite(Number(week?.targetGapPoints))) errors.push('busWeek requires targetGapPoints');
+  if (!Number.isFinite(Number(week?.longTermTargetPct))
+      || Number(week.longTermTargetPct) < Number(week.targetPct)
+      || Number(week.longTermTargetPct) > 100) errors.push('busWeek requires a valid longTermTargetPct');
+  if (!Number.isFinite(Number(week?.longTermTargetGapPoints))) errors.push('busWeek requires longTermTargetGapPoints');
   const distribution = week?.distribution;
   const edges = distribution?.binEdgesSeconds;
   const counts = distribution?.counts;
@@ -382,19 +410,23 @@ export function manifest(pack, files) {
         slides: [
           {
             role: 'headline', file: files.weeklyHeadline,
-            altText: `Weekly bus figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings.`,
+            altText: `${week.operatorName} weekly figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target. The longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030.`,
           },
           {
             role: 'daily-detail', file: files.weeklyDays,
-            altText: `Daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}.`,
+            altText: `${week.operatorName} daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}. The weekly result was ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target.`,
           },
           {
             role: 'distribution', file: files.weeklyDistribution,
-            altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} bus readings were. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes. ${Number(week.onTimePct).toFixed(1)} percent were on time.`,
+            altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} ${week.operatorName} readings were. One in ten was more than ${Math.abs(Number(week.distribution.p90DelaySeconds) / 60).toFixed(1)} minutes late. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes. ${Number(week.onTimePct).toFixed(1)} percent were on time, against WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target.`,
           },
         ],
-        caption: `${Number(week.onTimePct).toFixed(1)}% of bus timetable checks were on time from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
+        caption: `${week.operatorName}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}. That is ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. The longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)}% by 2030. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
         sources: {
+          operatorCode: week.operatorCode, operatorName: week.operatorName,
+          targetPct: week.targetPct, targetGapPoints: week.targetGapPoints,
+          longTermTargetPct: week.longTermTargetPct,
+          longTermTargetGapPoints: week.longTermTargetGapPoints,
           startDate: week.startDate, endDate: week.endDate,
           readings: week.readings, onTimeReadings: week.onTimeReadings,
           dailyOnTimePct: week.daily,

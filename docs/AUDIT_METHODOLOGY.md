@@ -1,8 +1,8 @@
 # WECA bus punctuality audit: methodology
 
 An independent measurement of bus punctuality across the West of England,
-built only from operators' own public open data and compared against the
-published 95% punctuality target. It covers the local registered bus operators
+built only from operators' own public open data and compared against WECA's
+published punctuality targets. It covers the local registered bus operators
 in the WECA area (First Bristol, Stagecoach West, The Big Lemon, Abus, CT Coaches
 and others), not long-distance coaches or ferries. This page sets out exactly how
 the figures are produced and where they can be wrong.
@@ -53,8 +53,11 @@ interpolation and no assumed speed: every figure is a real recorded position.
 A departure counts as on time if it is between 1 minute early and 5 minutes 59
 seconds late (delay between -60 and +359 seconds). This is the DfT statistical
 "on time" band, chosen because it matches the convention behind the official
-published figures. The target is 95% on time, the figure in the West of England
-Bus Service Improvement Plan and the Traffic Commissioner's window of tolerance.
+published figures. WECA's latest published Enhanced Partnership Scheme sets an
+annual area-wide target of 82% and says this will increase each year. The
+long-term Bus Service Improvement Plan goal remains 95% by 2030. Both use the
+same 1-minute-early to 5-minutes-late definition; neither is an operator-specific
+target for First Bristol alone.
 
 ## Geography (area and ward)
 
@@ -108,7 +111,7 @@ Operators publish the timetable, vehicle-location and fares data they are legall
 required to publish under the Bus Services Act 2017 and the 2020 Open Data
 Regulations. Performance figures are not on that list, so this audit does not
 claim any operator is breaking a publication duty. The point is narrower and
-factual: a public 95% target exists, the data to measure against it is free and
+factual: public annual and long-term targets exist, the data to measure against them is free and
 open, but no accessible, ongoing, route-level public record of actual performance
 exists. This fills that gap. These are independent estimates built to the
 official definition, not the official figures, and will differ from any operator
@@ -149,3 +152,4 @@ there.
 - Senior Traffic Commissioner, Statutory Document No. 14: https://www.gov.uk/government/publications/traffic-commissioners-local-bus-services-in-england-outside-london-and-wales-november-2018
 - DfT, Proportion of bus services running on time: https://www.gov.uk/government/publications/proportion-of-bus-services-running-on-time
 - West of England Bus Service Improvement Plan (2024): https://www.westofengland-ca.gov.uk/wp-content/uploads/2024/07/3882.Bus-Service-Plan-2024_v2-1.pdf
+- West of England Enhanced Partnership Scheme V7.02 (July 2025): https://www.westofengland-ca.gov.uk/wp-content/uploads/2025/07/West-of-England-EP-Scheme-V7.0-July-2025.pdf

@@ -6,8 +6,12 @@ import { botSaidSvg, busWeekSvg, manifest, validatePack, weeklyDaysSvg, weeklyDi
 const pack = {
   botSaid: { postText: 'A bus & its timetable <disagree>.', postUrl: 'https://bsky.app/x', route: '75', stop: 'Centre', observedAt: '2026-07-28T12:00:00Z', delayMinutes: 5 },
   busWeek: {
+    operatorCode: 'FBRI', operatorName: 'First Bristol',
     startDate: '2026-07-20', endDate: '2026-07-26',
     onTimePct: 67.4, onTimeReadings: 809, readings: 1200,
+    targetPct: 82, targetLabel: 'latest WECA area target', targetGapPoints: 14.6,
+    longTermTargetPct: 95, longTermTargetLabel: 'WECA 2030 goal',
+    longTermTargetGapPoints: 27.6,
     serviceDays: 7, daily: [61, 62, 63, 64, 65, 66, 67],
     distribution: {
       binEdgesSeconds: [-600, -300, -180, -120, -60, 0, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200],
@@ -48,11 +52,16 @@ test('weekly card gates and manifest preserve facts', () => {
   });
   assert.equal(output.drafts[1].sources.dailyOnTimePct.length, 7);
   assert.match(output.drafts[0].caption, /A bus & its timetable/);
-  assert.match(busWeekSvg(pack.busWeek), /33 in every 100/);
+  assert.match(busWeekSvg(pack.busWeek), /67.4% on time/);
+  assert.match(busWeekSvg(pack.busWeek), /14.6 points short/);
+  assert.match(busWeekSvg(pack.busWeek), /LATEST WECA AREA TARGET 82%/);
   assert.equal(output.drafts[1].slides.length, 3);
   assert.match(output.drafts[1].slides[0].altText, /100 squares/);
   assert.match(weeklyDaysSvg(pack.busWeek), /Best day: Sunday/);
   assert.match(weeklyDaysSvg(pack.busWeek), /Worst: Monday/);
-  assert.match(weeklyDistributionSvg(pack.busWeek), /Typical result:/);
+  assert.match(weeklyDistributionSvg(pack.busWeek), /1 in 10 was over/);
+  assert.match(weeklyDistributionSvg(pack.busWeek), /8.0 min late/);
   assert.match(weeklyDistributionSvg(pack.busWeek), /8 in 10 readings/);
+  assert.match(output.drafts[1].caption, /14.6 percentage points below/);
+  assert.match(output.drafts[1].caption, /95% by 2030/);
 });
