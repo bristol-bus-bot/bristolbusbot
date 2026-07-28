@@ -8,6 +8,8 @@
     "observedAt": "2026-07-28T11:54:00Z",
     "delayMinutes": 5,
     "vehicleRef": "FBRI-00000",
+    "operatorRef": "FBRI",
+    "operatorName": "First Bristol",
     "recentDepartures": [
       { "delaySeconds": -270 },
       { "delaySeconds": -170 },
@@ -34,6 +36,11 @@
   "busWeek": {
     "operatorCode": "FBRI",
     "operatorName": "First Bristol",
+    "operatorComparison": [
+      {"operatorCode": "FBRI", "operatorName": "First Bristol", "readings": 12431, "onTime": 8378, "onTimePct": 67.4},
+      {"operatorCode": "SCGL", "operatorName": "Stagecoach West", "readings": 3180, "onTime": 2232, "onTimePct": 70.2},
+      {"operatorCode": "LEMB", "operatorName": "The Big Lemon", "readings": 1190, "onTime": 698, "onTimePct": 58.7}
+    ],
     "targetPct": 82,
     "targetLabel": "latest WECA area target",
     "targetGapPoints": 14.6,

@@ -25,6 +25,7 @@ import {
     containsWebLink,
     parseEditorialVerifierOutput,
     parseEditorialWriterOutput,
+    operatorDisplayName,
     validateCommentaryCandidate,
     type EditorialWriterOutput,
 } from './editorial-commentary-policy.js';
@@ -612,6 +613,7 @@ export class AICommentary {
         corrections: string[],
     ): string {
         const event = context.event;
+        const operatorName = operatorDisplayName(event.operatorRef);
         const eventStatus = event.eventType === 'punctual'
             ? 'on time'
             : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
@@ -729,6 +731,7 @@ ${this.botPersona}
 
 LIVE OBSERVATION:
 - Route: ${event.line}
+- Operator: ${operatorName || `unknown (reference ${event.operatorRef || 'missing'})`}
 - Direction: ${event.direction}
 - Exact observed status: ${eventStatus}
 - Exact location: ${event.lastStopName}
@@ -744,6 +747,7 @@ WRITING RULES:
 - Sound like this bot, not a transport status template or press release.
 - Prefer one clean comic idea over cramming in every detail.
 - Include route, direction, exact location and exact observed status naturally.
+${operatorName ? `- Name the operator once as "${operatorName}"${operatorName === 'First Bristol' ? ' ("First Bus" is also acceptable)' : ''}.` : '- Do not guess the operator name.'}
 - One or two complete sentences, maximum 300 characters.
 - British spelling. No emojis, hashtags, links or source lines.
 - Do not invent passenger behaviour, causes, reactions or corporate facts.
@@ -767,11 +771,13 @@ Return only the requested JSON object.`;
         currentTime: DateTime,
     ): string {
         const event = context.event;
+        const operatorName = operatorDisplayName(event.operatorRef);
         const status = event.eventType === 'punctual'
             ? 'on time'
             : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
         const evidence: string[] = [
             `Route ${event.line}`,
+            operatorName ? `operator ${operatorName}` : `operator reference ${event.operatorRef || 'unknown'}`,
             event.direction,
             status,
             event.lastStopName || 'unknown location',
@@ -907,6 +913,7 @@ Return only the requested JSON object.`;
             ? this.editorialContext.select(currentTime, this.appState.recentPosts)
             : selectedHook;
         const isEditorialMode = hook !== null;
+        const operatorName = operatorDisplayName(context.event.operatorRef);
 
         // One approved special hook at most: sourced fact, occasion, or news.
         let editorialContext = '';
@@ -1150,12 +1157,13 @@ CONSTRAINTS:
 - Maximum ${Math.max(120, contentLimit - 5)} characters per option
 - Exactly 2 complete sentences each
 - Must include: route number, direction, location, delay status
+${operatorName ? `- Must name the operator as "${operatorName}"` : '- Do not guess the operator name'}
 - British spelling, no emojis, no hashtags
 
 CURRENT DATE/TIME: ${currentTime.toFormat('EEEE d MMMM yyyy, h:mm a')} (${TARGET_TIMEZONE})
 
 CURRENT SITUATION:
-Route ${context.event.line}, ${context.event.direction} direction, ${eventContext}, ${context.event.lastStopName} stop
+${operatorName ? `${operatorName} ` : ''}route ${context.event.line}, ${context.event.direction} direction, ${eventContext}, ${context.event.lastStopName} stop
 
 AVAILABLE DETAILS (pick 1-2 that ADD genuine wit):
 ${busDescription ? `- Vehicle: ${busDescription}` : ''}
@@ -1316,6 +1324,7 @@ REJECTION CRITERIA (immediately disqualify any draft with these):
 - Second sentence starts with "It is a..." or "One assumes/wonders..."
 - Over ${contentLimit} characters
 - Nonsensical or forced contextual connections (e.g., weather "providing comfort")
+${operatorName ? `- Does not name the operator as "${operatorName}"` : ''}
 ${newsQualityGate}
 
 SELECTION CRITERIA (for non-rejected drafts):
@@ -1461,7 +1470,7 @@ Start your response with the first word of the selected post.`;
             }
 
             // Final fallback: template
-            const s1 = `${context.event.line} ${context.event.eventType === 'punctual' ? 'on time' : `${Math.abs(context.event.delayMinutes)} min ${context.event.eventType}`} near ${context.event.lastStopName}, ${context.event.direction} direction.`;
+            const s1 = `${operatorName ? `${operatorName} ` : ''}route ${context.event.line} ${context.event.eventType === 'punctual' ? 'on time' : `${Math.abs(context.event.delayMinutes)} min ${context.event.eventType}`} near ${context.event.lastStopName}, ${context.event.direction} direction.`;
             const vehicleBit = this.buildVehicleOneLiner(context) || 'Plain livery, standard spec.';
             const s2 = `Vehicle notes: ${vehicleBit}`;
             const templateFallback = this.fitToLimit(`${s1} ${s2}`, 280);

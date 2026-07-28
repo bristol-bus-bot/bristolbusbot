@@ -122,6 +122,7 @@ function recentObservationStrip(data) {
 
 export function botSaidSvg(data, css = '') {
   const text = String(data.postText || '');
+  const operator = String(data.operatorName || data.operatorRef || 'Operator unknown');
   const fontSize = text.length > 260 ? 52 : text.length > 180 ? 60 : 74;
   const maxCharacters = fontSize >= 70 ? 27 : fontSize >= 60 ? 33 : 38;
   const lines = wrapWords(text, maxCharacters, 7);
@@ -140,7 +141,7 @@ export function botSaidSvg(data, css = '') {
     <text x="161" y="148" text-anchor="middle" font-size="58" font-weight="850" fill="#00512c">${xml(data.route || 'BUS')}</text>
     <text x="266" y="125" class="mono" font-size="26" font-weight="750" fill="#e8e2d5">@bristolbusbot.live</text>
     <circle cx="272" cy="158" r="6" fill="${COLORS.liveGreen}"/>
-    <text x="291" y="165" class="matrix" font-size="20" font-weight="700" letter-spacing="2" fill="${COLORS.liveGreen}">LIVE DATA</text>
+    <text x="291" y="165" class="matrix" font-size="20" font-weight="700" letter-spacing="1.6" fill="${COLORS.amber}">${xml(operator.toUpperCase())} · LIVE DATA</text>
     ${quoteLines(lines, 82, 304, lineHeight, fontSize)}
     ${recentObservationStrip(data)}
     <text x="82" y="1240" font-size="30" font-weight="750" fill="${COLORS.boardInk}">${xml(data.stop || 'Bristol')} · ${xml(formatDateTime(data.observedAt))}</text>
@@ -171,7 +172,7 @@ export function busWeekSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-b)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(formatDate(data.startDate).toUpperCase())}–${xml(formatDate(data.endDate).toUpperCase())}</text>
+    <text x="72" y="114" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())}</text>
     <text x="72" y="220" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${notOnTime} in every 100</text>
     <text x="72" y="310" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">weren't on time.</text>
     ${squareGrid(onTime)}
@@ -204,7 +205,7 @@ export function weeklyTargetSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-target)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · WECA TARGET</text>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())} · WECA TARGET</text>
     <text x="72" y="228" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${gap.toFixed(1)} points short.</text>
     <text x="72" y="302" font-size="30" fill="${COLORS.boardMuted}">Latest published annual area target</text>
     <rect x="72" y="372" width="936" height="530" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
@@ -218,7 +219,7 @@ export function weeklyTargetSvg(data, css = '') {
     <text x="${longTargetX.toFixed(1)}" y="682" text-anchor="end" class="mono" font-size="21" font-weight="750" fill="${COLORS.boardInk}">${longTarget.toFixed(0)}% BY 2030</text>
     <line x1="100" y1="744" x2="980" y2="744" stroke="rgba(255,255,255,.14)" stroke-width="2"/>
     <text x="100" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.liveGreen}">${actual.toFixed(1)}%</text>
-    <text x="100" y="866" font-size="24" fill="${COLORS.boardMuted}">First Bristol actual</text>
+    <text x="100" y="866" font-size="24" fill="${COLORS.boardMuted}">${xml(scope)} actual</text>
     <text x="430" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.amber}">${target.toFixed(0)}%</text>
     <text x="430" y="866" font-size="24" fill="${COLORS.boardMuted}">latest WECA target</text>
     <text x="745" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.boardInk}">${longTarget.toFixed(0)}%</text>
@@ -281,7 +282,7 @@ export function weeklyDaysSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-c)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · DAILY RESULTS</text>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())} · DAILY RESULTS</text>
     <text x="72" y="216" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Best day: ${days[highestIndex].dayLong}.</text>
     <text x="72" y="294" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">Worst: ${days[lowestIndex].dayLong}.</text>
     <rect x="72" y="360" width="936" height="520" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
@@ -347,7 +348,7 @@ export function weeklyDistributionSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-d)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.8" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
+    <text x="72" y="112" class="matrix" font-size="24" font-weight="700" letter-spacing="2.3" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())} · ${xml(Number(data.readings).toLocaleString('en-GB'))} READINGS</text>
     <text x="72" y="210" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">1 in 10 was over</text>
     <text x="72" y="286" font-size="72" font-weight="800" letter-spacing="-2.5" fill="${COLORS.boardInk}">${xml(p90Minutes)} min late.</text>
     <text x="72" y="350" font-size="28" fill="#b8b3a7">The bars show how early or late the readings were.</text>
@@ -387,7 +388,7 @@ export function weeklyPowertrainSvg(data, css = '') {
     <rect width="1080" height="1350" fill="#0d0f11"/>
     <rect width="1080" height="1350" fill="url(#led-dots-power)"/>
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
-    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">${xml(scope.toUpperCase())} · ELECTRIC VS DIESEL</text>
+    <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.0" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())} · ELECTRIC VS DIESEL</text>
     <text x="72" y="218" font-size="78" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${electricShare.toFixed(1)}% of readings</text>
     <text x="72" y="302" font-size="78" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">were electric.</text>
     <rect x="72" y="374" width="936" height="548" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
@@ -416,6 +417,38 @@ export function weeklyPowertrainSvg(data, css = '') {
   </svg>`;
 }
 
+export function weeklyOperatorsSvg(data, css = '') {
+  const comparison = data.operatorComparison || [];
+  const scope = String(data.operatorName || 'Bristol buses');
+  const rows = comparison.map((operator, index) => {
+    const top = 365 + index * 118;
+    const percentage = Number(operator.onTimePct);
+    const selected = operator.operatorCode === data.operatorCode;
+    return `
+      <rect x="92" y="${top}" width="896" height="102" rx="10" fill="${selected ? 'rgba(245,158,11,.08)' : 'rgba(255,255,255,.025)'}" stroke="${selected ? 'rgba(245,158,11,.65)' : 'rgba(255,255,255,.10)'}" stroke-width="2"/>
+      <text x="118" y="${top + 37}" font-size="29" font-weight="800" fill="${COLORS.boardInk}">${xml(operator.operatorName)}</text>
+      ${selected ? `<text x="520" y="${top + 34}" class="matrix" font-size="17" font-weight="750" letter-spacing="1.5" fill="${COLORS.amber}">THIS ROUNDUP</text>` : ''}
+      <text x="958" y="${top + 39}" text-anchor="end" class="mono" font-size="34" font-weight="850" fill="${selected ? COLORS.amber : COLORS.boardInk}">${percentage.toFixed(1)}%</text>
+      <rect x="118" y="${top + 54}" width="840" height="16" rx="4" fill="#555b61"/>
+      <rect x="118" y="${top + 54}" width="${(840 * percentage / 100).toFixed(1)}" height="16" rx="4" fill="${COLORS.liveGreen}"/>
+      <text x="118" y="${top + 91}" class="mono" font-size="19" font-weight="650" fill="${COLORS.boardMuted}">${xml(Number(operator.readings).toLocaleString('en-GB'))} readings</text>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <style>${css}</style>
+    <defs><pattern id="led-dots-operators" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.1" cy="1.1" r="1.1" fill="rgba(255,255,255,.045)"/></pattern></defs>
+    <rect width="1080" height="1350" fill="#0d0f11"/>
+    <rect width="1080" height="1350" fill="url(#led-dots-operators)"/>
+    <rect width="1080" height="12" fill="${COLORS.amber}"/>
+    <text x="72" y="112" class="matrix" font-size="24" font-weight="750" letter-spacing="2.0" fill="${COLORS.amber}">${xml(scope.toUpperCase())} ROUNDUP · OPERATORS COMPARED</text>
+    <text x="72" y="218" font-size="76" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">Same week.</text>
+    <text x="72" y="294" font-size="76" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">Different operators.</text>
+    ${rows}
+    <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
+    <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
+    <text x="1008" y="1270" text-anchor="end" class="mono" font-size="25" font-weight="750" fill="${COLORS.boardInk}">${xml(formatDate(data.startDate))}–${xml(formatDate(data.endDate))}</text>
+  </svg>`;
+}
+
 function formatDate(value) {
   const date = new Date(`${String(value).slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return String(value || '');
@@ -432,6 +465,7 @@ export function validatePack(pack) {
   const errors = [];
   if (!pack?.botSaid?.postText || !pack?.botSaid?.postUrl) errors.push('botSaid requires published postText and postUrl');
   if (!pack?.botSaid?.route || !pack?.botSaid?.observedAt) errors.push('botSaid requires route and observedAt');
+  if (!pack?.botSaid?.operatorRef || !pack?.botSaid?.operatorName) errors.push('botSaid requires operator identity');
   const week = pack?.busWeek;
   if (!week || !Number.isFinite(Number(week.onTimePct))) errors.push('busWeek requires onTimePct');
   if (!week || Number(week.serviceDays) !== 7) errors.push('busWeek requires exactly 7 service days');
@@ -439,6 +473,14 @@ export function validatePack(pack) {
   if (!week || !Number.isFinite(Number(week.onTimeReadings))) errors.push('busWeek requires onTimeReadings');
   if (!week || !Array.isArray(week.daily) || week.daily.length !== 7) errors.push('busWeek requires seven daily percentages');
   if (!week?.operatorCode || !week?.operatorName) errors.push('busWeek requires operator identity');
+  if (!Array.isArray(week?.operatorComparison)
+      || week.operatorComparison.length < 2
+      || week.operatorComparison.some(operator => !operator.operatorCode
+        || !operator.operatorName
+        || !Number.isFinite(Number(operator.readings))
+        || !Number.isFinite(Number(operator.onTimePct)))) {
+    errors.push('busWeek requires at least two complete operator comparisons');
+  }
   if (!Number.isFinite(Number(week?.targetPct)) || Number(week.targetPct) <= 0
       || Number(week.targetPct) > 100) errors.push('busWeek requires a valid targetPct');
   if (!Number.isFinite(Number(week?.targetGapPoints))) errors.push('busWeek requires targetGapPoints');
@@ -484,14 +526,14 @@ export function manifest(pack, files) {
   const bot = pack.botSaid;
   const week = pack.busWeek;
   return {
-    schema: 3,
+    schema: 4,
     generatedAt: pack.generatedAt || new Date().toISOString(),
     drafts: [
       {
         kind: 'bot-said', file: files.botSaid,
-        caption: `${bot.postText}\n\nRoute ${bot.route} at ${bot.stop || 'Bristol'}. Track buses live at bristolbuses.live.`,
-        altText: `Dark departure-board card quoting Bristol Bus Bot. Route ${bot.route} at ${bot.stop || 'Bristol'}, ${Number(bot.delayMinutes) > 0 ? `${bot.delayMinutes} minutes late` : Number(bot.delayMinutes) < 0 ? `${Math.abs(bot.delayMinutes)} minutes early` : 'on time'}. The quote reads: ${bot.postText}`,
-        sources: { postUrl: bot.postUrl, observedAt: bot.observedAt, vehicleRef: bot.vehicleRef || null, recentObservationCount: bot.recentDepartures?.length || 1 },
+        caption: `${bot.postText}\n\n${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}. Track buses live at bristolbuses.live.`,
+        altText: `Dark departure-board card quoting Bristol Bus Bot about ${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}, ${Number(bot.delayMinutes) > 0 ? `${bot.delayMinutes} minutes late` : Number(bot.delayMinutes) < 0 ? `${Math.abs(bot.delayMinutes)} minutes early` : 'on time'}. The quote reads: ${bot.postText}`,
+        sources: { postUrl: bot.postUrl, observedAt: bot.observedAt, operatorRef: bot.operatorRef, operatorName: bot.operatorName, vehicleRef: bot.vehicleRef || null, recentObservationCount: bot.recentDepartures?.length || 1 },
       },
       {
         kind: 'weekly-carousel',
@@ -516,6 +558,10 @@ export function manifest(pack, files) {
             role: 'powertrain', file: files.weeklyPowertrain,
             altText: `${Number(week.powertrain.electric.sharePct).toFixed(1)} percent of ${Number(week.powertrain.identifiedReadings).toLocaleString('en-GB')} identified ${week.operatorName} readings were from electric buses. Electric buses were on time in ${Number(week.powertrain.electric.onTimePct).toFixed(1)} percent of readings, compared with ${Number(week.powertrain.dieselOther.onTimePct).toFixed(1)} percent for diesel and other buses, a difference of ${Math.abs(Number(week.powertrain.onTimeDifferencePoints)).toFixed(1)} percentage points.`,
           },
+          {
+            role: 'operator-comparison', file: files.weeklyOperators,
+            altText: `On-time results by operator from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${week.operatorComparison.map(operator => `${operator.operatorName} ${Number(operator.onTimePct).toFixed(1)} percent from ${Number(operator.readings).toLocaleString('en-GB')} readings`).join('; ')}.`,
+          },
         ],
         caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
         sources: {
@@ -528,6 +574,7 @@ export function manifest(pack, files) {
           dailyOnTimePct: week.daily,
           delayDistribution: week.distribution,
           powertrain: week.powertrain,
+          operatorComparison: week.operatorComparison,
         },
       },
     ],
@@ -570,6 +617,7 @@ async function main() {
     weeklyDays: '04-weekly-days.jpg',
     weeklyDistribution: '05-weekly-distribution.jpg',
     weeklyPowertrain: '06-weekly-powertrain.jpg',
+    weeklyOperators: '07-operators-compared.jpg',
   };
   await Promise.all([
     sharp(render(botSaidSvg(pack.botSaid, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.botSaid)),
@@ -578,6 +626,7 @@ async function main() {
     sharp(render(weeklyDaysSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
     sharp(render(weeklyDistributionSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDistribution)),
     sharp(render(weeklyPowertrainSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyPowertrain)),
+    sharp(render(weeklyOperatorsSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyOperators)),
   ]);
   await fs.writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest(pack, names), null, 2)}\n`);
   process.stdout.write(`Wrote ${output}: ${Object.values(names).join(', ')}, manifest.json\n`);
