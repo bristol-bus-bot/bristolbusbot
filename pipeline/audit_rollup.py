@@ -27,6 +27,7 @@ from audit_fleet import load_fleet_index, fleet_for, fleet_number
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT_DB = os.getenv("BBB_AUDIT_DB", os.path.join(HERE, "audit.db"))
+SQLITE_BUSY_TIMEOUT_MS = 60_000
 
 TARGET_TZ = tz.gettz("Europe/London") or tz.tzlocal()
 
@@ -46,6 +47,16 @@ DELAY_BUCKETS = [
 ]
 
 PEAK_BANDS = ["am_peak", "interpeak", "pm_peak", "evening"]
+
+
+def connect_audit_db(path=None):
+    """Wait out one short collector write instead of failing the rollup."""
+    conn = sqlite3.connect(
+        path or AUDIT_DB,
+        timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+    )
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    return conn
 
 
 def migrate_overall_pk(cur):
@@ -666,7 +677,7 @@ def main():
         print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
         return 2
 
-    conn = sqlite3.connect(AUDIT_DB)
+    conn = connect_audit_db()
     init_summary_tables(conn)
     geo_index = load_geo_index()
     fleet_index = load_fleet_index()
