@@ -105,7 +105,7 @@ def build_operator(cur, service_date, operator):
     try:
         cur.execute(
             """SELECT model, electric, fuel, vehicles, readings_in_gate,
-                      on_time_pct, mean_delay_s, median_delay_s, routes_json
+                      on_time, on_time_pct, mean_delay_s, median_delay_s, routes_json
                FROM daily_fleet_summary WHERE service_date = ? AND operator = ?
                ORDER BY readings_in_gate DESC""",
             (service_date, operator),
@@ -121,6 +121,7 @@ def build_operator(cur, service_date, operator):
                 "fuel": r["fuel"],
                 "vehicles": r["vehicles"],
                 "readings_in_gate": r["readings_in_gate"],
+                "on_time": r["on_time"],
                 "on_time_pct": r["on_time_pct"],
                 "median_delay_s": r["median_delay_s"],
                 "routes": model_routes,

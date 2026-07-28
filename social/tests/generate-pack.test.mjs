@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { botSaidSvg, busWeekSvg, manifest, validatePack, weeklyDaysSvg, weeklyDistributionSvg, wrapWords, xml } from '../generate-pack.mjs';
+import { botSaidSvg, busWeekSvg, manifest, validatePack, weeklyDaysSvg, weeklyDistributionSvg, weeklyPowertrainSvg, weeklyTargetSvg, wrapWords, xml } from '../generate-pack.mjs';
 
 const pack = {
   botSaid: { postText: 'A bus & its timetable <disagree>.', postUrl: 'https://bsky.app/x', route: '75', stop: 'Centre', observedAt: '2026-07-28T12:00:00Z', delayMinutes: 5 },
@@ -12,6 +12,12 @@ const pack = {
     targetPct: 82, targetLabel: 'latest WECA area target', targetGapPoints: 14.6,
     longTermTargetPct: 95, longTermTargetLabel: 'WECA 2030 goal',
     longTermTargetGapPoints: 27.6,
+    powertrain: {
+      identifiedReadings: 1175, unidentifiedReadings: 25,
+      electric: { readings: 470, onTime: 300, sharePct: 40, onTimePct: 63.8 },
+      dieselOther: { readings: 705, onTime: 490, sharePct: 60, onTimePct: 69.5 },
+      onTimeDifferencePoints: -5.7,
+    },
     serviceDays: 7, daily: [61, 62, 63, 64, 65, 66, 67],
     distribution: {
       binEdgesSeconds: [-600, -300, -180, -120, -60, 0, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200],
@@ -35,8 +41,10 @@ test('XML and wrapping keep untrusted public text inside the SVG', () => {
 test('both cards use the required Instagram portrait dimensions', () => {
   assert.match(botSaidSvg(pack.botSaid), /width="1080" height="1350"/);
   assert.match(busWeekSvg(pack.busWeek), /width="1080" height="1350"/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /width="1080" height="1350"/);
   assert.match(weeklyDaysSvg(pack.busWeek), /width="1080" height="1350"/);
   assert.match(weeklyDistributionSvg(pack.busWeek), /width="1080" height="1350"/);
+  assert.match(weeklyPowertrainSvg(pack.busWeek), /width="1080" height="1350"/);
 });
 
 test('weekly card gates and manifest preserve facts', () => {
@@ -48,20 +56,26 @@ test('weekly card gates and manifest preserve facts', () => {
   }), /match onTimeReadings/);
   const output = manifest(pack, {
     botSaid: 'one.jpg', weeklyHeadline: 'two.jpg',
-    weeklyDays: 'three.jpg', weeklyDistribution: 'four.jpg',
+    weeklyTarget: 'three.jpg', weeklyDays: 'four.jpg',
+    weeklyDistribution: 'five.jpg', weeklyPowertrain: 'six.jpg',
   });
   assert.equal(output.drafts[1].sources.dailyOnTimePct.length, 7);
   assert.match(output.drafts[0].caption, /A bus & its timetable/);
-  assert.match(busWeekSvg(pack.busWeek), /67.4% on time/);
-  assert.match(busWeekSvg(pack.busWeek), /14.6 points short/);
-  assert.match(busWeekSvg(pack.busWeek), /LATEST WECA AREA TARGET 82%/);
-  assert.equal(output.drafts[1].slides.length, 3);
+  assert.match(busWeekSvg(pack.busWeek), /33 in every 100/);
+  assert.doesNotMatch(busWeekSvg(pack.busWeek), /TARGET/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /14.6 points short/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /82% TARGET/);
+  assert.equal(output.drafts[1].slides.length, 5);
   assert.match(output.drafts[1].slides[0].altText, /100 squares/);
   assert.match(weeklyDaysSvg(pack.busWeek), /Best day: Sunday/);
   assert.match(weeklyDaysSvg(pack.busWeek), /Worst: Monday/);
   assert.match(weeklyDistributionSvg(pack.busWeek), /1 in 10 was over/);
   assert.match(weeklyDistributionSvg(pack.busWeek), /8.0 min late/);
   assert.match(weeklyDistributionSvg(pack.busWeek), /8 in 10 readings/);
-  assert.match(output.drafts[1].caption, /14.6 percentage points below/);
-  assert.match(output.drafts[1].caption, /95% by 2030/);
+  assert.doesNotMatch(weeklyDistributionSvg(pack.busWeek), /WECA TARGET/);
+  assert.match(weeklyPowertrainSvg(pack.busWeek), /40.0% of readings/);
+  assert.match(weeklyPowertrainSvg(pack.busWeek), /DIESEL \/ OTHER/);
+  assert.match(weeklyPowertrainSvg(pack.busWeek), /5.7 percentage points apart/);
+  assert.match(output.drafts[1].caption, /14.6 points below/);
+  assert.match(output.drafts[1].caption, /40.0% of identified readings/);
 });

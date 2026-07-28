@@ -40,6 +40,23 @@
     "longTermTargetPct": 95,
     "longTermTargetLabel": "WECA 2030 goal",
     "longTermTargetGapPoints": 27.6,
+    "powertrain": {
+      "identifiedReadings": 12200,
+      "unidentifiedReadings": 231,
+      "electric": {
+        "readings": 4600,
+        "onTime": 3100,
+        "sharePct": 37.7,
+        "onTimePct": 67.4
+      },
+      "dieselOther": {
+        "readings": 7600,
+        "onTime": 5100,
+        "sharePct": 62.3,
+        "onTimePct": 67.1
+      },
+      "onTimeDifferencePoints": 0.3
+    },
     "startDate": "2026-07-20",
     "endDate": "2026-07-26",
     "onTimePct": 67.4,
