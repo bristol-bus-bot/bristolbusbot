@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 
 def test_fleet_search_payload_from_list_shaped_file(client, app, tmp_path):
@@ -56,6 +57,56 @@ def test_situations_endpoint(client, app):
 def test_busbot_posts_shape(client):
     data = client.get("/api/busbot-posts").get_json()
     assert set(data) == {"posts", "profileUrl", "handle"}
+
+
+def test_busbot_posts_matches_only_exact_current_journey(client, monkeypatch):
+    from app.routes import api_misc
+    current = {
+        "operatorRef": "FBRI", "vehicleRef": "FBRI-36205",
+        "journeyCode": "2100", "originAimedDep": "2026-07-01T21:00:00+00:00",
+    }
+    base = {
+        "eventId": 42, "operatorRef": "FBRI", "vehicleRef": "FBRI-36205",
+        "journeyRef": "2100", "originAimedDeparture": "2026-07-01T21:00:00+00:00",
+        "line": "75", "postUrl": "https://bsky.app/profile/bristolbusbot.live/post/abc",
+        "postText": "The exact published post.", "postType": "delay",
+        "timestamp": "2026-07-01T21:02:00+00:00",
+    }
+    wrong_journey = {**base, "eventId": 43, "journeyRef": "WRONG"}
+    matched = api_misc._match_bot_posts(
+        [base, wrong_journey], [current], 240,
+        now=datetime(2026, 7, 1, 21, 5, tzinfo=timezone.utc))
+    assert len(matched) == 1
+    assert matched[0]["eventId"] == 42
+    assert matched[0]["postText"] == "The exact published post."
+
+
+def test_busbot_posts_rejects_stale_missing_provenance_and_bad_url():
+    from app.routes import api_misc
+    current = {
+        "operatorRef": "FBRI", "vehicleRef": "FBRI-36205",
+        "journeyCode": "2100", "originAimedDep": "21:00:00",
+    }
+    base = {
+        "operatorRef": "FBRI", "vehicleRef": "FBRI-36205",
+        "journeyRef": "2100", "originAimedDeparture": "21:00:00",
+        "postUrl": "https://bsky.app/profile/bristolbusbot.live/post/abc",
+        "postText": "Post", "timestamp": "2026-07-01T20:00:00+00:00",
+    }
+    now = datetime(2026, 7, 1, 21, 0, tzinfo=timezone.utc)
+    assert api_misc._match_bot_posts([{**base, "timestamp": "2026-07-01T12:00:00Z"}], [current], 240, now) == []
+    assert api_misc._match_bot_posts([{**base, "journeyRef": ""}], [current], 240, now) == []
+    assert api_misc._match_bot_posts([{**base, "postUrl": "https://example.com/x"}], [current], 240, now) == []
+
+
+def test_busbot_posts_endpoint_fails_soft(client, monkeypatch):
+    from app.routes import api_misc
+    monkeypatch.setattr(api_misc, "_fetch_bot_posts",
+                        lambda _url: (_ for _ in ()).throw(OSError("bot down")))
+    response = client.get("/api/busbot-posts")
+    assert response.status_code == 200
+    assert response.get_json()["posts"] == []
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 def test_boundary_serves_real_file_then_404_when_missing(client, app):

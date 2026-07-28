@@ -136,6 +136,24 @@
             </ul>
         </section>
 
+        {% if profile.bot_mentions %}
+        <section aria-labelledby="mentions-title">
+            <h2 id="mentions-title">Mentioned by the bot</h2>
+            <div class="profile-mentions">
+            {% for mention in profile.bot_mentions %}
+                <article>
+                    <div>
+                        {% if mention.route %}<strong>Route {{ mention.route }}</strong>{% endif %}
+                        <time datetime="{{ mention.posted_at }}">{{ display_post_time(mention.posted_at) }}</time>
+                    </div>
+                    <blockquote>{{ mention.text }}</blockquote>
+                    <a href="{{ mention.post_url }}" target="_blank" rel="noopener">Open the Bluesky post ↗</a>
+                </article>
+            {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
         {% if details.model %}
         <section aria-labelledby="vehicle-title">
             <h2 id="vehicle-title">Vehicle</h2>

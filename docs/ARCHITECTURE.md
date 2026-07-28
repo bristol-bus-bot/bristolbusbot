@@ -26,6 +26,7 @@ those three numbers cannot disagree because they are the same number.
 | `bot/` | The Bluesky bot. Reads the collector's event stream, selects an event, generates AI commentary with a persona, posts. | TypeScript | Raspberry Pi (systemd) |
 | `pipeline/` | Offline data jobs: the 3-layer timetable build, fleet refresh, route shapes, audit rollup/export. | Python | GitHub Actions + Pi timers; workstation fallback |
 | `audit-site/` | Source of the WECA bus punctuality audit static site, published to a separate GitHub Pages repository. | HTML/CSS/JS | GitHub Pages |
+| `social/` | Read-only editorial tooling: Threads shadow selection and deterministic Instagram draft cards. It publishes nothing. | Python/Node | Workstation; future isolated Pi job |
 | `deploy/` | Immutable release deployment, systemd units, health/rollback gates, backups. | Python | Workstation → Pi |
 
 ## Databases and ownership
@@ -37,7 +38,7 @@ SQLite everywhere, with strict ownership boundaries:
 | `timetable.db` | GitHub builds candidates; the Pi validates and promotes atomically | collector, site, bot | GTFS + TransXChange + TNDS schedule data; read-only in production |
 | `live.db` | collector | site, bot | current vehicle state, disruptions (`situations`), corroborated delay `events` for the bot, poller status |
 | `audit.db` | collector + nightly rollup | rollup/export jobs | closest-approach timing-point observations and daily summaries |
-| `app_data.db` | bot | bot | posting history, engagement analytics, bot-local state |
+| `app_data.db` | bot | bot; read-only social selector | posting history, exact successful-post provenance, bot-local state |
 | `editorial-context.json` | human-approved on GitHub; Pi validates and promotes | bot | sourced facts, occasions and expiring news |
 
 The bot's only write to `live.db` is marking events consumed
@@ -91,6 +92,12 @@ cannot become a detached addendum merely to satisfy a posting slot. The
 legacy direct-SIRI ingest path still exists behind `INGEST_MODE=siri` as
 an explicit diagnostic fallback, never a default.
 
+After Bluesky confirms a successful post, the bot records the exact final text,
+AT URI and collector journey identity in `app_data.db`. Its loopback API can
+return that bounded recent history. The site may use it to mark only an exact
+operator + vehicle + journey + origin-departure match; incomplete, stale or
+unavailable provenance produces no badge and cannot affect the map itself.
+
 ## The audit
 
 A nightly, networkless rollup turns `audit.db` into publishable daily
@@ -105,6 +112,20 @@ adding another audit-database scan. If the snapshot is more than 48 hours old
 the site hides the audit headline and profile pages entirely — stale
 data degrades to absence, not to a broken or misleading figure.
 Methodology and its limitations: `docs/AUDIT_METHODOLOGY.md`.
+
+The same promoted integration snapshot carries bounded bot mentions for
+vehicle profiles. Manual Instagram packs read the published seven-day totals
+and the audit database read-only: the weekly histogram must reproduce both the
+published reading count and on-time count exactly or generation fails.
+
+## Social tooling
+
+Social expansion is downstream of successful Bluesky posts and published audit
+data. `social/threads_candidates.py` produces a logging-only selection report;
+it does not contact Meta. The Instagram generator produces one standalone
+observation card and an ordered three-slide weekly carousel (headline, daily
+shape, delay distribution), plus captions, alt text and source facts for human
+review. It does not publish, call Gemini or create another BODS consumer.
 
 ## Deployment shape
 

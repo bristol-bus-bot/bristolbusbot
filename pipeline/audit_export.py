@@ -29,7 +29,7 @@ TARGET_PCT = 95
 ON_TIME_BAND = "1 minute early to 5 min 59s late (DfT statistical definition)"
 
 OVERALL_COLS = [
-    "on_time_pct", "mean_delay_s", "median_delay_s",
+    "on_time", "early", "late", "on_time_pct", "mean_delay_s", "median_delay_s",
     "readings_in_gate", "readings_total", "excluded_distance",
     "median_gate_dist_m", "expected_trips", "observed_trips", "coverage_pct",
 ]

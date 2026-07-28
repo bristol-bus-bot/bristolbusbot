@@ -13,8 +13,39 @@ import type {
     DatabaseRoute, 
     DatabaseJourney, 
     DatabaseStopTime,
-    BusVehicleDetails
+    BusVehicleDetails,
+    BusEvent
 } from '../types/bus-types.js';
+
+export interface EngagementRecord {
+    postContent: string;
+    postType: string;
+    significance: number;
+    postUri?: string;
+    event: BusEvent;
+}
+
+export interface RecentPost {
+    collectorEventId: number | null;
+    operatorRef: string;
+    vehicleRef: string;
+    line: string;
+    journeyRef: string;
+    originAimedDeparture: string;
+    eventTimestamp: string;
+    delaySeconds: number | null;
+    direction: string;
+    stopCode: string;
+    stopName: string;
+    source: string;
+    corroboration: number | null;
+    lowConfidence: boolean;
+    postUri: string;
+    postContent: string;
+    postType: string;
+    significance: number | null;
+    timestamp: string;
+}
 
 /**
  * Database Manager Service
@@ -128,10 +159,9 @@ export class DatabaseManager {
                 const createStmts = [
                     `CREATE TABLE IF NOT EXISTS historical_delays (id INTEGER PRIMARY KEY AUTOINCREMENT, journey_code TEXT NOT NULL, stop_code TEXT NOT NULL, delay_minutes INTEGER NOT NULL, timestamp TEXT NOT NULL);`,
                     `CREATE TABLE IF NOT EXISTS kalman_state (journey_code TEXT PRIMARY KEY, variance REAL NOT NULL, estimate REAL NOT NULL, last_updated TEXT NOT NULL);`,
-                    `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT);`,
+                    `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT, collector_event_id INTEGER, operator_ref TEXT, line TEXT, journey_ref TEXT, origin_aimed_departure TEXT, event_timestamp TEXT, delay_seconds INTEGER, direction TEXT, stop_code TEXT, stop_name TEXT, source TEXT, corroboration INTEGER, low_confidence INTEGER);`,
                     `CREATE TABLE IF NOT EXISTS delay_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, route_id TEXT NOT NULL, delay_minutes INTEGER NOT NULL, last_stop_name TEXT, trend TEXT, report_time TEXT NOT NULL);`,
                     `CREATE INDEX IF NOT EXISTS idx_historical_delays ON historical_delays(journey_code, stop_code, timestamp);`,
-                    `CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp);`,
                     `CREATE INDEX IF NOT EXISTS idx_kalman_state_last_updated ON kalman_state(last_updated);`,
                     `CREATE INDEX IF NOT EXISTS idx_delay_reports ON delay_reports(route_id, report_time);`
                 ];
@@ -141,7 +171,51 @@ export class DatabaseManager {
                         logger.error("Error initializing app data database tables and indexes.", { err });
                         return reject(err);
                     }
-                    logger.info("App data database tables and indexes are ready.");
+                    this.migrateEngagementAnalytics()
+                        .then(() => {
+                            logger.info("App data database tables and indexes are ready.");
+                            resolve();
+                        })
+                        .catch(reject);
+                });
+            });
+        });
+    }
+
+    /** Add provenance columns to installations created before map highlighting. */
+    private migrateEngagementAnalytics(): Promise<void> {
+        const expected: Record<string, string> = {
+            collector_event_id: 'INTEGER',
+            operator_ref: 'TEXT',
+            line: 'TEXT',
+            journey_ref: 'TEXT',
+            origin_aimed_departure: 'TEXT',
+            event_timestamp: 'TEXT',
+            delay_seconds: 'INTEGER',
+            direction: 'TEXT',
+            stop_code: 'TEXT',
+            stop_name: 'TEXT',
+            source: 'TEXT',
+            corroboration: 'INTEGER',
+            low_confidence: 'INTEGER',
+        };
+        return new Promise((resolve, reject) => {
+            this.appDataDb!.all('PRAGMA table_info(engagement_analytics)', (err, rows: any[]) => {
+                if (err) return reject(err);
+                const present = new Set((rows || []).map(row => row.name));
+                const additions = Object.entries(expected)
+                    .filter(([name]) => !present.has(name))
+                    .map(([name, type]) => `ALTER TABLE engagement_analytics ADD COLUMN ${name} ${type}`);
+                const statements = [
+                    ...additions,
+                    'CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp)',
+                    'CREATE INDEX IF NOT EXISTS idx_engagement_vehicle_journey ON engagement_analytics(operator_ref, vehicle_ref, timestamp)',
+                ];
+                this.appDataDb!.exec(statements.join(';\n'), migrationErr => {
+                    if (migrationErr) return reject(migrationErr);
+                    if (additions.length) logger.info('Added engagement provenance columns', {
+                        count: additions.length,
+                    });
                     resolve();
                 });
             });
@@ -745,38 +819,55 @@ export class DatabaseManager {
      * Store engagement analytics
      * Used for tracking social media post performance
      */
-    async storeEngagementRecord(postContent: string, postType: string, significance: number, vehicleRef?: string, postUri?: string): Promise<void> {
-        try {
-            if (!this.appDataDb) {
-                return;
-            }
-
-            this.appDataDb.run(
-                `INSERT INTO engagement_analytics (post_content, post_type, significance_score, timestamp, vehicle_ref, post_uri) VALUES (?, ?, ?, ?, ?, ?);`,
-                [postContent, postType, significance, DateTime.now().toISO() ?? '', vehicleRef || null, postUri || null],
-                (err) => {
-                    if (err) {
-                        logger.error('Failed to store engagement record', { err });
-                    }
-                }
+    async storeEngagementRecord(record: EngagementRecord): Promise<void> {
+        if (!this.appDataDb) return;
+        const event = record.event;
+        await new Promise<void>((resolve, reject) => {
+            this.appDataDb!.run(
+                `INSERT INTO engagement_analytics
+                 (post_content, post_type, significance_score, timestamp,
+                  vehicle_ref, post_uri, collector_event_id, operator_ref,
+                  line, journey_ref, origin_aimed_departure, event_timestamp,
+                  delay_seconds, direction, stop_code, stop_name, source,
+                  corroboration, low_confidence)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                [record.postContent, record.postType, record.significance,
+                 DateTime.now().toISO() ?? '', event.vehicleRef || null,
+                 record.postUri || null, event.collectorEventId ?? null,
+                 event.operatorRef || null, event.line || null,
+                 event.datedJourneyRef || null,
+                 event.originAimedDepartureTimeStr || null,
+                 event.timestamp || null,
+                 event.delaySeconds ?? Math.round(event.delayMinutes * 60),
+                 event.direction || null, event.lastStopCode || null,
+                 event.lastStopName || null,
+                 event.source || null, event.corroboration ?? null,
+                 event.lowConfidence ? 1 : 0],
+                err => err ? reject(err) : resolve()
             );
-            
-        } catch (error: any) {
-            logger.error('Error storing engagement record', { error: error.message });
-        }
+        }).catch((error: any) => {
+            logger.error('Failed to store engagement record', { error: error.message });
+        });
     }
     
     /**
      * Get recent posts with vehicle refs and post URIs
      * Used by the /api/recent-posts endpoint for live-buses integration
      */
-    async getRecentPosts(limit: number = 5): Promise<Array<{ vehicleRef: string; postUri: string; postContent: string; postType: string; timestamp: string }>> {
+    async getRecentPosts(limit: number = 5): Promise<RecentPost[]> {
         try {
             if (!this.appDataDb) return [];
 
             return new Promise<any[]>((resolve) => {
                 this.appDataDb!.all(
-                    `SELECT vehicle_ref, post_uri, post_content, post_type, timestamp FROM engagement_analytics WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL ORDER BY timestamp DESC LIMIT ?;`,
+                    `SELECT collector_event_id, operator_ref, vehicle_ref, line,
+                            journey_ref, origin_aimed_departure, event_timestamp,
+                            delay_seconds, direction, stop_code, stop_name,
+                            source, corroboration, low_confidence, post_uri,
+                            post_content, post_type, significance_score, timestamp
+                       FROM engagement_analytics
+                      WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
+                      ORDER BY timestamp DESC LIMIT ?;`,
                     [limit],
                     (err, rows: any[]) => {
                         if (err) {
@@ -784,10 +875,24 @@ export class DatabaseManager {
                             return resolve([]);
                         }
                         resolve((rows || []).map(r => ({
+                            collectorEventId: r.collector_event_id,
+                            operatorRef: r.operator_ref || '',
                             vehicleRef: r.vehicle_ref,
+                            line: r.line || '',
+                            journeyRef: r.journey_ref || '',
+                            originAimedDeparture: r.origin_aimed_departure || '',
+                            eventTimestamp: r.event_timestamp || '',
+                            delaySeconds: r.delay_seconds,
+                            direction: r.direction || '',
+                            stopCode: r.stop_code || '',
+                            stopName: r.stop_name || '',
+                            source: r.source || '',
+                            corroboration: r.corroboration,
+                            lowConfidence: Boolean(r.low_confidence),
                             postUri: r.post_uri,
                             postContent: r.post_content,
                             postType: r.post_type,
+                            significance: r.significance_score,
                             timestamp: r.timestamp
                         })));
                     }

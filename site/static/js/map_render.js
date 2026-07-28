@@ -37,6 +37,17 @@ function corePath(eventType, c, r, hollow = false) {
     return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.punctual}" ${edge}/>`;
 }
 
+/** Small, shape-based marker showing that the bot posted about this journey. */
+export function featuredPostBadge(isFeatured) {
+    if (!isFeatured) return "";
+    return `<g class="busbot-post-badge" aria-hidden="true">
+        <path d="M24.5 2.5h7.2a2.3 2.3 0 0 1 2.3 2.3v4.5a2.3 2.3 0 0 1-2.3 2.3h-2.8l-3.7 2.7.8-2.7h-1.5a2.3 2.3 0 0 1-2.3-2.3V4.8a2.3 2.3 0 0 1 2.3-2.3Z"
+              fill="#F59E0B" stroke="#0D0F11" stroke-width="1.4"/>
+        <circle cx="26.8" cy="7" r="1" fill="#0D0F11"/>
+        <circle cx="30.4" cy="7" r="1" fill="#0D0F11"/>
+    </g>`;
+}
+
 export function busIcon(bus, isFeatured, options = {}) {
     const eventType = String(bus.waitingAtOrigin ? "waiting" : bus.eventType);
     const hollow = Boolean(options.hollow);
@@ -56,10 +67,13 @@ export function busIcon(bus, isFeatured, options = {}) {
         : (eventType === "waiting" ? ""
             : `<circle cx="${c}" cy="${c}" r="2.5" fill="${hollow ? "var(--sign-edge, #7E8582)" : "#fff"}"/>`);
     const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"
+             ${isFeatured ? 'role="img" aria-label="Bot posted about this journey"' : 'aria-hidden="true"'}>
+            ${isFeatured ? "<title>Bot posted about this journey</title>" : ""}
             <circle cx="${c}" cy="${c}" r="${coreR + 3}" fill="none" stroke="${ring}" stroke-width="3"/>
             ${corePath(eventType, c, coreR, hollow)}
             ${pointer}
+            ${featuredPostBadge(isFeatured)}
         </svg>`;
     return L.divIcon({ html: svg,
                        className: ["bus-marker", isFeatured ? "featured" : "",
@@ -91,7 +105,7 @@ function tooltipStatus(bus) {
     return { text: "on time", cls: "vs-status-ontime" };
 }
 
-export function busPopup(bus) {
+export function busPopup(bus, featuredPost = null) {
     const status = tooltipStatus(bus);
     const livery = el("div", {
         class: "bt-livery",
@@ -112,6 +126,12 @@ export function busPopup(bus) {
                 bus.lastStopName && bus.lastStopName !== "unknown"
                     ? el("span", { class: "bt-place" }, [`at ${bus.lastStopName}`]) : null,
             ]),
+            featuredPost?.postUrl ? el("a", {
+                class: "bt-featured",
+                href: featuredPost.postUrl,
+                target: "_blank",
+                rel: "noopener",
+            }, ["Bot post about this journey ↗"]) : null,
             el("button", {
                 class: "bt-details",
                 onClick: () => window.openVehicleSidebar(
