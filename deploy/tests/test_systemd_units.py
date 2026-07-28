@@ -134,6 +134,13 @@ def test_rollup_is_networkless_and_publish_does_not_repeat_it():
     assert "git add LICENSE README.md AUDIT_METHODOLOGY.md" in publish
 
 
+def test_audit_rollup_waits_until_the_previous_service_day_is_closed():
+    rollup = (SYSTEMD / "bbb-audit-rollup.timer").read_text(encoding="utf-8")
+    publish = (SYSTEMD / "bbb-audit-publish.timer").read_text(encoding="utf-8")
+    assert "OnCalendar=*-*-* 05:15:00" in rollup
+    assert "OnCalendar=*-*-* 05:45:00" in publish
+
+
 def test_integration_is_built_networkless_and_promoted_only_after_publish():
     runner = (SYSTEMD.parent / "run_audit_rollup.sh").read_text(encoding="utf-8")
     publish = (SYSTEMD.parent / "publish_to_github.sh").read_text(encoding="utf-8")

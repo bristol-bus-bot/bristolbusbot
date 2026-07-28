@@ -2,7 +2,9 @@
 Description=Run the completed-day audit rollup daily
 
 [Timer]
-OnCalendar=*-*-* 02:55:00
+# The collector can still improve previous-service-day observations until
+# shortly before 05:00.  Wait until that service-day boundary has closed.
+OnCalendar=*-*-* 05:15:00
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=30s
