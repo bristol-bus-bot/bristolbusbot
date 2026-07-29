@@ -9,6 +9,7 @@ One message, five sections:
                number = the matcher is pairing buses with wrong schedules.
   bot        - successful Bluesky posts today from durable delivery records
   site       - production site /healthz on :5002
+  timetable  - aggregate last accepted and last attempted automation state
   pi         - disk, memory, CPU temperature
 
 Webhook read directly from ~/.config/busbot-alerts/webhook (never assume
@@ -33,6 +34,9 @@ WEBHOOK_CONF = HOME / ".config" / "busbot-alerts" / "webhook"
 BOT_DB = Path(os.getenv(
     "BBB_BOT_DB", "/var/lib/bristolbusbot/bot/app_data.db"))
 SITE_URL = "http://127.0.0.1:5002/healthz"
+AGGREGATE_HEALTH = Path(os.getenv(
+    "BBB_AGGREGATE_HEALTH",
+    "/var/lib/bristolbusbot/monitoring/health.json"))
 
 
 def _post(text: str) -> None:
@@ -105,6 +109,30 @@ def site_line() -> str:
         return f"*site*  :x: {e}"
 
 
+def timetable_line() -> str:
+    """Read only the aggregate health contract, never raw timetable job files."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        automation = snapshot.get("timetable_automation")
+        if not isinstance(automation, dict):
+            return "*timetable*  aggregate status unavailable"
+        accepted = automation.get("last_accepted")
+        accepted = accepted if isinstance(accepted, dict) else {}
+        attempt = automation.get("last_attempt")
+        attempt = attempt if isinstance(attempt, dict) else {}
+        accepted_run = str(accepted.get("run_id") or "none")
+        accepted_at = str(accepted.get("accepted_at") or "unknown")[:10]
+        attempted_run = str(attempt.get("run_id") or "none")
+        outcome = str(attempt.get("outcome") or automation.get("status") or "unknown")
+        next_action = str(automation.get("next_action") or "next scheduled check")
+        return (
+            f"*timetable*  accepted run {accepted_run} ({accepted_at}) - "
+            f"last run {attempted_run}: {outcome} - {next_action}"
+        )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*timetable*  aggregate probe failed: {type(exc).__name__}"
+
+
 def pi_line() -> str:
     try:
         du = shutil.disk_usage("/")
@@ -127,7 +155,7 @@ def main() -> None:
     stamp = datetime.now().strftime("%a %H:%M")
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
-    lines += [bot_line(), site_line(), pi_line()]
+    lines += [bot_line(), site_line(), timetable_line(), pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 

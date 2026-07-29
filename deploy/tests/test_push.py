@@ -190,6 +190,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
         encoding="utf-8")
     assert "/usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py" in installer
     assert "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py" in installer
+    assert "/usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py" in installer
     assert (
         '"$stage/timetable_editions.py" '
         "/usr/local/libexec/bristolbusbot-timetable/timetable_editions.py"
@@ -204,9 +205,11 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
         payload.extractall(extract, filter="data")
     assert (extract / "timetable_delivery.py").is_file()
     assert (extract / "timetable_promote.py").is_file()
+    assert (extract / "timetable_service_profile.py").is_file()
     assert (extract / "timetable_manifest.py").is_file()
     assert (extract / "timetable_editions.py").is_file()
     assert (extract / "systemd/bbb-timetable-shadow@.service").is_file()
+    assert (extract / "systemd/bbb-timetable-shadow-auto.service").is_file()
     assert (extract / "systemd/bbb-timetable-promote@.service").is_file()
     assert (extract / "editorial_context.py").is_file()
     assert (extract / "editorial_fetch.py").is_file()

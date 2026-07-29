@@ -29,16 +29,25 @@ copies.
 
 `bbb-timetable-shadow.timer` is the one credential-gated exception to automatic
 enablement: the layout installer leaves it disabled until the root-only GitHub
-environment file exists. The timer starts the `@auto` service instance; an
-operator can start `bbb-timetable-shadow@RUN_ID.service` for one attended,
-exact-run delivery. A successful shadow service chains to the separately
-sandboxed root `bbb-timetable-promote@auto.service`, which remains structurally
-disabled without the root-owned promotion marker. Use
-`bbb-timetable-promote@attended.service` for the first reviewed live swap.
+credential exists. The timer starts `bbb-timetable-shadow-auto.service`; only
+that automatic unit chains to the separately sandboxed root
+`bbb-timetable-promote@auto.service`, which remains structurally disabled
+without the root-owned promotion marker. An operator can start
+`bbb-timetable-shadow@RUN_ID.service` for one diagnostic exact-run delivery; it
+has no promotion chain. After reviewing the shadow state, the live swap must use
+`bbb-timetable-promote@RUN_ID-SHA256.service` with the exact recorded identity.
+The automatic promoter also rejects a latest shadow whose recorded mode is
+attended, closing the gap between the two units.
 
-Production status (22 July 2026): the credential, timer and root promotion
+Production status (29 July 2026): the credential, timer and root promotion
 marker are installed; a complete production `auto` delivery and promotion was
 accepted successfully after being manually initiated during commissioning.
-The first timer-triggered due run remains routine evidence. Routine runs use
-`@auto`; attended instances are now diagnostic/recovery tools rather than a
-remaining implementation step.
+The first timer-triggered due build was safely rejected before promotion by an
+over-broad raw-row gate. Remediation is documented in the timetable execution
+plan.
+
+The corrected source templates keep exact-run and automatic topology separate.
+They use exit 73 for `flock` timeout, which the job wrapper records as
+`lock_timeout`; exit 75 is reserved for a benign application skip. These source
+templates are not production evidence until the reviewed layout is installed
+and the promotion-disabled shadow/attended rollout passes.
