@@ -165,26 +165,35 @@ def test_backup_sandbox_cache_directory_is_created_before_unit_start():
         assert "DevicePolicy=closed" in unit
 
 
-def test_timetable_shadow_is_unprivileged_sandboxed_and_chains_guarded_promotion():
-    service = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
+def test_timetable_auto_and_attended_shadows_have_separate_promotion_topology():
+    attended = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(
+        encoding="utf-8")
+    automatic = (SYSTEMD / "bbb-timetable-shadow-auto.service").read_text(
+        encoding="utf-8")
     timer = (SYSTEMD / "bbb-timetable-shadow.timer").read_text(encoding="utf-8")
-    assert service.startswith("[Unit]\n")
-    for setting in (
-        "User=@BBB_DEPLOY_USER@",
-        "EnvironmentFile=-/etc/bristolbusbot/timetable-delivery.env",
-        "LoadCredential=github-token:/etc/bristolbusbot/timetable-delivery.token",
-        "NoNewPrivileges=yes",
-        "ProtectHome=yes",
-        "ProtectSystem=strict",
-        "ProtectProc=invisible",
-        "ProcSubset=pid",
-        "ReadWritePaths=/var/lib/bristolbusbot/timetable-shadow "
-        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
-        "/run/lock/bristolbusbot/heavy-io.lock",
-        "OnSuccess=bbb-timetable-promote@auto.service",
-    ):
-        assert setting in service
-    assert ".timetable.db.upload" not in service
+    for service in (attended, automatic):
+        assert service.startswith("[Unit]\n")
+        for setting in (
+            "User=@BBB_DEPLOY_USER@",
+            "EnvironmentFile=-/etc/bristolbusbot/timetable-delivery.env",
+            "LoadCredential=github-token:/etc/bristolbusbot/timetable-delivery.token",
+            "NoNewPrivileges=yes",
+            "ProtectHome=yes",
+            "ProtectSystem=strict",
+            "ProtectProc=invisible",
+            "ProcSubset=pid",
+            "ReadWritePaths=/var/lib/bristolbusbot/timetable-shadow "
+            "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+            "/run/lock/bristolbusbot/heavy-io.lock",
+            "flock -w 900 -E 73",
+        ):
+            assert setting in service
+        assert ".timetable.db.upload" not in service
+    assert "OnSuccess=bbb-timetable-promote@auto.service" not in attended
+    assert "--run-id %i" in attended
+    assert "OnSuccess=bbb-timetable-promote@auto.service" in automatic
+    assert "--run-id auto" in automatic
+    assert "Unit=bbb-timetable-shadow-auto.service" in timer
     assert "05:00:00" in timer
 
 
@@ -194,7 +203,7 @@ def test_timetable_promoter_is_root_fixed_path_and_sandboxed():
     for setting in (
         "User=root",
         "--name timetable-promote --skip-exit-code 75",
-        "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py --mode %i",
+        "/usr/local/libexec/bristolbusbot-timetable/timetable_promote.py --candidate %i",
         "/run/lock/bristolbusbot/heavy-io.lock",
         "NoNewPrivileges=yes",
         "ProtectHome=yes",
@@ -214,6 +223,7 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-backup.service",
         "bbb-backup-check.service",
         "bbb-audit-rollup.service",
+        "bbb-timetable-shadow-auto.service",
         "bbb-timetable-shadow@.service",
         "bbb-timetable-promote@.service",
     ):
@@ -222,7 +232,7 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     backup = (SYSTEMD / "bbb-backup.service").read_text(encoding="utf-8")
     delivery = (SYSTEMD / "bbb-timetable-shadow@.service").read_text(encoding="utf-8")
     assert "flock -n -E 75" in backup
-    assert "flock -w 900 -E 75" in delivery
+    assert "flock -w 900 -E 73" in delivery
     tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
         encoding="utf-8")
     assert (

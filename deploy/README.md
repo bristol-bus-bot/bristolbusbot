@@ -82,37 +82,48 @@ always goes through the deployment command.
 ### Automated GitHub timetable delivery
 
 Download and promotion remain separate privilege boundaries. GitHub performs
-the heavy build; `bbb-timetable-shadow@.service` downloads one exact successful
-default-branch run, safely extracts the three-file parcel, verifies its GitHub
-digest and provenance manifest, validates the database again, and compares its
-counts with the current database. Its systemd sandbox can write only under
+the heavy build; `bbb-timetable-shadow-auto.service` handles scheduled checks,
+while `bbb-timetable-shadow@RUN_ID.service` downloads one exact successful
+default-branch run without triggering promotion. Both safely extract the
+three-file parcel, verify its GitHub digest and provenance manifest, validate
+the database again, and compare usable dated service with the current database.
+Their systemd sandboxes can write only under
 `/var/lib/bristolbusbot/timetable-shadow`, monitoring state and its lock file.
-It has no restart permission, promotion command or writable production path.
+They have no restart permission, promotion command or writable production path.
 
-After a successful or harmless skipped shadow check, systemd starts the
-separate root `bbb-timetable-promote@auto.service`. Automatic mode remains
+After the automatic shadow unit succeeds, systemd starts the separate root
+`bbb-timetable-promote@auto.service`. Its identity-first fast path skips an
+already handled run without reopening the candidate database, and it refuses a
+shadow recorded as attended. Automatic mode remains
 fail-closed until `/etc/bristolbusbot/timetable-promotion-enabled` exists as a
 root-owned regular file with mode `0644`. The promoter accepts no paths: it
 re-verifies the fixed candidate, copies it to fixed production staging, checks
 the hash again, atomically promotes it, restarts the three consumers, and checks
-local health, the timetable-backed stop-search endpoint and public health.
+local health, the timetable-backed stop-search endpoint, the bot's nested
+timetable connection and public health.
 Failure after replacement restores
 `timetable.db.previous`; an automatically rejected candidate is not retried
 until a different candidate arrives.
 
-Aggregate health sends one detailed Slack message when a different timetable is
+Aggregate health treats delivery and promotion as one run/hash-correlated
+transaction and sends one detailed Slack message when a different timetable is
 accepted. It includes coverage, row counts, source/fallback status, database and
 GitHub-run identity, functional-check results and rollback readiness. A failed
 delivery or promotion alert names the failure and explicitly says whether the
 candidate never reached production, the previous database was restored, or
-automatic rollback could not prove recovery. Daily no-change checks stay quiet.
+automatic rollback could not prove recovery. Alerts are recorded as delivered
+only after Slack returns success. Daily no-change checks stay quiet, and the
+twice-daily digest reads the same aggregate transaction state.
 
-Production status (22 July 2026): the timer and automatic-promotion marker are
+Production status (29 July 2026): the timer and automatic-promotion marker are
 enabled. GitHub run `29944744744` completed the full production `auto` path and
-was accepted after database, consumer, stop-search and public-health gates. It
-was manually initiated during commissioning; the first timer-triggered due run
-remains routine evidence. The steps below remain the installation/recovery
-procedure, not unfinished implementation work.
+was accepted after database, consumer, stop-search and public-health gates. The
+first timer-triggered due build, run `30421182234`, was safely rejected before
+promotion by the total `stop_times` collapse gate even though its next 28 days
+of service were complete. The live database was not changed. The correction is
+implemented in repository source but is not live until it passes the rollout in
+`docs/plans/TIMETABLE_BUILD_PI_EXECUTION.md`. Do not use a broad force or lower
+the old floor on the installed service.
 
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without
@@ -129,13 +140,28 @@ to `/etc/bristolbusbot/timetable-delivery.token` with mode `0600`. systemd
 mounts that token privately into only the short-lived shadow service; it is not
 placed in the service environment. Monitoring records only its expiry date.
 
-Routine timer runs use the `auto` instance. For one attended shadow test of an
-already successful workflow run, use its numeric GitHub run ID:
+Routine timer runs use the dedicated automatic unit. An exact-run instance is
+diagnostic only and cannot chain into the promoter. Stop the timer and disable
+the root promotion marker during rollout, then run the reviewed numeric GitHub
+run ID:
 
 ```sh
 sudo systemctl start bbb-timetable-shadow@RUN_ID.service
 sudo journalctl -u bbb-timetable-shadow@RUN_ID.service --since today
 ```
+
+Read the resulting run ID and full database SHA-256 from
+`/var/lib/bristolbusbot/timetable-shadow/state.json`, compare them with the
+reviewed artifact, and explicitly promote only that identity:
+
+```sh
+sudo systemctl start bbb-timetable-promote@RUN_ID-SHA256.service
+sudo journalctl -u bbb-timetable-promote@RUN_ID-SHA256.service -n 100 --no-pager
+```
+
+The promoter refuses a run/hash that differs from the latest successful shadow.
+Restore the marker and timer only after the attended transaction and all health
+evidence are complete.
 
 The daily timer checks the live database and monitoring state every morning. A
 successful automatic shadow delivery starts a six-day cooldown, producing
@@ -165,16 +191,9 @@ branch and path is accepted. Aggregate health records both jobs and sends a
 single detailed Slack message when a new blob is accepted or a transition
 fails.
 
-Before enabling automatic promotion, run one attended transaction and inspect
-the result:
-
-```sh
-sudo systemctl start bbb-timetable-promote@attended.service
-sudo journalctl -u bbb-timetable-promote@attended.service -n 100 --no-pager
-```
-
-If the live hash, consumer services and public health are correct, enable the
-fixed marker and exercise automatic no-change handling:
+If the live hash, consumer services and public health are correct after the
+run/hash-pinned attended transaction above, enable the fixed marker and exercise
+automatic no-change handling:
 
 ```sh
 sudo /usr/local/sbin/bbb-deploy-control timetable-auto-enable

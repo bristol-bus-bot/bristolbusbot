@@ -220,6 +220,7 @@ def test_attended_shadow_delivery_validates_and_never_addresses_live_output(tmp_
     state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
     assert state["last_shadow_run_id"] == str(RUN_ID)
     assert state["last_shadow_attempt"]["outcome"] == "success"
+    assert state["last_shadow_attempt"]["mode"] == "attended"
     assert state["token_expires_utc"] == "2027-01-01T00:00:00+00:00"
 
     with pytest.raises(DeliverySkipped, match="already shadow-delivered"):
@@ -238,6 +239,7 @@ def test_first_auto_run_refreshes_even_with_far_future_coverage(tmp_path):
     state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
     assert state["last_check"]["coverage_urgent"] is False
     assert state["last_check"]["refresh_due"] is True
+    assert state["last_shadow_attempt"]["mode"] == "auto"
 
 
 def test_recent_auto_success_skips_without_contacting_github(tmp_path):
@@ -257,6 +259,41 @@ def test_recent_auto_success_skips_without_contacting_github(tmp_path):
     state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
     assert state["last_check"]["coverage_urgent"] is False
     assert state["last_check"]["refresh_due"] is False
+
+
+def test_preflight_failure_is_recorded_without_corrupting_legacy_success(tmp_path):
+    archive = make_package(tmp_path)
+    client = FakeClient(archive)
+    client.token = ""
+    runner = delivery(tmp_path, client)
+    runner.config.shadow_root.mkdir(parents=True)
+    old_hash = "c" * 64
+    runner.config.state_path.write_text(json.dumps({
+        "schema": 1,
+        "last_shadow_run_id": "111",
+        "last_shadow_success_at": (NOW - timedelta(days=7)).isoformat(),
+        "last_shadow_attempt": {
+            "outcome": "success",
+            "run_id": 111,
+            "commit": "d" * 40,
+            "database_sha256": old_hash,
+        },
+    }), encoding="utf-8")
+
+    with pytest.raises(DeliveryError) as failure:
+        runner.run(RUN_ID)
+
+    assert failure.value.code == "missing_token"
+    state = json.loads(runner.config.state_path.read_text(encoding="utf-8"))
+    assert state["schema"] == 2
+    assert state["last_attempt"]["outcome"] == "failure"
+    assert state["last_attempt"]["failure_code"] == "missing_token"
+    assert state["last_success"] == {
+        "run_id": "111",
+        "finished_at": (NOW - timedelta(days=7)).isoformat(),
+        "commit": "d" * 40,
+        "database_sha256": old_hash,
+    }
 
 
 def test_auto_refreshes_again_after_six_days(tmp_path):
@@ -286,7 +323,7 @@ def test_bad_manifest_hash_and_validation_leave_live_and_candidate_untouched(tmp
     runner = delivery(tmp_path, FakeClient(archive))
     live_hash = sha256_file(runner.config.live_database)
 
-    with pytest.raises(DeliveryError, match="SHA-256") as failure:
+    with pytest.raises(DeliveryError, match="independent validation") as failure:
         runner.run(RUN_ID)
     assert failure.value.code == "candidate_validation_failed"
     assert sha256_file(runner.config.live_database) == live_hash
@@ -341,7 +378,11 @@ def test_count_collapse_is_a_hard_failure(tmp_path):
     make_timetable(candidate)
 
     with pytest.raises(DeliveryError, match="below safe minimum") as failure:
-        compare_with_current(current, validate(candidate, minimum_service_days=14))
+        compare_with_current(
+            current, candidate,
+            validate(candidate, minimum_service_days=14),
+            start_date=NOW.date(),
+        )
     assert failure.value.code == "candidate_count_collapse"
 
 

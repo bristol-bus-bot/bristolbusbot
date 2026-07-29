@@ -15,6 +15,7 @@ from pathlib import Path
 
 DEFAULT_STATE = Path("/var/lib/bristolbusbot/monitoring/jobs")
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+LOCK_TIMEOUT_EXIT_CODE = 73
 
 
 def now() -> str:
@@ -32,7 +33,7 @@ def write_state(path: Path, payload: dict) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.chmod(temporary_path, 0o640)
-        if os.geteuid() == 0:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
             os.chown(temporary_path, 0, path.parent.stat().st_gid)
         os.replace(temporary_path, path)
     finally:
@@ -72,13 +73,18 @@ def main() -> int:
     if code == 0:
         payload["last_result"] = "success"
         payload["last_success_at"] = payload["last_finished_at"]
+        payload.pop("failure_code", None)
     elif code in args.skip_exit_code:
         payload["last_result"] = "skipped"
         payload["last_skipped_at"] = payload["last_finished_at"]
+        payload.pop("failure_code", None)
         code = 0
     else:
         payload["last_result"] = "failure"
         payload["last_failure_at"] = payload["last_finished_at"]
+        payload["failure_code"] = (
+            "lock_timeout" if code == LOCK_TIMEOUT_EXIT_CODE
+            else "command_failed")
     write_state(path, payload)
     return code
 

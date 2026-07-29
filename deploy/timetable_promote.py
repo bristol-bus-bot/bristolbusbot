@@ -6,18 +6,20 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import tempfile
 import time
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from timetable_control import paths, promote, rollback, validate
-from timetable_delivery import compare_with_current, sha256_file
+from timetable_delivery import BRISTOL_TZ, compare_with_current, sha256_file
 from timetable_manifest import verify_manifest
 
 
@@ -39,9 +41,11 @@ SITE_FUNCTIONAL_TIMEOUT_SECONDS = 20
 class PromotionError(RuntimeError):
     """A fixed promotion safety gate failed."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str,
+                 safe_context: dict[str, object] | None = None):
         super().__init__(message)
         self.code = code
+        self.safe_context = dict(safe_context or {})
 
 
 class PromotionSkipped(PromotionError):
@@ -80,6 +84,26 @@ class Candidate:
     validation: dict[str, object]
     comparison: dict[str, object]
     tnds_status: str
+
+
+ATTENDED_RE = re.compile(r"([1-9][0-9]*)-([0-9a-f]{64})")
+
+
+@dataclass(frozen=True)
+class PromotionRequest:
+    mode: str
+    run_id: str | None = None
+    sha256: str | None = None
+
+
+def promotion_request(value: str) -> PromotionRequest:
+    if value == "auto":
+        return PromotionRequest("auto")
+    matched = ATTENDED_RE.fullmatch(value)
+    if not matched:
+        raise argparse.ArgumentTypeError(
+            "candidate must be 'auto' or RUN_ID-SHA256")
+    return PromotionRequest("attended", matched.group(1), matched.group(2))
 
 
 def utcnow() -> datetime:
@@ -161,11 +185,6 @@ def atomic_json(path: Path, payload: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def concise_error(exc: BaseException) -> str:
-    text = " ".join(str(exc).split())
-    return text[:300] or type(exc).__name__
-
-
 class SystemServices:
     """Fixed service restarts and health checks used by the root transaction."""
 
@@ -215,8 +234,17 @@ class SystemServices:
                         return True
                 else:
                     value = self._json("http://127.0.0.1:3010/api/health")
+                    details = value.get("details")
+                    health = details.get("healthData") \
+                        if isinstance(details, dict) else None
+                    database = health.get("database") \
+                        if isinstance(health, dict) else None
+                    timetable = database.get("timetable") \
+                        if isinstance(database, dict) else None
                     if value.get("success") is True \
-                            and value.get("runtime") == "systemd":
+                            and value.get("runtime") == "systemd" \
+                            and isinstance(timetable, dict) \
+                            and timetable.get("connected") is True:
                         return True
             except (OSError, RuntimeError, subprocess.SubprocessError, ValueError):
                 pass
@@ -244,9 +272,59 @@ class TimetablePromoter:
         self.fault = fault or (lambda _stage: None)
         self.uid, self.gid = owner_ids(config)
 
-    def write_state(self, payload: dict[str, object]) -> None:
-        payload["schema"] = 1
-        atomic_json(self.config.promotion_state, payload)
+    def state_document(self) -> dict[str, object]:
+        path = self.config.promotion_state
+        if not path.exists() and not path.is_symlink():
+            return {}
+        return read_json(path)
+
+    @staticmethod
+    def _last_accepted(document: dict[str, object]) -> dict[str, object] | None:
+        accepted = document.get("last_accepted")
+        if isinstance(accepted, dict):
+            return accepted
+        run_id = document.get("last_accepted_run_id")
+        accepted_at = document.get("last_accepted_at")
+        sha256 = document.get("database_sha256")
+        if run_id and accepted_at and sha256:
+            return {
+                "run_id": run_id,
+                "accepted_at": accepted_at,
+                "database_sha256": sha256,
+                "commit": document.get("commit"),
+            }
+        return None
+
+    def write_state(self, attempt: dict[str, object]) -> dict[str, object]:
+        previous = self.state_document()
+        accepted = self._last_accepted(previous)
+        if attempt.get("outcome") == "accepted":
+            accepted = {
+                "run_id": attempt.get("run_id"),
+                "accepted_at": attempt.get("finished_at"),
+                "database_sha256": attempt.get("database_sha256"),
+                "commit": attempt.get("commit"),
+            }
+        elif attempt.get("outcome") == "no_change" and accepted is None:
+            accepted = {
+                "run_id": attempt.get("run_id"),
+                "accepted_at": attempt.get("finished_at"),
+                "database_sha256": attempt.get("database_sha256"),
+                "commit": attempt.get("commit"),
+            }
+        document: dict[str, object] = {
+            "schema": 2,
+            "last_attempt": dict(attempt),
+        }
+        if accepted:
+            document["last_accepted"] = accepted
+            document["last_accepted_run_id"] = accepted.get("run_id")
+            document["last_accepted_at"] = accepted.get("accepted_at")
+        # Preserve legacy top-level attempt fields for installed readers during
+        # the schema transition.
+        document.update(attempt)
+        atomic_json(self.config.promotion_state, document)
+        return document
 
     def auto_enabled(self) -> bool:
         if not self.config.enable_marker.exists():
@@ -255,10 +333,12 @@ class TimetablePromoter:
         return True
 
     def refuse_rejected_replay(self, candidate: Candidate) -> None:
-        path = self.config.promotion_state
-        if not path.exists():
+        document = self.state_document()
+        if not document:
             return
-        previous = read_json(path)
+        previous = document.get("last_attempt")
+        if not isinstance(previous, dict):
+            previous = document
         if previous.get("database_sha256") != candidate.sha256:
             return
         if previous.get("outcome") in {"rejected", "rolled_back", "rollback_failed"}:
@@ -268,12 +348,25 @@ class TimetablePromoter:
             )
 
     def previous_state(self) -> dict[str, object] | None:
-        path = self.config.promotion_state
-        if not path.exists() and not path.is_symlink():
+        document = self.state_document()
+        if not document:
             return None
-        return read_json(path)
+        attempt = document.get("last_attempt")
+        return attempt if isinstance(attempt, dict) else document
 
-    def candidate(self) -> Candidate:
+    def delivery_attempt(self) -> dict[str, object]:
+        require_regular(self.config.delivery_state, uid=self.uid, mode=0o600)
+        delivery = read_json(self.config.delivery_state)
+        attempt = delivery.get("last_attempt")
+        if not isinstance(attempt, dict):
+            attempt = delivery.get("last_shadow_attempt")
+        if not isinstance(attempt, dict):
+            raise PromotionError(
+                "shadow_not_validated", "latest shadow attempt is unavailable")
+        return attempt
+
+    def candidate(self, expected_run_id: str | None = None,
+                  expected_sha256: str | None = None) -> Candidate:
         root = self.config.candidate_root
         require_directory(root, uid=self.uid, mode=0o700)
         database = root / "timetable.db"
@@ -282,9 +375,10 @@ class TimetablePromoter:
         for path in (database, manifest_path, attribution):
             require_regular(path, uid=self.uid, mode=0o600)
 
-        require_regular(self.config.delivery_state, uid=self.uid, mode=0o600)
         delivery = read_json(self.config.delivery_state)
-        attempt = delivery.get("last_shadow_attempt")
+        attempt = delivery.get("last_attempt")
+        if not isinstance(attempt, dict):
+            attempt = delivery.get("last_shadow_attempt")
         if not isinstance(attempt, dict) or attempt.get("outcome") != "success":
             raise PromotionError("shadow_not_validated", "latest shadow attempt did not succeed")
         run_id = str(attempt.get("run_id", ""))
@@ -292,6 +386,14 @@ class TimetablePromoter:
         expected_hash = str(attempt.get("database_sha256", ""))
         if not run_id.isdigit() or len(commit) != 40 or len(expected_hash) != 64:
             raise PromotionError("invalid_state", "shadow success identity is incomplete")
+        if expected_run_id is not None and run_id != expected_run_id:
+            raise PromotionError(
+                "attended_identity_mismatch",
+                "attended promotion run does not match the reviewed shadow")
+        if expected_sha256 is not None and expected_hash != expected_sha256:
+            raise PromotionError(
+                "attended_identity_mismatch",
+                "attended promotion hash does not match the reviewed shadow")
         if str(delivery.get("last_shadow_run_id", "")) != run_id:
             raise PromotionError("invalid_state", "shadow run identity is inconsistent")
 
@@ -307,9 +409,17 @@ class TimetablePromoter:
                 manifest_path=manifest_path,
                 minimum_service_days=self.config.minimum_service_days,
             )
-            comparison = compare_with_current(self.config.live_root / "timetable.db", validation)
+            comparison = compare_with_current(
+                self.config.live_root / "timetable.db",
+                database,
+                validation,
+                start_date=self.now().astimezone(BRISTOL_TZ).date(),
+            )
         except Exception as exc:
-            raise PromotionError("candidate_validation_failed", concise_error(exc)) from exc
+            code = exc.code if hasattr(exc, "code") else "candidate_validation_failed"
+            context = exc.safe_context if hasattr(exc, "safe_context") else {}
+            raise PromotionError(
+                str(code), "candidate failed root-side validation", context) from exc
         actual_hash = sha256_file(database)
         if actual_hash != expected_hash:
             raise PromotionError("candidate_changed", "candidate hash differs from shadow success")
@@ -408,7 +518,8 @@ class TimetablePromoter:
                 "outcome": "rolled_back" if recovered else "rollback_failed",
                 "finished_at": self.now().isoformat(),
                 "failure_code": failure.code,
-                "error": concise_error(failure),
+                "error": str(failure),
+                "context": failure.safe_context,
                 "recovery_healthy": bool(recovered),
             })
             self.write_state(state)
@@ -422,7 +533,8 @@ class TimetablePromoter:
                 "outcome": "rollback_failed",
                 "finished_at": self.now().isoformat(),
                 "failure_code": failure.code,
-                "error": concise_error(rollback_exc),
+                "error": "automatic timetable rollback failed",
+                "context": failure.safe_context,
                 "recovery_healthy": False,
             })
             self.write_state(state)
@@ -449,37 +561,89 @@ class TimetablePromoter:
             self._restart_and_check()
         except Exception as exc:
             failure = exc if isinstance(exc, PromotionError) else PromotionError(
-                "promotion_failed", concise_error(exc))
+                "promotion_failed", "promotion health transaction failed")
             self._rollback_and_raise(state, failure, previous_hash)
         finished = self.now()
         state.update({
             "outcome": "accepted",
             "finished_at": finished.isoformat(),
-            "last_accepted_run_id": candidate.run_id,
-            "last_accepted_at": finished.isoformat(),
             "recovered_interrupted_transaction": True,
         })
         self.write_state(state)
         return state
 
-    def run(self, mode: str) -> dict[str, object]:
-        if mode not in {"auto", "attended"}:
-            raise PromotionError("unsafe_mode", "promotion mode must be auto or attended")
+    def run(self, request: PromotionRequest | str) -> dict[str, object]:
+        if isinstance(request, str):
+            request = promotion_request(request)
+        mode = request.mode
         if mode == "auto" and not self.auto_enabled():
             raise PromotionSkipped("promotion_disabled", "automatic promotion is disabled")
 
+        attempt_id = uuid.uuid4().hex
+        if mode == "auto":
+            delivery_attempt = self.delivery_attempt()
+            if delivery_attempt.get("outcome") != "success":
+                raise PromotionSkipped(
+                    "shadow_not_new", "no new successful shadow requires promotion")
+            if delivery_attempt.get("mode") != "auto":
+                raise PromotionSkipped(
+                    "shadow_not_automatic",
+                    "automatic promotion cannot consume an attended shadow")
+            run_id = str(delivery_attempt.get("run_id") or "")
+            sha256 = str(delivery_attempt.get("database_sha256") or "")
+            if not run_id.isdigit() or len(sha256) != 64:
+                raise PromotionError(
+                    "invalid_state", "successful shadow identity is incomplete")
+            document = self.state_document()
+            previous = document.get("last_attempt")
+            if not isinstance(previous, dict):
+                previous = document
+            same_attempt = (
+                str(previous.get("run_id") or "") == run_id
+                and str(previous.get("database_sha256") or "") == sha256
+            )
+            if same_attempt and previous.get("outcome") in {
+                    "rejected", "rolled_back", "rollback_failed"}:
+                raise PromotionSkipped(
+                    "candidate_previously_rejected",
+                    "automatic promotion will not retry the same rejected candidate")
+            if same_attempt and previous.get("outcome") in {"accepted", "no_change"}:
+                raise PromotionSkipped(
+                    "candidate_already_handled",
+                    "latest successful shadow was already handled")
+            accepted = self._last_accepted(document)
+            if accepted and accepted.get("database_sha256") == sha256:
+                payload = {
+                    "attempt_id": attempt_id,
+                    "outcome": "no_change",
+                    "mode": mode,
+                    "finished_at": self.now().isoformat(),
+                    "run_id": run_id,
+                    "commit": delivery_attempt.get("commit"),
+                    "database_sha256": sha256,
+                    "validation": delivery_attempt.get("validation"),
+                    "comparison": delivery_attempt.get("comparison"),
+                    "tnds_status": delivery_attempt.get("tnds_status"),
+                }
+                self.write_state(payload)
+                return payload
+
         try:
-            candidate = self.candidate()
+            candidate = self.candidate(request.run_id, request.sha256)
             if mode == "auto":
                 self.refuse_rejected_replay(candidate)
         except PromotionSkipped:
             raise
         except PromotionError as exc:
             self.write_state({
+                "attempt_id": attempt_id,
                 "outcome": "rejected",
                 "finished_at": self.now().isoformat(),
+                "run_id": request.run_id,
+                "database_sha256": request.sha256,
                 "failure_code": exc.code,
-                "error": concise_error(exc),
+                "error": str(exc),
+                "context": exc.safe_context,
             })
             raise
         live = self.config.live_root / "timetable.db"
@@ -496,6 +660,7 @@ class TimetablePromoter:
                     )
                 return self._resume_interrupted(candidate, previous_state)
             payload = {
+                "attempt_id": attempt_id,
                 "outcome": "no_change",
                 "mode": mode,
                 "finished_at": self.now().isoformat(),
@@ -505,14 +670,13 @@ class TimetablePromoter:
                 "validation": candidate.validation,
                 "comparison": candidate.comparison,
                 "tnds_status": candidate.tnds_status,
-                "last_accepted_run_id": candidate.run_id,
-                "last_accepted_at": self.now().isoformat(),
             }
             self.write_state(payload)
             return payload
 
         started = self.now()
         state: dict[str, object] = {
+            "attempt_id": attempt_id,
             "outcome": "running",
             "mode": mode,
             "started_at": started.isoformat(),
@@ -538,7 +702,7 @@ class TimetablePromoter:
             self._restart_and_check()
         except Exception as exc:
             failure = exc if isinstance(exc, PromotionError) else PromotionError(
-                "promotion_failed", concise_error(exc))
+                "promotion_failed", "promotion transaction failed")
             if not promoted:
                 _, upload, _, _ = paths(self.config.live_root)
                 self._safe_remove(upload, {0, self.uid})
@@ -546,7 +710,8 @@ class TimetablePromoter:
                     "outcome": "rejected",
                     "finished_at": self.now().isoformat(),
                     "failure_code": failure.code,
-                    "error": concise_error(failure),
+                    "error": str(failure),
+                    "context": failure.safe_context,
                 })
                 self.write_state(state)
                 raise failure
@@ -557,8 +722,6 @@ class TimetablePromoter:
             "outcome": "accepted",
             "finished_at": finished.isoformat(),
             "duration_seconds": round((finished - started).total_seconds(), 3),
-            "last_accepted_run_id": candidate.run_id,
-            "last_accepted_at": finished.isoformat(),
         })
         self.write_state(state)
         return state
@@ -566,10 +729,13 @@ class TimetablePromoter:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("auto", "attended"), required=True)
+    parser.add_argument(
+        "--candidate", type=promotion_request, required=True,
+        help="use 'auto' or the exact reviewed RUN_ID-SHA256")
     args = parser.parse_args()
     try:
-        result = TimetablePromoter(PromotionConfig(), SystemServices()).run(args.mode)
+        result = TimetablePromoter(PromotionConfig(), SystemServices()).run(
+            args.candidate)
     except PromotionSkipped as exc:
         print(json.dumps({"status": "skipped", "reason": exc.code}))
         return 75
