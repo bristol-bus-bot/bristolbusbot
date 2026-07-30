@@ -1,7 +1,8 @@
 [Unit]
-Description=Bristol Bus Bot attended exact-run timetable shadow validation (%i)
+Description=Bristol Bus Bot automatic GitHub timetable delivery validation
 Wants=network-online.target
 After=network-online.target bbb-backup.service bbb-audit-rollup.service
+OnSuccess=bbb-timetable-promote@auto.service
 
 [Service]
 Type=oneshot
@@ -9,7 +10,7 @@ User=@BBB_DEPLOY_USER@
 Group=@BBB_DEPLOY_USER@
 EnvironmentFile=-/etc/bristolbusbot/timetable-delivery.env
 LoadCredential=github-token:/etc/bristolbusbot/timetable-delivery.token
-ExecStart=/usr/local/libexec/bbb-run-recorded-job --name timetable-shadow --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py --run-id %i
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name timetable-shadow --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py --run-id auto
 TimeoutStartSec=55min
 UMask=0077
 Nice=10

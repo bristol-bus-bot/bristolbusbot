@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -28,6 +29,11 @@ from timetable_manifest import (
     GTFS_REQUIRED,
     MANIFEST_VERSION,
     verify_manifest,
+)
+from timetable_service_profile import (
+    ServiceProfileError,
+    bristol_today,
+    compare_databases,
 )
 
 
@@ -55,23 +61,24 @@ MINIMUM_REFRESH_INTERVAL = timedelta(days=6)
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 BRISTOL_TZ = ZoneInfo("Europe/London")
-COUNT_RATIOS = {
+INVENTORY_RATIOS = {
     "routes": 0.80,
-    "trips": 0.75,
     "stops": 0.80,
-    "stop_times": 0.75,
     "route_shapes": 0.70,
     "first_routes": 0.80,
     "stop_routes": 0.70,
 }
+RAW_CATASTROPHIC_RATIO = 0.25
 
 
 class DeliveryError(RuntimeError):
     """A named safety gate refused a timetable delivery."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str,
+                 safe_context: Mapping[str, object] | None = None):
         super().__init__(message)
         self.code = code
+        self.safe_context = dict(safe_context or {})
 
 
 class DeliverySkipped(DeliveryError):
@@ -519,13 +526,15 @@ def validate_manifest_identity(manifest: dict, run: dict, artifact: dict,
             raise DeliveryError("invalid_manifest", f"manifest {source} archive set is invalid")
 
 
-def compare_with_current(current: Path, candidate_result: dict[str, object]) -> dict:
+def compare_with_current(current: Path, candidate: Path,
+                         candidate_result: dict[str, object], *,
+                         start_date: date | None = None) -> dict[str, object]:
     try:
         current_result = validate(current, today=date(1970, 1, 1))
     except (OSError, sqlite3.Error, RuntimeError) as exc:
         raise DeliveryError("current_timetable_invalid", "current timetable cannot be compared safely") from exc
     comparisons: dict[str, dict[str, object]] = {}
-    for name, ratio in COUNT_RATIOS.items():
+    for name, ratio in INVENTORY_RATIOS.items():
         new = int(candidate_result[name])
         if name not in current_result:
             comparisons[name] = {
@@ -542,7 +551,33 @@ def compare_with_current(current: Path, candidate_result: dict[str, object]) -> 
             raise DeliveryError(
                 "candidate_count_collapse",
                 f"candidate {name} count {new} is below safe minimum {minimum}")
-    return comparisons
+    raw_counts: dict[str, dict[str, object]] = {}
+    for name in ("trips", "stop_times"):
+        old = int(current_result[name])
+        new = int(candidate_result[name])
+        minimum = int(old * RAW_CATASTROPHIC_RATIO)
+        raw_counts[name] = {
+            "current": old,
+            "candidate": new,
+            "catastrophic_minimum": minimum,
+            "decision_role": "diagnostic_with_catastrophic_floor",
+        }
+        if old > 0 and new < minimum:
+            raise DeliveryError(
+                "candidate_catastrophic_count_collapse",
+                f"candidate {name} count is catastrophically low",
+                {"metric": name, "current": old, "candidate": new,
+                 "minimum": minimum})
+    try:
+        semantic = compare_databases(
+            current, candidate, start_date=start_date or bristol_today())
+    except ServiceProfileError as exc:
+        raise DeliveryError(exc.code, str(exc), exc.context) from exc
+    return {
+        "inventory": comparisons,
+        "raw_counts": raw_counts,
+        "service": semantic,
+    }
 
 
 def remove_shadow_tree(path: Path, root: Path) -> None:
@@ -569,10 +604,40 @@ class TimetableDelivery:
         ensure_shadow_boundary(config)
 
     def state(self) -> dict[str, object]:
-        return load_json(self.config.state_path)
+        payload = load_json(self.config.state_path)
+        attempt = payload.get("last_attempt")
+        if not isinstance(attempt, dict):
+            attempt = payload.get("last_shadow_attempt")
+        if "last_success" not in payload \
+                and payload.get("last_shadow_run_id") \
+                and payload.get("last_shadow_success_at"):
+            successful = attempt if isinstance(attempt, dict) \
+                and attempt.get("outcome") == "success" \
+                and str(attempt.get("run_id")) == str(
+                    payload.get("last_shadow_run_id")) else {}
+            payload["last_success"] = {
+                "run_id": payload.get("last_shadow_run_id"),
+                "finished_at": payload.get("last_shadow_success_at"),
+                "commit": successful.get("commit"),
+                "database_sha256": successful.get("database_sha256"),
+            }
+        return payload
 
     def write_state(self, payload: dict[str, object]) -> None:
-        payload["schema"] = 1
+        payload["schema"] = 2
+        attempt = payload.get("last_shadow_attempt")
+        if isinstance(attempt, dict):
+            payload["last_attempt"] = attempt
+        if "last_success" not in payload \
+                and payload.get("last_shadow_run_id") \
+                and payload.get("last_shadow_success_at"):
+            payload["last_success"] = {
+                "run_id": payload.get("last_shadow_run_id"),
+                "finished_at": payload.get("last_shadow_success_at"),
+                "commit": attempt.get("commit") if isinstance(attempt, dict) else None,
+                "database_sha256": attempt.get("database_sha256")
+                if isinstance(attempt, dict) else None,
+            }
         if self.token_expires_utc:
             payload["token_expires_utc"] = parse_utc(
                 self.token_expires_utc, "BBB_GITHUB_TOKEN_EXPIRES_UTC").isoformat()
@@ -700,12 +765,19 @@ class TimetableDelivery:
                 )
             except (OSError, ValueError, sqlite3.Error, RuntimeError,
                     json.JSONDecodeError) as exc:
-                raise DeliveryError("candidate_validation_failed", str(exc)) from exc
+                raise DeliveryError(
+                    "candidate_validation_failed",
+                    "candidate timetable failed independent validation") from exc
             attribution = payload / "TIMETABLE_ARTIFACT_ATTRIBUTION.txt"
             text = attribution.read_text(encoding="utf-8")
             if "Open Government Licence" not in text or len(text) > 64 * 1024:
                 raise DeliveryError("invalid_attribution", "parcel attribution is missing or invalid")
-            comparison = compare_with_current(self.config.live_database, validation)
+            comparison = compare_with_current(
+                self.config.live_database,
+                payload / "timetable.db",
+                validation,
+                start_date=self.now().astimezone(BRISTOL_TZ).date(),
+            )
 
             archive.unlink()
             old = root / ".candidate-old"
@@ -734,36 +806,43 @@ class TimetableDelivery:
 
     def run(self, requested_run_id: int | None = None) -> dict[str, object]:
         started = self.now()
+        attempt_id = uuid.uuid4().hex
+        mode = "auto" if requested_run_id is None else "attended"
         state = self.state()
-        urgent, latest = self.coverage_urgent()
-        refresh_due = True
-        last_success_value = state.get("last_shadow_success_at")
-        if last_success_value:
-            last_success = parse_utc(
-                last_success_value, "last_shadow_success_at")
-            refresh_due = (
-                started - last_success >= self.config.minimum_refresh_interval)
-        state["last_check"] = {
-            "checked_at": started.isoformat(),
-            "current_latest_service": latest,
-            "coverage_urgent": urgent,
-            "coverage_warning_days": self.config.coverage_warning_days,
-            "refresh_due": refresh_due,
-        }
-        if requested_run_id is None and not refresh_due:
-            self.write_state(state)
-            raise DeliverySkipped("recent_shadow", "a recent shadow delivery already succeeded")
-        if not self.client.token:
-            raise DeliveryError("missing_token", "GitHub delivery token is not configured")
-        if not self.token_expires_utc:
-            raise DeliveryError("missing_token_expiry", "GitHub delivery token expiry is not configured")
-        token_expiry = parse_utc(
-            self.token_expires_utc, "BBB_GITHUB_TOKEN_EXPIRES_UTC")
-        if token_expiry <= started:
-            raise DeliveryError("expired_token", "GitHub delivery token has expired")
-
         run: dict[str, object] | None = None
         try:
+            urgent, latest = self.coverage_urgent()
+            refresh_due = True
+            last_success_value = state.get("last_shadow_success_at")
+            if last_success_value:
+                last_success = parse_utc(
+                    last_success_value, "last_shadow_success_at")
+                refresh_due = (
+                    started - last_success >= self.config.minimum_refresh_interval)
+            state["last_check"] = {
+                "checked_at": started.isoformat(),
+                "current_latest_service": latest,
+                "coverage_urgent": urgent,
+                "coverage_warning_days": self.config.coverage_warning_days,
+                "refresh_due": refresh_due,
+            }
+            if requested_run_id is None and not refresh_due:
+                self.write_state(state)
+                raise DeliverySkipped(
+                    "recent_shadow", "a recent shadow delivery already succeeded")
+            if not self.client.token:
+                raise DeliveryError(
+                    "missing_token", "GitHub delivery token is not configured")
+            if not self.token_expires_utc:
+                raise DeliveryError(
+                    "missing_token_expiry",
+                    "GitHub delivery token expiry is not configured")
+            token_expiry = parse_utc(
+                self.token_expires_utc, "BBB_GITHUB_TOKEN_EXPIRES_UTC")
+            if token_expiry <= started:
+                raise DeliveryError(
+                    "expired_token", "GitHub delivery token has expired")
+
             _, workflow_id = self._workflow()
             if requested_run_id is not None:
                 run = self.client.run(requested_run_id)
@@ -775,9 +854,12 @@ class TimetableDelivery:
                 raise DeliverySkipped(
                     "already_delivered", "selected run was already shadow-delivered")
             state["last_shadow_attempt"] = {
+                "attempt_id": attempt_id,
                 "started_at": started.isoformat(),
                 "outcome": "running",
+                "mode": mode,
                 "run_id": run.get("id"),
+                "commit": run.get("head_sha"),
             }
             self.write_state(state)
             run = self._wait_for_run(int(run["id"]), workflow_id)
@@ -785,11 +867,18 @@ class TimetableDelivery:
         except DeliverySkipped:
             raise
         except DeliveryError as exc:
+            finished = self.now()
             state["last_shadow_attempt"] = {
-                "finished_at": self.now().isoformat(),
+                "attempt_id": attempt_id,
+                "started_at": started.isoformat(),
+                "finished_at": finished.isoformat(),
+                "duration_seconds": round((finished - started).total_seconds(), 3),
                 "outcome": "failure",
+                "mode": mode,
                 "run_id": run.get("id") if run else None,
+                "commit": run.get("head_sha") if run else None,
                 "failure_code": exc.code,
+                "context": exc.safe_context,
             }
             self.write_state(state)
             raise
@@ -798,8 +887,11 @@ class TimetableDelivery:
             "last_shadow_run_id": str(result["run_id"]),
             "last_shadow_success_at": finished.isoformat(),
             "last_shadow_attempt": {
+                "attempt_id": attempt_id,
+                "started_at": started.isoformat(),
                 "finished_at": finished.isoformat(),
                 "outcome": "success",
+                "mode": mode,
                 "run_id": result["run_id"],
                 "duration_seconds": round((finished - started).total_seconds(), 3),
                 "commit": result["commit"],
