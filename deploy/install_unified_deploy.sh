@@ -53,6 +53,7 @@ done
 /usr/bin/python3 "$stage/editorial_context.py" \
     --file "$stage/editorial-context.json" >/dev/null
 /usr/bin/python3 -m py_compile "$stage/timetable_delivery.py" "$stage/timetable_promote.py" \
+    "$stage/timetable_service_profile.py" \
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/configure_timetable_delivery.py" "$stage/editorial_context.py" \
@@ -92,6 +93,7 @@ for destination in \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py \
+    /usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_editions.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_control.py \
@@ -196,6 +198,7 @@ install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/lo
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
 install -o root -g root -m 0755 "$stage/timetable_delivery.py" /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py
 install -o root -g root -m 0755 "$stage/timetable_promote.py" /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py
+install -o root -g root -m 0644 "$stage/timetable_service_profile.py" /usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py
 install -o root -g root -m 0644 "$stage/timetable_manifest.py" /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py
 install -o root -g root -m 0644 "$stage/timetable_editions.py" /usr/local/libexec/bristolbusbot-timetable/timetable_editions.py
 install -o root -g root -m 0644 "$stage/timetable_control.py" /usr/local/libexec/bristolbusbot-timetable/timetable_control.py

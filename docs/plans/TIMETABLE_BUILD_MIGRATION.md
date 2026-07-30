@@ -1,8 +1,10 @@
 # Timetable build migration: GitHub builds, the Pi promotes
 
-Status: implemented, enabled and live; the complete production `auto` path was
-accepted on 22 July 2026. First scheduler-triggered due cycle is routine
-follow-up evidence.
+Status: implemented, enabled and safely serving the timetable accepted on
+22 July 2026. The first scheduler-triggered due build, on 29 July, was rejected
+before promotion by an over-broad row-count comparison. The live timetable was
+not changed. A reviewed validation and monitoring correction is required before
+the unattended path can be called fully proven.
 
 This is the architecture decision for removing the Windows workstation from
 production timetable refreshes. The companion execution plan is
@@ -189,8 +191,24 @@ The current gates remain and are strengthened. A candidate must pass:
   replacement-like calendar overlaps;
 - geometry sanity and a conservative variant cap;
 - required tables, columns, and indexes;
-- table-count comparison with the live database, with a documented manual
-  override for a legitimate major network change.
+- stable structural and inventory comparisons with the live database;
+- a bounded, Bristol-local service-window comparison that measures usable
+  trips, stop times, routes, operators and forward coverage rather than treating
+  retained historical/superseded rows as current service;
+- explicit per-day and per-operator collapse gates, including dated
+  `calendar_dates` additions/removals and bank-holiday service;
+- a versioned validation policy whose thresholds and complete comparison result
+  are recorded with the attempt.
+
+The original production comparison applied a flat 75% floor to total `trips`
+and `stop_times`. The 29 July candidate missed only the latter: 1,470,423 was
+3,519 rows below the 1,473,942 floor. Direct comparison of the two databases
+showed that the candidate retained or increased the next 7, 14 and 28 days of
+service and was lower on only four of 306 comparable future service days. Much
+of the raw shrinkage was the removal of superseded editions. The replacement
+gate must therefore compare service that can actually run, while continuing to
+fail closed on a missing day, operator or future coverage cliff. The 75% raw
+count gate must not merely be lowered.
 
 During development, a content-hash regression harness compares every relevant
 table with a known-good build. This strict hash comparison is a development
@@ -222,9 +240,13 @@ Every failure is fail-closed:
 - hash, manifest, or validation failure: the old timetable stays live;
 - restart or health failure: the previous database is restored automatically.
 
-The job record feeds `aggregate_health.py`; `status_digest.py` consumes that
+The job record feeds `aggregate_health.py`; the status digest must consume that
 single aggregate output. Alerts distinguish dispatch, build, download,
-validation, promotion, restart, and rollback failures.
+validation, promotion, restart, and rollback failures. Delivery and promotion
+are one incident family: a failed shadow means promotion was not attempted, not
+that promotion later failed because its last success became old. Alerts must be
+correlated to the same run/hash/attempt, deduplicated per attempt, and retried if
+Slack delivery itself fails.
 
 ## Backups
 
@@ -252,13 +274,15 @@ rebuilds and a restore drill have both succeeded.
    timer, and prove its recent-shadow no-op path. The maintainer chose to proceed
    without waiting a week for another shadow-only run.
 8. [x] Enable live promotion and attend the first run.
-9. [ ] Observe a scheduler-triggered due promotion in normal operation. This is
-   routine follow-up evidence, not an implementation gate: the timer is enabled
-   and the laptop has already been removed from normal production duty. Retain
-   it as an emergency fallback. GitHub run `29944744744` was accepted through
-   the complete production `auto` path on 22 July 2026 after independent Pi
-   validation and all live health gates, but that commissioning run was
-   manually initiated.
+9. [x] Observe the first scheduler-triggered due delivery. GitHub run
+   `30421182234` built successfully on 29 July 2026, but the Pi safely rejected
+   it before promotion because the old total-row gate measured superseded data
+   rather than near-term service. The existing database remained live.
+10. [ ] Replace that gate with the service-window policy, correct correlated
+    monitoring and no-change/lock semantics, then complete one fresh attended
+    shadow and promotion followed by one harmless unattended timer exercise.
+    Measure Pi memory/swap during the promotion-disabled shadow before setting
+    any resource limit. The laptop remains only an emergency fallback.
 
 Rollback at every stage is to disable the new timer/service. The existing
 workstation refresh path remains available throughout.

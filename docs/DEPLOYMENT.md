@@ -68,23 +68,41 @@ commit. SSH host keys are strictly checked and never auto-accepted.
 GitHub Actions is the normal compute plane; the Pi is the scheduler and safety
 plane. The daily `bbb-timetable-shadow.timer` causes a fresh build about every
 six days, downloads only the exact default-branch artifact, and independently
-checks its provenance, hash, schema, service horizon, routes, shapes and row
-count changes. The unprivileged downloader cannot write production data.
+checks its provenance, hash, schema, service horizon, routes, shapes and usable
+dated service. Raw trip and stop-time totals remain diagnostics with only a low
+catastrophic floor. The unprivileged downloader cannot write production data.
 
 A separate fixed-path root service performs the atomic live replacement. It
 retains `timetable.db.previous`, restarts and checks collector, site and bot,
 checks the public endpoint, and restores the old database after any failure.
 Automatic promotion requires a root-owned enable marker and never retries the
-same rejected candidate automatically. Its detailed result and timer job record
-feed aggregate health.
+same rejected candidate automatically. Exact-run shadow delivery has no
+automatic promotion edge; attended promotion must name the exact reviewed
+run/hash, and automatic promotion refuses attended shadow state. Its detailed
+result and timer job record feed one correlated aggregate health transaction
+and the digest reads only that aggregate result.
 
 This path is live, not shadow-only: GitHub run `29944744744` was downloaded,
 validated and accepted by the production `auto` promotion path on 22 July
 2026. The candidate carried service through 30 May 2027 and all consumer and
-functional health gates passed. That commissioning run was manually initiated;
-the 05:00 timer is enabled but had not yet fired as of that date. Its first due
-rebuild remains routine monitoring rather than a remaining implementation
-gate; the workstation is retained only as an attended fallback.
+functional health gates passed. That commissioning run was manually initiated.
+
+The first genuinely due timer run, `30421182234` on 29 July, built successfully
+but was rejected before promotion. The existing flat total-row comparison
+mistook the removal of superseded timetable editions for missing current
+service; a direct 7/14/28-day comparison found the candidate at 100.3% of the
+accepted database. Production was never changed and remains healthy. A
+service-window validator and correlated monitoring correction are implemented
+in repository source, but they must pass a promotion-disabled Pi shadow before
+another live swap. Do not lower or bypass the installed count threshold as a
+shortcut.
+
+The later “promotion rejected / unknown_failure” Slack alert was a monitoring
+false positive: a failed shadow correctly prevented promotion, but the monitor
+independently aged the last promoter success and reused an older `no_change`
+detail. The corrected source correlates wrapper/detail records by run and hash,
+preserves last accepted state separately, and retries notification until Slack
+confirms success.
 
 `python deploy/push.py --refresh-timetable` remains the attended workstation
 fallback. It applies the same validation, fixed staging, atomic replacement and

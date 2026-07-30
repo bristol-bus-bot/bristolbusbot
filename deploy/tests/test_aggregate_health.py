@@ -29,7 +29,11 @@ def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch
     monkeypatch.setattr(
         aggregate_health, "editorial_refresh_check", lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
-    monkeypatch.setattr(aggregate_health, "notify", messages.append)
+    def notify(message):
+        messages.append(message)
+        return True
+
+    monkeypatch.setattr(aggregate_health, "notify", notify)
     monkeypatch.setattr(
         aggregate_health.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0))
@@ -162,6 +166,7 @@ def test_timetable_messages_explain_success_and_safe_rollback():
     assert "rolled back" in failure
     assert "previous timetable was restored" in failure
     assert "blocked from replay" in failure
+    assert "site rejected" not in failure
 
 
 def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
@@ -170,6 +175,10 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
     (state / "resource-samples.csv").write_text("sample\n", encoding="utf-8")
     published = tmp_path / "audit_data.json"
     published.write_text("{}\n", encoding="utf-8")
+    (state / "incidents.json").write_text(json.dumps({
+        "active": ["job:timetable-automation"],
+        "timetable_recovery_pending": True,
+    }), encoding="utf-8")
     messages = []
     now = datetime.now(timezone.utc).isoformat()
     attempt = {
@@ -194,7 +203,25 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
         aggregate_health, "editorial_refresh_check",
         lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
-    monkeypatch.setattr(aggregate_health, "notify", messages.append)
+
+    def notify(message):
+        messages.append(message)
+        return True
+
+    monkeypatch.setattr(aggregate_health, "notify", notify)
+    monkeypatch.setattr(
+        aggregate_health, "timetable_automation_check",
+        lambda: ({
+            "status": "healthy",
+            "phase": "complete",
+            "delivery": {"status": "enabled"},
+            "promotion": {"status": "enabled"},
+            "last_attempt": attempt,
+            "last_accepted": {
+                "run_id": "123",
+                "accepted_at": now,
+            },
+        }, []))
     monkeypatch.setattr(
         aggregate_health.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0))
@@ -214,5 +241,210 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
     assert aggregate_health.main() == 0
     assert len(messages) == 1
     assert "Timetable updated automatically" in messages[0]
+    incident = json.loads(
+        (state / "incidents.json").read_text(encoding="utf-8"))
+    assert incident["timetable_recovery_pending"] is False
     assert aggregate_health.main() == 0
     assert len(messages) == 1
+
+
+def test_failed_shadow_never_inherits_old_promotion_success(monkeypatch):
+    shadow = {
+        "status": "enabled",
+        "job": {"result": "failure", "failure_code": "lock_timeout",
+                "age_hours": 0.1,
+                "last_failure_at": "2026-07-29T05:00:00+00:00"},
+        "last_attempt": {
+            "outcome": "success",
+            "run_id": "29944744744",
+            "database_sha256": "a" * 64,
+        },
+    }
+    old_promotion = {
+        "status": "enabled",
+        "job": {"result": "success", "age_hours": 400},
+        "last_attempt": {
+            "outcome": "accepted",
+            "run_id": "29944744744",
+            "database_sha256": "a" * 64,
+        },
+        "last_accepted": {"run_id": "29944744744"},
+    }
+    monkeypatch.setattr(
+        aggregate_health, "timetable_delivery_check", lambda: (shadow, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check",
+        lambda: (old_promotion, []))
+
+    check, issues = aggregate_health.timetable_automation_check()
+
+    assert check["status"] == "failed"
+    assert check["phase"] == "shadow"
+    assert check["promotion_expected"] is False
+    assert check["last_attempt"]["run_id"] == "29944744744"
+    assert check["last_attempt"]["failure_code"] == "lock_timeout"
+    assert check["last_attempt"]["outcome"] == "failure"
+    assert "promotion not attempted" in check["summary"]
+    assert issues == ["job:timetable-automation"]
+
+
+def test_mismatched_wrapper_and_detail_report_the_new_failure(monkeypatch):
+    shadow = {
+        "status": "enabled",
+        "job": {"result": "success", "age_hours": 2},
+        "last_attempt": {
+            "outcome": "success",
+            "run_id": "30421182234",
+            "database_sha256": "b" * 64,
+            "finished_at": "2026-07-29T05:00:00+00:00",
+        },
+    }
+    promotion = {
+        "status": "enabled",
+        "job": {"result": "failure", "failure_code": "lock_timeout",
+                "last_ok_at": "2026-07-29T05:01:00+00:00",
+                "last_failure_at": "2026-07-29T05:01:00+00:00"},
+        "last_attempt": {
+            "outcome": "accepted",
+            "run_id": "29944744744",
+            "database_sha256": "a" * 64,
+        },
+    }
+    monkeypatch.setattr(aggregate_health, "age_seconds", lambda _value: 7200)
+    monkeypatch.setattr(
+        aggregate_health, "timetable_delivery_check", lambda: (shadow, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check", lambda: (promotion, []))
+
+    check, issues = aggregate_health.timetable_automation_check()
+
+    assert check["status"] == "failed"
+    assert check["last_attempt"]["run_id"] == "30421182234"
+    assert check["last_attempt"]["failure_code"] == "lock_timeout"
+    assert check["last_attempt"]["outcome"] == "failure"
+    assert issues == ["job:timetable-automation"]
+
+
+def test_unsafe_promotion_marker_is_visible_even_during_delivery_cooldown(
+        monkeypatch):
+    monkeypatch.setattr(
+        aggregate_health, "timetable_delivery_check",
+        lambda: ({
+            "status": "enabled",
+            "job": {"result": "skipped", "age_hours": 0.1},
+        }, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check",
+        lambda: ({
+            "status": "enabled",
+            "marker": {"status": "unsafe"},
+        }, ["job:timetable-promote"]))
+
+    check, issues = aggregate_health.timetable_automation_check()
+
+    assert check["status"] == "failed"
+    assert check["last_attempt"]["failure_code"] == "unsafe_promotion_marker"
+    assert issues == ["job:timetable-automation"]
+
+
+def test_attended_shadow_is_diagnostic_and_does_not_expect_promotion(monkeypatch):
+    shadow = {
+        "status": "enabled",
+        "job": {"result": "success", "age_hours": 0.1},
+        "last_attempt": {
+            "outcome": "success",
+            "mode": "attended",
+            "run_id": "30421182234",
+            "database_sha256": "b" * 64,
+            "finished_at": "2026-07-29T05:00:00+00:00",
+        },
+    }
+    stale_promotion = {
+        "status": "enabled",
+        "job": {
+            "result": "failure",
+            "failure_code": "command_failed",
+            "last_failure_at": "2026-07-28T05:00:00+00:00",
+        },
+        "last_attempt": {
+            "outcome": "rolled_back",
+            "run_id": "29944744744",
+            "database_sha256": "a" * 64,
+        },
+    }
+    monkeypatch.setattr(
+        aggregate_health, "timetable_delivery_check", lambda: (shadow, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check",
+        lambda: (stale_promotion, ["job:timetable-promote"]))
+
+    check, issues = aggregate_health.timetable_automation_check()
+
+    assert check["status"] == "idle"
+    assert check["phase"] == "attended_shadow"
+    assert check["promotion_expected"] is False
+    assert "production is unchanged" in check["summary"]
+    assert issues == []
+
+
+def test_timetable_notification_state_advances_only_after_successful_send(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    state.mkdir()
+    (state / "resource-samples.csv").write_text("sample\n", encoding="utf-8")
+    published = tmp_path / "audit_data.json"
+    published.write_text("{}\n", encoding="utf-8")
+    now = datetime.now(timezone.utc).isoformat()
+    attempt = {
+        "outcome": "failure",
+        "finished_at": now,
+        "run_id": "30421182234",
+        "database_sha256": "b" * 64,
+        "failure_code": "lock_timeout",
+        "context": {"phase": "promotion"},
+    }
+    automation = {
+        "status": "failed",
+        "phase": "promotion",
+        "delivery": {"status": "enabled"},
+        "promotion": {"status": "enabled"},
+        "last_attempt": attempt,
+    }
+    sends = iter((False, True))
+    messages = []
+
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "PUBLISHED", published)
+    monkeypatch.setattr(aggregate_health, "service_checks", lambda: ({}, []))
+    monkeypatch.setattr(aggregate_health, "job_checks", lambda: ({}, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_automation_check", lambda: (automation, [
+            "job:timetable-automation"]))
+    monkeypatch.setattr(
+        aggregate_health, "editorial_refresh_check",
+        lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
+
+    def notify(message):
+        messages.append(message)
+        return next(sends)
+
+    monkeypatch.setattr(aggregate_health, "notify", notify)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(
+        aggregate_health.shutil, "disk_usage",
+        lambda _path: SimpleNamespace(total=100, used=10, free=90))
+    monkeypatch.setattr(
+        aggregate_health, "sqlite_value",
+        lambda _path, query: (now if "poller_status" in query else "20260716"))
+
+    assert aggregate_health.main() == 1
+    first = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
+    assert first["notified_timetable_failure_fingerprints"] == []
+    assert aggregate_health.main() == 1
+    second = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
+    assert len(second["notified_timetable_failure_fingerprints"]) == 1
+    assert aggregate_health.main() == 1
+    assert len(messages) == 2

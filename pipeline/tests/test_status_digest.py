@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -25,3 +26,28 @@ def test_bot_digest_counts_durable_success_rows_only(tmp_path, monkeypatch):
     connection.close()
     monkeypatch.setattr(status_digest, "BOT_DB", database)
     assert "1 post(s)" in status_digest.bot_line()
+
+
+def test_timetable_digest_reads_the_aggregate_contract_only(tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "timetable_automation": {
+            "status": "failed",
+            "last_accepted": {
+                "run_id": "29944744744",
+                "accepted_at": "2026-07-20T03:12:00+00:00",
+            },
+            "last_attempt": {
+                "run_id": "30421182234",
+                "outcome": "failure",
+            },
+            "next_action": "fresh delivery at the next due check",
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    line = status_digest.timetable_line()
+
+    assert "accepted run 29944744744 (2026-07-20)" in line
+    assert "last run 30421182234: failure" in line
+    assert "fresh delivery at the next due check" in line

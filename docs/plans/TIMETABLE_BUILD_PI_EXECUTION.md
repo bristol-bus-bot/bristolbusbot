@@ -1,8 +1,10 @@
 # Timetable delivery execution plan: GitHub build, Pi promotion
 
-Status: complete, enabled and live; the production `auto` path was accepted on
-22 July 2026. Its first scheduler-triggered due cycle remains routine follow-up
-evidence.
+Status: enabled and live on the timetable accepted by the production `auto`
+path on 22 July 2026. The first scheduler-triggered due delivery on 29 July
+failed safely before promotion and exposed validator and monitoring corrections
+specified in this document. Those corrections are implemented in repository
+source and tests but have not yet passed review or the Pi rollout gates.
 
 The filename is retained because earlier discussions and documentation link to
 it. This is no longer a plan to make the production Pi perform the normal full
@@ -205,11 +207,12 @@ Acceptance: repeated timers are idempotent; a second process cannot duplicate a
 download; malformed API data, expired artifacts, unsafe ZIPs, bad hashes, and
 validation failures all leave production untouched.
 
-Implementation status (2026-07-22): code and hostile-input tests are complete.
+Implementation status (updated 2026-07-29): code and hostile-input tests are complete.
 The root-installed Python entry point has no promotion action or destination
-argument; the systemd unit grants write access only to the shadow and monitoring
-directories. Routine runs use `@auto`, while an attended run may name only a
-numeric GitHub run ID. The daily timer is installed disabled until its
+argument; the systemd units grant write access only to the shadow and monitoring
+directories. The timer uses a dedicated automatic unit whose successful result
+may chain to `promote@auto`; an attended `@RUN_ID` unit has no promotion edge.
+The daily timer is installed disabled until its
 repository-scoped credential exists. Its 05:00 window follows the 04:30 Sunday
 backup check, and both share the heavy-I/O lock so the backup has precedence.
 Automatic checks use the last successful shadow delivery as the freshness
@@ -219,7 +222,9 @@ safety signal, not a reason to leave frequently changing source data stale.
 Pi installation and two attended shadow deliveries completed on 2026-07-22.
 The daily timer is enabled, its recent-shadow no-op path was exercised, and the
 GitHub environment reviewer gate was removed while the default-branch-only
-policy remained in place.
+policy remained in place. The corrected templates assign lock timeout exit 73,
+retain 75 for an application skip, and fast-skip an already handled candidate
+before database revalidation. They are not installed yet.
 
 ### WP6 - Pi promotion transaction
 
@@ -307,11 +312,17 @@ during health check all produce the expected live file and job record.
 Acceptance: the digest reports a deliberately injected failure in plain
 language, and a restore drill recovers a timetable independently of GitHub.
 
-Implementation status (2026-07-22): timetable delivery and promotion job
-records feed aggregate health, accepted and failed paths produce detailed Slack
-language, the live and `.previous` files remain in the encrypted backup set,
-and the existing local/off-site restore procedure provides the independent
-recovery path.
+Implementation status (updated 2026-07-29): timetable delivery and promotion
+job records feed aggregate health, the live and `.previous` files remain in the
+encrypted backup set, and the existing local/off-site restore procedure
+provides the independent recovery path. The first due failure exposed two
+monitoring defects: promotion was treated as independently overdue after its
+prerequisite shadow failed, and the resulting alert reused an older successful
+`no_change` detail, producing `unknown_failure`. The source correction now
+models one run/hash-correlated automation transaction, exposes it in the digest,
+keeps accepted identity separate from the latest attempt, names lock failures,
+and advances alert deduplication only after Slack confirms delivery. Pi rollout
+evidence remains outstanding.
 
 ### WP8 - Evidence-gated rollout
 
@@ -327,13 +338,112 @@ recovery path.
 7. Observe subsequent unattended promotions; the laptop remains an emergency
    fallback while live automation accumulates operating history. Run
    `29944744744` was accepted by the production `auto` path on 22 July 2026,
-   but was manually initiated during commissioning; the first timer-triggered
-   due cycle remains to be observed without blocking normal operation.
+   but was manually initiated during commissioning. The first timer-triggered
+   due delivery, run `30421182234` on 29 July, built correctly and was rejected
+   before promotion by an over-broad raw `stop_times` count gate. Production
+   remained healthy. The validator and monitoring corrections in the incident
+   review below are now the remaining evidence gate.
 8. Update `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `pipeline/README.md`,
    `deploy/README.md`, and the roadmap with the proven state.
 
 At every point, rollback is disabling the new timer/service. The current manual
 workstation path remains available.
+
+## 29 July 2026 incident review and correction package
+
+The first genuinely due timer run proved the fail-closed boundary: the GitHub
+build succeeded, the Pi rejected the candidate, and no production file was
+replaced. It also showed that safe refusal is not the same as a good decision.
+
+### Evidence
+
+| Measure | Live accepted run `29944744744` | Candidate run `30421182234` |
+|---|---:|---:|
+| Routes | 254 | 245 |
+| Trips | 54,506 | 42,050 |
+| Stops | 6,437 | 6,416 |
+| Stop times | 1,965,256 | 1,470,423 |
+| Route shapes | 413 | 402 |
+| First routes | 108 | 108 |
+| Stop-route pairs | 15,153 | 15,014 |
+| Recorded route editions | 352 | 286 |
+| Superseded editions | 146 | 74 |
+| Latest service | 30 May 2027 | 4 June 2027 |
+
+The flat `stop_times >= 75% of live` rule required 1,473,942 rows, so the
+candidate failed by 3,519 rows at 74.82%. A read-only semantic comparison found
+the candidate at 100.3% of live for both trips and stop times over the next 7,
+14 and 28 days. Across 306 common future service dates it was lower on only
+four dates, with a minimum daily ratio of 95.1% on New Year's Day. First
+Bristol's 28-day stop times increased from 5,535,344 to 5,545,088. The raw
+source and database were smaller mainly because fewer obsolete/superseded
+editions were retained, not because current service had collapsed.
+
+At 11:06 the monitor then sent a separate “promotion rejected” alert for the
+previous day. No such rejection occurred: the most recent promoter record was
+a successful `no_change`. `aggregate_health.py` independently aged promotion
+at 30 hours even though the failed shadow correctly prevented promotion, then
+formatted the older detail as `unknown_failure`.
+
+### Required implementation
+
+1. Build a read-only service profile for the live and candidate databases in a
+   single bounded scan. Aggregate by service date, operator and route; derive
+   28-day plausibility and at least 180 days of forward coverage in Python.
+2. Make service-window semantics the primary completeness gate. Initial
+   conservative policy: each near-term day retains at least 85% of live trips
+   and stop times; the 28-day total at least 90%; routes at least 80%; each
+   substantial operator at least 70%; and no forward-coverage cliff below 75%.
+   Fixtures may justify adjusting those figures before merge, but all values
+   live in one versioned policy and are written to the attempt record.
+3. Keep stable structural/inventory checks for routes, stops, shapes, First
+   routes and stop-route pairs. Retain raw trip/stop-time counts as diagnostics
+   or a low emergency floor, not the main acceptance decision. A legitimate
+   operator transfer may be a warning only when equivalent dated service
+   demonstrably reappears under another NOC; matching a route number alone is
+   insufficient.
+4. Extend structured records with allowlisted numeric comparison details,
+   run/hash identity and timings. Preserve the last accepted database metadata
+   separately from the last attempt. Never forward raw exception text,
+   downloaded strings, credentials or host paths to Slack.
+5. Treat shadow and promotion as one causal incident. Promotion is expected
+   only after a new successful shadow. Correlate wrapper and detail records by
+   run/hash/time; do not reuse an older success to explain a newer failure.
+   Deduplicate each attempt fingerprint, retry failed Slack sends, and recover
+   only when the whole timetable incident family is clear.
+6. Give lock timeout its own failure exit and code; exit 75 remains a benign
+   application skip. Avoid chaining the promoter after a recent-shadow/no-new-
+   candidate skip, which currently spends about a minute revalidating the old
+   candidate.
+7. Make attended delivery genuinely attended and pinned. An exact-run shadow
+   must not silently chain to `promote@auto`, and the reviewed run/hash must be
+   the one the attended promoter accepts.
+8. Strengthen the live health transaction: retain database/hash checks,
+   collector verification, stop-search and public health, and also require the
+   bot's nested health payload to report its timetable connection.
+
+The comparator must open SQLite databases read-only/immutable with
+`query_only`, a bounded page cache and file-backed temporary storage. It uses
+fixed SQL, has an internal deadline, and must not create a second BODS consumer.
+Do not guess a `MemoryMax`: measure peak memory, available RAM and swap on a
+promotion-disabled Pi shadow first.
+
+### Required regression and rollout evidence
+
+- The exact 22/29 July pair passes the new semantic comparison.
+- Missing near-term day, missing material operator, stale/empty future,
+  malformed calendar, oversized/slow database and future coverage cliff fail.
+- An operator transfer with equivalent dated service warns but passes; an
+  unrelated same-number route cannot mask a loss.
+- Bank holidays, `calendar_dates`, Bristol local dates and DST are fixtures.
+- Lock timeout, different consecutive failures, Slack retry/deduplication,
+  state-schema migration and every rollback injection are tested.
+- After merge, build a fresh artifact. Stop the timer and disable automatic
+  promotion; install the control-plane change; run an exact shadow; inspect the
+  comparison and Pi resource peak; then perform one attended promotion. Verify
+  the live hash and `.previous`, collector, site, stop search, bot timetable
+  connection, public health, Slack, aggregate health and digest before restoring
+  the marker and timer. No week-long wait is required.
 
 ## Risk register
 
@@ -365,9 +475,10 @@ service-health impact merely confirms that GitHub remains the build plane.
 
 ## Done means
 
-All implementation work packages passed their acceptance gates on 22 July
-2026. An attended live promotion, automatic no-change exercise and the complete
-production `auto` path succeeded; failure and rollback were demonstrated; the
-daily timer is enabled; the laptop is documented only as a fallback; and the Pi
-remained healthy throughout. The first scheduler-triggered due rebuild is
-routine operating evidence still to be observed.
+The architecture and original work packages went live on 22 July 2026, with an
+attended promotion, rollback proof and automatic no-change exercise. The first
+scheduler-triggered due delivery on 29 July failed safely but exposed a false
+negative completeness gate and a false downstream alert. Final completion now
+also requires the correction package above, a fresh attended acceptance, a
+clean unattended no-update exercise, and clear Slack/digest evidence. Until
+then the accepted timetable remains safe and the laptop remains fallback only.
