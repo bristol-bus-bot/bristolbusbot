@@ -236,10 +236,9 @@ def test_auto_mode_is_structurally_disabled_without_root_marker(tmp_path):
     assert services.restarts == []
 
 
-def test_auto_mode_cannot_consume_an_attended_shadow(tmp_path):
-    promoter, services, _, live, marker = promotion_case(tmp_path)
-    marker.write_text("enabled\n", encoding="utf-8")
-    marker.chmod(0o644)
+def test_auto_mode_cannot_consume_an_attended_shadow(tmp_path, monkeypatch):
+    promoter, services, _, live, _ = promotion_case(tmp_path)
+    monkeypatch.setattr(promoter, "auto_enabled", lambda: True)
     state = json.loads(promoter.config.delivery_state.read_text(encoding="utf-8"))
     state["last_shadow_attempt"]["mode"] = "attended"
     promoter.config.delivery_state.write_text(json.dumps(state), encoding="utf-8")
@@ -265,10 +264,9 @@ def test_attended_promotion_refuses_a_different_reviewed_identity(tmp_path):
 
 
 def test_auto_same_accepted_hash_is_a_fast_no_change(tmp_path, monkeypatch):
-    promoter, services, candidate, _, marker = promotion_case(tmp_path)
+    promoter, services, candidate, _, _ = promotion_case(tmp_path)
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
-    marker.write_text("enabled\n", encoding="utf-8")
-    marker.chmod(0o644)
+    monkeypatch.setattr(promoter, "auto_enabled", lambda: True)
     promoter.write_state({
         "outcome": "accepted",
         "finished_at": "2026-07-20T03:12:00+00:00",
