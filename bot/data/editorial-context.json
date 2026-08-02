@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-23T00:00:00Z",
+  "updated_at": "2026-08-02T23:54:29Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -398,6 +398,34 @@
         "url": "https://www.gov.uk/government/news/cheaper-travel-for-millions-with-a-third-off-fares",
         "published_on": "2026-07-22",
         "verified_on": "2026-07-23"
+      }
+    },
+    {
+      "id": "govuk-summer-holiday-savings-start-now-with-free-buses-f-ca5e2c48",
+      "label": "Summer holiday savings start now with free buses for kids",
+      "claim": "Summer holiday savings start now with free buses for kids. The Summer Bus Fare Offer is part of the government's Great British Summer Savings scheme.",
+      "prompt_hint": "This wording came from the approved GOV.UK title and summary. Use exact dates, make no prediction, and do not add facts from outside this claim.",
+      "requirements": [
+        {
+          "label": "approved story subject",
+          "alternatives": [
+            "Summer holiday savings start now with free buses for kids"
+          ]
+        }
+      ],
+      "published_at": "2026-07-31T23:01:03Z",
+      "active_from": "2026-08-02T23:54:29Z",
+      "expires_at": "2026-08-07T23:01:03Z",
+      "probability": 0.1,
+      "max_uses_total": 2,
+      "cooldown_hours": 36,
+      "append_source_link": false,
+      "source": {
+        "publisher": "UK Government",
+        "title": "Summer holiday savings start now with free buses for kids",
+        "url": "https://www.gov.uk/government/news/summer-holiday-savings-start-now-with-free-buses-for-kids",
+        "published_on": "2026-07-31",
+        "verified_on": "2026-08-02"
       }
     }
   ]
