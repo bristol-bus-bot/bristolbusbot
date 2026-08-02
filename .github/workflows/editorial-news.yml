@@ -55,27 +55,8 @@ jobs:
         if: steps.discover.outputs.found == 'true'
         run: python deploy/editorial_context.py --file bot/data/editorial-context.json
 
-      - name: Skip a story already reviewed in GitHub
-        if: steps.discover.outputs.found == 'true'
-        id: duplicate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_ID: ${{ steps.discover.outputs.source_id }}
-        shell: bash
-        run: |
-          count=$(gh pr list --state all \
-            --search "editorial-source:${SOURCE_ID} in:body" \
-            --json number --jq 'length')
-          if [ "$count" -gt 0 ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Open the approval pull request
-        if: >-
-          steps.discover.outputs.found == 'true' &&
-          steps.duplicate.outputs.skip != 'true'
+        if: steps.discover.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           STORY_ID: ${{ steps.discover.outputs.id }}
@@ -85,13 +66,21 @@ jobs:
           EXPIRES_AT: ${{ steps.discover.outputs.expires_at }}
         shell: bash
         run: |
-          branch="automation/editorial-news-${STORY_ID}-${GITHUB_RUN_ID}"
+          set -euo pipefail
+          branch="automation/editorial-news-${STORY_ID}"
           git config user.name "bristol-bus-bot editorial automation"
           git config user.email "bristol-bus-bot@users.noreply.github.com"
           git switch -c "$branch"
           git add bot/data/editorial-context.json
           git commit -m "Propose approved news context: ${STORY_TITLE}"
-          git push origin "HEAD:${branch}"
+          remote_sha=$(git ls-remote --heads origin "refs/heads/${branch}" | awk '{print $1}')
+          if [ -n "$remote_sha" ]; then
+            git push \
+              --force-with-lease="refs/heads/${branch}:${remote_sha}" \
+              origin "HEAD:refs/heads/${branch}"
+          else
+            git push origin "HEAD:refs/heads/${branch}"
+          fi
           {
             echo "GitHub found a recent official Department for Transport bus story."
             echo
@@ -112,8 +101,34 @@ jobs:
             echo
             echo "<!-- editorial-source:${SOURCE_ID} -->"
           } > editorial-pr-body.md
-          gh pr create \
+          set +e
+          pr_output=$(gh pr create \
             --base main \
             --head "$branch" \
             --title "[editorial approval] ${STORY_TITLE}" \
-            --body-file editorial-pr-body.md
+            --body-file editorial-pr-body.md 2>&1)
+          pr_status=$?
+          set -e
+          if [ "$pr_status" -ne 0 ]; then
+            {
+              echo "### Editorial proposal failed after validation"
+              echo
+              echo "**Story:** ${STORY_TITLE}"
+              echo
+              echo "**Source ID:** ${SOURCE_ID}"
+              echo
+              echo "**Reusable branch:** \`${branch}\`"
+              echo
+              echo "The branch is deliberately stable so a retry updates it instead of creating branch clutter."
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "$pr_output" >&2
+            exit "$pr_status"
+          fi
+          printf '%s\n' "$pr_output"
+          {
+            echo "### Editorial proposal opened"
+            echo
+            echo "**Story:** ${STORY_TITLE}"
+            echo
+            echo "${pr_output}"
+          } >> "$GITHUB_STEP_SUMMARY"

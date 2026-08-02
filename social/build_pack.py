@@ -17,6 +17,17 @@ DELAY_BIN_EDGES_S = (
     240, 300, 360, 480, 600, 900, 1200,
 )
 
+DEFAULT_OPERATOR_NAMES = {
+    "FBRI": "First Bristol",
+    "SCGL": "Stagecoach West",
+}
+
+POST_PROVENANCE_COLUMNS = {
+    "id", "operator_ref", "vehicle_ref", "line", "journey_ref",
+    "event_timestamp", "delay_seconds", "stop_code", "stop_name",
+    "post_uri", "post_content", "low_confidence",
+}
+
 
 def _service_date(value: str) -> datetime:
     return datetime.strptime(value, "%Y%m%d").replace(tzinfo=timezone.utc)
@@ -291,6 +302,63 @@ def build_bot_said(recent: dict,
     raise ValueError("no recent post has complete exact-journey and stop provenance")
 
 
+def read_bot_post(path: Path, post_uri: str, post_url: str,
+                  audit_conn: sqlite3.Connection | None = None,
+                  operator_names: dict[str, str] | None = None) -> dict:
+    """Build one card only from the bot's stored successful-post provenance."""
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    if not post_uri.startswith("at://") or \
+            "/app.bsky.feed.post/" not in post_uri:
+        raise ValueError("post URI is not a full Bluesky post AT URI")
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        columns = {
+            str(row[1]) for row in conn.execute(
+                "PRAGMA table_info(engagement_analytics)")
+        }
+        missing = sorted(POST_PROVENANCE_COLUMNS - columns)
+        if missing:
+            raise RuntimeError(
+                "engagement database predates exact post provenance: "
+                + ", ".join(missing))
+        row = conn.execute(
+            """SELECT operator_ref, vehicle_ref, line, journey_ref,
+                      event_timestamp, delay_seconds, stop_code, stop_name,
+                      post_uri, post_content, low_confidence
+                 FROM engagement_analytics
+                WHERE post_uri = ?
+                ORDER BY id DESC LIMIT 1""",
+            (post_uri,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise ValueError("the requested post is not in the bot's successful-post log")
+    if bool(row["low_confidence"]):
+        raise ValueError("the requested post has low-confidence journey provenance")
+    payload = {
+        "posts": [{
+            "postText": row["post_content"],
+            "postUrl": post_url,
+            "postUri": row["post_uri"],
+            "line": row["line"],
+            "eventTimestamp": row["event_timestamp"],
+            "operatorRef": row["operator_ref"],
+            "vehicleRef": row["vehicle_ref"],
+            "journeyRef": row["journey_ref"],
+            "stopCode": row["stop_code"],
+            "stopName": row["stop_name"],
+            "delaySeconds": row["delay_seconds"],
+        }],
+    }
+    names = {**DEFAULT_OPERATOR_NAMES, **(operator_names or {})}
+    result = build_bot_said(payload, audit_conn, names)
+    result["postUri"] = post_uri
+    return result
+
+
 def build_pack(audit: dict, recent: dict,
                now: datetime | None = None,
                audit_conn: sqlite3.Connection | None = None,
@@ -308,27 +376,49 @@ def build_pack(audit: dict, recent: dict,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--audit-json", type=Path, required=True)
-    parser.add_argument("--recent-posts-json", type=Path, required=True)
+    parser.add_argument("--audit-json", type=Path)
+    parser.add_argument("--recent-posts-json", type=Path)
+    parser.add_argument("--app-db", type=Path)
+    parser.add_argument("--post-uri")
+    parser.add_argument("--post-url")
     parser.add_argument("--audit-db", type=Path)
     parser.add_argument(
         "--operator",
         help="operator code for weekly cards (defaults to audit JSON selection)")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    audit = json.loads(args.audit_json.read_text(encoding="utf-8"))
-    recent = json.loads(args.recent_posts_json.read_text(encoding="utf-8"))
+    single = bool(args.app_db or args.post_uri or args.post_url)
+    if single and not all((args.app_db, args.post_uri, args.post_url)):
+        parser.error("single-card mode requires --app-db, --post-uri and --post-url")
+    if single and (args.audit_json or args.recent_posts_json or args.operator):
+        parser.error(
+            "single-card mode cannot be combined with weekly pack inputs")
+    if not single and not all((args.audit_json, args.recent_posts_json)):
+        parser.error(
+            "weekly mode requires --audit-json and --recent-posts-json")
     if args.audit_db and not args.audit_db.is_file():
         parser.error(f"audit database not found: {args.audit_db}")
-    conn = sqlite3.connect(
+    audit_conn = sqlite3.connect(
         f"{args.audit_db.resolve().as_uri()}?mode=ro", uri=True
     ) if args.audit_db else None
     try:
-        pack = build_pack(
-            audit, recent, audit_conn=conn, operator=args.operator)
+        if single:
+            pack = {
+                "generatedAt": datetime.now(timezone.utc).isoformat(),
+                "botSaid": read_bot_post(
+                    args.app_db, args.post_uri, args.post_url,
+                    audit_conn=audit_conn),
+            }
+        else:
+            audit = json.loads(args.audit_json.read_text(encoding="utf-8"))
+            recent = json.loads(
+                args.recent_posts_json.read_text(encoding="utf-8"))
+            pack = build_pack(
+                audit, recent, audit_conn=audit_conn,
+                operator=args.operator)
     finally:
-        if conn is not None:
-            conn.close()
+        if audit_conn is not None:
+            audit_conn.close()
     args.output.write_text(
         json.dumps(pack, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {args.output}")

@@ -27,7 +27,15 @@ export function xml(value) {
 }
 
 export function wrapWords(value, maxCharacters, maxLines = 10) {
-  const words = String(value ?? '').trim().split(/\s+/).filter(Boolean);
+  const words = String(value ?? '').trim().split(/\s+/).filter(Boolean)
+    .flatMap(word => {
+      if (word.length <= maxCharacters) return [word];
+      const pieces = [];
+      for (let start = 0; start < word.length; start += maxCharacters) {
+        pieces.push(word.slice(start, start + maxCharacters));
+      }
+      return pieces;
+    });
   const lines = [];
   let current = '';
   for (const word of words) {
@@ -44,6 +52,25 @@ export function wrapWords(value, maxCharacters, maxLines = 10) {
   const clipped = lines.slice(0, maxLines);
   clipped[maxLines - 1] = clipped[maxLines - 1].replace(/[.,;:!?]?$/, '…');
   return clipped;
+}
+
+const QUOTE_FONT_SIZES = [74, 70, 66, 62, 58, 54, 50, 46, 42];
+
+export function quoteLayout(value) {
+  const text = String(value ?? '').trim();
+  if (!text) throw new Error('botSaid requires non-empty published postText');
+  for (const fontSize of QUOTE_FONT_SIZES) {
+    const maxCharacters = Math.floor(27 * 74 / fontSize);
+    const lines = wrapWords(text, maxCharacters, Number.POSITIVE_INFINITY);
+    if (lines.length <= 7) {
+      return {
+        fontSize,
+        lineHeight: Math.round(fontSize * 1.16),
+        lines,
+      };
+    }
+  }
+  throw new Error('botSaid quote cannot fit at the minimum legible size');
 }
 
 function textLines(lines, x, y, lineHeight, attributes = '') {
@@ -123,10 +150,7 @@ function recentObservationStrip(data) {
 export function botSaidSvg(data, css = '') {
   const text = String(data.postText || '');
   const operator = String(data.operatorName || data.operatorRef || 'Operator unknown');
-  const fontSize = text.length > 260 ? 52 : text.length > 180 ? 60 : 74;
-  const maxCharacters = fontSize >= 70 ? 27 : fontSize >= 60 ? 33 : 38;
-  const lines = wrapWords(text, maxCharacters, 7);
-  const lineHeight = Math.round(fontSize * 1.16);
+  const { fontSize, lineHeight, lines } = quoteLayout(text);
   const delay = Number(data.delayMinutes);
   const badge = Number.isFinite(delay)
     ? delay > 0 ? `+${delay} MIN` : delay < 0 ? `−${Math.abs(delay)} MIN` : 'ON TIME'
@@ -461,11 +485,19 @@ function formatDateTime(value) {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }).format(date);
 }
 
-export function validatePack(pack) {
+export function validatePack(pack, card = 'all') {
   const errors = [];
+  if (!['all', 'bot-said'].includes(card)) errors.push(`unknown card mode: ${card}`);
   if (!pack?.botSaid?.postText || !pack?.botSaid?.postUrl) errors.push('botSaid requires published postText and postUrl');
   if (!pack?.botSaid?.route || !pack?.botSaid?.observedAt) errors.push('botSaid requires route and observedAt');
   if (!pack?.botSaid?.operatorRef || !pack?.botSaid?.operatorName) errors.push('botSaid requires operator identity');
+  if (!errors.length) {
+    try { quoteLayout(pack.botSaid.postText); } catch (error) { errors.push(error.message); }
+  }
+  if (card === 'bot-said') {
+    if (errors.length) throw new Error(errors.join('; '));
+    return;
+  }
   const week = pack?.busWeek;
   if (!week || !Number.isFinite(Number(week.onTimePct))) errors.push('busWeek requires onTimePct');
   if (!week || Number(week.serviceDays) !== 7) errors.push('busWeek requires exactly 7 service days');
@@ -522,62 +554,65 @@ export function validatePack(pack) {
   if (errors.length) throw new Error(errors.join('; '));
 }
 
-export function manifest(pack, files) {
+export function manifest(pack, files, card = 'all') {
   const bot = pack.botSaid;
   const week = pack.busWeek;
+  const drafts = [
+    {
+      kind: 'bot-said', file: files.botSaid,
+      caption: `${bot.postText}\n\n${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}. Track buses live at bristolbuses.live.`,
+      altText: `Dark departure-board card quoting Bristol Bus Bot about ${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}, ${Number(bot.delayMinutes) > 0 ? `${bot.delayMinutes} minutes late` : Number(bot.delayMinutes) < 0 ? `${Math.abs(bot.delayMinutes)} minutes early` : 'on time'}. The quote reads: ${bot.postText}`,
+      sources: { postUrl: bot.postUrl, postUri: bot.postUri || null, observedAt: bot.observedAt, operatorRef: bot.operatorRef, operatorName: bot.operatorName, vehicleRef: bot.vehicleRef || null, journeyRef: bot.journeyRef || null, recentObservationCount: bot.recentDepartures?.length || 1 },
+    },
+  ];
+  if (card === 'all') drafts.push(
+    {
+      kind: 'weekly-carousel',
+      slides: [
+        {
+          role: 'headline', file: files.weeklyHeadline,
+          altText: `${week.operatorName} weekly figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings.`,
+        },
+        {
+          role: 'target', file: files.weeklyTarget,
+          altText: `${week.operatorName} recorded ${Number(week.onTimePct).toFixed(1)} percent on time, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target. WECA's longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030, a gap of ${Number(week.longTermTargetGapPoints).toFixed(1)} points.`,
+        },
+        {
+          role: 'daily-detail', file: files.weeklyDays,
+          altText: `${week.operatorName} daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}.`,
+        },
+        {
+          role: 'distribution', file: files.weeklyDistribution,
+          altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} ${week.operatorName} readings were. One in ten was more than ${Math.abs(Number(week.distribution.p90DelaySeconds) / 60).toFixed(1)} minutes late. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes.`,
+        },
+        {
+          role: 'powertrain', file: files.weeklyPowertrain,
+          altText: `${Number(week.powertrain.electric.sharePct).toFixed(1)} percent of ${Number(week.powertrain.identifiedReadings).toLocaleString('en-GB')} identified ${week.operatorName} readings were from electric buses. Electric buses were on time in ${Number(week.powertrain.electric.onTimePct).toFixed(1)} percent of readings, compared with ${Number(week.powertrain.dieselOther.onTimePct).toFixed(1)} percent for diesel and other buses, a difference of ${Math.abs(Number(week.powertrain.onTimeDifferencePoints)).toFixed(1)} percentage points.`,
+        },
+        {
+          role: 'operator-comparison', file: files.weeklyOperators,
+          altText: `On-time results by operator from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${week.operatorComparison.map(operator => `${operator.operatorName} ${Number(operator.onTimePct).toFixed(1)} percent from ${Number(operator.readings).toLocaleString('en-GB')} readings`).join('; ')}.`,
+        },
+      ],
+      caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
+      sources: {
+        operatorCode: week.operatorCode, operatorName: week.operatorName,
+        targetPct: week.targetPct, targetGapPoints: week.targetGapPoints,
+        longTermTargetPct: week.longTermTargetPct,
+        longTermTargetGapPoints: week.longTermTargetGapPoints,
+        startDate: week.startDate, endDate: week.endDate,
+        readings: week.readings, onTimeReadings: week.onTimeReadings,
+        dailyOnTimePct: week.daily,
+        delayDistribution: week.distribution,
+        powertrain: week.powertrain,
+        operatorComparison: week.operatorComparison,
+      },
+    },
+  );
   return {
     schema: 4,
     generatedAt: pack.generatedAt || new Date().toISOString(),
-    drafts: [
-      {
-        kind: 'bot-said', file: files.botSaid,
-        caption: `${bot.postText}\n\n${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}. Track buses live at bristolbuses.live.`,
-        altText: `Dark departure-board card quoting Bristol Bus Bot about ${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}, ${Number(bot.delayMinutes) > 0 ? `${bot.delayMinutes} minutes late` : Number(bot.delayMinutes) < 0 ? `${Math.abs(bot.delayMinutes)} minutes early` : 'on time'}. The quote reads: ${bot.postText}`,
-        sources: { postUrl: bot.postUrl, observedAt: bot.observedAt, operatorRef: bot.operatorRef, operatorName: bot.operatorName, vehicleRef: bot.vehicleRef || null, recentObservationCount: bot.recentDepartures?.length || 1 },
-      },
-      {
-        kind: 'weekly-carousel',
-        slides: [
-          {
-            role: 'headline', file: files.weeklyHeadline,
-            altText: `${week.operatorName} weekly figures shown as 100 squares: ${Math.round(Number(week.onTimePct))} green squares were on time and ${100 - Math.round(Number(week.onTimePct))} outlined red squares were not. The exact result was ${Number(week.onTimePct).toFixed(1)} percent across ${Number(week.readings).toLocaleString('en-GB')} timing-point readings.`,
-          },
-          {
-            role: 'target', file: files.weeklyTarget,
-            altText: `${week.operatorName} recorded ${Number(week.onTimePct).toFixed(1)} percent on time, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target. WECA's longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030, a gap of ${Number(week.longTermTargetGapPoints).toFixed(1)} points.`,
-          },
-          {
-            role: 'daily-detail', file: files.weeklyDays,
-            altText: `${week.operatorName} daily on-time percentages from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${dailySeries(week).map(day => `${day.day} ${day.value.toFixed(1)} percent`).join(', ')}.`,
-          },
-          {
-            role: 'distribution', file: files.weeklyDistribution,
-            altText: `Bar chart showing how early or late ${Number(week.readings).toLocaleString('en-GB')} ${week.operatorName} readings were. One in ten was more than ${Math.abs(Number(week.distribution.p90DelaySeconds) / 60).toFixed(1)} minutes late. The typical result was ${timingWords(week.distribution.medianDelaySeconds)}. Eight in ten readings were between ${signedMinutes(week.distribution.p10DelaySeconds)} and ${signedMinutes(week.distribution.p90DelaySeconds)} minutes.`,
-          },
-          {
-            role: 'powertrain', file: files.weeklyPowertrain,
-            altText: `${Number(week.powertrain.electric.sharePct).toFixed(1)} percent of ${Number(week.powertrain.identifiedReadings).toLocaleString('en-GB')} identified ${week.operatorName} readings were from electric buses. Electric buses were on time in ${Number(week.powertrain.electric.onTimePct).toFixed(1)} percent of readings, compared with ${Number(week.powertrain.dieselOther.onTimePct).toFixed(1)} percent for diesel and other buses, a difference of ${Math.abs(Number(week.powertrain.onTimeDifferencePoints)).toFixed(1)} percentage points.`,
-          },
-          {
-            role: 'operator-comparison', file: files.weeklyOperators,
-            altText: `On-time results by operator from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${week.operatorComparison.map(operator => `${operator.operatorName} ${Number(operator.onTimePct).toFixed(1)} percent from ${Number(operator.readings).toLocaleString('en-GB')} readings`).join('; ')}.`,
-          },
-        ],
-        caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
-        sources: {
-          operatorCode: week.operatorCode, operatorName: week.operatorName,
-          targetPct: week.targetPct, targetGapPoints: week.targetGapPoints,
-          longTermTargetPct: week.longTermTargetPct,
-          longTermTargetGapPoints: week.longTermTargetGapPoints,
-          startDate: week.startDate, endDate: week.endDate,
-          readings: week.readings, onTimeReadings: week.onTimeReadings,
-          dailyOnTimePct: week.daily,
-          delayDistribution: week.distribution,
-          powertrain: week.powertrain,
-          operatorComparison: week.operatorComparison,
-        },
-      },
-    ],
+    drafts,
   };
 }
 
@@ -586,6 +621,7 @@ function argumentsFrom(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--input') result.input = argv[++index];
     else if (argv[index] === '--output') result.output = argv[++index];
+    else if (argv[index] === '--card') result.card = argv[++index];
   }
   return result;
 }
@@ -593,8 +629,9 @@ function argumentsFrom(argv) {
 async function main() {
   const args = argumentsFrom(process.argv.slice(2));
   if (!args.input || !args.output) throw new Error('usage: --input pack.json --output directory');
+  const card = args.card || 'all';
   const pack = JSON.parse(await fs.readFile(path.resolve(args.input), 'utf8'));
-  validatePack(pack);
+  validatePack(pack, card);
   const output = path.resolve(args.output);
   await fs.mkdir(output, { recursive: true });
   const { default: sharp } = await import('sharp');
@@ -610,7 +647,7 @@ async function main() {
       defaultFontFamily: 'Google Sans Flex',
     },
   }).render().asPng();
-  const names = {
+  const allNames = {
     botSaid: '01-the-bot-said.jpg',
     weeklyHeadline: '02-weekly-headline.jpg',
     weeklyTarget: '03-weekly-target.jpg',
@@ -619,16 +656,20 @@ async function main() {
     weeklyPowertrain: '06-weekly-powertrain.jpg',
     weeklyOperators: '07-operators-compared.jpg',
   };
-  await Promise.all([
+  const names = card === 'bot-said' ? { botSaid: allNames.botSaid } : allNames;
+  const renders = [
     sharp(render(botSaidSvg(pack.botSaid, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.botSaid)),
+  ];
+  if (card === 'all') renders.push(
     sharp(render(busWeekSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyHeadline)),
     sharp(render(weeklyTargetSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyTarget)),
     sharp(render(weeklyDaysSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
     sharp(render(weeklyDistributionSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDistribution)),
     sharp(render(weeklyPowertrainSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyPowertrain)),
     sharp(render(weeklyOperatorsSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyOperators)),
-  ]);
-  await fs.writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest(pack, names), null, 2)}\n`);
+  );
+  await Promise.all(renders);
+  await fs.writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest(pack, names, card), null, 2)}\n`);
   process.stdout.write(`Wrote ${output}: ${Object.values(names).join(', ')}, manifest.json\n`);
 }
 
