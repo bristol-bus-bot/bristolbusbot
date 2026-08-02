@@ -8,7 +8,7 @@ npm install
 npm run generate -- --input pack.json --output previews
 ```
 
-The input is a JSON object with `botSaid` and `busWeek` objects. See
+The full-pack input is a JSON object with `botSaid` and `busWeek` objects. See
 `examples/demo-pack.json` for the shape. The output directory contains seven
 1080 x 1350 JPEGs plus `manifest.json`, which carries captions, per-slide alt
 text and the source facts used for review:
@@ -44,6 +44,20 @@ python build_pack.py --audit-json audit_data.json `
 npm run generate -- --input pack.json --output previews
 ```
 
+To render only the established Bot Said card, pass `--card bot-said`. In this
+mode the input needs only `generatedAt` and `botSaid`; no weekly audit pack is
+required. Long quotes shrink through bounded font sizes and are refused if
+they cannot fit legibly. They are never truncated.
+
+```powershell
+python build_pack.py --app-db app_data.db `
+  --post-uri at://did:plc:BOT/app.bsky.feed.post/RKEY `
+  --post-url https://bsky.app/profile/bristolbusbot.live/post/RKEY `
+  --audit-db audit.db --output single-card.json
+npm run generate -- --input single-card.json --output previews `
+  --card bot-said
+```
+
 Pass `--operator ALL` for a whole-network carousel, or another published
 operator code to override the audit JSON selection. Weekly cards carry WECA's
 latest published annual area-wide target, the observed shortfall, and the
@@ -52,11 +66,40 @@ long-term 95% by 2030 goal.
 Gemini is not involved in rendering or numbers. An optional caption-writing
 step can be added later, but its output must remain a review-only suggestion.
 
-## Slack delivery
+## Slack curation
 
-During laptop testing, the maintainer can upload the rendered JPEGs directly
-to the existing Slack DM. For unattended Pi delivery, the existing incoming webhook
-can announce that a pack exists but cannot upload its image files. The minimal
-future setup is a narrowly scoped Slack app token with `files:write`, stored in
-a root-readable credential file, using Slack's external-upload flow. The token
-and generated packs must not be committed to Git.
+`curation.py` implements the outbound-only flow locally. It accepts one
+`bsky.app` post link from one allowlisted user in one private, non-shared
+channel, resolves the actor to its DID, verifies the public post still exists,
+and then looks up the exact full AT URI in `app_data.db`. Slack message text is
+never used as card or caption copy. A separate `social.db` records render and
+Slack delivery attempts; it is a delivery ledger, not a claim that anything
+was posted to Instagram.
+
+An attended local link render makes no Slack API call and is useful before the
+Pi setup gate:
+
+```powershell
+python curation.py --db social.db --app-db app_data.db `
+  --audit-db audit.db --output-dir cards `
+  --channel-id C_PRIVATE --allowed-user-id U_MAINTAINER `
+  --link https://bsky.app/profile/bristolbusbot.live/post/RKEY
+```
+
+Intentional regeneration requires an explicit new template identity, for
+example `--new-version bot-said-v2`. Re-sharing the same link under the normal
+version reuses the original delivery instead of uploading a duplicate.
+
+The existing incoming webhook cannot upload images. The later Pi setup needs a
+narrow Slack app token with `groups:history`, `groups:read`, `chat:write`,
+`files:write` and `files:read`, and the app must be invited only to the private
+curation channel. `files:read` is needed to reconcile an uncertain upload
+before retrying. The token belongs in a root-only systemd credential file; it
+must never be committed, pasted into chat or logged. Live polling will use:
+
+```text
+python curation.py ... --slack-credential /run/credentials/slack-token
+```
+
+The local code and tests do not configure the Slack app, contact Slack, install
+the Pi service, or post to Instagram. Those remain attended rollout gates.

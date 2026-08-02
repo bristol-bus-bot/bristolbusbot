@@ -1,7 +1,16 @@
 # Social expansion, second edition
 
-Status: accepted direction. The first four quick wins are implemented locally
-and awaiting review; no Meta publisher or Pi social service has been deployed.
+Status (29 July 2026): the exact post-to-map/profile provenance, logging-only
+Threads selector and review-only Instagram pack generator are on `main`. The
+generator produces one standalone quote card and a six-slide, dark,
+operator-labelled weekly carousel with captions, alt text and deterministic
+source facts. It has no Meta credentials and cannot publish. Threads shadow,
+the isolated delivery service and any Meta integration remain future work.
+
+Sequencing note (2 August 2026): editorial rules, budgets and kill criteria in
+this document remain authoritative. The rollout order is superseded by
+`ENRICHMENT_UI_SOCIAL_EXECUTION_INDEX.md`, which brings isolated, manually
+published Instagram curation ahead of Threads.
 This is a reconsideration of `SOCIAL_EXPANSION_PLAN.md` (July 2026) against the
 system as actually built, not as it was when that plan was written. The first
 plan is retained for reference; where this document is silent, the first
@@ -217,10 +226,11 @@ Rank the formats by what each uniquely offers and what it costs:
    receipts), it carries zero new factual risk because the verifier
    already passed it, and it costs minutes. Runs whenever there is a strong
    candidate, normally once or twice a week; there is no quota.
-2. **Weekly carousel** — the credibility anchor. Three fixed slides tell
-   one story: B makes the headline physical as 100 squares; C shows the
-   seven daily values on an explicitly zoomed axis plus a full-scale bar;
-   D shows the signed delay distribution, median and p10–p90 spread.
+2. **Weekly carousel** — the credibility anchor. Six fixed slides tell
+   one story: the weekly headline as 100 squares; actual performance against
+   WECA's current and long-term targets; seven daily values; the signed delay
+   distribution with median and p10–p90 spread; electric versus diesel/other;
+   and the same results separated by operator.
    All numbers are deterministic from the audit rollups and distance-gated
    audit observations;
    the histogram must reproduce the published reading and on-time counts
@@ -235,7 +245,7 @@ Rank the formats by what each uniquely offers and what it costs:
    slot: at least one post in four must be constructive, enforced by the
    draft generator's bookkeeping rather than the calendar.
 
-Pilot cadence: **regular Bot Said cards plus one weekly B→C→D carousel**,
+Pilot cadence: **regular Bot Said cards plus one weekly six-slide carousel**,
 with a third format at most when Microscope or Something Went Right has a
 genuine story. Stories are reflex-only (resharing feed posts); no Reels
 quota; no automated replies; comments checked on posting days. Every slot
@@ -315,20 +325,23 @@ BODS consumer, a collector write path, or load on the audit pipeline.
 
 ## 8. Rollout
 
-1. **Map linkage** (smallest useful experiment): bot records journey
+1. [x] **Map linkage** (smallest useful experiment): bot records journey
    identity in `app_data.db` and exposes a bounded loopback recent-posts API;
    site badges same-journey
    vehicles; profile pages gain the mentions section. Ship behind a site
    feature flag; turning it off removes badges and nothing else.
-2. **Threads shadow** (sample gate): selector logs at least 50 decisions
+2. [ ] **Threads shadow** (sample gate): selector logs at least 50 decisions
    across one complete service day; tune the significance budget on that
    evidence and prove a dead `bbb-social` affects nothing.
-3. **Threads live** (30-day pilot): budgeted publishing, manual replies,
+3. [ ] **Threads live** (30-day pilot): budgeted publishing, manual replies,
    pinned intro post. Monthly Insights read; adjust budget.
-4. **Instagram manual pilot** (start immediately; assess at eight weeks):
-   regular Bot Said cards, one weekly B→C→D carousel, native posting, plus
-   an optional third format when there is a genuine story.
-5. **Decision point**: continue, adjust, or stop Instagram; only on
+4. [x] **Instagram review tooling**: deterministic quote and weekly cards,
+   operator labels, target and fleet comparisons, captions, alt text and manual
+   Slack review have been exercised. It remains incapable of publishing.
+5. [ ] **Instagram manual pilot** (start when the maintainer chooses; assess at
+   eight weeks): regular Bot Said cards, one weekly carousel, native posting,
+   plus an optional third format when there is a genuine story.
+6. [ ] **Decision point**: continue, adjust, or stop Instagram; only on
    "continue" invest in Meta publishing automation with GitHub-merge
    approval, then consider auto-publishing the weekly carousel after at least
    three clean reviewed examples.
@@ -356,5 +369,5 @@ existing tests pass) stands unchanged.
 |---|---|---|
 | Bluesky | ~50–70/day (unchanged) | The firehose; its followers chose it |
 | Threads | ~5–10/day, ceiling 15, no minimum | Significance budget tuned in shadow; API ceiling (250/day) is nowhere near binding |
-| Instagram | Regular Bot Said + 1 weekly B→C→D carousel | Manual native posting from generated draft packs |
+| Instagram | Regular Bot Said + 1 weekly six-slide carousel | Manual native posting from generated draft packs |
 | Map badges | Every qualifying bot post | Same-journey match, 90-minute window |

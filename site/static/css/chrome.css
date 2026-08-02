@@ -1,8 +1,22 @@
 /* Header status chips and search focus. */
 .stat-chip { display: inline-flex; align-items: center; gap: 5px;
              padding: 3px 10px; border-radius: var(--r-pill);
-             font-size: 11px; font-weight: 700; }
+             border: 1px solid transparent; appearance: none;
+             font: inherit; font-size: 11px; font-weight: 700;
+             line-height: 1; white-space: nowrap; cursor: pointer;
+             transition: border-color var(--dur-fast), box-shadow var(--dur-fast),
+                         transform var(--dur-fast); }
 .stat-chip .stat-label { font-weight: 500; opacity: .8; }
+.stat-chip:hover { border-color: currentColor; }
+.stat-chip[aria-pressed="true"] {
+    border-color: currentColor;
+    box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 24%, transparent);
+    transform: translateY(-1px);
+}
+.stat-chip:focus-visible {
+    outline: 3px solid var(--focus, #FFDD00);
+    outline-offset: 2px;
+}
 .stat-ontime { background: var(--tint-ontime); color: var(--ev-ontime); }
 .stat-early  { background: var(--tint-early);  color: var(--ev-early); }
 .stat-late   { background: var(--tint-late);   color: var(--ev-late); }

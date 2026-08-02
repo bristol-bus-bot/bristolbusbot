@@ -83,14 +83,20 @@ export function busIcon(bus, isFeatured, options = {}) {
                        popupAnchor: [0, -c] });
 }
 
-export function depotIcon(livery) {
-    const ring = liveryColor(livery) || "#7E8582";
+export function depotIcon(livery, options = {}) {
+    const hollow = Boolean(options.hollow);
+    const ring = hollow
+        ? "var(--sign-edge, #7E8582)"
+        : (liveryColor(livery) || "#7E8582");
+    const innerFill = hollow ? "none" : "#7E8582";
+    const centreFill = hollow ? "var(--sign-edge, #7E8582)" : "#495049";
     return L.divIcon({
         html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
                  <circle cx="11" cy="11" r="9" fill="none" stroke="${ring}" stroke-width="2"/>
-                 <circle cx="11" cy="11" r="5.5" fill="#7E8582" stroke="var(--sign-edge, #7E8582)" stroke-width="1"/>
-                 <circle cx="11" cy="11" r="2" fill="#495049"/></svg>`,
-        className: "bus-marker depot", iconSize: [22, 22],
+                 <circle cx="11" cy="11" r="5.5" fill="${innerFill}" stroke="var(--sign-edge, #7E8582)" stroke-width="1"/>
+                 <circle cx="11" cy="11" r="2" fill="${centreFill}"/></svg>`,
+        className: `bus-marker depot${hollow ? " filtered-out" : ""}`,
+        iconSize: [22, 22],
         iconAnchor: [11, 11], popupAnchor: [0, -11] });
 }
 

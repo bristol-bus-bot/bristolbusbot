@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 globalThis.window = { BBB: {} };
-const { busIcon, featuredPostBadge } = await import(
+const { busIcon, depotIcon, featuredPostBadge } = await import(
     "../../static/js/map_render.js");
 
 test("featured journey marker has an explicit bot-post speech bubble", () => {
@@ -27,5 +27,16 @@ test("featured bus icon is larger and exposes the post state accessibly", () => 
     assert.match(featured.html, /aria-label="Bot posted about this journey"/);
     assert.match(featured.html, /busbot-post-badge/);
     assert.doesNotMatch(ordinary.html, /busbot-post-badge/);
+    delete globalThis.L;
+});
+
+test("depot icon has a hollow filtered-out variant", () => {
+    globalThis.L = { divIcon: options => options };
+    const ordinary = depotIcon({ left: "#006688" });
+    const filtered = depotIcon({ left: "#006688" }, { hollow: true });
+    assert.match(ordinary.html, /stroke="#006688"/);
+    assert.doesNotMatch(ordinary.className, /filtered-out/);
+    assert.match(filtered.html, /fill="none"/);
+    assert.match(filtered.className, /filtered-out/);
     delete globalThis.L;
 });

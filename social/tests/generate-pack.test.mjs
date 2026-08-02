@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { botSaidSvg, busWeekSvg, manifest, validatePack, weeklyDaysSvg, weeklyDistributionSvg, weeklyOperatorsSvg, weeklyPowertrainSvg, weeklyTargetSvg, wrapWords, xml } from '../generate-pack.mjs';
+import { botSaidSvg, busWeekSvg, manifest, quoteLayout, validatePack, weeklyDaysSvg, weeklyDistributionSvg, weeklyOperatorsSvg, weeklyPowertrainSvg, weeklyTargetSvg, wrapWords, xml } from '../generate-pack.mjs';
 
 const pack = {
   botSaid: { postText: 'A bus & its timetable <disagree>.', postUrl: 'https://bsky.app/x', route: '75', stop: 'Centre', observedAt: '2026-07-28T12:00:00Z', delayMinutes: 5, operatorRef: 'FBRI', operatorName: 'First Bristol' },
@@ -88,4 +88,24 @@ test('weekly card gates and manifest preserve facts', () => {
   assert.match(botSaidSvg(pack.botSaid), /FIRST BRISTOL · LIVE DATA/);
   assert.match(output.drafts[1].caption, /14.6 points below/);
   assert.match(output.drafts[1].caption, /40.0% of identified readings/);
+});
+
+test('single-card mode needs no weekly data and emits one draft', () => {
+  const single = { generatedAt: '2026-08-02T12:00:00Z', botSaid: pack.botSaid };
+  validatePack(single, 'bot-said');
+  assert.throws(() => validatePack(single), /busWeek/);
+  const output = manifest(single, { botSaid: 'one.jpg' }, 'bot-said');
+  assert.equal(output.drafts.length, 1);
+  assert.equal(output.drafts[0].kind, 'bot-said');
+  assert.equal(output.drafts[0].file, 'one.jpg');
+});
+
+test('quote autofit never truncates and refuses illegible text', () => {
+  const long = Array.from({ length: 36 }, (_, index) => `word${index}`).join(' ');
+  const layout = quoteLayout(long);
+  assert.ok(layout.fontSize >= 42);
+  assert.ok(layout.lines.length <= 7);
+  assert.equal(layout.lines.join(' '), long);
+  assert.throws(() => quoteLayout('word '.repeat(500)), /minimum legible/);
+  assert.doesNotMatch(botSaidSvg({ ...pack.botSaid, postText: long }), /…/);
 });

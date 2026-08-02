@@ -3,7 +3,10 @@ from __future__ import annotations
 import sys
 import sqlite3
 from datetime import datetime, timezone
+import json
 from pathlib import Path
+
+import pytest
 
 
 SOCIAL = Path(__file__).resolve().parents[1]
@@ -182,3 +185,64 @@ def test_week_gate_rejects_gaps_and_small_samples():
         assert "1,000" in str(exc)
     else:
         raise AssertionError("small sample must fail")
+
+
+def make_app_db(path: Path, *, uri: str =
+                "at://did:plc:bot/app.bsky.feed.post/abc",
+                low_confidence: int = 0) -> None:
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE engagement_analytics (
+               id INTEGER PRIMARY KEY, operator_ref TEXT, vehicle_ref TEXT,
+               line TEXT, journey_ref TEXT, event_timestamp TEXT,
+               delay_seconds INTEGER, stop_code TEXT, stop_name TEXT,
+               post_uri TEXT, post_content TEXT, low_confidence INTEGER
+           )""")
+    conn.execute(
+        "INSERT INTO engagement_analytics VALUES (1,?,?,?,?,?,?,?,?,?,?,?)",
+        ("FBRI", "FBRI-100", "75", "J-1",
+         "2026-07-26T12:30:00Z", 330, "0100BRP",
+         "Bedminster Parade", uri, "Exact final Bluesky text.",
+         low_confidence))
+    conn.commit()
+    conn.close()
+
+
+def test_single_card_reads_one_exact_full_uri_from_bot_db(tmp_path):
+    app_db = tmp_path / "app_data.db"
+    make_app_db(app_db)
+    uri = "at://did:plc:bot/app.bsky.feed.post/abc"
+    card = build_pack.read_bot_post(
+        app_db, uri,
+        "https://bsky.app/profile/bristolbusbot.live/post/abc")
+    assert card["postUri"] == uri
+    assert card["postText"] == "Exact final Bluesky text."
+    assert card["operatorName"] == "First Bristol"
+    assert card["journeyRef"] == "J-1"
+
+
+def test_single_card_refuses_rkey_only_or_low_confidence(tmp_path):
+    app_db = tmp_path / "app_data.db"
+    make_app_db(app_db, low_confidence=1)
+    with pytest.raises(ValueError, match="full Bluesky post AT URI"):
+        build_pack.read_bot_post(
+            app_db, "abc", "https://bsky.app/profile/x/post/abc")
+    with pytest.raises(ValueError, match="low-confidence"):
+        build_pack.read_bot_post(
+            app_db, "at://did:plc:bot/app.bsky.feed.post/abc",
+            "https://bsky.app/profile/bristolbusbot.live/post/abc")
+
+
+def test_single_card_cli_writes_bot_only_pack(tmp_path):
+    app_db = tmp_path / "app_data.db"
+    output = tmp_path / "pack.json"
+    make_app_db(app_db)
+    assert build_pack.main([
+        "--app-db", str(app_db),
+        "--post-uri", "at://did:plc:bot/app.bsky.feed.post/abc",
+        "--post-url", "https://bsky.app/profile/bristolbusbot.live/post/abc",
+        "--output", str(output),
+    ]) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert set(payload) == {"generatedAt", "botSaid"}
+    assert payload["botSaid"]["postUri"].endswith("/abc")

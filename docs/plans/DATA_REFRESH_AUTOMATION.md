@@ -1,8 +1,10 @@
 # Full data-refresh automation: master plan
 
-Status: Phase A timetable delivery is complete and live; Phases B-F remain the
-approved next work.
-Social-media expansion is explicitly deferred until this plan is done.
+Status: Phase A timetable delivery is live and fail-closed, but the first due
+timer run on 29 July 2026 exposed an acceptance-policy and monitoring defect
+that must be corrected before Phase A is considered fully proven. Phases B-F
+remain the next core data track. Independent low-risk social quick wins have
+landed; Meta publishing remains outside this plan.
 
 The goal is not "make the Pi do everything." The goal is that the Windows
 laptop can be off indefinitely without any production data silently ageing.
@@ -14,7 +16,7 @@ Companion documents:
 
 - `TIMETABLE_BUILD_MIGRATION.md`: architecture decision for timetable builds;
 - `TIMETABLE_BUILD_PI_EXECUTION.md`: timetable implementation work packages;
-- `SOCIAL_EXPANSION_PLAN.md`: later work, not a prerequisite here.
+- `SOCIAL_EXPANSION_PLAN_V2.md`: optional downstream work, gated per feature.
 
 ## System-wide principles
 
@@ -108,14 +110,17 @@ Complete WP1-WP8 in `TIMETABLE_BUILD_PI_EXECUTION.md`:
 This is the priority because every other timetable-derived artifact depends on
 it. A full build on the 1 GB Pi is optional fallback work, not a gate.
 
-Acceptance evidence (22 July 2026): attended promotion, forced rollback tests,
-automatic no-change handling and a manually initiated production `auto` GitHub
-build -> Pi delivery -> live promotion all passed. The accepted run was
+Acceptance evidence (updated 29 July 2026): attended promotion, forced rollback
+tests, automatic no-change handling and a manually initiated production `auto`
+GitHub build -> Pi delivery -> live promotion all passed. The accepted run was
 `29944744744`; its consumer and functional health gates passed and the previous
-database remained available. The daily timer is enabled. The maintainer chose
-not to make an arbitrary six-day wait for its first due rebuild a completion
-gate. That scheduler-triggered cycle remains observable routine evidence, and
-the laptop is no longer part of normal timetable production.
+database remained available. The first due timer build, `30421182234`, then
+failed safely before promotion because the flat 75% raw `stop_times` gate
+mistook fewer superseded editions for missing current service. Direct semantic
+comparison showed 100.3% of live trips and stop times over the next 28 days.
+The accepted database remained healthy; the laptop is still fallback only.
+The service-window validator and correlated monitoring work in
+`TIMETABLE_BUILD_PI_EXECUTION.md` is now the remaining Phase A gate.
 
 ## Phase B - Identity and complete consumer-path audit
 
@@ -296,7 +301,10 @@ Pi promotion, and a restore drill have all proved reliable.
 4. Phase D: health audit in report-only mode.
 5. Phase E: deterministic fleet and locality regeneration, shadow first.
 6. Phase F: descriptions with a human approval window.
-7. Only then return to Threads, Instagram, and the wider social plan.
+7. Isolated social curation may proceed as a parallel workstream under
+   `ENRICHMENT_UI_SOCIAL_EXECUTION_INDEX.md`; it does not waive or reorder any
+   data-safety gate above, and it is not deployed in the same attended window
+   as a data cutover.
 
 When social work resumes, first correct its stale command-centre reference and
 keep OAuth callback routing through the core bot rather than a separate public
