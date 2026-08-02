@@ -1,6 +1,6 @@
 # Enrichment, UI and social curation execution index
 
-Status: active execution checklist, 2 August 2026.
+Status: active execution checklist, 3 August 2026.
 
 This is the short, authoritative order of work. The much larger
 `ENRICHMENT_UI_AND_SOCIAL_CURATION_PLAN.md` remains the design record and
@@ -23,8 +23,8 @@ technical rationale; it is not one giant implementation ticket.
 
 ### 0. Editorial-news workflow incident
 
-Status: local hardening implemented and tested; live repository permission
-still needs explicit approval.
+Status: hardening is in draft PR #30 and the repository permission is enabled;
+the attended main-branch workflow test waits for review and merge.
 
 - [x] Confirm the exact failure: GitHub Actions is blocked from creating PRs.
 - [x] Replace per-run branch names with one stable branch per story.
@@ -33,8 +33,9 @@ still needs explicit approval.
 - [x] Add a useful job summary when PR creation fails.
 - [x] Validate the real GOV.UK story against a scratch context file.
 - [x] Verify and delete the eight abandoned failed-run branches.
-- [ ] Publish the hardening change through the normal reviewed GitHub path.
-- [ ] Enable the repository Actions PR-creation permission.
+- [x] Open draft PR #30 through the normal reviewed GitHub path.
+- [x] Enable and verify the repository Actions PR-creation permission.
+- [ ] Review and merge PR #30.
 - [ ] Run one attended `workflow_dispatch` that actually reaches PR creation.
 - [ ] Review the resulting editorial PR on its wording and facts.
 
