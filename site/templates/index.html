@@ -20,14 +20,14 @@
 
         <!-- Status counts -->
         <div id="header-stats" class="flex items-center gap-2 ml-3">
-            <div class="stat-chip stat-ontime"><span class="stat-dot"></span><span id="count-punctual">0</span><span class="stat-label">on time</span></div>
-            <div class="stat-chip stat-early"><span class="stat-di"></span><span id="count-early">0</span><span class="stat-label">early</span></div>
-            <div class="stat-chip stat-late"><span class="stat-sq"></span><span id="count-delayed">0</span><span class="stat-label">late</span></div>
-            <div class="stat-chip stat-origin"><span class="stat-dot"></span><span id="count-waiting">0</span><span class="stat-label">at origin</span></div>
-            <div class="stat-chip stat-depot depot-stat">
+            <button type="button" class="stat-chip stat-ontime" data-status-filter="punctual" aria-pressed="false" aria-label="Filter map to on-time buses"><span class="stat-dot"></span><span id="count-punctual">0</span><span class="stat-label">on time</span></button>
+            <button type="button" class="stat-chip stat-early" data-status-filter="early" aria-pressed="false" aria-label="Filter map to early buses"><span class="stat-di"></span><span id="count-early">0</span><span class="stat-label">early</span></button>
+            <button type="button" class="stat-chip stat-late" data-status-filter="delayed" aria-pressed="false" aria-label="Filter map to late buses"><span class="stat-sq"></span><span id="count-delayed">0</span><span class="stat-label">late</span></button>
+            <button type="button" class="stat-chip stat-origin" data-status-filter="waiting" aria-pressed="false" aria-label="Filter map to buses waiting at their origin"><span class="stat-dot"></span><span id="count-waiting">0</span><span class="stat-label">at origin</span></button>
+            <button type="button" class="stat-chip stat-depot depot-stat" data-status-filter="depot" aria-pressed="false" aria-label="Filter map to buses at a depot">
                 <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 <span id="count-depot">0</span><span class="stat-label">at depot</span>
-            </div>
+            </button>
         </div>
 
         <!-- Layer toggles (desktop) -->

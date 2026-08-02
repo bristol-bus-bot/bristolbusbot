@@ -243,13 +243,78 @@ def select_candidate(
     raise NoNewsCandidate("no new official bus story needs review")
 
 
-def atomic_json(path: Path, value: dict) -> None:
+def render_context_with_news(
+    original: str,
+    *,
+    updated_at: str,
+    item: dict[str, object],
+) -> str:
+    """Append one news item without reformatting the human-curated file.
+
+    ``editorial-context.json`` deliberately keeps its requirements compact so
+    approval diffs stay readable. Re-serialising the complete document with
+    ``json.dump(indent=2)`` turns a one-story proposal into a several-hundred
+    line formatting change. This renderer changes only ``updated_at`` and the
+    final ``news`` array, then reparses the result as a safety check.
+    """
+    try:
+        expected = json.loads(original)
+    except json.JSONDecodeError as exc:
+        raise NewsDiscoveryError("local editorial context is unreadable") from exc
+    if not isinstance(expected, dict) or not isinstance(expected.get("news"), list):
+        raise NewsDiscoveryError("local editorial context has no news array")
+
+    newline = "\r\n" if "\r\n" in original else "\n"
+    updated_pattern = re.compile(
+        r'(?m)^(  "updated_at": )"[^"\r\n]+"(,)(?=\r?$)')
+    rendered, replacement_count = updated_pattern.subn(
+        rf'\g<1>{json.dumps(updated_at)}\g<2>', original)
+    if replacement_count != 1:
+        raise NewsDiscoveryError(
+            "local editorial context has an unexpected updated_at layout")
+
+    marker = f'{newline}  "news": [{newline}'
+    if rendered.count(marker) != 1:
+        raise NewsDiscoveryError(
+            "local editorial context has an unexpected news layout")
+    body_start = rendered.index(marker) + len(marker)
+    body_end = rendered.rfind(f"{newline}  ]{newline}}}")
+    if body_end < body_start:
+        raise NewsDiscoveryError(
+            "local editorial context has an unexpected document ending")
+
+    existing_body = rendered[body_start:body_end]
+    encoded_item = json.dumps(item, indent=2, ensure_ascii=False)
+    indented_item = newline.join(
+        f"    {line}" for line in encoded_item.splitlines())
+    separator = f",{newline}" if existing_body.strip() else ""
+    rendered = (
+        rendered[:body_start]
+        + existing_body
+        + separator
+        + indented_item
+        + rendered[body_end:]
+    )
+
+    expected["updated_at"] = updated_at
+    expected["news"].append(item)
+    try:
+        reparsed = json.loads(rendered)
+    except json.JSONDecodeError as exc:
+        raise NewsDiscoveryError(
+            "rendered editorial context is invalid JSON") from exc
+    if reparsed != expected:
+        raise NewsDiscoveryError(
+            "rendered editorial context changed unexpected data")
+    return rendered
+
+
+def atomic_text(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.new-{os.getpid()}")
     try:
-        with temporary.open("x", encoding="utf-8") as handle:
-            json.dump(value, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
+        with temporary.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(value)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
@@ -280,7 +345,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--now")
     args = parser.parse_args(argv)
     try:
-        context = json.loads(args.context.read_text(encoding="utf-8"))
+        with args.context.open("r", encoding="utf-8", newline="") as handle:
+            context_text = handle.read()
+        context = json.loads(context_text)
     except (OSError, json.JSONDecodeError) as exc:
         raise NewsDiscoveryError("local editorial context is unreadable") from exc
     now = parse_timestamp(args.now) if args.now else utcnow()
@@ -297,9 +364,12 @@ def main(argv: list[str] | None = None) -> int:
     except NoNewsCandidate as exc:
         print(str(exc))
         return 75
-    context["updated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    context.setdefault("news", []).append(candidate["item"])
-    atomic_json(args.context, context)
+    rendered = render_context_with_news(
+        context_text,
+        updated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        item=candidate["item"],
+    )
+    atomic_text(args.context, rendered)
     if args.github_output:
         write_github_output(args.github_output, candidate)
     print(json.dumps({

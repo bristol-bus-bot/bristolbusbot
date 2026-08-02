@@ -16,6 +16,7 @@
         let activeRouteLineLayers = [];   // Polyline layers for route search view
         let activeRouteVehicleRefs = [];  // Vehicle refs highlighted in route view
         let activeRoutePathLoading = false;
+        let activeStatusFilter = null;     // One of window.BBB.BUS_STATUSES
         const TILE_URLS = {
             day: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
             night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -316,11 +317,32 @@
         }
 
         function markerVisual(bus) {
+            const filterVisual = window.BBB.statusFilterVisual(
+                bus, activeStatusFilter);
+            const vehicleSelected = Boolean(
+                activeRouteVehicleRef
+                && bus.vehicleRef === activeRouteVehicleRef);
             if (bus.eventType === 'depot') {
+                let hollow = false;
+                let mode = 'normal';
+                let zOffset = 100;
+                if (activeRouteLine) {
+                    hollow = true;
+                    mode = 'route-other';
+                    zOffset = 400;
+                } else if (filterVisual) {
+                    hollow = filterVisual.hollow && !vehicleSelected;
+                    mode = `${filterVisual.mode}${vehicleSelected ? '|vehicle-selected' : ''}`;
+                    zOffset = vehicleSelected ? 1800 : filterVisual.zOffset;
+                } else if (activeRouteVehicleRef) {
+                    hollow = !vehicleSelected;
+                    mode = vehicleSelected ? 'vehicle-selected' : 'vehicle-other';
+                    zOffset = vehicleSelected ? 1800 : 400;
+                }
                 return {
-                    key: `depot|${bus.livery?.left || ''}`,
-                    zOffset: 100,
-                    build: () => window.BBB.depotIcon(bus.livery),
+                    key: `depot|${bus.livery?.left || ''}|${mode}|${hollow}`,
+                    zOffset,
+                    build: () => window.BBB.depotIcon(bus.livery, { hollow }),
                 };
             }
 
@@ -328,18 +350,23 @@
             const options = {};
             let mode = 'normal';
             let zOffset = featured ? 1500 : 1000;
-            if (activeRouteVehicleRef) {
-                const selected = bus.vehicleRef === activeRouteVehicleRef;
-                options.hollow = !selected;
-                options.emphasized = selected;
-                mode = selected ? 'vehicle-selected' : 'vehicle-other';
-                zOffset = selected ? 1800 : 400;
-            } else if (activeRouteLine) {
+            if (activeRouteLine) {
                 const selected = window.BBB.isBusOnRoute(bus, activeRouteLine);
                 options.hollow = !selected;
                 if (selected) options.ringColor = '#1D70B8';
                 mode = selected ? `route-${activeRouteLine}` : 'route-other';
                 zOffset = selected ? 1600 : 400;
+            } else if (filterVisual) {
+                options.hollow = filterVisual.hollow && !vehicleSelected;
+                options.emphasized = vehicleSelected;
+                mode = `${filterVisual.mode}${vehicleSelected ? '|vehicle-selected' : ''}`;
+                zOffset = vehicleSelected ? 1800 : filterVisual.zOffset;
+            } else if (activeRouteVehicleRef) {
+                const selected = vehicleSelected;
+                options.hollow = !selected;
+                options.emphasized = selected;
+                mode = selected ? 'vehicle-selected' : 'vehicle-other';
+                zOffset = selected ? 1800 : 400;
             }
             const key = [
                 bus.eventType, bus.waitingAtOrigin, bus.bearing,
@@ -366,6 +393,22 @@
             busMarkers.forEach((marker, ref) => {
                 syncMarkerAppearance(marker, busByRef.get(ref), force);
             });
+        }
+
+        function setActiveStatusFilter(status) {
+            const next = window.BBB.BUS_STATUSES.includes(status) ? status : null;
+            if (next && activeRouteLine) clearRouteView();
+            activeStatusFilter = next;
+            window.BBB.syncStatusFilterButtons(
+                document.querySelectorAll('[data-status-filter]'),
+                activeStatusFilter);
+            syncAllMarkerAppearances();
+        }
+
+        function toggleStatusFilter(event) {
+            const requested = event.currentTarget.dataset.statusFilter;
+            setActiveStatusFilter(window.BBB.nextStatusFilter(
+                activeStatusFilter, requested));
         }
 
         function updateBusMarkers(buses) {
@@ -400,16 +443,12 @@
             });
 
             // Update header status counts
-            const punctualCount = buses.filter(b => b.eventType === 'punctual').length;
-            const earlyCount = buses.filter(b => b.eventType === 'early').length;
-            const delayedCount = buses.filter(b => b.eventType === 'delayed').length;
-            const waitingCount = buses.filter(b => b.eventType === 'waiting' || b.waitingAtOrigin).length;
-            const depotCount = buses.filter(b => b.eventType === 'depot').length;
-            document.getElementById('count-punctual').textContent = punctualCount;
-            document.getElementById('count-early').textContent = earlyCount;
-            document.getElementById('count-delayed').textContent = delayedCount;
-            document.getElementById('count-waiting').textContent = waitingCount;
-            document.getElementById('count-depot').textContent = depotCount;
+            const counts = window.BBB.countBusStatuses(buses);
+            document.getElementById('count-punctual').textContent = counts.punctual;
+            document.getElementById('count-early').textContent = counts.early;
+            document.getElementById('count-delayed').textContent = counts.delayed;
+            document.getElementById('count-waiting').textContent = counts.waiting;
+            document.getElementById('count-depot').textContent = counts.depot;
         }
 
         function updateStopMarkers(stops) {
@@ -1413,6 +1452,7 @@
             setSearchOpen(false);
             document.getElementById('stop-search').value = '';
             vehicleSidebarState = null;
+            setActiveStatusFilter(null);
 
             // Clear any existing route/bus view
             clearBusRoute(true);
@@ -1771,6 +1811,9 @@
             on('fab-boundary', 'click', toggleBoundaryBtn);
             on('geolocate-btn', 'click', geolocateUser);
             on('sidebar-toggle', 'click', toggleSidebar);
+            document.querySelectorAll('[data-status-filter]').forEach(button => {
+                button.addEventListener('click', toggleStatusFilter);
+            });
             document.addEventListener('bbb:themechange', event => {
                 const theme = event.detail?.theme === 'night' ? 'night' : 'day';
                 if (tileLayer) tileLayer.setUrl(TILE_URLS[theme]);
@@ -1848,9 +1891,10 @@
             }
         });
 
-        // Escape key clears active route or route view
+        // Escape key clears the active map emphasis mode.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (activeStatusFilter) { setActiveStatusFilter(null); return; }
                 if (activeRouteLine) { clearRouteView(); return; }
                 if (routeViewActive || activeRouteLayer) { clearBusRoute(); }
             }
