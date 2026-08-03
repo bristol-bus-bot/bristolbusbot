@@ -196,6 +196,16 @@ alt text, caption and SQLite ledger.
 The kill switch is disabling the timer and removing the live marker; neither
 operation touches Instagram or any core service.
 
+Production status (4 August 2026): PR #32 was merged and social release
+`20260803t234404745058z-4ab3bcea` plus the reviewed layout were installed. The
+release passed its native ARM64 gate. The service and timer are inactive, the
+timer is disabled, and no social credential or live marker exists. All four
+core services and the local bot/site and public site health endpoints passed.
+The failed-unit read-back also exposed an older, unrelated audit-rollup failure
+from 3 August caused by the then-current pipeline release omitting
+`fbribuses.json`; that reliability repair is recorded separately in the
+execution index and must not be bundled into this social rollout.
+
 ## Backups
 
 Nightly encrypted restic snapshots to a dedicated local drive, copied to

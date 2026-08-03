@@ -12,11 +12,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: python -m compileall -q site pipeline collector deploy
+      - run: python -m compileall -q site pipeline collector deploy social
       - run: pip install -e "collector[dev]" -e "site[dev]" flask paramiko
       - run: python -m pytest collector -q
       - run: python -m pytest site -q
-      - run: python -m pytest pipeline/tests audit-site/tests deploy/tests -q
+      - run: python -m pytest pipeline/tests audit-site/tests deploy/tests social/tests -q
 
   bot:
     runs-on: ubuntu-latest
@@ -42,13 +42,27 @@ jobs:
       - run: npm test
         working-directory: site
 
+  social-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: social/package-lock.json
+      - run: npm ci
+        working-directory: social
+      - run: npm test
+        working-directory: social
+
   docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: every component has a real README
         run: |
-          for d in collector site bot pipeline deploy audit-site; do
+          for d in collector site bot pipeline deploy audit-site social; do
             test -s "$d/README.md" || { echo "missing or empty $d/README.md"; exit 1; }
           done
           if find . -name 'PUBLIC_README.md' -print -quit | grep -q .; then
