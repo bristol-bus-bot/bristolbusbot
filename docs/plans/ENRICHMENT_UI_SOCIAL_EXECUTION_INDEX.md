@@ -63,9 +63,12 @@ remained green.
 
 ### 2. Slack-to-Instagram-card curation
 
-Status: the local core and isolated Pi deployment path are implemented and
-tested. The ARM64 renderer smoke passed on 4 August 2026. Slack credentials,
-shadow polling, one real delivery and timer enable remain attended gates.
+Status: PR #32 is merged and social release
+`20260803t234404745058z-4ab3bcea` plus the reviewed layout are installed on
+the Pi. Both ARM64 render gates passed on 4 August 2026. The service and timer
+are inactive, the timer is disabled, and no Slack credential or live marker is
+installed. Slack configuration, shadow polling, one real delivery and timer
+enable remain attended gates.
 
 - [x] Add and locally smoke-test a single-card renderer mode.
 - [x] Run the renderer smoke test on ARM64: native dependencies installed and
@@ -85,7 +88,8 @@ shadow polling, one real delivery and timer enable remain attended gates.
 - [x] Add an explicit `social` release, root-owned configuration helper,
   credential-gated sandboxed service/timer, shadow-default runner, live marker,
   aggregate health, digest and deployment documentation.
-- [ ] Merge and deploy the social release and layout; leave the timer disabled.
+- [x] Merge PR #32 and deploy the social release and layout with the timer
+  disabled; verify local/public health and all four core services.
 - [ ] Configure the private channel/user IDs and bot token once on the Pi.
 - [ ] Seed the checkpoint, then shadow-render a newly shared link with no reply
   or upload.
@@ -98,8 +102,16 @@ The later engagement shortlist is optional and cannot block link-driven cards.
 
 ### 3. Enrichment automation
 
-Status: resumes behind the existing timetable proof and data-safety gates.
+Status: paused behind a newly confirmed pre-existing audit incident. The
+scheduled rollup failed at 05:15 on 3 August because pipeline release
+`20260730t180316535210z-56fd00a3` omitted required `fbribuses.json`; aggregate
+health has reported `job:audit-rollup` since then. This predates and is
+independent of the social deployment. Collector, bot, site, tunnel and their
+local/public health endpoints remain healthy.
 
+- [ ] Restore the missing fleet artifact through a separate reviewed pipeline
+  release, rerun the rollup, and prove aggregate health clears before resuming
+  enrichment work.
 - [ ] Complete the promotion-disabled timetable Phase A proof.
 - [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
 - [ ] Add durable consumer-path overrides for every bot artifact.

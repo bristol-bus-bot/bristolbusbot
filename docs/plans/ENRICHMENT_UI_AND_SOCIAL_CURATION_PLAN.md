@@ -655,12 +655,13 @@ and the feature works fine without it.
 
 **Implementation evidence, 4 August 2026:** the renderer completed a native
 ARM64 1080 x 1350 smoke render on the production Pi from the exact reviewed
-source without contacting Slack. The isolated service, timer, configuration
-helper, monitoring and deploy path are implemented on the rollout branch and
-covered by local tests. That is build evidence, not production evidence: no
-Slack credential has been installed, the service has not read a real channel,
-no card has been uploaded and the timer has not been enabled. The unchecked
-steps below remain real approval gates.
+source without contacting Slack. PR #32 was then merged and release
+`20260803t234404745058z-4ab3bcea` plus the isolated systemd layout were
+installed successfully. The timer is disabled and inactive, the service is
+inactive, and no Slack credential or live marker exists. That is production
+installation evidence, not delivery evidence: the service has not read a real
+channel and no card has been uploaded. The unchecked steps below remain real
+approval gates.
 
 1. Build and test everything locally; no Slack contact.
 2. Pi ARM64 render smoke test, still no Slack contact.

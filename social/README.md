@@ -113,6 +113,14 @@ installed the native `sharp` and `resvg` packages and produced a valid
 1080 x 1350 JPEG. The temporary directory was removed and Slack was not
 contacted.
 
+Production status (4 August 2026): PR #32 is merged and release
+`20260803t234404745058z-4ab3bcea` plus the reviewed systemd layout are
+installed. The release passed a second native ARM64 render gate. The curation
+service and timer are inactive, the timer is disabled, and the credential and
+live marker are absent. The commands below therefore start at the one-time
+Slack app/configuration gate; they are not a claim that a real link has already
+been processed.
+
 Deploy the reviewed code first. This runs the complete local gates, installs
 native packages off to the side and accepts the release only after another
 ARM64 render. It does not start the curation job or contact Slack:
