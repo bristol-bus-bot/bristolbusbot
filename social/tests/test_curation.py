@@ -59,11 +59,13 @@ class FakeSlack:
         self.found_file = None
         self.private_checks = []
         self.messages = []
+        self.history_oldest = []
 
     def require_private_channel(self, channel):
         self.private_checks.append(channel)
 
     def history(self, channel, oldest):
+        self.history_oldest.append((channel, oldest))
         return list(self.messages)
 
     def reply(self, channel, thread_ts, text):
@@ -240,10 +242,24 @@ def test_attended_new_version_creates_a_separate_render(service_parts):
 
 def test_poll_verifies_private_channel_and_advances_checkpoint(service_parts):
     service = make_service(service_parts, shadow=True)
+    service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
     service_parts[5].messages = [message("1.000")]
     assert service.poll_once() == 1
     assert service_parts[5].private_checks == ["C-PRIVATE"]
+    assert service_parts[5].history_oldest == [("C-PRIVATE", "0.500")]
     assert service_parts[2].checkpoint("C-PRIVATE") == "1.000"
+
+
+def test_first_poll_seeds_now_without_replaying_channel_history(
+        service_parts, monkeypatch):
+    service = make_service(service_parts, shadow=True)
+    service_parts[5].messages = [message("1.000")]
+    monkeypatch.setattr(curation.time, "time", lambda: 1234.5)
+
+    assert service.poll_once() == 0
+    assert service_parts[5].private_checks == ["C-PRIVATE"]
+    assert service_parts[5].history_oldest == []
+    assert service_parts[2].checkpoint("C-PRIVATE") == "1234.500000"
 
 
 def test_slack_client_uses_external_upload_flow_and_private_channel_gate(tmp_path):

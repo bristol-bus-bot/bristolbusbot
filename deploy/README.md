@@ -32,7 +32,7 @@ render private values only into temporary upload payloads.
 | `python deploy/push.py --component bot` | locally built bot, Node dependencies and runtime JSON | bot | collector, site, tunnel, state, secrets |
 | `python deploy/push.py --component pipeline` | scheduled audit job code and reviewed audit-site assets | none | timetable, live services, secrets |
 | `python deploy/push.py --component tunnel` | non-secret named-tunnel ingress config | tunnel | credential JSON and application code |
-| `python deploy/push.py --component social` | planned social component (not implemented) | none; exits without changes | everything |
+| `python deploy/push.py --component social` | isolated renderer and Slack-curation code | none; ARM64 render health gate only | core services, timer state, credentials, databases |
 | `python deploy/push.py --all` | pipeline, collector, site, bot and tunnel | each affected service | timetable database and secrets |
 | `python deploy/push.py --timetable PATH` | one already-built timetable | collector, site and bot | application code, tunnel, secrets |
 | `python deploy/push.py --refresh-timetable` | builds and validates locally, then replaces the timetable | collector, site and bot | application code, tunnel, secrets |
@@ -59,6 +59,15 @@ render private values only into temporary upload payloads.
 A targeted deployment sends one success alert for that component. `--all`
 sends one combined success alert after every component passes; failures still
 identify the affected component immediately.
+
+The optional social component is intentionally more conservative. Its release
+gate performs one native ARM64 demo render on the Pi, then removes that demo;
+it never starts the curation service or calls Slack. `--install-layout`
+installs its oneshot and timer but leaves the timer disabled. Configure the
+private Slack channel, allowlisted user and hidden bot token with
+`bbb-configure-social-curation`, prove one shared link in shadow mode, then use
+the allowlisted live marker for one attended delivery before enabling the
+timer. The full commands and kill switch are in `social/README.md`.
 
 Production settings remain under `/etc/bristolbusbot`; mutable databases remain
 under `/var/lib/bristolbusbot`. Current code releases are under

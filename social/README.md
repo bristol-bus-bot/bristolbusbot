@@ -101,5 +101,86 @@ must never be committed, pasted into chat or logged. Live polling will use:
 python curation.py ... --slack-credential /run/credentials/slack-token
 ```
 
-The local code and tests do not configure the Slack app, contact Slack, install
-the Pi service, or post to Instagram. Those remain attended rollout gates.
+The first production poll deliberately records the current Slack time and
+returns without reading channel history. Share the test link only after that
+checkpoint-seeding run; a new installation can therefore never replay the
+Free plan's retained history.
+
+## Pi rollout and operation
+
+The ARM64 renderer gate passed on 4 August 2026: a temporary Pi checkout
+installed the native `sharp` and `resvg` packages and produced a valid
+1080 x 1350 JPEG. The temporary directory was removed and Slack was not
+contacted.
+
+Deploy the reviewed code first. This runs the complete local gates, installs
+native packages off to the side and accepts the release only after another
+ARM64 render. It does not start the curation job or contact Slack:
+
+```powershell
+python deploy/push.py --component social
+python deploy/push.py --install-layout
+```
+
+The layout installs `bbb-social-curation.service` and its three-minute timer,
+but leaves the timer disabled. The service is a sandboxed oneshot. It can read
+only `app_data.db` and `audit.db`, and can write only the delivery ledger at
+`/var/lib/bristolbusbot/social.db`, rendered cards under
+`/var/lib/bristolbusbot/social/`, and its monitoring job record. The existing
+backup configuration already names the ledger path.
+
+Create or update the Slack app with only `groups:history`, `groups:read`,
+`chat:write`, `files:write` and `files:read`, install it to the workspace and
+invite it only to the private curation channel. On the Pi, enter the resulting
+bot token directly into the hidden prompt; never put it in a command, chat,
+repository file or log:
+
+```sh
+sudo /usr/local/sbin/bbb-configure-social-curation \
+  --channel-id C_PRIVATE --allowed-user-id U_MAINTAINER
+```
+
+The helper writes a root-owned environment file and a mode-0600 token file.
+systemd supplies the token through its private credentials directory. The
+service defaults to **shadow** because `/etc/bristolbusbot/social-live-enabled`
+does not exist.
+
+Run the first poll before sharing a link; it checks the private-channel gate,
+seeds the current-time checkpoint and processes no history:
+
+```sh
+sudo systemctl start bbb-social-curation.service
+sudo journalctl -u bbb-social-curation.service -n 50 --no-pager
+```
+
+Then share one bot Bluesky link in the private channel and start the service
+again. Shadow mode reads and verifies the request and renders locally, but
+cannot reply or upload. Inspect the job record, ledger and rendered JPEG before
+the attended live test.
+
+For that single attended test, enable live mode through the fixed allowlisted
+helper, share the test link again as a new Slack message, start one job, then
+verify the Slack image, alt text, caption and ledger. The shadow request is
+already checkpointed, so merely rerunning the service without a new message
+correctly does nothing:
+
+```sh
+sudo -n /usr/local/sbin/bbb-deploy-control social-live-enable
+sudo systemctl start bbb-social-curation.service
+```
+
+Only after that passes should the timer be enabled:
+
+```sh
+sudo systemctl enable --now bbb-social-curation.timer
+```
+
+The immediate kill switch leaves every collector/site/bot/tunnel path alone:
+
+```sh
+sudo systemctl disable --now bbb-social-curation.timer
+sudo -n /usr/local/sbin/bbb-deploy-control social-live-disable
+```
+
+Instagram publishing remains a manual phone action. The ledger proves only
+that Slack received a draft; it never claims the image was posted to Instagram.

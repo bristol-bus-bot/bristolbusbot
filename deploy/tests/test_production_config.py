@@ -12,6 +12,13 @@ def write_env(root: Path, component: str, extra: dict[str, str] | None = None) -
     values = dict(config.EXPECTED[component])
     values.update({key: "x" * minimum
                    for key, minimum in config.SECRET_MINIMUMS.get(component, {}).items()})
+    if component == "social":
+        values.update({
+            "BBB_SOCIAL_CHANNEL_ID": "C12345678",
+            "BBB_SOCIAL_ALLOWED_USER_ID": "U12345678",
+        })
+        (root / "social-slack.token").write_text(
+            "xoxb-test-token-123456789\n", encoding="utf-8")
     values.update(extra or {})
     (root / f"{component}.env").write_text(
         "\n".join(f"{key}={value}" for key, value in values.items()), encoding="utf-8")
@@ -19,7 +26,7 @@ def write_env(root: Path, component: str, extra: dict[str, str] | None = None) -
 
 def test_validates_canonical_settings_without_returning_values(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "validate_private_file", lambda path: None)
-    for component in ("collector", "site", "bot"):
+    for component in ("collector", "site", "bot", "social"):
         write_env(tmp_path, component)
         assert config.validate(component, tmp_path) is None
     assert config.validate("pipeline", tmp_path) is None

@@ -46,6 +46,21 @@ def test_real_deploy_refuses_a_dirty_tree_before_connecting(monkeypatch):
     assert push.main(["--component", "pipeline"]) == 1
 
 
+def test_social_gate_installs_locked_node_dependencies_before_tests(monkeypatch):
+    commands = []
+    monkeypatch.setattr(push, "run_local", lambda command, **kwargs:
+                        commands.append((command, kwargs.get("cwd"))))
+
+    push.run_gates("social")
+
+    node_commands = [command for command, cwd in commands
+                     if cwd == push.REPO / "social"]
+    assert node_commands == [
+        [push.npm_command(), "ci", "--no-audit", "--no-fund"],
+        [push.npm_command(), "test"],
+    ]
+
+
 @pytest.mark.parametrize("component", push.CODE_COMPONENTS)
 def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
     if component == "bot" and not (push.REPO / "bot/dist/index.js").exists():
@@ -78,6 +93,11 @@ def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
         assert (extract / "audit_site_assets/README.md").is_file()
         assert (extract / "LICENSE").is_file()
         assert (extract / "AUDIT_METHODOLOGY.md").is_file()
+    if component == "social":
+        assert (extract / "social_run.py").is_file()
+        assert (extract / "generate-pack.mjs").is_file()
+        assert (extract / "examples/demo-pack.json").is_file()
+        assert (extract / "fonts/google-sans-flex-variable.ttf").is_file()
 
 
 class FakeRemote:
@@ -174,6 +194,10 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "bot-token-promote:)" in helper
     assert "@BBB_DEPLOY_BASE@/incoming/bot.env.token-new" in helper
     assert "bbb-deploy-control bot-token-promote" in sudoers
+    assert "social-live-enable:)" in helper
+    assert "social-live-disable:)" in helper
+    assert "bbb-deploy-control social-live-enable" in sudoers
+    assert "bbb-deploy-control social-live-disable" in sudoers
 
 
 def test_layout_installer_waits_for_slow_startup_and_has_rollback_trap():
@@ -219,6 +243,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-editorial-promote.service").is_file()
     assert (extract / "systemd/bbb-editorial-refresh.timer").is_file()
     assert "enable --now bbb-editorial-refresh.timer" in installer
+    assert (extract / "configure_social_curation.py").is_file()
+    assert (extract / "systemd/bbb-social-curation.service").is_file()
+    assert (extract / "systemd/bbb-social-curation.timer").is_file()
+    assert "Social curation timer installed but left disabled" in installer
 
 
 def test_layout_update_preserves_existing_current_release_links():
