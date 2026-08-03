@@ -624,7 +624,10 @@ Concurrency one; every run writes a job record.
 
 A Slack app (reusing the existing BristolBusBot app if scopes allow) with
 the narrowest workable grant: read + reply in the one private channel
-(`groups:history`, `groups:read`, `chat:write`) plus `files:write`. The
+(`groups:history`, `groups:read`, `chat:write`) plus `files:write` and
+`files:read`. The read scope is used only to reconcile an uncertain upload
+before a retry; without it the service fails closed instead of risking a
+duplicate. The
 token is stored root-only and passed via systemd `LoadCredential`, never in
 the repo, releases, logs or chat. Uploads retry with bounded backoff;
 before any retry the service reconciles against `social.db` and the Slack
@@ -650,14 +653,25 @@ and the feature works fine without it.
 
 ## Rollout (each step is an approval gate)
 
+**Implementation evidence, 4 August 2026:** the renderer completed a native
+ARM64 1080 x 1350 smoke render on the production Pi from the exact reviewed
+source without contacting Slack. The isolated service, timer, configuration
+helper, monitoring and deploy path are implemented on the rollout branch and
+covered by local tests. That is build evidence, not production evidence: no
+Slack credential has been installed, the service has not read a real channel,
+no card has been uploaded and the timer has not been enabled. The unchecked
+steps below remain real approval gates.
+
 1. Build and test everything locally; no Slack contact.
 2. Pi ARM64 render smoke test, still no Slack contact.
 3. Maintainer configures the Slack app and token once, directly on the Pi
    (the token never transits chat or the repository).
 4. Shadow mode: the service reads a test link and renders locally but
    sends nothing. Run until a handful of links have round-tripped cleanly.
-5. One attended real delivery; verify the phone-downloaded image, alt text
-   and caption byte-for-byte against the local render.
+5. Enable live mode, share the link again as a new Slack message, and make one
+   attended real delivery; verify the phone-downloaded image, alt text and
+   caption byte-for-byte against the local render. The checkpointed shadow
+   request is never silently replayed.
 6. Enable the timer.
 7. Instagram posting stays entirely manual — that is a feature, not a gap,
    until the V2 §8 decision point says otherwise.

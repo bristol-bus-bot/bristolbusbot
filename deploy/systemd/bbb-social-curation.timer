@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll the private Slack curation channel every three minutes
+
+[Timer]
+OnCalendar=*:0/3
+RandomizedDelaySec=20s
+AccuracySec=10s
+Persistent=true
+Unit=bbb-social-curation.service
+
+[Install]
+WantedBy=timers.target

@@ -17,6 +17,12 @@ fails.
 Each service's environment file lives at `/etc/bristolbusbot/<name>.env`,
 owned root-readable by the service user with mode `0640`.
 
+The social Slack bot token is the deliberate exception: it lives alone at
+`/etc/bristolbusbot/social-slack.token`, root-owned with mode `0600`, and
+systemd presents it only to `bbb-social-curation.service` through
+`LoadCredential`. It must never be placed in an environment file, command
+line, release, log or chat message.
+
 The units enable resource accounting immediately.
 `bbb-resource-sample.timer` records RSS every five minutes. Memory
 limits are intentionally not guessed: collect at least seven days, run
@@ -26,6 +32,16 @@ limits are intentionally not guessed: collect at least seven days, run
 The timer units own all scheduled jobs; there are no project cron commands.
 The unified layout installer verifies every unit before replacing installed
 copies.
+
+`bbb-social-curation.timer` is also excluded from automatic enablement. The
+layout installer leaves it disabled, and the service defaults to shadow mode
+until `/etc/bristolbusbot/social-live-enabled` exists. Its first successful
+poll records the current Slack timestamp without reading retained history, so
+installing it cannot replay old channel links. Enable live mode for one
+attended delivery only after shadow verification; enable the timer only after
+that delivered card, alt text, caption and ledger entry have been checked.
+Disabling the timer and running `bbb-deploy-control social-live-disable` is the
+kill switch and does not affect any core service.
 
 `bbb-timetable-shadow.timer` is the one credential-gated exception to automatic
 enablement: the layout installer leaves it disabled until the root-only GitHub

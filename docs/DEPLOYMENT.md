@@ -26,10 +26,12 @@ machine identity.
 ## Services and timers
 
 Four long-running system-level units — collector, site, bot and the
-named Cloudflare tunnel — plus eleven project timers owning the audit
+named Cloudflare tunnel — plus twelve project timers owning the audit
 rollup/publish/snapshot, collector staleness check, twice-daily digest,
 nightly backup, weekly backup-repository check, resource sampling, aggregate
-health, timetable delivery and approved editorial refresh. Unit templates are source-controlled in
+health, timetable delivery, approved editorial refresh and optional Slack card
+curation. The curation timer is installed disabled until its shadow and
+attended-delivery gates pass. Unit templates are source-controlled in
 `deploy/systemd/` and rendered by `deploy/push.py --install-layout`; do not edit
 live copies. Re-run that command after reviewed unit or deployment-helper
 changes. It preserves the current release links and rolls the installed units
@@ -56,7 +58,8 @@ deployment:
 3. uploads, verifies and installs dependencies off to the side while the
    old release stays live;
 4. atomically switches the `current` symlink and restarts only the
-   affected service;
+   affected long-running service; the social oneshot is not started by a code
+   deployment;
 5. accepts the release only after its component health gate passes —
    otherwise it restores the previous link automatically.
 
@@ -160,6 +163,39 @@ No GitHub token is stored on the Pi for this path because the approved source
 file is public. A validation, download, restart or digest failure leaves the
 previous approved information live.
 
+## Slack card curation
+
+`python deploy/push.py --component social` builds the isolated social release,
+runs its Python and JavaScript tests, installs Node dependencies off to the
+side, then accepts it only after a native ARM64 1080 x 1350 render. It does not
+contact Slack, start the curation service or change the timer. `--all`
+deliberately excludes this optional component.
+
+`--install-layout` installs `bbb-social-curation.service` and its timer but
+leaves that timer disabled. The oneshot reads the bot and audit databases
+read-only and can write only `/var/lib/bristolbusbot/social.db`,
+`/var/lib/bristolbusbot/social/` and its monitoring job record. Its token is a
+root-owned mode-0600 file loaded by systemd credentials, never an environment
+variable, release file or command-line value.
+
+Configure the private channel, allowlisted maintainer and hidden bot token once
+on the Pi:
+
+```sh
+sudo /usr/local/sbin/bbb-configure-social-curation \
+  --channel-id C_PRIVATE --allowed-user-id U_MAINTAINER
+```
+
+Without `/etc/bristolbusbot/social-live-enabled`, every run is shadow-only. The
+first run seeds a current-time Slack checkpoint and cannot replay retained
+history. After a newly shared link renders cleanly in shadow, one attended live
+delivery uses the tightly allowlisted `social-live-enable` helper and a newly
+shared Slack message. A shadowed message has already been checkpointed and is
+never silently replayed. Enable the timer only after checking the Slack image,
+alt text, caption and SQLite ledger.
+The kill switch is disabling the timer and removing the live marker; neither
+operation touches Instagram or any core service.
+
 ## Backups
 
 Nightly encrypted restic snapshots to a dedicated local drive, copied to
@@ -176,6 +212,8 @@ that has not been restored is not treated as a backup.
 ## Rollback rules
 
 - A component deploy rolls itself back when its health gate fails.
+- A first social release that fails its ARM64 render gate removes its new
+  `current/social` link; it never starts a service or contacts Slack.
 - The timetable deploy retains the previous database on the Pi.
 - If the tunnel is unhealthy, inspect its logs and named-tunnel
   configuration; do not replace it with an ad-hoc quick tunnel.

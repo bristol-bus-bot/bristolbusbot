@@ -1,0 +1,49 @@
+[Unit]
+Description=Bristol Bus Bot Slack-to-card curation poll
+Documentation=https://github.com/bristol-bus-bot/bristolbusbot
+Wants=network-online.target
+After=network-online.target bbb-collector.service bbb-bot.service
+ConditionPathExists=/etc/bristolbusbot/social.env
+ConditionPathExists=/etc/bristolbusbot/social-slack.token
+ConditionPathExists=@BBB_DEPLOY_BASE@/current/social
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/social
+EnvironmentFile=/etc/bristolbusbot/social.env
+LoadCredential=slack-token:/etc/bristolbusbot/social-slack.token
+ExecStartPre=+/usr/local/libexec/bbb-validate-config social
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name social-curation -- /usr/bin/python3 @BBB_DEPLOY_BASE@/current/social/social_run.py
+UMask=0077
+TimeoutStartSec=3min
+
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUWeight=50
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/bristolbusbot/bot/app_data.db /var/lib/bristolbusbot/collector/audit.db
+ReadWritePaths=/var/lib/bristolbusbot/social.db /var/lib/bristolbusbot/social /var/lib/bristolbusbot/monitoring
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

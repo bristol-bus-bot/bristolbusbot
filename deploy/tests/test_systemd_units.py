@@ -122,6 +122,46 @@ def test_every_timer_job_has_baseline_sandboxing():
         assert "TimeoutStartSec=" in source, path.name
 
 
+def test_social_curation_is_credentialed_isolated_and_shadow_gated():
+    service = (SYSTEMD / "bbb-social-curation.service").read_text(
+        encoding="utf-8")
+    timer = (SYSTEMD / "bbb-social-curation.timer").read_text(
+        encoding="utf-8")
+    for setting in (
+        "User=@BBB_DEPLOY_USER@",
+        "EnvironmentFile=/etc/bristolbusbot/social.env",
+        "LoadCredential=slack-token:/etc/bristolbusbot/social-slack.token",
+        "ExecStartPre=+/usr/local/libexec/bbb-validate-config social",
+        "--name social-curation",
+        "current/social/social_run.py",
+        "NoNewPrivileges=yes",
+        "PrivateTmp=yes",
+        "ProtectHome=read-only",
+        "ProtectSystem=strict",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/bot/app_data.db "
+        "/var/lib/bristolbusbot/collector/audit.db",
+        "ReadWritePaths=/var/lib/bristolbusbot/social.db "
+        "/var/lib/bristolbusbot/social /var/lib/bristolbusbot/monitoring",
+        "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    ):
+        assert setting in service
+    assert "MemoryDenyWriteExecute=yes" not in service
+    assert "OnCalendar=*:0/3" in timer
+    assert "Persistent=true" in timer
+    assert "Unit=bbb-social-curation.service" in timer
+
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
+        encoding="utf-8")
+    assert (
+        "d /var/lib/bristolbusbot/social 0750 "
+        "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+    assert (
+        "f /var/lib/bristolbusbot/social.db 0600 "
+        "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+
+
 def test_rollup_is_networkless_and_publish_does_not_repeat_it():
     rollup = (SYSTEMD / "bbb-audit-rollup.service").read_text(encoding="utf-8")
     publish = (SYSTEMD.parent / "publish_to_github.sh").read_text(encoding="utf-8")

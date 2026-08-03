@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -32,10 +33,20 @@ EXPECTED = {
         "APP_DATA_DB_PATH": "/var/lib/bristolbusbot/bot/app_data.db",
         "ENABLE_FILE_LOGS": "false",
     },
+    "social": {
+        "BBB_SOCIAL_DB": "/var/lib/bristolbusbot/social.db",
+        "BBB_SOCIAL_APP_DB": "/var/lib/bristolbusbot/bot/app_data.db",
+        "BBB_SOCIAL_AUDIT_DB": "/var/lib/bristolbusbot/collector/audit.db",
+        "BBB_SOCIAL_OUTPUT_DIR": "/var/lib/bristolbusbot/social/cards",
+    },
 }
 SECRET_MINIMUMS = {
     "collector": {"BODS_API_KEY": 16},
     "bot": {"API_AUTH_TOKEN": 32, "BSKY_APP_PASSWORD": 8},
+}
+SOCIAL_IDS = {
+    "BBB_SOCIAL_CHANNEL_ID": re.compile(r"C[A-Z0-9]{8,20}"),
+    "BBB_SOCIAL_ALLOWED_USER_ID": re.compile(r"U[A-Z0-9]{8,20}"),
 }
 
 
@@ -89,6 +100,21 @@ def validate(component: str, root: Path = CONFIG_ROOT,
         f"{key} is missing or implausibly short"
         for key, minimum in SECRET_MINIMUMS.get(component, {}).items()
         if len(values.get(key, "")) < minimum)
+    if component == "social":
+        errors.extend(
+            f"{key} is not a canonical Slack ID"
+            for key, pattern in SOCIAL_IDS.items()
+            if not pattern.fullmatch(values.get(key, "")))
+        token_path = root / "social-slack.token"
+        try:
+            validate_private_file(token_path)
+            token = token_path.read_text(encoding="utf-8").strip()
+            if (not token.startswith("xoxb-") or len(token) < 20
+                    or len(token) > 512
+                    or any(character.isspace() for character in token)):
+                errors.append("Slack bot token is missing or invalid")
+        except OSError:
+            errors.append("Slack bot token file is missing or invalid")
     if errors:
         raise RuntimeError("production configuration rejected (values hidden):\n- "
                            + "\n- ".join(errors))

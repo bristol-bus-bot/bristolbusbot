@@ -1,6 +1,6 @@
 # Enrichment, UI and social curation execution index
 
-Status: active execution checklist, 3 August 2026.
+Status: active execution checklist, 4 August 2026.
 
 This is the short, authoritative order of work. The much larger
 `ENRICHMENT_UI_AND_SOCIAL_CURATION_PLAN.md` remains the design record and
@@ -23,8 +23,9 @@ technical rationale; it is not one giant implementation ticket.
 
 ### 0. Editorial-news workflow incident
 
-Status: hardening is in draft PR #30 and the repository permission is enabled;
-the attended main-branch workflow test waits for review and merge.
+Status: fixed and proved on `main`. PR #30 was merged, the attended workflow
+created PR #31 successfully, and the maintainer rejected that story by closing
+the PR without merge. Its generated branch was removed.
 
 - [x] Confirm the exact failure: GitHub Actions is blocked from creating PRs.
 - [x] Replace per-run branch names with one stable branch per story.
@@ -35,15 +36,17 @@ the attended main-branch workflow test waits for review and merge.
 - [x] Verify and delete the eight abandoned failed-run branches.
 - [x] Open draft PR #30 through the normal reviewed GitHub path.
 - [x] Enable and verify the repository Actions PR-creation permission.
-- [ ] Review and merge PR #30.
-- [ ] Run one attended `workflow_dispatch` that actually reaches PR creation.
-- [ ] Review the resulting editorial PR on its wording and facts.
+- [x] Review and merge PR #30.
+- [x] Run one attended `workflow_dispatch` that actually reaches PR creation.
+- [x] Review the resulting editorial PR on its wording and facts; reject PR #31.
 
 Do not call this fixed merely because the qualifying story ages out.
 
 ### 1. Header status filters
 
-Status: implemented and verified locally; not deployed.
+Status: deployed as site release `20260803t001525357513z-ccda69b1` and
+verified on the live desktop and phone-width layouts. Local and public health
+remained green.
 
 - [x] Add one exclusive status classifier with precedence:
   `depot -> waiting -> delayed/early/punctual`.
@@ -55,14 +58,18 @@ Status: implemented and verified locally; not deployed.
 - [x] Add classifier, interaction, cache-key and keyboard tests.
 - [x] Verify desktop and phone layouts locally. Production deployment remains
   a separate attended gate.
+- [x] Deploy only the site component and verify the live filter interaction,
+  four core services, failed-unit list and local/public health.
 
 ### 2. Slack-to-Instagram-card curation
 
-Status: local renderer and curation core implemented and tested; ARM64, Slack
-credentials and any real Slack contact remain attended gates.
+Status: the local core and isolated Pi deployment path are implemented and
+tested. The ARM64 renderer smoke passed on 4 August 2026. Slack credentials,
+shadow polling, one real delivery and timer enable remain attended gates.
 
 - [x] Add and locally smoke-test a single-card renderer mode.
-- [ ] Run the renderer smoke test on ARM64.
+- [x] Run the renderer smoke test on ARM64: native dependencies installed and
+  produced a 1080 x 1350 JPEG; the temporary Pi directory was removed.
 - [x] Accept links only from the allowlisted Slack user and private channel.
 - [x] Resolve the Bluesky actor to its DID and compare the full AT URI.
 - [x] Verify that the public post still exists; fail closed if Bluesky cannot
@@ -73,7 +80,18 @@ credentials and any real Slack contact remain attended gates.
 - [x] Make retries reconcile before upload. The implementation uses Slack file
   reads, so request `files:read` explicitly as well as `files:write`.
 - [x] Provide an attended `--new-version` path for intentional regeneration.
-- [ ] Run locally, then ARM64, then shadow, then one attended real Slack upload.
+- [x] Make the first poll seed its checkpoint at the current time instead of
+  replaying retained Slack history.
+- [x] Add an explicit `social` release, root-owned configuration helper,
+  credential-gated sandboxed service/timer, shadow-default runner, live marker,
+  aggregate health, digest and deployment documentation.
+- [ ] Merge and deploy the social release and layout; leave the timer disabled.
+- [ ] Configure the private channel/user IDs and bot token once on the Pi.
+- [ ] Seed the checkpoint, then shadow-render a newly shared link with no reply
+  or upload.
+- [ ] Enable live mode, share the link again as a new Slack message, verify the
+  image/alt/caption and delivery ledger, then enable the timer. The checkpointed
+  shadow request is not replayed.
 - [ ] Keep Instagram posting manual.
 
 The later engagement shortlist is optional and cannot block link-driven cards.

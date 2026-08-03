@@ -27,8 +27,11 @@ REPO = Path(__file__).resolve().parent.parent
 DEPLOY = REPO / "deploy"
 MARKER = "/etc/bristolbusbot/unified-deploy-layout"
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,79}")
-CODE_COMPONENTS = ("pipeline", "collector", "site", "bot")
-ALL_COMPONENTS = (*CODE_COMPONENTS, "tunnel")
+CORE_CODE_COMPONENTS = ("pipeline", "collector", "site", "bot")
+CODE_COMPONENTS = (*CORE_CODE_COMPONENTS, "social")
+# --all intentionally remains the live core stack. Social has separate
+# attended gates and must always be deployed explicitly.
+ALL_COMPONENTS = (*CORE_CODE_COMPONENTS, "tunnel")
 CHOICES = (*ALL_COMPONENTS, "social")
 FORBIDDEN_NAMES = {
     ".env", "live.db", "audit.db", "app_data.db", "timetable.db",
@@ -134,6 +137,12 @@ def run_gates(component: str) -> None:
             run_local([npm_command(), "test"], cwd=REPO / "bot")
         elif component == "pipeline":
             run_local([*pytest, "pipeline/tests"], env=pytest_env)
+        elif component == "social":
+            run_local([*pytest, "social/tests"], env=pytest_env)
+            run_local(
+                [npm_command(), "ci", "--no-audit", "--no-fund"],
+                cwd=REPO / "social")
+            run_local([npm_command(), "test"], cwd=REPO / "social")
         else:
             raise RuntimeError(f"no local gate is defined for {component}")
 
@@ -196,6 +205,14 @@ def populate_release(component: str, root: Path) -> None:
                      "stop_localities.json", "editorial-context.json"):
             copy_file(REPO / "bot/data" / name, root / name)
         copy_file(REPO / "site/stop_enrichment.json", root / "stop_enrichment.json")
+    elif component == "social":
+        for name in ("package.json", "package-lock.json"):
+            copy_file(REPO / "social" / name, root / name)
+        for pattern in ("*.py", "*.mjs"):
+            for path in (REPO / "social").glob(pattern):
+                copy_file(path, root / path.name)
+        copy_tree(REPO / "social/fonts", root / "fonts")
+        copy_tree(REPO / "social/examples", root / "examples")
     elif component == "pipeline":
         for pattern in ("*.py", "*.json", "*.geojson", "requirements-runtime.txt"):
             for path in (REPO / "pipeline").glob(pattern):
@@ -322,6 +339,8 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
         )
     if component == "bot":
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
+    if component == "social":
+        return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
     if component == "pipeline":
         return (
             f"{cd} && python3 -m venv venv && "
@@ -346,6 +365,7 @@ def atomic_switch(remote: Remote, component: str, target: str) -> None:
 
 def healthy(remote: Remote, component: str) -> bool:
     pipeline = remote.settings.remote_base / "current" / "pipeline"
+    social = remote.settings.remote_base / "current" / "social"
     commands = {
         "collector": (
             "systemctl is-active --quiet bbb-collector.service && "
@@ -378,6 +398,15 @@ def healthy(remote: Remote, component: str) -> bool:
             "systemctl is-active --quiet bbb-tunnel.service && "
             "curl -fsS --max-time 20 https://bristolbuses.live/healthz >/dev/null"
         ),
+        "social": (
+            "set -eu; output=$(mktemp -d /tmp/bbb-social-health.XXXXXX); "
+            "trap 'rm -rf -- \"$output\"' EXIT INT TERM; "
+            f"cd {q(social)}; "
+            "node generate-pack.mjs --input examples/demo-pack.json "
+            "--output \"$output\" --card bot-said >/dev/null; "
+            "file \"$output/01-the-bot-said.jpg\" | "
+            "grep -q 'JPEG image data.*1080x1350'"
+        ),
     }
     return remote.run(commands[component], check=False).strip() == ""
 
@@ -392,7 +421,7 @@ def wait_healthy(remote: Remote, component: str, attempts: int = 12) -> bool:
 
 
 def restart(remote: Remote, component: str) -> None:
-    if component == "pipeline":
+    if component in {"pipeline", "social"}:
         return
     remote.run(f"sudo -n /usr/local/sbin/bbb-deploy-control restart {component}")
 
@@ -405,12 +434,14 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
     incoming = remote_base / "incoming" / built.archive.name
     previous = remote.run(
         f"test -L {q(remote_base / 'current' / component)} && "
-        f"readlink -f {q(remote_base / 'current' / component)}"
+        f"readlink -f {q(remote_base / 'current' / component)}",
+        check=False,
     ).strip()
     switched = False
     try:
         remote.run(f"test -f {MARKER}")
-        remote.run(f"/usr/local/libexec/bbb-validate-config {component}")
+        if component != "social":
+            remote.run(f"/usr/local/libexec/bbb-validate-config {component}")
         remote.run(
             f"mkdir -p {q(release_dir.parent)} {q(remote_base / 'incoming')} && "
             f"test ! -e {q(release_dir)} && mkdir {q(release_dir)}"
@@ -434,14 +465,21 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
             raise RuntimeError(f"{component} failed its production health gate")
     except Exception:
         if switched:
-            log.error("%s failed health; restoring %s", component, previous)
-            atomic_switch(remote, component, previous)
-            restart(remote, component)
-            if not wait_healthy(remote, component):
-                notify(remote, f":rotating_light: BristolBusBot {component} deploy and rollback both failed")
+            if previous:
+                log.error("%s failed health; restoring %s", component, previous)
+                atomic_switch(remote, component, previous)
+                restart(remote, component)
+                if not wait_healthy(remote, component):
+                    notify(remote, f":rotating_light: BristolBusBot {component} deploy and rollback both failed")
+                    raise RuntimeError(
+                        f"CRITICAL: {component} rollback did not recover health"
+                    )
+            elif component == "social":
+                current = remote.settings.remote_base / "current" / "social"
+                remote.run(f"test -L {q(current)} && rm -f {q(current)}")
+            else:
                 raise RuntimeError(
-                    f"CRITICAL: {component} rollback did not recover health"
-                )
+                    f"CRITICAL: {component} had no previous release to restore")
         notify(remote, f":warning: BristolBusBot {component} deploy failed; previous release retained")
         raise
     if notify_success:
@@ -542,7 +580,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "validate_production_config.py", "verify_release.py",
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
-        "configure_timetable_delivery.py",
+        "configure_timetable_delivery.py", "configure_social_curation.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)
@@ -610,7 +648,12 @@ def command_plan(args: argparse.Namespace) -> list[str]:
         ]
     components = list(ALL_COMPONENTS) if args.all else [args.component]
     if components == ["social"]:
-        return ["The planned social component is not implemented; no change will be made."]
+        return [
+            "Run the social Python/JavaScript gates and prepare one immutable release.",
+            "Switch only current/social after an ARM64 1080x1350 render succeeds.",
+            "Do not start the curation service, enable its timer or contact Slack.",
+            "Do not overwrite credentials or durable delivery state.",
+        ]
     return [
         f"Run local gates and prepare immutable releases for: {', '.join(components)}.",
         "Switch only the affected current symlink and restart only that service.",
@@ -630,7 +673,7 @@ Commands and scope:
   --component bot        locally built bot + runtime JSON; restarts bot
   --component pipeline   scheduled audit job code; restarts no long-running service
   --component tunnel     public non-secret tunnel config; restarts tunnel
-  --component social     planned but not implemented; exits without changes
+  --component social     isolated renderer/curation code; leaves timer disabled
   --all                  pipeline, collector, site, bot and tunnel code/config;
                          does NOT rebuild or replace the timetable database
   --timetable PATH       only a known timetable; restarts collector, site and bot
@@ -666,9 +709,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.dry_run:
         print("DRY RUN COMPLETE: no build, SSH connection or live change was made.")
         return 0
-    if args.component == "social":
-        raise SystemExit("social deployment is not implemented; nothing was changed")
-
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         require_clean_tree()
