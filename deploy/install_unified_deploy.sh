@@ -56,7 +56,8 @@ done
     "$stage/timetable_service_profile.py" \
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
-    "$stage/configure_timetable_delivery.py" "$stage/editorial_context.py" \
+    "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
+    "$stage/editorial_context.py" \
     "$stage/editorial_fetch.py" "$stage/editorial_promote.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
 
@@ -91,6 +92,7 @@ for destination in \
     /usr/local/libexec/bbb-aggregate-health \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/sbin/bbb-configure-timetable-delivery \
+    /usr/local/sbin/bbb-configure-social-curation \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py \
     /usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py \
@@ -195,6 +197,7 @@ install -o root -g root -m 0755 "$stage/run_recorded_job.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/bbb-aggregate-health
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
+install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
 install -o root -g root -m 0755 "$stage/timetable_delivery.py" /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py
 install -o root -g root -m 0755 "$stage/timetable_promote.py" /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py
@@ -255,6 +258,11 @@ for timer in "$stage/systemd"/*.timer; do
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \
        ! /usr/bin/systemctl is-enabled --quiet "$timer_name"; then
         echo "Timetable shadow timer installed but left disabled until its root-only credential is configured."
+        continue
+    fi
+    if [ "$timer_name" = bbb-social-curation.timer ] && \
+       ! /usr/bin/systemctl is-enabled --quiet "$timer_name"; then
+        echo "Social curation timer installed but left disabled until shadow and attended delivery pass."
         continue
     fi
     /usr/bin/systemctl is-enabled --quiet "$timer_name"

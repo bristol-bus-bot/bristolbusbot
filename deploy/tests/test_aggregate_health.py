@@ -1,9 +1,54 @@
 import json
+import sqlite3
 import stat
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from deploy import aggregate_health
+
+
+def test_social_curation_health_reads_enabled_job_and_ledger(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    jobs = state / "jobs"
+    jobs.mkdir(parents=True)
+    now = datetime.now(timezone.utc).isoformat()
+    (jobs / "social-curation.json").write_text(json.dumps({
+        "last_result": "success",
+        "last_success_at": now,
+    }), encoding="utf-8")
+    database = tmp_path / "social.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE deliveries (status TEXT, updated_at TEXT)")
+    connection.executemany(
+        "INSERT INTO deliveries VALUES (?, ?)",
+        (("delivered", now), ("rendered", now)),
+    )
+    connection.commit()
+    connection.close()
+    config = tmp_path / "social.env"
+    token = tmp_path / "social-slack.token"
+    marker = tmp_path / "social-live-enabled"
+    for path in (config, token, marker):
+        path.write_text("present\n", encoding="utf-8")
+
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "SOCIAL_DB", database)
+    monkeypatch.setattr(aggregate_health, "SOCIAL_CONFIG", config)
+    monkeypatch.setattr(aggregate_health, "SOCIAL_TOKEN", token)
+    monkeypatch.setattr(aggregate_health, "SOCIAL_LIVE_MARKER", marker)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    result, issues = aggregate_health.social_curation_check()
+
+    assert issues == []
+    assert result["status"] == "enabled"
+    assert result["mode"] == "live"
+    assert result["deliveries"]["by_status"] == {
+        "delivered": 1, "rendered": 1}
 
 
 def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch):
@@ -28,6 +73,9 @@ def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch
         aggregate_health, "timetable_promotion_check", lambda: ({"status": "disabled"}, []))
     monkeypatch.setattr(
         aggregate_health, "editorial_refresh_check", lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(
+        aggregate_health, "social_curation_check",
+        lambda: ({"status": "not_configured", "mode": "shadow"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
     def notify(message):
         messages.append(message)
@@ -202,6 +250,9 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
     monkeypatch.setattr(
         aggregate_health, "editorial_refresh_check",
         lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(
+        aggregate_health, "social_curation_check",
+        lambda: ({"status": "not_configured", "mode": "shadow"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
 
     def notify(message):
@@ -423,6 +474,9 @@ def test_timetable_notification_state_advances_only_after_successful_send(
     monkeypatch.setattr(
         aggregate_health, "editorial_refresh_check",
         lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(
+        aggregate_health, "social_curation_check",
+        lambda: ({"status": "not_configured", "mode": "shadow"}, []))
     monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
 
     def notify(message):

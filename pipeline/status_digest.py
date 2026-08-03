@@ -10,6 +10,7 @@ One message, five sections:
   bot        - successful Bluesky posts today from durable delivery records
   site       - production site /healthz on :5002
   timetable  - aggregate last accepted and last attempted automation state
+  social     - Slack curation rollout mode and durable card deliveries
   pi         - disk, memory, CPU temperature
 
 Webhook read directly from ~/.config/busbot-alerts/webhook (never assume
@@ -133,6 +134,25 @@ def timetable_line() -> str:
         return f"*timetable*  aggregate probe failed: {type(exc).__name__}"
 
 
+def social_line() -> str:
+    """Read the curation status from the same aggregate health contract."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        social = snapshot.get("social_deliveries")
+        if not isinstance(social, dict):
+            return "*social*  aggregate status unavailable"
+        status = str(social.get("status") or "unknown")
+        mode = str(social.get("mode") or "shadow")
+        deliveries = social.get("deliveries")
+        deliveries = deliveries if isinstance(deliveries, dict) else {}
+        by_status = deliveries.get("by_status")
+        by_status = by_status if isinstance(by_status, dict) else {}
+        delivered = int(by_status.get("delivered", 0))
+        return f"*social*  {status} - {mode} mode - {delivered} card(s) delivered"
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*social*  aggregate probe failed: {type(exc).__name__}"
+
+
 def pi_line() -> str:
     try:
         du = shutil.disk_usage("/")
@@ -155,7 +175,7 @@ def main() -> None:
     stamp = datetime.now().strftime("%a %H:%M")
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
-    lines += [bot_line(), site_line(), timetable_line(), pi_line()]
+    lines += [bot_line(), site_line(), timetable_line(), social_line(), pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 

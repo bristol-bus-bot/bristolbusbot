@@ -80,6 +80,38 @@ case "$action:$component" in
         trap - EXIT INT TERM
         exit 0
         ;;
+    social-live-enable:)
+        target=/etc/bristolbusbot/social-live-enabled
+        candidate=/etc/bristolbusbot/.social-live-enabled.new
+        /usr/local/libexec/bbb-validate-config social >/dev/null
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            test -f "$target"
+            test ! -L "$target"
+            test "$(stat -c %U "$target")" = root
+            test "$(stat -c %G "$target")" = root
+            test "$(stat -c %a "$target")" = 644
+            exit 0
+        fi
+        test ! -e "$candidate"
+        test ! -L "$candidate"
+        install -o root -g root -m 0644 /dev/null "$candidate"
+        printf '%s\n' "enabled=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$candidate"
+        mv -f "$candidate" "$target"
+        exit 0
+        ;;
+    social-live-disable:)
+        target=/etc/bristolbusbot/social-live-enabled
+        if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+            exit 0
+        fi
+        test -f "$target"
+        test ! -L "$target"
+        test "$(stat -c %U "$target")" = root
+        test "$(stat -c %G "$target")" = root
+        test "$(stat -c %a "$target")" = 644
+        rm -f "$target"
+        exit 0
+        ;;
     timetable-promote:)
         exec /usr/local/sbin/bbb-timetable-control promote
         ;;

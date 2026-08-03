@@ -51,3 +51,18 @@ def test_timetable_digest_reads_the_aggregate_contract_only(tmp_path, monkeypatc
     assert "accepted run 29944744744 (2026-07-20)" in line
     assert "last run 30421182234: failure" in line
     assert "fresh delivery at the next due check" in line
+
+
+def test_social_digest_reads_mode_and_durable_delivery_count(tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "social_deliveries": {
+            "status": "enabled",
+            "mode": "live",
+            "deliveries": {"by_status": {"delivered": 3}},
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.social_line() == (
+        "*social*  enabled - live mode - 3 card(s) delivered")

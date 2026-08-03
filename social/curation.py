@@ -231,11 +231,11 @@ class DeliveryLedger:
         return self.conn.execute(
             "SELECT * FROM deliveries WHERE id=?", (delivery_id,)).fetchone()
 
-    def checkpoint(self, channel: str) -> str:
+    def checkpoint(self, channel: str) -> str | None:
         row = self.conn.execute(
             "SELECT value FROM state WHERE key=?", (f"checkpoint:{channel}",)
         ).fetchone()
-        return str(row[0]) if row else "0"
+        return str(row[0]) if row else None
 
     def set_checkpoint(self, channel: str, ts: str) -> None:
         self.conn.execute(
@@ -521,9 +521,15 @@ class CurationService:
         if self.slack is None:
             raise CurationError("polling requires a Slack client")
         self.slack.require_private_channel(self.channel)
+        checkpoint = self.ledger.checkpoint(self.channel)
+        if checkpoint is None:
+            # First contact is deliberately a no-op. Seed at "now" so a new
+            # installation cannot replay the channel's retained history.
+            self.ledger.set_checkpoint(self.channel, f"{time.time():.6f}")
+            return 0
         handled = 0
         for message in self.slack.history(
-                self.channel, self.ledger.checkpoint(self.channel)):
+                self.channel, checkpoint):
             if message.get("type") != "message" or message.get("subtype"):
                 self.ledger.set_checkpoint(self.channel, str(message.get("ts") or "0"))
                 continue

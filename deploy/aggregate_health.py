@@ -19,6 +19,10 @@ STATE = Path("/var/lib/bristolbusbot/monitoring")
 LIVE_DB = Path("/var/lib/bristolbusbot/collector/live.db")
 AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
 BOT_DB = Path("/var/lib/bristolbusbot/bot/app_data.db")
+SOCIAL_DB = Path("/var/lib/bristolbusbot/social.db")
+SOCIAL_CONFIG = Path("/etc/bristolbusbot/social.env")
+SOCIAL_TOKEN = Path("/etc/bristolbusbot/social-slack.token")
+SOCIAL_LIVE_MARKER = Path("/etc/bristolbusbot/social-live-enabled")
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
@@ -548,6 +552,58 @@ def editorial_refresh_check() -> tuple[dict, list[str]]:
     return result, issues
 
 
+def social_curation_check() -> tuple[dict, list[str]]:
+    enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-social-curation.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    configured = SOCIAL_CONFIG.is_file() and SOCIAL_TOKEN.is_file()
+    result: dict[str, object] = {
+        "status": "enabled" if enabled else (
+            "configured_disabled" if configured else "not_configured"),
+        "mode": "live" if SOCIAL_LIVE_MARKER.is_file() else "shadow",
+    }
+    issues: list[str] = []
+    if enabled and not configured:
+        issues.append("credential:social-curation")
+    if enabled:
+        path = STATE / "jobs/social-curation.json"
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+            success = job.get("last_success_at")
+            age_h = age_seconds(success) / 3600 if success else None
+            result["job"] = {
+                "result": job.get("last_result"),
+                "last_success_at": success,
+                "age_hours": round(age_h, 2) if age_h is not None else None,
+            }
+            if (job.get("last_result") == "failure"
+                    or age_h is None or age_h > 1):
+                issues.append("job:social-curation")
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            result["job"] = {"result": "missing", "error": str(exc)}
+            issues.append("job:social-curation")
+    try:
+        connection = sqlite3.connect(
+            f"file:{SOCIAL_DB}?mode=ro", uri=True)
+        try:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) FROM deliveries GROUP BY status"
+            ).fetchall()
+            last_delivery = connection.execute(
+                "SELECT MAX(updated_at) FROM deliveries WHERE status='delivered'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        result["deliveries"] = {
+            "by_status": {str(status): int(count) for status, count in rows},
+            "last_delivered_at": last_delivery,
+        }
+    except (OSError, sqlite3.Error):
+        result["deliveries"] = {"by_status": {}, "last_delivered_at": None}
+    return result, issues
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -730,6 +786,8 @@ def main() -> int:
         timetable_promotion, dict) else {}
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
+    social_deliveries, found = social_curation_check()
+    issues.extend(found)
 
     try:
         feed_at = sqlite_value(
@@ -803,7 +861,7 @@ def main() -> int:
                  "backup_mounted": backup_mounted},
         "posting": {"last_success_at": last_post,
                     "silence_is_not_an_incident": True},
-        "social_deliveries": {"status": "not_configured"},
+        "social_deliveries": social_deliveries,
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
     }
