@@ -37,6 +37,14 @@ The audit database supplies up to 20 real recent observations at the selected
 stop for the quote card's receipt strip. Without it, the card explicitly shows
 only the current observation; the renderer never invents comparison dots.
 
+The published daily rollups are the weekly source of truth. Raw observations
+can occasionally settle after a day's rollup has frozen. If that makes the raw
+week larger, the builder checks every day and broad delay bucket against
+`daily_delay_histogram`, excludes only the newest surplus rows in that exact
+day/bucket, and records the count as `postRollupExtrasExcluded`. A missing row,
+shortage or inconsistent frozen histogram stops the render rather than mixing
+two versions of the week.
+
 ```powershell
 python build_pack.py --audit-json audit_data.json `
   --recent-posts-json recent-posts.json --audit-db audit.db `
@@ -75,6 +83,14 @@ and then looks up the exact full AT URI in `app_data.db`. Slack message text is
 never used as card or caption copy. A separate `social.db` records render and
 Slack delivery attempts; it is a delivery ledger, not a claim that anything
 was posted to Instagram.
+
+Typing the exact command `roundup` in that channel builds the latest complete
+seven-day carousel from the published audit data. The bot uploads six numbered
+1080 x 1350 JPEGs in order: headline, WECA target, daily results, early/late
+distribution, electric versus diesel/other, and operators compared. It then
+posts the ready-to-copy caption in the same Slack thread. It never publishes to
+Instagram. A second, separately typed `roundup` is an intentional fresh request;
+rerunning the poller cannot duplicate the same Slack message.
 
 The poller silently ignores ordinary channel messages and file uploads. This
 lets completed cards and weekly carousels live in the same private channel
@@ -140,7 +156,8 @@ python deploy/push.py --install-layout
 
 The layout installs `bbb-social-curation.service` and its three-minute timer,
 but leaves the timer disabled. The service is a sandboxed oneshot. It can read
-only `app_data.db` and `audit.db`, and can write only the delivery ledger at
+only `app_data.db`, `audit.db` and the published `audit_data.json`, and can write
+only the delivery ledger at
 `/var/lib/bristolbusbot/social/social.db`, rendered cards under
 `/var/lib/bristolbusbot/social/`, and its monitoring job record. The existing
 backup configuration already names the ledger path.
@@ -169,10 +186,10 @@ sudo systemctl start bbb-social-curation.service
 sudo journalctl -u bbb-social-curation.service -n 50 --no-pager
 ```
 
-Then share one bot Bluesky link in the private channel and start the service
-again. Shadow mode reads and verifies the request and renders locally, but
-cannot reply or upload. Inspect the job record, ledger and rendered JPEG before
-the attended live test.
+Then share one bot Bluesky link, or type the exact word `roundup`, in the private
+channel and start the service again. Shadow mode reads and verifies the request
+and renders locally, but cannot reply or upload. Inspect the job record, ledger
+and rendered JPEGs before the attended live test.
 
 Slack can encode one pasted URL as `<target|the same target>`. The parser uses
 the actual target once and ignores the display label, so that normal phone

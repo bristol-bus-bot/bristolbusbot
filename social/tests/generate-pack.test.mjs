@@ -100,6 +100,23 @@ test('single-card mode needs no weekly data and emits one draft', () => {
   assert.equal(output.drafts[0].file, 'one.jpg');
 });
 
+test('weekly mode needs no bot post and emits all six ordered slides', () => {
+  const weekly = { generatedAt: '2026-08-04T12:00:00Z', busWeek: pack.busWeek };
+  validatePack(weekly, 'weekly');
+  const output = manifest(weekly, {
+    weeklyHeadline: 'one.jpg', weeklyTarget: 'two.jpg',
+    weeklyDays: 'three.jpg', weeklyDistribution: 'four.jpg',
+    weeklyPowertrain: 'five.jpg', weeklyOperators: 'six.jpg',
+  }, 'weekly');
+  assert.equal(output.drafts.length, 1);
+  assert.equal(output.drafts[0].kind, 'weekly-carousel');
+  assert.deepEqual(
+    output.drafts[0].slides.map(slide => slide.role),
+    ['headline', 'target', 'daily-detail', 'distribution', 'powertrain', 'operator-comparison'],
+  );
+  assert.equal(output.drafts[0].slides.length, 6);
+});
+
 test('quote autofit never truncates and refuses illegible text', () => {
   const long = Array.from({ length: 36 }, (_, index) => `word${index}`).join(' ');
   const layout = quoteLayout(long);

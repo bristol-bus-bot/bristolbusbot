@@ -22,6 +22,15 @@ DEFAULT_OPERATOR_NAMES = {
     "SCGL": "Stagecoach West",
 }
 
+DELAY_BUCKETS = (
+    "early_5plus",
+    "early_1_5",
+    "on_time",
+    "late_6_10",
+    "late_10_20",
+    "late_20plus",
+)
+
 POST_PROVENANCE_COLUMNS = {
     "id", "operator_ref", "vehicle_ref", "line", "journey_ref",
     "event_timestamp", "delay_seconds", "stop_code", "stop_name",
@@ -181,6 +190,112 @@ def _percentile(values: list[int], quantile: float) -> int:
     return int(round(values[lower] + (values[upper] - values[lower]) * fraction))
 
 
+def _delay_bucket(delay_s: int) -> str:
+    if delay_s < -300:
+        return "early_5plus"
+    if delay_s < -60:
+        return "early_1_5"
+    if delay_s <= 359:
+        return "on_time"
+    if delay_s <= 600:
+        return "late_6_10"
+    if delay_s <= 1200:
+        return "late_10_20"
+    return "late_20plus"
+
+
+def _reconcile_frozen_delays(
+        conn: sqlite3.Connection, audit: dict, week: dict,
+        operators: list[str]) -> tuple[list[int], int]:
+    """Match mutable raw rows to the published daily broad histograms.
+
+    A small number of observations can settle after the daily rollup. The
+    published daily summaries are the public record, so retain the oldest raw
+    rows in each day/bucket and exclude only the newest count surplus. Any
+    shortage or inconsistent frozen histogram fails closed.
+    """
+    histogram_table = conn.execute(
+        """SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='daily_delay_histogram'"""
+    ).fetchone()
+    columns = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(timepoint_observations)")
+    }
+    if histogram_table is None or "recorded_at" not in columns:
+        raise ValueError(
+            "weekly histogram/raw reading mismatch and frozen reconciliation "
+            "data is unavailable")
+
+    start_key = week["startDate"].replace("-", "")
+    end_key = week["endDate"].replace("-", "")
+    selected_operator = week.get("operatorCode") or "ALL"
+    frozen = {
+        (str(service_date), str(bucket)): int(count)
+        for service_date, bucket, count in conn.execute(
+            """SELECT service_date, bucket, SUM(n)
+                 FROM daily_delay_histogram
+                WHERE service_date BETWEEN ? AND ?
+                  AND operator = ? AND route IS NULL
+                GROUP BY service_date, bucket""",
+            (start_key, end_key, selected_operator),
+        )
+    }
+
+    published_days = {
+        str(day.get("service_date")): int(
+            ((((day.get("by_operator") or {}).get(selected_operator) or {})
+              .get("overall") or {}).get("readings_in_gate") or 0)
+        )
+        for day in audit.get("days") or []
+        if start_key <= str(day.get("service_date") or "") <= end_key
+    }
+    expected_dates = [
+        (datetime.strptime(start_key, "%Y%m%d") + timedelta(days=index))
+        .strftime("%Y%m%d")
+        for index in range(7)
+    ]
+    for service_date in expected_dates:
+        published = published_days.get(service_date)
+        frozen_total = sum(
+            frozen.get((service_date, bucket), 0)
+            for bucket in DELAY_BUCKETS)
+        if published is None or frozen_total != published:
+            raise ValueError(
+                "weekly frozen histogram does not match the published daily "
+                f"total for {service_date}: {frozen_total} != {published}")
+
+    placeholders = ",".join("?" for _ in operators)
+    rows = conn.execute(
+        f"""SELECT rowid, service_date, observed_delay_s, recorded_at
+              FROM timepoint_observations
+             WHERE service_date BETWEEN ? AND ?
+               AND operator IN ({placeholders})
+               AND observed_delay_s IS NOT NULL
+               AND gps_distance_m IS NOT NULL AND gps_distance_m <= 150""",
+        (start_key, end_key, *operators),
+    ).fetchall()
+    grouped: dict[tuple[str, str], list[tuple[str, int, int]]] = {}
+    for rowid, service_date, delay_s, recorded_at in rows:
+        key = (str(service_date), _delay_bucket(int(delay_s)))
+        grouped.setdefault(key, []).append(
+            (str(recorded_at or ""), int(rowid), int(delay_s)))
+
+    reconciled: list[int] = []
+    excluded = 0
+    for service_date in expected_dates:
+        for bucket in DELAY_BUCKETS:
+            values = sorted(grouped.get((service_date, bucket), []))
+            keep = frozen.get((service_date, bucket), 0)
+            if len(values) < keep:
+                raise ValueError(
+                    "weekly raw rows are below the frozen histogram for "
+                    f"{service_date}/{bucket}: {len(values)} < {keep}")
+            reconciled.extend(value[2] for value in values[:keep])
+            excluded += len(values) - keep
+    return sorted(reconciled), excluded
+
+
 def build_distribution(conn: sqlite3.Connection, audit: dict,
                        week: dict) -> dict:
     start_key = week["startDate"].replace("-", "")
@@ -207,10 +322,14 @@ def build_distribution(conn: sqlite3.Connection, audit: dict,
         (start_key, end_key, *operators),
     ).fetchall()
     delays = sorted(int(row[0]) for row in rows)
+    excluded_post_rollup = 0
     if len(delays) != week["readings"]:
-        raise ValueError(
-            "weekly histogram/raw reading mismatch: "
-            f"{len(delays)} != {week['readings']}")
+        delays, excluded_post_rollup = _reconcile_frozen_delays(
+            conn, audit, week, operators)
+        if len(delays) != week["readings"]:
+            raise ValueError(
+                "weekly reconciled/raw reading mismatch: "
+                f"{len(delays)} != {week['readings']}")
     on_time = sum(-60 <= value <= 359 for value in delays)
     if on_time != week["onTimeReadings"]:
         raise ValueError(
@@ -225,6 +344,7 @@ def build_distribution(conn: sqlite3.Connection, audit: dict,
         "medianDelaySeconds": int(round(statistics.median(delays))),
         "p10DelaySeconds": _percentile(delays, .10),
         "p90DelaySeconds": _percentile(delays, .90),
+        "postRollupExtrasExcluded": excluded_post_rollup,
     }
 
 
