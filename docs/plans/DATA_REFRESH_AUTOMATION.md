@@ -158,10 +158,10 @@ different operators.
 
 ## Phase C - Data/code decoupling
 
-Production bootstrap note (4 August 2026): the audit rollup is the first
-consumer being moved to the durable fleet path after a clean code release
+Production bootstrap note (4 August 2026): the audit rollup was the first
+consumer moved to the durable fleet path after a clean code release
 correctly omitted the private generated cache and exposed its old cross-release
-dependency. This incident repair seeds and validates the existing fleet file;
+dependency. This incident repair seeded and validated the existing fleet file;
 it does not complete Phase C, change site/bot consumers, or enable unattended
 fleet refresh.
 

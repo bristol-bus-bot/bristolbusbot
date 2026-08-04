@@ -196,6 +196,15 @@ alt text, caption and SQLite ledger.
 The kill switch is disabling the timer and removing the live marker; neither
 operation touches Instagram or any core service.
 
+Commissioning note (4 August 2026): the channel, allowlisted user and root-only
+bot token were configured successfully and the bot was confirmed as a private
+channel member. The first shadow start exposed a local compatibility bug: the
+credential reader rejected systemd's protected runtime credential copy because
+its copied mode differed from the root-owned source file's `0600`. No Slack
+message or card was sent. The follow-up fix accepts only the exact regular
+`slack-token` beneath systemd's `/run/credentials/` hierarchy; arbitrary loose
+or symlinked credentials remain rejected.
+
 Production status (4 August 2026): PR #32 was merged and social release
 `20260803t234404745058z-4ab3bcea` plus the reviewed layout were installed. The
 release passed its native ARM64 gate. The service and timer are inactive, the
@@ -208,8 +217,15 @@ the private generated file lives at
 `/var/lib/bristolbusbot/enrichment/fbribuses.json`, the root-owned rollup
 wrapper fixes that path, systemd grants read-only access, and pipeline setup and
 health gates fail closed if it cannot be parsed. Code releases do not contain
-or overwrite the fleet file. See the execution index for the live bootstrap,
-catch-up and health proof status.
+or overwrite the fleet file.
+
+Production recovery completed on 4 August 2026. PR #34 merged as `f7e83307`;
+pipeline release `20260804t001717496979z-f7e83307` passed the durable-file gate.
+The validated live bot copy was atomically seeded with SHA-256
+`69b953091c942005908546f2e30a74656100fc4666f5b32820a428868b7be976`
+(2,605 vehicles, 4,386 lookup entries). The missing 2 August rollup and publish
+then succeeded, aggregate health reported `ok` with no issues, all core
+services and audit timers were active, and no failed units remained.
 
 ## Backups
 
@@ -224,9 +240,10 @@ host is noticed. Restores are drilled from both repositories to scratch
 directories with manifest, integrity and freshness verification; a backup
 that has not been restored is not treated as a backup.
 
-The backup manifest includes the durable private enrichment directory as an
-optional path so installations can adopt this repair before the wider
-enrichment estate is fully migrated.
+The example backup manifest includes the durable private enrichment directory
+as an optional path so installations can adopt this repair before the wider
+enrichment estate is fully migrated. The live root-owned backup configuration
+must be checked separately before claiming backup coverage.
 
 ## Rollback rules
 

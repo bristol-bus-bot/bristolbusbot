@@ -51,10 +51,11 @@ site and bot working directories without committing it.
 On the Pi, the audit's authoritative private copy is
 `/var/lib/bristolbusbot/enrichment/fbribuses.json`. Pipeline releases validate
 that durable file during setup and health checks, but never package or replace
-it. The initial copy is bootstrapped atomically from a validated live release;
-the later enrichment automation phase will own candidate generation and atomic
-promotion. Legacy site and bot release paths remain read-only fallbacks for
-development and recovery, not the production source of truth.
+it. The initial copy was bootstrapped atomically from a validated live release
+on 4 August 2026 with 2,605 vehicles and 4,386 lookup
+entries. The later enrichment automation phase will own candidate generation
+and atomic promotion. Legacy site and bot release paths remain read-only
+fallbacks for development and recovery, not the production source of truth.
 
 Known source-data hazards and matching rules are documented in
 `docs/plans/COLLECTOR_SPEC.md`; audit definitions and limitations are in
