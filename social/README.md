@@ -76,6 +76,11 @@ never used as card or caption copy. A separate `social.db` records render and
 Slack delivery attempts; it is a delivery ledger, not a claim that anything
 was posted to Instagram.
 
+The poller silently ignores ordinary channel messages and file uploads. This
+lets completed cards and weekly carousels live in the same private channel
+without the bot replying to each draft. A message containing more than one
+`bsky.app` post link still receives a closed, explanatory refusal.
+
 An attended local link render makes no Slack API call and is useful before the
 Pi setup gate:
 
