@@ -46,8 +46,15 @@ exports, fleet refresh, geocoding and boundary generation.
 in Git. Run `python pipeline/update_fleet_data.py`, or
 `python pipeline/refresh_enrichment.py --fix` for the complete enrichment
 refresh, to create the local cache. The refresh command distributes it to the
-site and bot working directories; deployment includes those local copies
-without committing them.
+site and bot working directories without committing it.
+
+On the Pi, the audit's authoritative private copy is
+`/var/lib/bristolbusbot/enrichment/fbribuses.json`. Pipeline releases validate
+that durable file during setup and health checks, but never package or replace
+it. The initial copy is bootstrapped atomically from a validated live release;
+the later enrichment automation phase will own candidate generation and atomic
+promotion. Legacy site and bot release paths remain read-only fallbacks for
+development and recovery, not the production source of truth.
 
 Known source-data hazards and matching rules are documented in
 `docs/plans/COLLECTOR_SPEC.md`; audit definitions and limitations are in

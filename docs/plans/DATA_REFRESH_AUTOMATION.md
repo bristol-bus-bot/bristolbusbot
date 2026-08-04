@@ -158,6 +158,13 @@ different operators.
 
 ## Phase C - Data/code decoupling
 
+Production bootstrap note (4 August 2026): the audit rollup is the first
+consumer being moved to the durable fleet path after a clean code release
+correctly omitted the private generated cache and exposed its old cross-release
+dependency. This incident repair seeds and validates the existing fleet file;
+it does not complete Phase C, change site/bot consumers, or enable unattended
+fleet refresh.
+
 1. Create `/var/lib/bristolbusbot/enrichment/`, owned by the data-maintenance
    service and included in the backup configuration.
 2. Seed it from the verified live release.

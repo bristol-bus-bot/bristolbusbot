@@ -164,8 +164,25 @@ def test_social_curation_is_credentialed_isolated_and_shadow_gated():
 
 def test_rollup_is_networkless_and_publish_does_not_repeat_it():
     rollup = (SYSTEMD / "bbb-audit-rollup.service").read_text(encoding="utf-8")
+    runner = (SYSTEMD.parent / "run_audit_rollup.sh").read_text(encoding="utf-8")
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
+        encoding="utf-8")
     publish = (SYSTEMD.parent / "publish_to_github.sh").read_text(encoding="utf-8")
     assert "IPAddressDeny=any" in rollup
+    assert (
+        "Environment=BBB_FLEET_FILE=/var/lib/bristolbusbot/enrichment/"
+        "fbribuses.json"
+    ) in rollup
+    assert (
+        "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment/fbribuses.json"
+    ) in rollup
+    assert (
+        "BBB_FLEET_FILE=/var/lib/bristolbusbot/enrichment/fbribuses.json"
+    ) in runner
+    assert (
+        "d /var/lib/bristolbusbot/enrichment 0750 "
+        "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
     assert "audit_rollup.py" not in publish
     assert 'install -m 0644 "$AUDIT_DIR/LICENSE" LICENSE' in publish
     assert 'install -m 0644 "$ASSET_DIR/README.md" README.md' in publish

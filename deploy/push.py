@@ -26,6 +26,8 @@ from local_config import DeploySettings, LocalConfigError, load_deploy_settings
 REPO = Path(__file__).resolve().parent.parent
 DEPLOY = REPO / "deploy"
 MARKER = "/etc/bristolbusbot/unified-deploy-layout"
+DURABLE_FLEET_FILE = PurePosixPath(
+    "/var/lib/bristolbusbot/enrichment/fbribuses.json")
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,79}")
 CORE_CODE_COMPONENTS = ("pipeline", "collector", "site", "bot")
 CODE_COMPONENTS = (*CORE_CODE_COMPONENTS, "social")
@@ -347,6 +349,7 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
             "venv/bin/pip install -q -r requirements-runtime.txt && "
             "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
             "load_geo_index()' && "
+            f"BBB_FLEET_FILE={q(DURABLE_FLEET_FILE)} "
             "venv/bin/python3 -c 'from audit_fleet import load_fleet_index; "
             "load_fleet_index()' && "
             "chmod 0755 publish_to_github.sh"
@@ -385,12 +388,16 @@ def healthy(remote: Remote, component: str) -> bool:
         ),
         "pipeline": (
             f"test -x {q(pipeline / 'venv/bin/python3')} && "
+            f"cd {q(pipeline)} && "
             f"{q(pipeline / 'venv/bin/python3')} -m py_compile "
             f"{q(pipeline / 'audit_snapshot.py')} "
             f"{q(pipeline / 'audit_rollup.py')} "
             f"{q(pipeline / 'audit_export.py')} "
             f"{q(pipeline / 'audit_integration.py')} "
             f"{q(pipeline / 'audit_promote.py')} && "
+            f"BBB_FLEET_FILE={q(DURABLE_FLEET_FILE)} "
+            f"{q(pipeline / 'venv/bin/python3')} -c "
+            "'from audit_fleet import load_fleet_index; load_fleet_index()' && "
             "systemctl is-active --quiet bbb-audit-snapshot.timer "
             "bbb-audit-rollup.timer bbb-audit-publish.timer"
         ),
