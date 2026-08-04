@@ -395,11 +395,13 @@ def test_poll_handles_exact_roundup_but_ignores_similar_conversation(
     service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
     service_parts[5].messages = [
         message("1.000", text="could we do a roundup later?"),
-        message("2.000", text="roundup"),
+        {**message("2.000", text="roundup"), "subtype": "app_attributed"},
+        {**message("3.000", text="roundup"), "subtype": "file_share",
+         "files": [{"id": "F-DRAFT"}]},
     ]
 
     assert service.poll_once() == 1
-    assert service_parts[2].checkpoint("C-PRIVATE") == "2.000"
+    assert service_parts[2].checkpoint("C-PRIVATE") == "3.000"
     assert len(service_parts[6].packs) == 1
 
 
