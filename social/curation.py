@@ -673,14 +673,19 @@ class CurationService:
         handled = 0
         for message in self.slack.history(
                 self.channel, checkpoint):
-            if message.get("type") != "message" or message.get("subtype"):
+            message_text = str(message.get("text") or "")
+            attributed_roundup = (
+                is_roundup_command(message_text)
+                and not message.get("files")
+            )
+            if (message.get("type") != "message"
+                    or (message.get("subtype") and not attributed_roundup)):
                 self.ledger.set_checkpoint(self.channel, str(message.get("ts") or "0"))
                 continue
             # The same private channel also holds completed Instagram drafts.
             # File uploads and ordinary conversation are not card requests.
             # Multiple Bluesky links still enter process() and fail closed
             # with the existing explanatory reply.
-            message_text = str(message.get("text") or "")
             if (not LINK_RE.search(message_text)
                     and not is_roundup_command(message_text)):
                 self.ledger.set_checkpoint(
