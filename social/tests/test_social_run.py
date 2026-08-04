@@ -13,7 +13,7 @@ import social_run  # noqa: E402
 
 
 ENVIRONMENT = {
-    "BBB_SOCIAL_DB": "/var/lib/bristolbusbot/social.db",
+    "BBB_SOCIAL_DB": "/var/lib/bristolbusbot/social/social.db",
     "BBB_SOCIAL_APP_DB": "/var/lib/bristolbusbot/bot/app_data.db",
     "BBB_SOCIAL_AUDIT_DB": "/var/lib/bristolbusbot/collector/audit.db",
     "BBB_SOCIAL_OUTPUT_DIR": "/var/lib/bristolbusbot/social/cards",
