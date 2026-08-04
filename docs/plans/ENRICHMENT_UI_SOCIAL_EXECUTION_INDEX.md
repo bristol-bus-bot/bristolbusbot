@@ -63,15 +63,15 @@ remained green.
 
 ### 2. Slack-to-Instagram-card curation
 
-Status: PRs #32, #35, #36 and #37 are merged. Social release
-`20260804t204401034353z-e0716f09` and the reviewed layout are installed on the
-Pi. Both ARM64 render gates passed on 4 August 2026. The private Slack app,
-allowlisted channel/user and root-only credential are configured. Checkpoint
-seeding and a newly shared link's 1080 x 1350 shadow render both passed. The
-first live attempt was safely refused before any image bytes were uploaded
-because Slack rejected JSON arguments for its external-upload ticket. The live
-marker is off and the timer remains disabled. The form-encoded upload fix, one
-attended real delivery and timer enable remain gated steps.
+Status: commissioned on 4 August 2026. PRs #32, #35, #36, #37 and #38 are
+merged. Social release `20260804t205910782323z-b4980e79` and the reviewed
+layout are installed on the Pi. The private Slack app, allowlisted channel/user
+and root-only credential are configured. Checkpoint seeding, a 1080 x 1350
+shadow render and one attended live delivery all passed. Slack's read-back
+confirmed the JPEG, alt-text reply and caption reply in the correct private
+thread. The live marker is present and the three-minute timer is enabled and
+active. Its first automatic firing completed successfully without creating a
+duplicate request, file or reply. Instagram posting remains manual.
 
 - [x] Add and locally smoke-test a single-card renderer mode.
 - [x] Run the renderer smoke test on ARM64: native dependencies installed and
@@ -112,14 +112,14 @@ attended real delivery and timer enable remain gated steps.
   parser read Slack's actual link target once while still refusing two
   separately supplied links. Shadow mode rendered one 1080 x 1350 JPEG with
   the verified text, caption and alt text; it sent no reply or upload.
-- [ ] Enable live mode, share the link again as a new Slack message, verify the
-  image/alt/caption and delivery ledger, then enable the timer. The checkpointed
-  shadow request is not replayed. The first attended attempt reached
-  `files.getUploadURLExternal` but Slack returned `invalid_arguments` before an
-  upload ticket or image bytes; the ledger stayed at `rendered`, live mode was
-  disabled again, and the pending fix uses the form encoding in Slack's file
-  guide for both external-upload API calls.
-- [ ] Keep Instagram posting manual.
+- [x] Merge PR #38 as `b4980e79`, deploy social release
+  `20260804t205910782323z-b4980e79` and repeat the attended live delivery. The
+  form-encoded upload flow delivered one JPEG plus acknowledged alt-text and
+  caption replies. A Slack API read-back found all three in the correct private
+  thread. The ledger recorded one `delivered` request with no error; the
+  three-minute timer was then enabled and became active. Its first automatic
+  firing succeeded and left the request and delivery counts unchanged.
+- [x] Keep Instagram posting manual.
 
 The later engagement shortlist is optional and cannot block link-driven cards.
 

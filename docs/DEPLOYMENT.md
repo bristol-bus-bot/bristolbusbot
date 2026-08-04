@@ -244,13 +244,25 @@ removed immediately. Slack's file guide demonstrates form fields for
 external-upload API calls. The pending fix follows that encoding while leaving
 ordinary JSON message calls unchanged.
 
-Production status (4 August 2026): PRs #32, #35 and #36 were merged and social
-release `20260804t003554677599z-c54b1602` plus the reviewed layout were
-installed. The release passed its native ARM64 gate. The root-only social
-credential is installed and validated, the service completed its checkpoint
-seed successfully and is now inactive, the timer is disabled and inactive,
-and no live marker exists. All four core services and the local bot/site and
-public site health endpoints passed.
+PR #38 merged as `b4980e79`, and social release
+`20260804t205910782323z-b4980e79` passed the full local gates, secret/public
+metadata scans and native ARM64 render gate. The repeated attended request then
+delivered one JPEG. The ledger recorded the Slack file ID and both reply
+timestamps, status `delivered` and no error. A separate Slack API read-back
+confirmed the JPEG, alt-text reply and caption reply in the correct private
+thread. Only after that proof was the three-minute timer enabled; it reported
+enabled and active with the live marker present. The first automatic firing at
+22:15 BST completed with systemd result `success` and created no duplicate
+request, delivery, file or reply. Aggregate health was `ok` with no issues, all
+four core services were active, local/public endpoints passed and no failed
+units remained. Instagram publication is still a manual phone action.
+
+Production status (4 August 2026): social release
+`20260804t205910782323z-b4980e79` is live. Its timer is enabled and active, its
+live marker and root-only credential are installed, and one attended private
+Slack delivery has been read back successfully. All four core services and the
+local bot/site and public site health endpoints passed. The timer's first
+automatic run also completed successfully without duplication.
 The failed-unit read-back also exposed an older, unrelated audit-rollup failure
 from 3 August caused by the then-current pipeline release omitting
 `fbribuses.json`. The repair is deliberately separate from the social rollout:
