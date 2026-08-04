@@ -562,6 +562,14 @@ class CurationService:
             if message.get("type") != "message" or message.get("subtype"):
                 self.ledger.set_checkpoint(self.channel, str(message.get("ts") or "0"))
                 continue
+            # The same private channel also holds completed Instagram drafts.
+            # File uploads and ordinary conversation are not card requests.
+            # Multiple Bluesky links still enter process() and fail closed
+            # with the existing explanatory reply.
+            if not LINK_RE.search(str(message.get("text") or "")):
+                self.ledger.set_checkpoint(
+                    self.channel, str(message.get("ts") or "0"))
+                continue
             self.process(message)
             self.ledger.set_checkpoint(self.channel, str(message["ts"]))
             handled += 1

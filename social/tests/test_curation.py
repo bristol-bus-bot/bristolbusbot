@@ -256,6 +256,38 @@ def test_poll_verifies_private_channel_and_advances_checkpoint(service_parts):
     assert service_parts[2].checkpoint("C-PRIVATE") == "1.000"
 
 
+def test_poll_silently_ignores_non_link_messages_and_file_uploads(service_parts):
+    service = make_service(service_parts)
+    service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
+    service_parts[5].messages = [
+        {"type": "message", "ts": "1.000", "user": "U-TOM",
+         "text": "ordinary channel note"},
+        {"type": "message", "ts": "2.000", "user": "U-TOM",
+         "text": "", "files": [{"id": "F-DRAFT"}]},
+    ]
+
+    assert service.poll_once() == 0
+    assert service_parts[2].checkpoint("C-PRIVATE") == "2.000"
+    assert service_parts[2].conn.execute(
+        "SELECT COUNT(*) FROM requests").fetchone()[0] == 0
+    assert service_parts[4].calls == 0
+    assert service_parts[3].packs == []
+    assert service_parts[5].uploads == 0
+    assert service_parts[5].replies == []
+
+
+def test_poll_still_refuses_multiple_bluesky_links(service_parts):
+    service = make_service(service_parts)
+    service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
+    service_parts[5].messages = [message(
+        "1.000", text=f"{URL} and {URL}")]
+
+    assert service.poll_once() == 1
+    assert service_parts[2].checkpoint("C-PRIVATE") == "1.000"
+    assert service_parts[5].uploads == 0
+    assert "exactly one" in service_parts[5].replies[0][2]
+
+
 def test_first_poll_seeds_now_without_replaying_channel_history(
         service_parts, monkeypatch):
     service = make_service(service_parts, shadow=True)
