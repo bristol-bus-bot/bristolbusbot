@@ -13,8 +13,12 @@ from pathlib import Path
 HERE = Path(os.path.abspath(__file__)).parent
 FLEET_FILE = HERE / "fbribuses.json"
 REPO_FLEET_FILE = HERE.parent / "site" / "fbribuses.json"
+DURABLE_FLEET_FILE = Path("/var/lib/bristolbusbot/enrichment/fbribuses.json")
 PRODUCTION_FLEET_FILE = (
     Path.home() / "bristolbusbot" / "current" / "site" / "fbribuses.json"
+)
+PRODUCTION_BOT_FLEET_FILE = (
+    Path.home() / "bristolbusbot" / "current" / "bot" / "fbribuses.json"
 )
 DIGITS = re.compile(r"(\d+)")
 
@@ -26,7 +30,13 @@ def fleet_path(path=None):
     configured = os.getenv("BBB_FLEET_FILE")
     if configured:
         return Path(configured)
-    for candidate in (FLEET_FILE, REPO_FLEET_FILE, PRODUCTION_FLEET_FILE):
+    for candidate in (
+        FLEET_FILE,
+        REPO_FLEET_FILE,
+        DURABLE_FLEET_FILE,
+        PRODUCTION_FLEET_FILE,
+        PRODUCTION_BOT_FLEET_FILE,
+    ):
         if candidate.is_file():
             return candidate
     return FLEET_FILE

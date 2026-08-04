@@ -52,6 +52,11 @@
     {
       "name": "bristolbusbot-config",
       "path": "/etc/bristolbusbot"
+    },
+    {
+      "name": "enrichment-state",
+      "path": "/var/lib/bristolbusbot/enrichment",
+      "required": false
     }
   ],
   "git_repositories": [

@@ -109,9 +109,15 @@ health has reported `job:audit-rollup` since then. This predates and is
 independent of the social deployment. Collector, bot, site, tunnel and their
 local/public health endpoints remain healthy.
 
-- [ ] Restore the missing fleet artifact through a separate reviewed pipeline
-  release, rerun the rollup, and prove aggregate health clears before resuming
-  enrichment work.
+- [x] Identify the broken ownership contract: a clean release correctly
+  omitted the private generated artifact, while the rollup still depended on a
+  mutable copy inside another component's release.
+- [ ] Merge the separate repair that establishes
+  `/var/lib/bristolbusbot/enrichment/fbribuses.json`, fixes the rollup to that
+  path, and adds parse gates without packaging private data.
+- [ ] Atomically bootstrap the durable file from the validated live bot copy,
+  deploy only the pipeline component, catch up missed rollups, and prove
+  aggregate health clears before resuming enrichment work.
 - [ ] Complete the promotion-disabled timetable Phase A proof.
 - [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
 - [ ] Add durable consumer-path overrides for every bot artifact.

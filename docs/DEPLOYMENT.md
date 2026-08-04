@@ -203,8 +203,13 @@ timer is disabled, and no social credential or live marker exists. All four
 core services and the local bot/site and public site health endpoints passed.
 The failed-unit read-back also exposed an older, unrelated audit-rollup failure
 from 3 August caused by the then-current pipeline release omitting
-`fbribuses.json`; that reliability repair is recorded separately in the
-execution index and must not be bundled into this social rollout.
+`fbribuses.json`. The repair is deliberately separate from the social rollout:
+the private generated file lives at
+`/var/lib/bristolbusbot/enrichment/fbribuses.json`, the root-owned rollup
+wrapper fixes that path, systemd grants read-only access, and pipeline setup and
+health gates fail closed if it cannot be parsed. Code releases do not contain
+or overwrite the fleet file. See the execution index for the live bootstrap,
+catch-up and health proof status.
 
 ## Backups
 
@@ -218,6 +223,10 @@ An external dead-man service alerts on missed runs, so a silently dead
 host is noticed. Restores are drilled from both repositories to scratch
 directories with manifest, integrity and freshness verification; a backup
 that has not been restored is not treated as a backup.
+
+The backup manifest includes the durable private enrichment directory as an
+optional path so installations can adopt this repair before the wider
+enrichment estate is fully migrated.
 
 ## Rollback rules
 
