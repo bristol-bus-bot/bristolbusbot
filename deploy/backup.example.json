@@ -32,7 +32,7 @@
     },
     {
       "name": "social",
-      "path": "/var/lib/bristolbusbot/social.db",
+      "path": "/var/lib/bristolbusbot/social/social.db",
       "required": false
     }
   ],
