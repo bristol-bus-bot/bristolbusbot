@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -310,3 +311,46 @@ def test_slack_client_rejects_shared_or_dm_destination():
     client = curation.SlackClient("xoxb-test", request_json=request_json)
     with pytest.raises(curation.CurationError, match="private, non-shared"):
         client.require_private_channel("D-DM")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX credential modes")
+def test_credential_accepts_only_the_protected_systemd_copy(
+        monkeypatch, tmp_path):
+    systemd_root = tmp_path / "run" / "credentials"
+    credential_directory = systemd_root / "bbb-social-curation.service"
+    credential_directory.mkdir(parents=True)
+    credential = credential_directory / "slack-token"
+    credential.write_text("xoxb-test-token-123456789\n", encoding="utf-8")
+    credential.chmod(0o444)
+    monkeypatch.setattr(curation, "SYSTEMD_CREDENTIALS_ROOT", systemd_root)
+
+    assert curation._credential(
+        credential, credential_directory=credential_directory
+    ) == "xoxb-test-token-123456789"
+    with pytest.raises(curation.CurationError, match="group or other"):
+        curation._credential(credential)
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    loose = outside / "slack-token"
+    loose.write_text("xoxb-test-token-123456789\n", encoding="utf-8")
+    loose.chmod(0o444)
+    with pytest.raises(curation.CurationError, match="group or other"):
+        curation._credential(loose, credential_directory=outside)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX credential modes")
+def test_credential_rejects_symlink_even_inside_systemd_directory(
+        monkeypatch, tmp_path):
+    systemd_root = tmp_path / "run" / "credentials"
+    credential_directory = systemd_root / "bbb-social-curation.service"
+    credential_directory.mkdir(parents=True)
+    source = tmp_path / "source-token"
+    source.write_text("xoxb-test-token-123456789\n", encoding="utf-8")
+    credential = credential_directory / "slack-token"
+    credential.symlink_to(source)
+    monkeypatch.setattr(curation, "SYSTEMD_CREDENTIALS_ROOT", systemd_root)
+
+    with pytest.raises(curation.CurationError, match="regular file"):
+        curation._credential(
+            credential, credential_directory=credential_directory)

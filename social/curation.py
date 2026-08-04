@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import stat
 import subprocess
 import time
 import urllib.error
@@ -27,6 +28,7 @@ import build_pack
 
 APPVIEW = "https://public.api.bsky.app/xrpc"
 SLACK_API = "https://slack.com/api"
+SYSTEMD_CREDENTIALS_ROOT = Path("/run/credentials")
 DEFAULT_TEMPLATE_VERSION = "bot-said-v1"
 SAFE_VERSION = re.compile(r"[a-z0-9][a-z0-9._-]{0,79}")
 LINK_RE = re.compile(
@@ -539,10 +541,27 @@ class CurationService:
         return handled
 
 
-def _credential(path: Path) -> str:
-    if not path.is_file():
+def _credential(path: Path, *, credential_directory: Path | None = None) -> str:
+    try:
+        info = path.lstat()
+    except OSError:
         raise CurationError(f"Slack credential not found: {path}")
-    if os.name != "nt" and path.stat().st_mode & 0o077:
+    if not stat.S_ISREG(info.st_mode):
+        raise CurationError(f"Slack credential is not a regular file: {path}")
+    trusted_systemd_copy = False
+    if credential_directory is not None and path.name == "slack-token":
+        try:
+            root = SYSTEMD_CREDENTIALS_ROOT.resolve()
+            directory = credential_directory.resolve(strict=True)
+            source = path.resolve(strict=True)
+            trusted_systemd_copy = (
+                source.parent == directory
+                and directory.is_relative_to(root)
+            )
+        except OSError:
+            trusted_systemd_copy = False
+    if (os.name != "nt" and info.st_mode & 0o077
+            and not trusted_systemd_copy):
         raise CurationError(
             "Slack credential must not be readable by group or other users")
     token = path.read_text(encoding="utf-8").strip()
@@ -577,7 +596,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"bot database not found: {args.app_db}")
     if args.audit_db and not args.audit_db.is_file():
         parser.error(f"audit database not found: {args.audit_db}")
-    slack = SlackClient(_credential(args.slack_credential)) \
+    credential_directory = os.getenv("CREDENTIALS_DIRECTORY")
+    slack = SlackClient(_credential(
+        args.slack_credential,
+        credential_directory=Path(credential_directory)
+        if credential_directory else None,
+    )) \
         if args.slack_credential else None
     ledger = DeliveryLedger(args.db)
     try:
