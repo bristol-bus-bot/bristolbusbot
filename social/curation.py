@@ -36,6 +36,7 @@ LINK_RE = re.compile(
     re.IGNORECASE,
 )
 SLACK_LINK_RE = re.compile(r"<([^<>\s|]+)\|[^<>]*>")
+ROUNDUP_RE = re.compile(r"^\s*roundup\s*$", re.IGNORECASE)
 
 
 class CurationError(RuntimeError):
@@ -71,6 +72,10 @@ def parse_post_link(text: str) -> PostLink:
         rkey=rkey,
         url=f"https://bsky.app/profile/{actor}/post/{rkey}",
     )
+
+
+def is_roundup_command(text: str) -> bool:
+    return bool(ROUNDUP_RE.fullmatch(str(text or "")))
 
 
 def _form_body(payload: dict) -> bytes:
@@ -363,11 +368,16 @@ class SlackClient:
         return None
 
     def upload(self, channel: str, thread_ts: str, image: Path,
-               filename: str, *, prepared: Callable[[str], None]) -> str:
+               filename: str, *, prepared: Callable[[str], None],
+               alt_text: str | None = None) -> str:
         size = image.stat().st_size
-        ticket = self._api("files.getUploadURLExternal", {
+        ticket_payload = {
             "filename": filename, "length": size,
-        }, form_encoded=True)
+        }
+        if alt_text:
+            ticket_payload["alt_txt"] = alt_text
+        ticket = self._api(
+            "files.getUploadURLExternal", ticket_payload, form_encoded=True)
         file_id = str(ticket.get("file_id") or "")
         upload_url = str(ticket.get("upload_url") or "")
         if not file_id or not upload_url:
@@ -399,24 +409,70 @@ def render_single(pack: dict, output: Path, *, node: str = "node") -> tuple[Path
     return image, draft
 
 
+def render_weekly(pack: dict, output: Path, *,
+                  node: str = "node") -> tuple[list[Path], dict]:
+    output.mkdir(parents=True, exist_ok=True)
+    pack_path = output / "pack.json"
+    pack_path.write_text(json.dumps(pack, indent=2) + "\n", encoding="utf-8")
+    script = Path(__file__).with_name("generate-pack.mjs")
+    subprocess.run(
+        [node, str(script), "--input", str(pack_path), "--output",
+         str(output), "--card", "weekly"],
+        check=True, capture_output=True, text=True,
+    )
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    drafts = manifest.get("drafts") or []
+    if len(drafts) != 1 or drafts[0].get("kind") != "weekly-carousel":
+        raise CurationError("the renderer did not produce one weekly carousel")
+    draft = drafts[0]
+    slides = draft.get("slides") or []
+    images = [output / str(slide.get("file") or "") for slide in slides]
+    if len(images) != 6 or any(not image.is_file() for image in images):
+        raise CurationError("the renderer did not produce all six weekly slides")
+    return images, draft
+
+
+def build_weekly_pack(audit_json: Path, audit_db: Path) -> dict:
+    if not audit_json.is_file():
+        raise CurationError("the published weekly audit data is unavailable")
+    if not audit_db.is_file():
+        raise CurationError("the audit database is unavailable")
+    audit = json.loads(audit_json.read_text(encoding="utf-8"))
+    conn = sqlite3.connect(
+        f"{audit_db.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        week = build_pack.build_week(audit)
+        week["distribution"] = build_pack.build_distribution(conn, audit, week)
+    finally:
+        conn.close()
+    return {"generatedAt": utc_now(), "busWeek": week}
+
+
 class CurationService:
     def __init__(self, *, ledger: DeliveryLedger, app_db: Path,
-                 audit_db: Path | None, output_dir: Path,
+                 audit_db: Path | None, audit_json: Path | None = None,
+                 output_dir: Path,
                  allowed_user: str, channel: str,
                  bluesky: BlueskyAppView | None = None,
                  slack: SlackClient | None = None,
                  renderer: Callable[[dict, Path], tuple[Path, dict]] | None = None,
+                 weekly_renderer: Callable[
+                     [dict, Path], tuple[list[Path], dict]] | None = None,
+                 weekly_builder: Callable[[Path, Path], dict] | None = None,
                  template_version: str = DEFAULT_TEMPLATE_VERSION,
                  shadow: bool = False):
         self.ledger = ledger
         self.app_db = app_db
         self.audit_db = audit_db
+        self.audit_json = audit_json
         self.output_dir = output_dir
         self.allowed_user = allowed_user
         self.channel = channel
         self.bluesky = bluesky or BlueskyAppView()
         self.slack = slack
         self.renderer = renderer or render_single
+        self.weekly_renderer = weekly_renderer or render_weekly
+        self.weekly_builder = weekly_builder or build_weekly_pack
         if not SAFE_VERSION.fullmatch(template_version):
             raise ValueError("template version must be a short lowercase identifier")
         self.template_version = template_version
@@ -426,6 +482,61 @@ class CurationService:
         if self.shadow or self.slack is None:
             return ""
         return self.slack.reply(self.channel, ts, text)
+
+    def _process_roundup(self, ts: str, user: str) -> str:
+        if self.audit_json is None or self.audit_db is None:
+            raise CurationError("weekly roundup data is not configured")
+        try:
+            pack = self.weekly_builder(self.audit_json, self.audit_db)
+            week = pack["busWeek"]
+            digest = hashlib.sha256(ts.encode("utf-8")).hexdigest()[:8]
+            job_dir = self.output_dir / (
+                f"roundup-{week['startDate']}-to-{week['endDate']}-{digest}")
+            images, draft = self.weekly_renderer(pack, job_dir)
+            if self.shadow:
+                self.ledger.save_request(
+                    self.channel, ts, user, outcome="rendered")
+                return "rendered"
+            if self.slack is None:
+                raise CurationError("live delivery requires a Slack client")
+            slides = draft.get("slides") or []
+            if len(images) != 6 or len(slides) != 6:
+                raise CurationError("the weekly roundup does not contain six slides")
+            operator_slug = re.sub(
+                r"[^a-z0-9]+", "-", str(week["operatorName"]).lower()
+            ).strip("-") or "bus"
+            role_slugs = {
+                "headline": "headline",
+                "target": "weca-target",
+                "daily-detail": "daily-results",
+                "distribution": "early-late-distribution",
+                "powertrain": "electric-vs-diesel",
+                "operator-comparison": "operators-compared",
+            }
+            for index, (image, slide) in enumerate(
+                    zip(images, slides), start=1):
+                role = str(slide.get("role") or "")
+                if role not in role_slugs or not slide.get("altText"):
+                    raise CurationError(
+                        "the weekly roundup has incomplete slide metadata")
+                filename = (
+                    f"{operator_slug}-weekly-{week['startDate']}-to-"
+                    f"{week['endDate']}-slide-{index}-"
+                    f"{role_slugs[role]}.jpg")
+                self.slack.upload(
+                    self.channel, ts, image, filename,
+                    prepared=lambda _file_id: None,
+                    alt_text=str(slide["altText"]),
+                )
+            self._reply(ts, f"Caption\n{draft['caption']}")
+            self.ledger.save_request(
+                self.channel, ts, user, outcome="delivered")
+            return "delivered"
+        except CurationError:
+            raise
+        except Exception as exc:
+            raise CurationError(
+                f"the weekly roundup stopped safely: {exc}") from exc
 
     def process(self, message: dict, *, new_version: str | None = None) -> str:
         ts = str(message.get("ts") or "")
@@ -443,6 +554,8 @@ class CurationService:
             self._reply(ts, error)
             return "refused"
         try:
+            if is_roundup_command(text):
+                return self._process_roundup(ts, user)
             link = parse_post_link(text)
             uri, public_text = self.bluesky.resolve_and_verify(link)
             version = new_version or self.template_version
@@ -539,7 +652,8 @@ class CurationService:
         except CurationError as exc:
             self.ledger.save_request(
                 self.channel, ts, user, outcome="refused", error=str(exc))
-            self._reply(ts, f"Couldn't make that card: {exc}")
+            kind = "roundup" if is_roundup_command(text) else "card"
+            self._reply(ts, f"Couldn't make that {kind}: {exc}")
             return "refused"
         except Exception as exc:
             self.ledger.save_request(
@@ -566,7 +680,9 @@ class CurationService:
             # File uploads and ordinary conversation are not card requests.
             # Multiple Bluesky links still enter process() and fail closed
             # with the existing explanatory reply.
-            if not LINK_RE.search(str(message.get("text") or "")):
+            message_text = str(message.get("text") or "")
+            if (not LINK_RE.search(message_text)
+                    and not is_roundup_command(message_text)):
                 self.ledger.set_checkpoint(
                     self.channel, str(message.get("ts") or "0"))
                 continue
@@ -611,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="social.db delivery ledger")
     parser.add_argument("--app-db", type=Path, required=True)
     parser.add_argument("--audit-db", type=Path)
+    parser.add_argument("--audit-json", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--channel-id", required=True)
     parser.add_argument("--allowed-user-id", required=True)
@@ -627,10 +744,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--new-version must differ from the normal template version")
     if not args.link and not args.slack_credential:
         parser.error("polling requires --slack-credential")
+    if not args.link and not args.audit_json:
+        parser.error("polling requires --audit-json for the roundup command")
     if not args.app_db.is_file():
         parser.error(f"bot database not found: {args.app_db}")
     if args.audit_db and not args.audit_db.is_file():
         parser.error(f"audit database not found: {args.audit_db}")
+    if args.audit_json and not args.audit_json.is_file():
+        parser.error(f"published audit data not found: {args.audit_json}")
     credential_directory = os.getenv("CREDENTIALS_DIRECTORY")
     slack = SlackClient(_credential(
         args.slack_credential,
@@ -642,6 +763,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         service = CurationService(
             ledger=ledger, app_db=args.app_db, audit_db=args.audit_db,
+            audit_json=args.audit_json,
             output_dir=args.output_dir, allowed_user=args.allowed_user_id,
             channel=args.channel_id, slack=slack,
             shadow=args.shadow or bool(args.link))

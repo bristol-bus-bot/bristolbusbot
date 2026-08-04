@@ -164,6 +164,57 @@ def test_weekly_distribution_uses_raw_rows_and_matches_rollup_counts():
     assert sum(distribution["counts"]) == week["readings"]
     assert distribution["medianDelaySeconds"] == 120
     assert distribution["p90DelaySeconds"] == 600
+    assert distribution["postRollupExtrasExcluded"] == 0
+
+
+def test_weekly_distribution_excludes_only_newest_frozen_bucket_extras():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        """CREATE TABLE timepoint_observations (
+               service_date TEXT, operator TEXT,
+               observed_delay_s INTEGER, gps_distance_m INTEGER,
+               recorded_at TEXT
+           );
+           CREATE TABLE daily_delay_histogram (
+               service_date TEXT, operator TEXT, route TEXT,
+               bucket TEXT, n INTEGER
+           );""")
+    payload = audit_payload()
+    raw_rows = []
+    frozen_rows = []
+    for index, day in enumerate(payload["days"]):
+        service_date = day["service_date"]
+        on_time = 120 + index
+        late = 200 - on_time
+        raw_rows.extend(
+            (service_date, "FBRI", 120, 25,
+             f"2026-07-{20 + index:02d}T05:00:00Z")
+            for _ in range(on_time))
+        raw_rows.extend(
+            (service_date, "FBRI", 600, 25,
+             f"2026-07-{20 + index:02d}T05:00:00Z")
+            for _ in range(late))
+        # This reading settled after the frozen rollup. It is in the same broad
+        # bucket, but its newest recorded_at makes it the one safe exclusion.
+        raw_rows.append((
+            service_date, "FBRI", 359, 25,
+            f"2026-07-{20 + index:02d}T09:00:00Z"))
+        frozen_rows.extend([
+            (service_date, "FBRI", None, "on_time", on_time),
+            (service_date, "FBRI", None, "late_6_10", late),
+        ])
+    conn.executemany(
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?)", raw_rows)
+    conn.executemany(
+        "INSERT INTO daily_delay_histogram VALUES (?,?,?,?,?)", frozen_rows)
+
+    week = build_pack.build_week(payload)
+    distribution = build_pack.build_distribution(conn, payload, week)
+
+    assert sum(distribution["counts"]) == week["readings"]
+    assert sum(distribution["counts"][5:12]) == week["onTimeReadings"]
+    assert distribution["postRollupExtrasExcluded"] == 7
+    assert distribution["medianDelaySeconds"] == 120
 
 
 def test_week_can_explicitly_build_the_whole_network():

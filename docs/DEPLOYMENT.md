@@ -188,13 +188,22 @@ sudo /usr/local/sbin/bbb-configure-social-curation \
 
 Without `/etc/bristolbusbot/social-live-enabled`, every run is shadow-only. The
 first run seeds a current-time Slack checkpoint and cannot replay retained
-history. After a newly shared link renders cleanly in shadow, one attended live
-delivery uses the tightly allowlisted `social-live-enable` helper and a newly
-shared Slack message. A shadowed message has already been checkpointed and is
-never silently replayed. Enable the timer only after checking the Slack image,
-alt text, caption and SQLite ledger.
+history. After a newly shared link or exact `roundup` command renders cleanly
+in shadow, one attended live delivery uses the tightly allowlisted
+`social-live-enable` helper and a newly shared Slack message. A shadowed message
+has already been checkpointed and is never silently replayed. Enable the timer
+only after checking the Slack image(s), alt text, caption and SQLite ledger.
 The kill switch is disabling the timer and removing the live marker; neither
 operation touches Instagram or any core service.
+
+The exact word `roundup` is the phone workflow for the latest complete weekly
+post. It renders and uploads six ordered portrait slides (including electric
+versus diesel/other and the separate operator comparison) and then replies once
+with the copy-ready caption. Other conversation and uploaded draft files are
+ignored. Weekly totals come from the already-published seven daily rollups. If
+new raw observations settled after those rollups, the distribution builder may
+exclude only the newest surplus rows proven by the same day's frozen broad
+histogram; any shortage or inconsistency refuses the roundup.
 
 Commissioning note (4 August 2026): the channel, allowlisted user and root-only
 bot token were configured successfully and the bot was confirmed as a private

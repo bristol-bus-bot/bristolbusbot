@@ -62,6 +62,7 @@ class FakeSlack:
         self.private_checks = []
         self.messages = []
         self.history_oldest = []
+        self.upload_details = []
 
     def require_private_channel(self, channel):
         self.private_checks.append(channel)
@@ -77,10 +78,14 @@ class FakeSlack:
     def find_file(self, channel, filename):
         return self.found_file
 
-    def upload(self, channel, thread_ts, image, filename, *, prepared):
+    def upload(self, channel, thread_ts, image, filename, *, prepared,
+               alt_text=None):
         self.uploads += 1
-        prepared("F-CARD")
-        return "F-CARD"
+        file_id = "F-CARD" if self.uploads == 1 else f"F-CARD-{self.uploads}"
+        self.upload_details.append(
+            (channel, thread_ts, image.name, filename, alt_text))
+        prepared(file_id)
+        return file_id
 
 
 class FakeRenderer:
@@ -99,6 +104,49 @@ class FakeRenderer:
         }
 
 
+class FakeWeeklyRenderer:
+    def __init__(self):
+        self.packs = []
+
+    def __call__(self, pack, output):
+        self.packs.append(pack)
+        output.mkdir(parents=True, exist_ok=True)
+        roles = [
+            "headline", "target", "daily-detail", "distribution",
+            "powertrain", "operator-comparison",
+        ]
+        slides = []
+        images = []
+        for index, role in enumerate(roles, start=1):
+            image = output / f"{index:02d}-{role}.jpg"
+            image.write_bytes(b"jpeg")
+            images.append(image)
+            slides.append({
+                "role": role, "file": image.name,
+                "altText": f"Alt text for {role}",
+            })
+        return images, {
+            "kind": "weekly-carousel", "slides": slides,
+            "caption": "The finished weekly caption.",
+        }
+
+
+class FakeWeeklyBuilder:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, audit_json, audit_db):
+        self.calls.append((audit_json, audit_db))
+        return {
+            "generatedAt": "2026-08-04T12:00:00Z",
+            "busWeek": {
+                "operatorName": "First Bristol",
+                "startDate": "2026-07-28",
+                "endDate": "2026-08-03",
+            },
+        }
+
+
 @pytest.fixture
 def service_parts(tmp_path):
     app_db = tmp_path / "app_data.db"
@@ -107,17 +155,23 @@ def service_parts(tmp_path):
     renderer = FakeRenderer()
     bluesky = FakeBluesky()
     slack = FakeSlack()
-    yield tmp_path, app_db, ledger, renderer, bluesky, slack
+    weekly_renderer = FakeWeeklyRenderer()
+    weekly_builder = FakeWeeklyBuilder()
+    yield (tmp_path, app_db, ledger, renderer, bluesky, slack,
+           weekly_renderer, weekly_builder)
     ledger.close()
 
 
-def make_service(parts, *, shadow=False):
-    tmp_path, app_db, ledger, renderer, bluesky, slack = parts
+def make_service(parts, *, shadow=False, roundup=False):
+    tmp_path, app_db, ledger, renderer, bluesky, slack = parts[:6]
     return curation.CurationService(
-        ledger=ledger, app_db=app_db, audit_db=None,
+        ledger=ledger, app_db=app_db,
+        audit_db=tmp_path / "audit.db" if roundup else None,
+        audit_json=tmp_path / "audit.json" if roundup else None,
         output_dir=tmp_path / "cards", allowed_user="U-TOM",
         channel="C-PRIVATE", renderer=renderer, bluesky=bluesky,
-        slack=slack, shadow=shadow)
+        slack=slack, shadow=shadow,
+        weekly_renderer=parts[6], weekly_builder=parts[7])
 
 
 def message(ts="1.000", user="U-TOM", text=None):
@@ -186,6 +240,65 @@ def test_non_allowlisted_user_is_refused_before_bluesky_or_render(service_parts)
     assert service_parts[3].packs == []
     assert service_parts[5].uploads == 0
     assert "allowlisted" in service_parts[5].replies[0][2]
+
+
+def test_roundup_command_delivers_six_ordered_slides_and_one_caption(
+        service_parts):
+    service = make_service(service_parts, roundup=True)
+    request = message(text="roundup")
+
+    assert service.process(request) == "delivered"
+    assert service.process(request) == "delivered"
+
+    slack = service_parts[5]
+    assert slack.uploads == 6
+    assert len(service_parts[6].packs) == 1
+    assert len(service_parts[7].calls) == 1
+    assert slack.upload_details[0][3].endswith("slide-1-headline.jpg")
+    assert slack.upload_details[-1][3].endswith(
+        "slide-6-operators-compared.jpg")
+    assert all(detail[4].startswith("Alt text for ")
+               for detail in slack.upload_details)
+    assert slack.replies == [(
+        "C-PRIVATE", "1.000", "Caption\nThe finished weekly caption.")]
+
+
+def test_roundup_shadow_renders_without_writing_to_slack(service_parts):
+    service = make_service(service_parts, shadow=True, roundup=True)
+
+    assert service.process(message(text=" ROUNDUP ")) == "rendered"
+    assert service_parts[5].uploads == 0
+    assert service_parts[5].replies == []
+    assert len(service_parts[6].packs) == 1
+
+
+def test_partial_roundup_upload_is_terminal_for_that_slack_message(
+        service_parts):
+    service = make_service(service_parts, roundup=True)
+    slack = service_parts[5]
+    normal_upload = slack.upload
+
+    def fail_on_third(*args, **kwargs):
+        if slack.uploads == 2:
+            raise curation.CurationError("simulated Slack failure")
+        return normal_upload(*args, **kwargs)
+
+    slack.upload = fail_on_third
+    request = message(text="roundup")
+
+    assert service.process(request) == "refused"
+    assert slack.uploads == 2
+    assert service.process(request) == "refused"
+    assert slack.uploads == 2
+    assert "simulated Slack failure" in slack.replies[-1][2]
+
+
+def test_non_allowlisted_roundup_is_refused_before_build(service_parts):
+    service = make_service(service_parts, roundup=True)
+
+    assert service.process(message(user="U-SOMEONE", text="roundup")) == "refused"
+    assert service_parts[7].calls == []
+    assert service_parts[5].uploads == 0
 
 
 def test_same_link_twice_delivers_one_file_and_deterministic_copy(service_parts):
@@ -276,6 +389,20 @@ def test_poll_silently_ignores_non_link_messages_and_file_uploads(service_parts)
     assert service_parts[5].replies == []
 
 
+def test_poll_handles_exact_roundup_but_ignores_similar_conversation(
+        service_parts):
+    service = make_service(service_parts, shadow=True, roundup=True)
+    service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
+    service_parts[5].messages = [
+        message("1.000", text="could we do a roundup later?"),
+        message("2.000", text="roundup"),
+    ]
+
+    assert service.poll_once() == 1
+    assert service_parts[2].checkpoint("C-PRIVATE") == "2.000"
+    assert len(service_parts[6].packs) == 1
+
+
 def test_poll_still_refuses_multiple_bluesky_links(service_parts):
     service = make_service(service_parts)
     service_parts[2].set_checkpoint("C-PRIVATE", "0.500")
@@ -329,12 +456,15 @@ def test_slack_client_uses_external_upload_flow_and_private_channel_gate(tmp_pat
     prepared = []
     assert client.upload(
         "C-PRIVATE", "1.000", image, "card.jpg",
-        prepared=prepared.append) == "F-ONE"
+        prepared=prepared.append, alt_text="Accessible description") == "F-ONE"
     assert prepared == ["F-ONE"]
     assert uploaded == [("https://files.slack.test/upload", b"jpeg")]
     ticket = next(kwargs["form_payload"] for url, kwargs in calls
                   if url.endswith("files.getUploadURLExternal"))
-    assert ticket == {"filename": "card.jpg", "length": 4}
+    assert ticket == {
+        "filename": "card.jpg", "length": 4,
+        "alt_txt": "Accessible description",
+    }
     complete = next(kwargs["form_payload"] for url, kwargs in calls
                     if url.endswith("files.completeUploadExternal"))
     assert complete["channel_id"] == "C-PRIVATE"
