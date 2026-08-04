@@ -133,7 +133,7 @@ python deploy/push.py --install-layout
 The layout installs `bbb-social-curation.service` and its three-minute timer,
 but leaves the timer disabled. The service is a sandboxed oneshot. It can read
 only `app_data.db` and `audit.db`, and can write only the delivery ledger at
-`/var/lib/bristolbusbot/social.db`, rendered cards under
+`/var/lib/bristolbusbot/social/social.db`, rendered cards under
 `/var/lib/bristolbusbot/social/`, and its monitoring job record. The existing
 backup configuration already names the ledger path.
 

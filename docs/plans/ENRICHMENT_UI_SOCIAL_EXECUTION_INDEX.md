@@ -93,9 +93,13 @@ enable remain attended gates.
 - [x] Configure the private channel/user IDs and root-only bot token on the Pi;
   validate the hidden values, confirm the bot is a channel member, and leave
   the timer disabled and live marker absent.
-- [ ] Deploy the systemd-credential mode compatibility fix discovered by the
-  first safe run, then seed the checkpoint and shadow-render a newly shared
-  link with no reply
+- [x] Merge PR #35 and deploy social release
+  `20260804t003554677599z-c54b1602`; the systemd-credential compatibility gate
+  then passed on the Pi.
+- [ ] Move the SQLite ledger into its already sandbox-writable social state
+  directory after the second safe run proved WAL sidecars could not be created
+  beside the old top-level database path. Then seed the checkpoint and
+  shadow-render a newly shared link with no reply
   or upload.
 - [ ] Enable live mode, share the link again as a new Slack message, verify the
   image/alt/caption and delivery ledger, then enable the timer. The checkpointed

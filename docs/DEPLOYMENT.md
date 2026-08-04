@@ -173,8 +173,8 @@ deliberately excludes this optional component.
 
 `--install-layout` installs `bbb-social-curation.service` and its timer but
 leaves that timer disabled. The oneshot reads the bot and audit databases
-read-only and can write only `/var/lib/bristolbusbot/social.db`,
-`/var/lib/bristolbusbot/social/` and its monitoring job record. Its token is a
+read-only and can write only `/var/lib/bristolbusbot/social/` (the SQLite
+ledger and rendered cards) and its monitoring job record. Its token is a
 root-owned mode-0600 file loaded by systemd credentials, never an environment
 variable, release file or command-line value.
 
@@ -204,6 +204,16 @@ its copied mode differed from the root-owned source file's `0600`. No Slack
 message or card was sent. The follow-up fix accepts only the exact regular
 `slack-token` beneath systemd's `/run/credentials/` hierarchy; arbitrary loose
 or symlinked credentials remain rejected.
+
+The rerun then exposed a separate sandbox-path error before Slack polling:
+SQLite could open the top-level ledger but could not create its WAL sidecars
+without write access to the whole shared state directory. No Slack message or
+card was sent. The ledger therefore lives at
+`/var/lib/bristolbusbot/social/social.db`, inside the service's dedicated
+writable directory. The layout installer stops the social timer/service,
+atomically migrates the database and any sidecars plus the non-secret config
+path, validates the result, and restores the old locations on installer
+rollback. It does not alter the root-only token.
 
 Production status (4 August 2026): PR #32 was merged and social release
 `20260803t234404745058z-4ab3bcea` plus the reviewed layout were installed. The

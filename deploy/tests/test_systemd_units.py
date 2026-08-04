@@ -140,8 +140,8 @@ def test_social_curation_is_credentialed_isolated_and_shadow_gated():
         "ProtectSystem=strict",
         "ReadOnlyPaths=/var/lib/bristolbusbot/bot/app_data.db "
         "/var/lib/bristolbusbot/collector/audit.db",
-        "ReadWritePaths=/var/lib/bristolbusbot/social.db "
-        "/var/lib/bristolbusbot/social /var/lib/bristolbusbot/monitoring",
+        "ReadWritePaths=/var/lib/bristolbusbot/social "
+        "/var/lib/bristolbusbot/monitoring",
         "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
     ):
         assert setting in service
@@ -157,9 +157,23 @@ def test_social_curation_is_credentialed_isolated_and_shadow_gated():
         "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
     assert (
-        "f /var/lib/bristolbusbot/social.db 0600 "
+        "f /var/lib/bristolbusbot/social/social.db 0600 "
         "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
+    assert "/var/lib/bristolbusbot/social.db" not in service
+
+
+def test_layout_migrates_social_sqlite_into_its_writable_directory():
+    installer = (SYSTEMD.parent / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert "social_legacy_db=/var/lib/bristolbusbot/social.db" in installer
+    assert "social_db=$social_state_dir/social.db" in installer
+    assert 'mv "$social_legacy_db" "$social_db"' in installer
+    assert "BBB_SOCIAL_DB=/var/lib/bristolbusbot/social/social.db" in installer
+    assert 'validate_production_config.py" social' in installer
+    assert 'if [ "$social_db_migrated" -eq 1 ]' in installer
+    assert installer.index("systemctl stop bbb-social-curation.timer") \
+        < installer.index('mv "$social_legacy_db" "$social_db"')
 
 
 def test_rollup_is_networkless_and_publish_does_not_repeat_it():

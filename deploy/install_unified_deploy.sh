@@ -20,6 +20,12 @@ releases=$base/releases
 incoming=$base/incoming
 backup=/var/backups/bristolbusbot-unified-deploy-$(date -u +%Y%m%dT%H%M%SZ)
 marker=/etc/bristolbusbot/unified-deploy-layout
+social_config=/etc/bristolbusbot/social.env
+social_legacy_db=/var/lib/bristolbusbot/social.db
+social_state_dir=/var/lib/bristolbusbot/social
+social_db=$social_state_dir/social.db
+social_db_migrated=0
+social_timer_enabled=0
 changed=0
 
 mkdir -p "$current" "$releases" "$incoming" "$backup/units" \
@@ -104,6 +110,7 @@ for destination in \
     /usr/local/libexec/bristolbusbot-editorial/editorial_promote.py \
     /etc/sudoers.d/bristolbusbot-deploy \
     /etc/tmpfiles.d/bristolbusbot.conf \
+    "$social_config" \
     "$remote_home/bus-audit/publish_to_github.sh"
 do
     backup_file "$destination"
@@ -113,6 +120,16 @@ rollback() {
     code=$?
     trap - EXIT INT TERM
     if [ "$changed" -eq 1 ]; then
+        /usr/bin/systemctl stop bbb-social-curation.timer \
+            bbb-social-curation.service >/dev/null 2>&1 || true
+        if [ "$social_db_migrated" -eq 1 ]; then
+            for suffix in '' -wal -shm; do
+                if [ -e "$social_db$suffix" ] && \
+                   [ ! -e "$social_legacy_db$suffix" ]; then
+                    mv "$social_db$suffix" "$social_legacy_db$suffix" || true
+                fi
+            done
+        fi
         for unit in "$backup/new-units/"*; do
             test -e "$unit" || continue
             name=$(basename "$unit")
@@ -132,6 +149,9 @@ rollback() {
         fi
         /usr/bin/systemctl daemon-reload || true
         /usr/bin/systemctl restart bbb-collector.service bbb-site.service bbb-bot.service bbb-tunnel.service || true
+        if [ "$social_timer_enabled" -eq 1 ]; then
+            /usr/bin/systemctl start bbb-social-curation.timer || true
+        fi
     fi
     echo "unified deploy installation failed; previous units were restored" >&2
     exit "$code"
@@ -187,6 +207,80 @@ wait_public_site() {
 }
 
 changed=1
+if /usr/bin/systemctl is-enabled --quiet bbb-social-curation.timer; then
+    social_timer_enabled=1
+fi
+/usr/bin/systemctl stop bbb-social-curation.timer \
+    bbb-social-curation.service >/dev/null 2>&1 || true
+install -o "$deploy_user" -g "$deploy_user" -m 0750 -d "$social_state_dir"
+if [ -e "$social_legacy_db" ] || [ -L "$social_legacy_db" ]; then
+    if [ -e "$social_db" ] || [ -L "$social_db" ]; then
+        echo "both legacy and durable social databases exist" >&2
+        exit 1
+    fi
+    if [ -L "$social_legacy_db" ] || [ ! -f "$social_legacy_db" ]; then
+        echo "legacy social database is not a regular file" >&2
+        exit 1
+    fi
+    for suffix in -wal -shm; do
+        if [ -L "$social_legacy_db$suffix" ]; then
+            echo "legacy social database sidecar is a symlink" >&2
+            exit 1
+        fi
+        if [ -e "$social_legacy_db$suffix" ]; then
+            test -f "$social_legacy_db$suffix"
+        fi
+    done
+    mv "$social_legacy_db" "$social_db"
+    social_db_migrated=1
+    for suffix in -wal -shm; do
+        if [ -e "$social_legacy_db$suffix" ]; then
+            mv "$social_legacy_db$suffix" "$social_db$suffix"
+        fi
+    done
+    chown "$deploy_user:$deploy_user" "$social_db"
+    for suffix in -wal -shm; do
+        if [ -e "$social_db$suffix" ]; then
+            chown "$deploy_user:$deploy_user" "$social_db$suffix"
+        fi
+    done
+    chmod 0600 "$social_db"
+fi
+if [ -e "$social_config" ] || [ -L "$social_config" ]; then
+    /usr/bin/python3 - "$social_config" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+info = path.lstat()
+if not stat.S_ISREG(info.st_mode):
+    raise SystemExit("social configuration is not a regular file")
+old = "BBB_SOCIAL_DB=/var/lib/bristolbusbot/social.db\n"
+new = "BBB_SOCIAL_DB=/var/lib/bristolbusbot/social/social.db\n"
+text = path.read_text(encoding="utf-8")
+old_count = text.count(old)
+new_count = text.count(new)
+if (old_count, new_count) == (1, 0):
+    candidate = path.with_name(".social.env.migration")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(candidate, flags, stat.S_IMODE(info.st_mode))
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text.replace(old, new))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chown(candidate, info.st_uid, info.st_gid)
+        os.chmod(candidate, stat.S_IMODE(info.st_mode))
+        os.replace(candidate, path)
+    finally:
+        candidate.unlink(missing_ok=True)
+elif (old_count, new_count) != (0, 1):
+    raise SystemExit("social configuration has an unexpected database path")
+PY
+    /usr/bin/python3 "$stage/validate_production_config.py" social
+fi
 install -o root -g root -m 0755 "$stage/deploy_control.sh" /usr/local/sbin/bbb-deploy-control
 install -o root -g root -m 0755 "$stage/timetable_control.py" /usr/local/sbin/bbb-timetable-control
 install -o root -g root -m 0755 "$stage/validate_production_config.py" /usr/local/libexec/bbb-validate-config
@@ -251,6 +345,10 @@ if ! wait_bot; then echo "bot health wait exhausted" >&2; exit 1; fi
 /usr/bin/systemctl restart bbb-tunnel.service
 /usr/bin/systemctl is-active --quiet bbb-collector.service bbb-site.service bbb-bot.service bbb-tunnel.service
 if ! wait_public_site; then echo "public site health wait exhausted" >&2; exit 1; fi
+
+if [ "$social_timer_enabled" -eq 1 ]; then
+    /usr/bin/systemctl start bbb-social-curation.timer
+fi
 
 /usr/bin/systemctl enable --now bbb-editorial-refresh.timer
 for timer in "$stage/systemd"/*.timer; do
