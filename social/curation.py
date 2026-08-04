@@ -392,6 +392,31 @@ class SlackClient:
                 return str(item.get("id") or "") or None
         return None
 
+    def wait_for_thread_files(self, channel: str, thread_ts: str,
+                              filenames: list[str], *,
+                              timeout: float = 15) -> None:
+        expected = set(filenames)
+        deadline = time.monotonic() + timeout
+        while True:
+            response = self._api("conversations.replies", {
+                "channel": channel, "ts": thread_ts, "limit": 100,
+            }, http_method="GET")
+            visible = {
+                str(file.get("name") or "")
+                for message in response.get("messages") or []
+                if isinstance(message, dict)
+                for file in message.get("files") or []
+                if isinstance(file, dict)
+            }
+            if expected <= visible:
+                return
+            if time.monotonic() >= deadline:
+                missing = ", ".join(sorted(expected - visible))
+                raise CurationError(
+                    "Slack did not confirm all weekly slides before the "
+                    f"caption: {missing}")
+            time.sleep(.5)
+
     def upload(self, channel: str, thread_ts: str, image: Path,
                filename: str, *, prepared: Callable[[str], None],
                alt_text: str | None = None) -> str:
@@ -538,6 +563,7 @@ class CurationService:
                 "powertrain": "electric-vs-diesel",
                 "operator-comparison": "operators-compared",
             }
+            filenames = []
             for index, (image, slide) in enumerate(
                     zip(images, slides), start=1):
                 role = str(slide.get("role") or "")
@@ -548,11 +574,14 @@ class CurationService:
                     f"{operator_slug}-weekly-{week['startDate']}-to-"
                     f"{week['endDate']}-slide-{index}-"
                     f"{role_slugs[role]}.jpg")
+                filenames.append(filename)
                 self.slack.upload(
                     self.channel, ts, image, filename,
                     prepared=lambda _file_id: None,
                     alt_text=str(slide["altText"]),
                 )
+            self.slack.wait_for_thread_files(
+                self.channel, ts, filenames)
             self._reply(ts, f"Caption\n{draft['caption']}")
             self.ledger.save_request(
                 self.channel, ts, user, outcome="delivered")
