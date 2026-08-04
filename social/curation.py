@@ -78,6 +78,31 @@ def is_roundup_command(text: str) -> bool:
     return bool(ROUNDUP_RE.fullmatch(str(text or "")))
 
 
+def roundup_command_from_message(message: dict) -> str | None:
+    direct = str(message.get("text") or "")
+    if is_roundup_command(direct):
+        return direct
+
+    fragments: list[str] = []
+
+    def collect(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                collect(item)
+            return
+        if not isinstance(value, dict):
+            return
+        if value.get("type") in {"text", "mrkdwn"}:
+            text = value.get("text")
+            if isinstance(text, str):
+                fragments.append(text)
+        collect(value.get("elements"))
+
+    collect(message.get("blocks"))
+    return next((fragment for fragment in fragments
+                 if is_roundup_command(fragment)), None)
+
+
 def _form_body(payload: dict) -> bytes:
     values = {}
     for key, value in payload.items():
@@ -678,8 +703,9 @@ class CurationService:
             # a command sent on the maintainer's behalf. Exact `roundup` is
             # still authenticated inside process(), so route that single word
             # before filtering ordinary subtypes and uploaded drafts.
-            if is_roundup_command(message_text):
-                self.process(message)
+            roundup_text = roundup_command_from_message(message)
+            if roundup_text is not None:
+                self.process({**message, "text": roundup_text})
                 self.ledger.set_checkpoint(self.channel, str(message["ts"]))
                 handled += 1
                 continue
