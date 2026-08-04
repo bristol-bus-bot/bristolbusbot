@@ -487,12 +487,14 @@ function formatDateTime(value) {
 
 export function validatePack(pack, card = 'all') {
   const errors = [];
-  if (!['all', 'bot-said'].includes(card)) errors.push(`unknown card mode: ${card}`);
-  if (!pack?.botSaid?.postText || !pack?.botSaid?.postUrl) errors.push('botSaid requires published postText and postUrl');
-  if (!pack?.botSaid?.route || !pack?.botSaid?.observedAt) errors.push('botSaid requires route and observedAt');
-  if (!pack?.botSaid?.operatorRef || !pack?.botSaid?.operatorName) errors.push('botSaid requires operator identity');
-  if (!errors.length) {
-    try { quoteLayout(pack.botSaid.postText); } catch (error) { errors.push(error.message); }
+  if (!['all', 'bot-said', 'weekly'].includes(card)) errors.push(`unknown card mode: ${card}`);
+  if (card !== 'weekly') {
+    if (!pack?.botSaid?.postText || !pack?.botSaid?.postUrl) errors.push('botSaid requires published postText and postUrl');
+    if (!pack?.botSaid?.route || !pack?.botSaid?.observedAt) errors.push('botSaid requires route and observedAt');
+    if (!pack?.botSaid?.operatorRef || !pack?.botSaid?.operatorName) errors.push('botSaid requires operator identity');
+    if (!errors.length) {
+      try { quoteLayout(pack.botSaid.postText); } catch (error) { errors.push(error.message); }
+    }
   }
   if (card === 'bot-said') {
     if (errors.length) throw new Error(errors.join('; '));
@@ -557,15 +559,14 @@ export function validatePack(pack, card = 'all') {
 export function manifest(pack, files, card = 'all') {
   const bot = pack.botSaid;
   const week = pack.busWeek;
-  const drafts = [
-    {
+  const drafts = [];
+  if (card !== 'weekly') drafts.push({
       kind: 'bot-said', file: files.botSaid,
       caption: `${bot.postText}\n\n${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}. Track buses live at bristolbuses.live.`,
       altText: `Dark departure-board card quoting Bristol Bus Bot about ${bot.operatorName} route ${bot.route} at ${bot.stop || 'Bristol'}, ${Number(bot.delayMinutes) > 0 ? `${bot.delayMinutes} minutes late` : Number(bot.delayMinutes) < 0 ? `${Math.abs(bot.delayMinutes)} minutes early` : 'on time'}. The quote reads: ${bot.postText}`,
       sources: { postUrl: bot.postUrl, postUri: bot.postUri || null, observedAt: bot.observedAt, operatorRef: bot.operatorRef, operatorName: bot.operatorName, vehicleRef: bot.vehicleRef || null, journeyRef: bot.journeyRef || null, recentObservationCount: bot.recentDepartures?.length || 1 },
-    },
-  ];
-  if (card === 'all') drafts.push(
+    });
+  if (card !== 'bot-said') drafts.push(
     {
       kind: 'weekly-carousel',
       slides: [
@@ -656,11 +657,22 @@ async function main() {
     weeklyPowertrain: '06-weekly-powertrain.jpg',
     weeklyOperators: '07-operators-compared.jpg',
   };
-  const names = card === 'bot-said' ? { botSaid: allNames.botSaid } : allNames;
-  const renders = [
+  const weeklyNames = {
+    weeklyHeadline: '01-weekly-headline.jpg',
+    weeklyTarget: '02-weekly-target.jpg',
+    weeklyDays: '03-weekly-days.jpg',
+    weeklyDistribution: '04-weekly-distribution.jpg',
+    weeklyPowertrain: '05-weekly-powertrain.jpg',
+    weeklyOperators: '06-operators-compared.jpg',
+  };
+  const names = card === 'bot-said'
+    ? { botSaid: allNames.botSaid }
+    : card === 'weekly' ? weeklyNames : allNames;
+  const renders = [];
+  if (card !== 'weekly') renders.push(
     sharp(render(botSaidSvg(pack.botSaid, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.botSaid)),
-  ];
-  if (card === 'all') renders.push(
+  );
+  if (card !== 'bot-said') renders.push(
     sharp(render(busWeekSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyHeadline)),
     sharp(render(weeklyTargetSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyTarget)),
     sharp(render(weeklyDaysSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
