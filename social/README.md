@@ -113,14 +113,15 @@ installed the native `sharp` and `resvg` packages and produced a valid
 1080 x 1350 JPEG. The temporary directory was removed and Slack was not
 contacted.
 
-Production status (4 August 2026): PRs #32, #35 and #36 are merged, release
-`20260804t003554677599z-c54b1602` and the reviewed systemd layout are installed,
+Production status (4 August 2026): PRs #32, #35, #36 and #37 are merged, release
+`20260804t204401034353z-e0716f09` and the reviewed systemd layout are installed,
 and the release passed its native ARM64 render gate. The private Slack app,
-allowlisted channel/user and root-only credential are configured. The first
-successful shadow poll seeded a current-time checkpoint and recorded zero
-requests and zero deliveries. The timer remains disabled and the live marker
-remains absent. A newly shared link has not yet completed its shadow render or
-attended live-delivery gates.
+allowlisted channel/user and root-only credential are configured. Checkpoint
+seeding and a newly shared link's reviewed 1080 x 1350 shadow render passed.
+Slack rejected the first live upload-ticket request before receiving image
+bytes because that method did not accept the client's JSON arguments. Live
+mode was disabled again and the timer remains disabled. The form-encoded
+upload fix and attended delivery still have to pass before timer enable.
 
 Deploy the reviewed code first. This runs the complete local gates, installs
 native packages off to the side and accepts the release only after another
@@ -171,6 +172,10 @@ Slack can encode one pasted URL as `<target|the same target>`. The parser uses
 the actual target once and ignores the display label, so that normal phone
 share format is accepted without weakening the one-link rule. Two separately
 supplied links are still refused.
+
+The external file-upload ticket and completion calls use URL-encoded form
+fields, matching Slack's file-upload guide and SDK behaviour. Ordinary Slack
+message calls continue to use JSON.
 
 For that single attended test, enable live mode through the fixed allowlisted
 helper, share the test link again as a new Slack message, start one job, then
