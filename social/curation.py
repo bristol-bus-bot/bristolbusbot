@@ -674,12 +674,16 @@ class CurationService:
         for message in self.slack.history(
                 self.channel, checkpoint):
             message_text = str(message.get("text") or "")
-            attributed_roundup = (
-                is_roundup_command(message_text)
-                and not message.get("files")
-            )
-            if (message.get("type") != "message"
-                    or (message.get("subtype") and not attributed_roundup)):
+            # Slack integrations can attach non-message transport metadata to
+            # a command sent on the maintainer's behalf. Exact `roundup` is
+            # still authenticated inside process(), so route that single word
+            # before filtering ordinary subtypes and uploaded drafts.
+            if is_roundup_command(message_text):
+                self.process(message)
+                self.ledger.set_checkpoint(self.channel, str(message["ts"]))
+                handled += 1
+                continue
+            if message.get("type") != "message" or message.get("subtype"):
                 self.ledger.set_checkpoint(self.channel, str(message.get("ts") or "0"))
                 continue
             # The same private channel also holds completed Instagram drafts.
