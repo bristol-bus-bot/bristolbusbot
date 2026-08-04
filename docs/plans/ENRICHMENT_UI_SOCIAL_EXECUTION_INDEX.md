@@ -63,12 +63,14 @@ remained green.
 
 ### 2. Slack-to-Instagram-card curation
 
-Status: PR #32 is merged and social release
-`20260803t234404745058z-4ab3bcea` plus the reviewed layout are installed on
-the Pi. Both ARM64 render gates passed on 4 August 2026. The service and timer
-are inactive, the timer is disabled, and no Slack credential or live marker is
-installed. Slack configuration, shadow polling, one real delivery and timer
-enable remain attended gates.
+Status: PRs #32, #35 and #36 are merged. Social release
+`20260804t003554677599z-c54b1602` and the reviewed layout are installed on the
+Pi. Both ARM64 render gates passed on 4 August 2026. The private Slack app,
+allowlisted channel/user and root-only credential are configured. The first
+successful shadow poll seeded a current-time checkpoint with zero requests and
+zero deliveries. The timer remains disabled and the live marker remains
+absent. A newly shared link's shadow render, one attended real delivery and
+timer enable remain gated steps.
 
 - [x] Add and locally smoke-test a single-card renderer mode.
 - [x] Run the renderer smoke test on ARM64: native dependencies installed and
@@ -96,11 +98,20 @@ enable remain attended gates.
 - [x] Merge PR #35 and deploy social release
   `20260804t003554677599z-c54b1602`; the systemd-credential compatibility gate
   then passed on the Pi.
-- [ ] Move the SQLite ledger into its already sandbox-writable social state
-  directory after the second safe run proved WAL sidecars could not be created
-  beside the old top-level database path. Then seed the checkpoint and
-  shadow-render a newly shared link with no reply
-  or upload.
+- [x] Merge PR #36 as `cc8c363d`, install the reviewed layout and move the
+  SQLite ledger into `/var/lib/bristolbusbot/social/social.db`, where its WAL
+  sidecars are inside the service's dedicated writable state directory.
+- [x] Reinstall the Slack app with the five documented bot scopes, replace the
+  Pi credential through the hidden configuration helper, validate it, and run
+  the first successful shadow poll. It seeded the private-channel checkpoint;
+  the ledger contained zero requests and zero deliveries, the timer remained
+  disabled and the live marker remained absent.
+- [ ] Shadow-render one newly shared link with no reply or upload, then inspect
+  the job record, ledger and rendered JPEG. The first phone-friendly share was
+  safely refused because Slack represented one pasted URL as
+  `<target|the same target>` and the parser counted both copies. The pending
+  parser fix reads Slack's actual link target once while still refusing two
+  separately supplied links; deploy it before repeating this gate.
 - [ ] Enable live mode, share the link again as a new Slack message, verify the
   image/alt/caption and delivery ledger, then enable the timer. The checkpointed
   shadow request is not replayed.

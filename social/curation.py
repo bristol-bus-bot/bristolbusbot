@@ -35,6 +35,7 @@ LINK_RE = re.compile(
     r"https://bsky\.app/profile/([^/\s?#]+)/post/([A-Za-z0-9._~:-]+)",
     re.IGNORECASE,
 )
+SLACK_LINK_RE = re.compile(r"<([^<>\s|]+)\|[^<>]*>")
 
 
 class CurationError(RuntimeError):
@@ -53,7 +54,12 @@ class PostLink:
 
 
 def parse_post_link(text: str) -> PostLink:
-    matches = list(LINK_RE.finditer(str(text or "")))
+    # Slack may represent one pasted URL as <target|the same target>. Parse the
+    # actual link target once and ignore its display label, which is not a
+    # second user-supplied destination.
+    normalized = SLACK_LINK_RE.sub(
+        lambda match: match.group(1), str(text or ""))
+    matches = list(LINK_RE.finditer(normalized))
     if len(matches) != 1:
         raise CurationError("share exactly one bsky.app post link")
     actor = urllib.parse.unquote(matches[0].group(1)).strip()

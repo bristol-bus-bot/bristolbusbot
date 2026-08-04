@@ -113,13 +113,14 @@ installed the native `sharp` and `resvg` packages and produced a valid
 1080 x 1350 JPEG. The temporary directory was removed and Slack was not
 contacted.
 
-Production status (4 August 2026): PR #32 is merged and release
-`20260803t234404745058z-4ab3bcea` plus the reviewed systemd layout are
-installed. The release passed a second native ARM64 render gate. The curation
-service and timer are inactive, the timer is disabled, and the credential and
-live marker are absent. The commands below therefore start at the one-time
-Slack app/configuration gate; they are not a claim that a real link has already
-been processed.
+Production status (4 August 2026): PRs #32, #35 and #36 are merged, release
+`20260804t003554677599z-c54b1602` and the reviewed systemd layout are installed,
+and the release passed its native ARM64 render gate. The private Slack app,
+allowlisted channel/user and root-only credential are configured. The first
+successful shadow poll seeded a current-time checkpoint and recorded zero
+requests and zero deliveries. The timer remains disabled and the live marker
+remains absent. A newly shared link has not yet completed its shadow render or
+attended live-delivery gates.
 
 Deploy the reviewed code first. This runs the complete local gates, installs
 native packages off to the side and accepts the release only after another
@@ -165,6 +166,11 @@ Then share one bot Bluesky link in the private channel and start the service
 again. Shadow mode reads and verifies the request and renders locally, but
 cannot reply or upload. Inspect the job record, ledger and rendered JPEG before
 the attended live test.
+
+Slack can encode one pasted URL as `<target|the same target>`. The parser uses
+the actual target once and ignores the display label, so that normal phone
+share format is accepted without weakening the one-link rule. Two separately
+supplied links are still refused.
 
 For that single attended test, enable live mode through the fixed allowlisted
 helper, share the test link again as a new Slack message, start one job, then
