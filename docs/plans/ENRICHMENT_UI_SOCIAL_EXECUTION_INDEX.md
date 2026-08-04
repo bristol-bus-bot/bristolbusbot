@@ -90,8 +90,12 @@ enable remain attended gates.
   aggregate health, digest and deployment documentation.
 - [x] Merge PR #32 and deploy the social release and layout with the timer
   disabled; verify local/public health and all four core services.
-- [ ] Configure the private channel/user IDs and bot token once on the Pi.
-- [ ] Seed the checkpoint, then shadow-render a newly shared link with no reply
+- [x] Configure the private channel/user IDs and root-only bot token on the Pi;
+  validate the hidden values, confirm the bot is a channel member, and leave
+  the timer disabled and live marker absent.
+- [ ] Deploy the systemd-credential mode compatibility fix discovered by the
+  first safe run, then seed the checkpoint and shadow-render a newly shared
+  link with no reply
   or upload.
 - [ ] Enable live mode, share the link again as a new Slack message, verify the
   image/alt/caption and delivery ledger, then enable the timer. The checkpointed
@@ -102,22 +106,24 @@ The later engagement shortlist is optional and cannot block link-driven cards.
 
 ### 3. Enrichment automation
 
-Status: paused behind a newly confirmed pre-existing audit incident. The
-scheduled rollup failed at 05:15 on 3 August because pipeline release
+Status: incident resolved on 4 August 2026. The scheduled rollup failed at
+05:15 on 3 August because pipeline release
 `20260730t180316535210z-56fd00a3` omitted required `fbribuses.json`; aggregate
-health has reported `job:audit-rollup` since then. This predates and is
-independent of the social deployment. Collector, bot, site, tunnel and their
-local/public health endpoints remain healthy.
+health then reported `job:audit-rollup`. This predated and was independent of
+the social deployment.
 
 - [x] Identify the broken ownership contract: a clean release correctly
   omitted the private generated artifact, while the rollup still depended on a
   mutable copy inside another component's release.
-- [ ] Merge the separate repair that establishes
+- [x] Merge PR #34 as `f7e83307`; it establishes
   `/var/lib/bristolbusbot/enrichment/fbribuses.json`, fixes the rollup to that
   path, and adds parse gates without packaging private data.
-- [ ] Atomically bootstrap the durable file from the validated live bot copy,
-  deploy only the pipeline component, catch up missed rollups, and prove
-  aggregate health clears before resuming enrichment work.
+- [x] Atomically bootstrap the durable file from the validated live bot copy
+  (2,605 vehicles, 4,386 lookup entries; SHA-256
+  `69b953091c942005908546f2e30a74656100fc4666f5b32820a428868b7be976`),
+  deploy pipeline release `20260804t001717496979z-f7e83307`, catch up and
+  publish the missing 2 August rollup, and prove aggregate health is `ok` with
+  no issues or failed units.
 - [ ] Complete the promotion-disabled timetable Phase A proof.
 - [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
 - [ ] Add durable consumer-path overrides for every bot artifact.
