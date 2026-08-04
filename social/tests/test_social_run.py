@@ -30,6 +30,8 @@ def test_runner_defaults_to_shadow_until_live_marker_exists(tmp_path):
         ENVIRONMENT, live_marker=marker, credential=credential)
     assert args[-1] == "--shadow"
     assert str(credential) in args
+    assert "--audit-json" in args
+    assert str(social_run.DEFAULT_AUDIT_JSON) in args
 
     marker.write_text("enabled\n", encoding="utf-8")
     args = social_run.build_args(

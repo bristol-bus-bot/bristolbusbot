@@ -9,6 +9,8 @@ import curation
 
 
 LIVE_MARKER = Path("/etc/bristolbusbot/social-live-enabled")
+DEFAULT_AUDIT_JSON = Path(
+    "/var/lib/bristolbusbot/pipeline/audit_site/audit_data.json")
 
 REQUIRED_ENV = (
     "BBB_SOCIAL_DB",
@@ -35,6 +37,7 @@ def build_args(environment: dict[str, str], *, live_marker: Path = LIVE_MARKER,
         "--db", environment["BBB_SOCIAL_DB"],
         "--app-db", environment["BBB_SOCIAL_APP_DB"],
         "--audit-db", environment["BBB_SOCIAL_AUDIT_DB"],
+        "--audit-json", str(DEFAULT_AUDIT_JSON),
         "--output-dir", environment["BBB_SOCIAL_OUTPUT_DIR"],
         "--channel-id", environment["BBB_SOCIAL_CHANNEL_ID"],
         "--allowed-user-id", environment["BBB_SOCIAL_ALLOWED_USER_ID"],
