@@ -113,15 +113,16 @@ installed the native `sharp` and `resvg` packages and produced a valid
 1080 x 1350 JPEG. The temporary directory was removed and Slack was not
 contacted.
 
-Production status (4 August 2026): PRs #32, #35, #36 and #37 are merged, release
-`20260804t204401034353z-e0716f09` and the reviewed systemd layout are installed,
-and the release passed its native ARM64 render gate. The private Slack app,
-allowlisted channel/user and root-only credential are configured. Checkpoint
-seeding and a newly shared link's reviewed 1080 x 1350 shadow render passed.
-Slack rejected the first live upload-ticket request before receiving image
-bytes because that method did not accept the client's JSON arguments. Live
-mode was disabled again and the timer remains disabled. The form-encoded
-upload fix and attended delivery still have to pass before timer enable.
+Production status (4 August 2026): PRs #32, #35, #36, #37 and #38 are merged,
+release `20260804t205910782323z-b4980e79` and the reviewed systemd layout are
+installed, and the release passed its native ARM64 render gate. The private
+Slack app, allowlisted channel/user and root-only credential are configured.
+Checkpoint seeding, the reviewed 1080 x 1350 shadow render and one attended
+live delivery passed. Slack's API read-back confirmed the JPEG, alt-text reply
+and caption reply in the correct private thread. The live marker is present
+and the three-minute timer is enabled and active. Its first automatic firing
+completed successfully without duplicating the request, file or replies.
+Instagram posting remains manual.
 
 Deploy the reviewed code first. This runs the complete local gates, installs
 native packages off to the side and accepts the release only after another
