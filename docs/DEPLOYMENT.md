@@ -215,11 +215,30 @@ atomically migrates the database and any sidecars plus the non-secret config
 path, validates the result, and restores the old locations on installer
 rollback. It does not alter the root-only token.
 
-Production status (4 August 2026): PR #32 was merged and social release
-`20260803t234404745058z-4ab3bcea` plus the reviewed layout were installed. The
-release passed its native ARM64 gate. The service and timer are inactive, the
-timer is disabled, and no social credential or live marker exists. All four
-core services and the local bot/site and public site health endpoints passed.
+PR #36 merged as `cc8c363d` and the reviewed layout migration completed on the
+Pi. The Slack app was then reinstalled with the five documented bot scopes and
+the refreshed bot token was replaced through the root-only configuration
+helper. Configuration validation passed with values hidden. The first
+successful shadow poll seeded the current-time private-channel checkpoint and
+recorded zero requests and zero deliveries. Its systemd result was `success`;
+the timer stayed disabled and inactive and the live marker stayed absent. No
+retained Slack message was processed and nothing was uploaded or replied.
+
+The first newly shared phone-friendly link then exposed a Slack-markup edge
+case in shadow mode. Slack represented one pasted URL as
+`<target|the same target>`, so the strict parser counted two matches and safely
+refused the request before creating a delivery or JPEG. The parser fix reads
+the actual Slack link target once and ignores its display label; tests continue
+to prove that two separately supplied links and a misleading label are
+refused. Repeat the shadow-render gate after deploying that fix.
+
+Production status (4 August 2026): PRs #32, #35 and #36 were merged and social
+release `20260804t003554677599z-c54b1602` plus the reviewed layout were
+installed. The release passed its native ARM64 gate. The root-only social
+credential is installed and validated, the service completed its checkpoint
+seed successfully and is now inactive, the timer is disabled and inactive,
+and no live marker exists. All four core services and the local bot/site and
+public site health endpoints passed.
 The failed-unit read-back also exposed an older, unrelated audit-rollup failure
 from 3 August caused by the then-current pipeline release omitting
 `fbribuses.json`. The repair is deliberately separate from the social rollout:
