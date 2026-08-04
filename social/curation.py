@@ -73,16 +73,33 @@ def parse_post_link(text: str) -> PostLink:
     )
 
 
+def _form_body(payload: dict) -> bytes:
+    values = {}
+    for key, value in payload.items():
+        if isinstance(value, (dict, list)):
+            values[key] = json.dumps(value, separators=(",", ":"))
+        else:
+            values[key] = str(value)
+    return urllib.parse.urlencode(values).encode("utf-8")
+
+
 def _http_json(url: str, *, method: str = "GET",
                payload: dict | None = None,
+               form_payload: dict | None = None,
                headers: dict[str, str] | None = None,
                timeout: float = 15) -> dict:
+    if payload is not None and form_payload is not None:
+        raise ValueError("choose JSON or form payload, not both")
     body = None
     request_headers = {"User-Agent": "bristolbusbot-social-curation/1"}
     request_headers.update(headers or {})
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
         request_headers["Content-Type"] = "application/json; charset=utf-8"
+    elif form_payload is not None:
+        body = _form_body(form_payload)
+        request_headers["Content-Type"] = (
+            "application/x-www-form-urlencoded; charset=utf-8")
     request = urllib.request.Request(
         url, data=body, headers=request_headers, method=method)
     try:
@@ -276,12 +293,16 @@ class SlackClient:
             raise CurationError("Slack image upload outcome is unknown") from exc
 
     def _api(self, method: str, payload: dict | None = None,
-             *, http_method: str = "POST") -> dict:
+             *, http_method: str = "POST", form_encoded: bool = False) -> dict:
         payload = payload or {}
         if http_method == "GET":
             url = f"{SLACK_API}/{method}?{urllib.parse.urlencode(payload)}"
             response = self.request_json(
                 url, headers={"Authorization": f"Bearer {self.token}"})
+        elif form_encoded:
+            response = self.request_json(
+                f"{SLACK_API}/{method}", method="POST", form_payload=payload,
+                headers={"Authorization": f"Bearer {self.token}"})
         else:
             response = self.request_json(
                 f"{SLACK_API}/{method}", method="POST", payload=payload,
@@ -346,7 +367,7 @@ class SlackClient:
         size = image.stat().st_size
         ticket = self._api("files.getUploadURLExternal", {
             "filename": filename, "length": size,
-        })
+        }, form_encoded=True)
         file_id = str(ticket.get("file_id") or "")
         upload_url = str(ticket.get("upload_url") or "")
         if not file_id or not upload_url:
@@ -356,7 +377,7 @@ class SlackClient:
         self._api("files.completeUploadExternal", {
             "files": [{"id": file_id, "title": filename}],
             "channel_id": channel, "thread_ts": thread_ts,
-        })
+        }, form_encoded=True)
         return file_id
 
 
