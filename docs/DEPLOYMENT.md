@@ -230,7 +230,19 @@ case in shadow mode. Slack represented one pasted URL as
 refused the request before creating a delivery or JPEG. The parser fix reads
 the actual Slack link target once and ignores its display label; tests continue
 to prove that two separately supplied links and a misleading label are
-refused. Repeat the shadow-render gate after deploying that fix.
+refused. PR #37 merged as `e0716f09`, social release
+`20260804t204401034353z-e0716f09` passed its deployment gates, and the repeated
+shadow test produced the reviewed 1080 x 1350 JPEG with its caption and alt
+text. No Slack reply or upload occurred in shadow mode.
+
+The first attended live attempt then reached Slack's external-upload ticket
+method, which returned `invalid_arguments` before issuing a file ID or receiving
+any image bytes. The delivery remained safely `rendered`; no alt-text or
+caption reply was sent, the timer stayed disabled, and the live marker was
+removed immediately. Slack's file guide demonstrates form fields for
+`files.getUploadURLExternal`, and its Python SDK uses form encoding for both
+external-upload API calls. The pending fix follows that encoding while leaving
+ordinary JSON message calls unchanged.
 
 Production status (4 August 2026): PRs #32, #35 and #36 were merged and social
 release `20260804t003554677599z-c54b1602` plus the reviewed layout were

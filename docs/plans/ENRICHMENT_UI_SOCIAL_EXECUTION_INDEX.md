@@ -63,14 +63,15 @@ remained green.
 
 ### 2. Slack-to-Instagram-card curation
 
-Status: PRs #32, #35 and #36 are merged. Social release
-`20260804t003554677599z-c54b1602` and the reviewed layout are installed on the
+Status: PRs #32, #35, #36 and #37 are merged. Social release
+`20260804t204401034353z-e0716f09` and the reviewed layout are installed on the
 Pi. Both ARM64 render gates passed on 4 August 2026. The private Slack app,
-allowlisted channel/user and root-only credential are configured. The first
-successful shadow poll seeded a current-time checkpoint with zero requests and
-zero deliveries. The timer remains disabled and the live marker remains
-absent. A newly shared link's shadow render, one attended real delivery and
-timer enable remain gated steps.
+allowlisted channel/user and root-only credential are configured. Checkpoint
+seeding and a newly shared link's 1080 x 1350 shadow render both passed. The
+first live attempt was safely refused before any image bytes were uploaded
+because Slack rejected JSON arguments for its external-upload ticket. The live
+marker is off and the timer remains disabled. The form-encoded upload fix, one
+attended real delivery and timer enable remain gated steps.
 
 - [x] Add and locally smoke-test a single-card renderer mode.
 - [x] Run the renderer smoke test on ARM64: native dependencies installed and
@@ -106,15 +107,18 @@ timer enable remain gated steps.
   the first successful shadow poll. It seeded the private-channel checkpoint;
   the ledger contained zero requests and zero deliveries, the timer remained
   disabled and the live marker remained absent.
-- [ ] Shadow-render one newly shared link with no reply or upload, then inspect
-  the job record, ledger and rendered JPEG. The first phone-friendly share was
-  safely refused because Slack represented one pasted URL as
-  `<target|the same target>` and the parser counted both copies. The pending
-  parser fix reads Slack's actual link target once while still refusing two
-  separately supplied links; deploy it before repeating this gate.
+- [x] Merge PR #37 as `e0716f09`, deploy social release
+  `20260804t204401034353z-e0716f09` and repeat the phone-friendly share. The
+  parser read Slack's actual link target once while still refusing two
+  separately supplied links. Shadow mode rendered one 1080 x 1350 JPEG with
+  the verified text, caption and alt text; it sent no reply or upload.
 - [ ] Enable live mode, share the link again as a new Slack message, verify the
   image/alt/caption and delivery ledger, then enable the timer. The checkpointed
-  shadow request is not replayed.
+  shadow request is not replayed. The first attended attempt reached
+  `files.getUploadURLExternal` but Slack returned `invalid_arguments` before an
+  upload ticket or image bytes; the ledger stayed at `rendered`, live mode was
+  disabled again, and the pending fix uses the form encoding in Slack's file
+  guide for both external-upload API calls.
 - [ ] Keep Instagram posting manual.
 
 The later engagement shortlist is optional and cannot block link-driven cards.

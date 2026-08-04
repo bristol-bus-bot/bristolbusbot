@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import sys
@@ -299,11 +300,27 @@ def test_slack_client_uses_external_upload_flow_and_private_channel_gate(tmp_pat
         prepared=prepared.append) == "F-ONE"
     assert prepared == ["F-ONE"]
     assert uploaded == [("https://files.slack.test/upload", b"jpeg")]
-    complete = next(kwargs["payload"] for url, kwargs in calls
+    ticket = next(kwargs["form_payload"] for url, kwargs in calls
+                  if url.endswith("files.getUploadURLExternal"))
+    assert ticket == {"filename": "card.jpg", "length": 4}
+    complete = next(kwargs["form_payload"] for url, kwargs in calls
                     if url.endswith("files.completeUploadExternal"))
     assert complete["channel_id"] == "C-PRIVATE"
     assert complete["thread_ts"] == "1.000"
     assert complete["files"] == [{"id": "F-ONE", "title": "card.jpg"}]
+
+
+def test_slack_form_body_serializes_nested_upload_fields():
+    encoded = curation._form_body({
+        "filename": "card.jpg",
+        "length": 4,
+        "files": [{"id": "F-ONE", "title": "card.jpg"}],
+    }).decode("utf-8")
+    form = parse_qs(encoded)
+    assert form["filename"] == ["card.jpg"]
+    assert form["length"] == ["4"]
+    assert json.loads(form["files"][0]) == [
+        {"id": "F-ONE", "title": "card.jpg"}]
 
 
 def test_slack_client_rejects_shared_or_dm_destination():
