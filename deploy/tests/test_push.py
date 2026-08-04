@@ -93,6 +93,7 @@ def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
         assert (extract / "audit_site_assets/README.md").is_file()
         assert (extract / "LICENSE").is_file()
         assert (extract / "AUDIT_METHODOLOGY.md").is_file()
+        assert not (extract / "fbribuses.json").exists()
     if component == "social":
         assert (extract / "social_run.py").is_file()
         assert (extract / "generate-pack.mjs").is_file()
@@ -119,6 +120,18 @@ class FakeRemote:
 
     def __exit__(self, *_args):
         return None
+
+
+def test_pipeline_setup_and_health_validate_the_durable_fleet_file():
+    release = TEST_SETTINGS.remote_base / "releases" / "pipeline" / "release-1"
+    setup = push.setup_command("pipeline", release)
+    remote = FakeRemote()
+
+    assert f"BBB_FLEET_FILE={push.DURABLE_FLEET_FILE}" in setup
+    assert push.healthy(remote, "pipeline") is True
+    assert len(remote.commands) == 1
+    assert f"BBB_FLEET_FILE={push.DURABLE_FLEET_FILE}" in remote.commands[0]
+    assert "load_fleet_index" in remote.commands[0]
 
 
 def test_failed_health_switches_back_to_previous_release(monkeypatch, tmp_path):

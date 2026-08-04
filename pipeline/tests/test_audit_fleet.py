@@ -44,20 +44,36 @@ def test_missing_or_invalid_fleet_data_is_a_hard_failure(tmp_path):
         audit_fleet.load_fleet_index(empty)
 
 
-def test_production_fallback_is_after_release_and_repository_copies(
+def test_durable_and_production_fallbacks_follow_development_copies(
         monkeypatch, tmp_path):
     release = tmp_path / "release.json"
     repository = tmp_path / "repository.json"
+    durable = tmp_path / "durable.json"
     production = tmp_path / "production.json"
-    for path in (release, repository, production):
+    production_bot = tmp_path / "production-bot.json"
+    for path in (release, repository, durable, production, production_bot):
         path.write_text("[]", encoding="utf-8")
     monkeypatch.delenv("BBB_FLEET_FILE", raising=False)
     monkeypatch.setattr(audit_fleet, "FLEET_FILE", release)
     monkeypatch.setattr(audit_fleet, "REPO_FLEET_FILE", repository)
+    monkeypatch.setattr(audit_fleet, "DURABLE_FLEET_FILE", durable)
     monkeypatch.setattr(audit_fleet, "PRODUCTION_FLEET_FILE", production)
+    monkeypatch.setattr(
+        audit_fleet, "PRODUCTION_BOT_FLEET_FILE", production_bot)
 
     assert audit_fleet.fleet_path() == release
     release.unlink()
     assert audit_fleet.fleet_path() == repository
     repository.unlink()
+    assert audit_fleet.fleet_path() == durable
+    durable.unlink()
     assert audit_fleet.fleet_path() == production
+    production.unlink()
+    assert audit_fleet.fleet_path() == production_bot
+
+
+def test_configured_fleet_path_overrides_all_fallbacks(monkeypatch, tmp_path):
+    configured = tmp_path / "configured.json"
+    monkeypatch.setenv("BBB_FLEET_FILE", str(configured))
+
+    assert audit_fleet.fleet_path() == configured
