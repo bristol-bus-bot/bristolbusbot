@@ -128,10 +128,14 @@ def test_post_link_parser_requires_exactly_one_bsky_post_link():
     parsed = curation.parse_post_link(f"<https://bsky.app/profile/bristolbusbot.live/post/abc123|post>")
     assert parsed.actor == "bristolbusbot.live"
     assert parsed.rkey == "abc123"
+    duplicated_label = curation.parse_post_link(f"<{URL}|{URL}>")
+    assert duplicated_label.url == URL
     with pytest.raises(curation.CurationError, match="exactly one"):
         curation.parse_post_link("no link here")
     with pytest.raises(curation.CurationError, match="exactly one"):
         curation.parse_post_link(f"{URL} and {URL}")
+    with pytest.raises(curation.CurationError, match="exactly one"):
+        curation.parse_post_link(f"<https://example.com|{URL}>")
 
 
 def test_appview_resolves_handle_and_requires_exact_public_post():
