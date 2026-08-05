@@ -143,12 +143,17 @@ the social deployment.
   deploy pipeline release `20260804t001717496979z-f7e83307`, catch up and
   publish the missing 2 August rollup, and prove aggregate health is `ok` with
   no issues or failed units.
-- [ ] Complete the promotion-disabled timetable Phase A proof.
+- [x] Complete the promotion-disabled timetable Phase A proof. Corrected run
+  `30568434088` passed the attended diagnostic shadow and separate exact-hash
+  promotion on 30 July; the previous database remained available, aggregate
+  health is `ok`, and automatic no-change checks stayed harmless through
+  5 August.
 - [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
 - [ ] Add durable consumer-path overrides for every bot artifact.
 - [ ] Use a small shared promotion library plus fixed artifact-specific
   wrappers; do not create an arbitrary configurable root promoter.
-- [ ] Run the data-health audit report-only for two weeks.
+- [ ] Run the data-health audit report-only until three consecutive clean daily
+  reports and an injected operator-count-collapse warning have been reviewed.
 - [ ] Refactor fleet refresh to all-or-nothing candidates and shadow it.
 - [ ] Automate locality derivation as specified by
   `DATA_REFRESH_AUTOMATION.md`; it is not silently dropped from scope.

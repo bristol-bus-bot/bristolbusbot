@@ -278,11 +278,13 @@ rebuilds and a restore drill have both succeeded.
    `30421182234` built successfully on 29 July 2026, but the Pi safely rejected
    it before promotion because the old total-row gate measured superseded data
    rather than near-term service. The existing database remained live.
-10. [ ] Replace that gate with the service-window policy, correct correlated
+10. [x] Replace that gate with the service-window policy, correct correlated
     monitoring and no-change/lock semantics, then complete one fresh attended
     shadow and promotion followed by one harmless unattended timer exercise.
-    Measure Pi memory/swap during the promotion-disabled shadow before setting
-    any resource limit. The laptop remains only an emergency fallback.
+    Run `30568434088` passed its attended diagnostic shadow and exact-hash
+    promotion on 30 July; harmless automatic no-change checks continued through
+    5 August. No speculative resource limit was added. The laptop remains only
+    an emergency fallback.
 
 Rollback at every stage is to disable the new timer/service. The existing
 workstation refresh path remains available throughout.

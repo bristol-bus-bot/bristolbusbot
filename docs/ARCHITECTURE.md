@@ -151,10 +151,11 @@ accepted on 22 July 2026 and the daily timer is enabled. The first due timer run
 on 29 July built successfully but was rejected before promotion by a raw-row
 gate that did not distinguish upcoming service from superseded editions. The
 accepted timetable remained live. The service-window validator and correlated
-monitoring correction are implemented in repository source; a
-promotion-disabled Pi shadow proof is pending. A failed source, workflow,
-download, validator, restart or functional health check continues to leave or
-restore the previous timetable.
+monitoring correction passed an attended diagnostic shadow and separate
+run/hash-pinned promotion on 30 July as run `30568434088`; subsequent automatic
+no-change checks remained harmless. A failed source, workflow, download,
+validator, restart or functional health check continues to leave or restore the
+previous timetable.
 
 Facts and news remain human decisions, but their discovery and safe delivery
 are automated: an official-source candidate becomes eligible only after a

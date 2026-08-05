@@ -97,9 +97,9 @@ These are the facts the plan is built on, checked against the repository on
   `local_flavour.json` is curated neighbourhood editorial used only by the bot.
 - The Pi: ~904 MiB RAM, four live services, eleven timers, one maintenance
   lock, and now a large SSD. Disk space is no longer a constraint; RAM and
-  scheduling contention still are. The remaining Phase A gate (service-window
-  validator + correlated monitoring, from the 29 July incident) is implemented
-  in source but not yet proven on a promotion-disabled shadow.
+  scheduling contention still are. The Phase A service-window validator and
+  correlated monitoring correction passed their attended diagnostic shadow,
+  exact-hash promotion and automatic no-change follow-up on and after 30 July.
 
 ## What "automatic like the stop data" actually means
 
@@ -266,14 +266,15 @@ automating the production of wrong data.
 
 ## WP0 — Finish the Phase A hardening gate first
 
-The service-window validator and correlated monitoring corrections from the
-29 July incident must pass their promotion-disabled Pi shadow and a fresh
-attended promotion before any new data-plane automation starts. One change
-stream on the data plane at a time.
+Completed 30 July 2026. Corrected run `30568434088` passed its
+promotion-disabled Pi shadow and separate exact-hash attended promotion; the
+previous database was retained, consumer health passed, and subsequent
+automatic no-change checks remained harmless. Keep one change stream on the
+data plane at a time.
 
-**Plain English:** the timetable safety net is mid-upgrade. Finish stitching
-that before adding new machinery that shares the same locks, timers and alert
-channels — otherwise you can't tell whose alert is whose.
+**Plain English:** the timetable safety-net upgrade is finished and proved.
+The next data work may proceed without weakening its locks, validation or
+alerting boundaries.
 
 ## WP1 — Vehicle identity (Phase B)
 
@@ -339,8 +340,9 @@ the site keeps serving the old data throughout.
 
 ## WP4 — Detection: the nightly data-health audit (Phase D)
 
-A read-only nightly Pi job (report-only for its first two weeks) that answers,
-among the Phase D questions, the ones this plan needs:
+A read-only nightly Pi job (report-only until it has produced three consecutive
+clean daily reports) that answers, among the Phase D questions, the ones this
+plan needs:
 
 - Which observed, active, operator-scoped vehicles are missing a livery, a
   fleet entry, or any of the three blurb variants?
@@ -356,8 +358,9 @@ Output is one versioned JSON report through the existing `run_recorded_job.py`
 **Plain English:** every night, a job that changes nothing looks at what the
 collector actually saw on the road and writes a short report: "3 new buses
 have no livery data, 1 new model I've never heard of, fleet file is 12 days
-old." The morning digest reads that report. For the first two weeks it only
-reports, so you can check its counts by eye before anything acts on them.
+old." The morning digest reads that report. It only reports until three clean
+daily results have been checked by eye. A simulated operator-count collapse
+must also produce the expected digest warning before anything acts on it.
 
 (Scope note: WP4 asks "is the data estate *fresh and complete*?" Part 5's
 measurement-quality job asks the different question "are the *numbers
@@ -1099,14 +1102,14 @@ to proceed.
 |---|---|---|---|
 | 0 | Part 0: editorial workflow fix | nothing — **do first** | under an hour |
 | 1 | Part 2: status-filter chips | nothing | 1–2 sessions |
-| 2 | WP0: Phase A hardening proof | in flight | already planned |
+| 2 | WP0: Phase A hardening proof | complete 30 July | done |
 | 3 | WP1: vehicle identity | WP0 | 2–3 sessions |
 | 4 | WP2: bot consumer paths | — (parallel with WP1) | 1 session |
 | 5 | S1: renderer single-card mode | nothing (parallel track) | 1–2 sessions |
 | 6 | S2–S4: curation service, Slack, isolation | S1 | 3–4 sessions + shadow |
 | 7 | WP3: decoupling + promotion helper | WP1, WP2 | 2–3 sessions |
-| 8 | WP4: data-health audit (report-only) | WP3 | 2 sessions + 2-week soak |
-| 9 | WP5: fleet regenerator | WP4 soak | 2 sessions + shadow cycle |
+| 8 | WP4: data-health audit (report-only) | WP3 | 2 sessions + 3 clean daily reports |
+| 9 | WP5: fleet regenerator | WP4 report gate | 2 sessions + shadow cycle |
 | 10 | WP6: blurb generation + review loop | WP5 | 2–3 sessions + 30-day window |
 | 11 | S5: engagement shortlist | S2–S4 proven | 1 session |
 | 12 | Part 4: Threads shadow onward | S4 pattern proven | per `SOCIAL_EXPANSION_PLAN_V2.md` |
