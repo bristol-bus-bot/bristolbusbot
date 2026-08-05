@@ -28,7 +28,7 @@ THRESHOLDS = {
 DEFAULT_OUTPUT = Path("/var/lib/bristolbusbot/monitoring/data-health.json")
 DEFAULT_LIVE_DB = Path("/var/lib/bristolbusbot/collector/live.db")
 DEFAULT_AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
-DEFAULT_TIMETABLE_DB = Path("/var/lib/bristolbusbot/collector/timetable.db")
+DEFAULT_TIMETABLE_DB = Path("/var/lib/bristolbusbot/pipeline/timetable.db")
 DEFAULT_FLEET = Path("/var/lib/bristolbusbot/enrichment/fbribuses.json")
 DEFAULT_LOCALITIES = Path(
     "/var/lib/bristolbusbot/enrichment/stop_localities.json")
