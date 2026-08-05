@@ -1,8 +1,16 @@
 /** Render map icons and popups for vehicles and depots. */
 import { el } from "./util.js";
 
-const EV_COLORS = { delayed: "#D4351C", early: "#eab308",
-                    waiting: "#1D70B8", punctual: "#00703C" };
+const EV_COLORS = {
+    delayed: "var(--marker-status-late, #D4351C)",
+    early: "var(--marker-status-early, #F59E0B)",
+    waiting: "var(--marker-status-waiting, #1D70B8)",
+    punctual: "var(--marker-status-ontime, #00703C)",
+};
+const MARKER_INK = "var(--marker-ink, #14181D)";
+const MARKER_GAP = "var(--marker-gap, #FFFFFF)";
+const MARKER_MUTED = "var(--marker-muted-ring, #8B93A0)";
+const WAITING_BG = "var(--marker-waiting-bg, #E9E7E1)";
 
 const HEX = /^#[0-9a-fA-F]{3,8}$/;
 
@@ -16,64 +24,90 @@ export function liveryColor(livery) {
 }
 
 function corePath(eventType, c, r, hollow = false) {
-    const outline = "var(--sign-edge, #7E8582)";
+    const type = eventType in EV_COLORS ? eventType : "punctual";
+    const color = EV_COLORS[type];
+    const edge = MARKER_INK;
     if (hollow) {
-        const common = `fill="none" stroke="${outline}" stroke-width="2.4"`;
-        if (eventType === "delayed")
-            return `<rect x="${c - r * 0.82}" y="${c - r * 0.82}" width="${r * 1.64}" height="${r * 1.64}" rx="1.5" ${common}/>`;
-        if (eventType === "early")
-            return `<rect x="${c - r * 0.78}" y="${c - r * 0.78}" width="${r * 1.56}" height="${r * 1.56}" rx="1.5" ${common} transform="rotate(45 ${c} ${c})"/>`;
-        return `<circle cx="${c}" cy="${c}" r="${r}" ${common}/>`;
+        const common = `fill="${MARKER_GAP}" stroke="${color}" stroke-width="2.5"`;
+        if (type === "delayed")
+            return `<rect data-marker-core="delayed" x="${c - r}" y="${c - r}" width="${r * 2}" height="${r * 2}" rx="2" ${common}/>`;
+        if (type === "early")
+            return `<path data-marker-core="early" d="M ${c} ${c - r - 1} L ${c + r + 1} ${c + r} L ${c - r - 1} ${c + r} Z" ${common} stroke-linejoin="round"/>`;
+        if (type === "waiting")
+            return `<circle data-marker-core="waiting" cx="${c}" cy="${c}" r="${r}" fill="${MARKER_GAP}" stroke="${color}" stroke-width="3.5"/>`;
+        return `<circle data-marker-core="punctual" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
     }
-    const edge = `stroke="${outline}" stroke-width="1.2"`;
-    // Each state has a distinct marker shape as well as a colour.
-    if (eventType === "delayed")   // square
-        return `<rect x="${c - r * 0.82}" y="${c - r * 0.82}" width="${r * 1.64}" height="${r * 1.64}" rx="1.5" fill="${EV_COLORS.delayed}" ${edge}/>`;
-    if (eventType === "early")     // diamond
-        return `<rect x="${c - r * 0.78}" y="${c - r * 0.78}" width="${r * 1.56}" height="${r * 1.56}" rx="1.5" fill="${EV_COLORS.early}" ${edge} transform="rotate(45 ${c} ${c})"/>`;
-    if (eventType === "waiting")   // hollow circle
-        return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.waiting}" ${edge}/>`
-             + `<circle cx="${c}" cy="${c}" r="${r * 0.45}" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.9"/>`;
-    return `<circle cx="${c}" cy="${c}" r="${r}" fill="${EV_COLORS.punctual}" ${edge}/>`;
+    const common = `fill="${color}" stroke="${edge}" stroke-width="1.3"`;
+    if (type === "delayed")
+        return `<rect data-marker-core="delayed" x="${c - r}" y="${c - r}" width="${r * 2}" height="${r * 2}" rx="2" ${common}/>`;
+    if (type === "early")
+        return `<path data-marker-core="early" d="M ${c} ${c - r - 1} L ${c + r + 1} ${c + r} L ${c - r - 1} ${c + r} Z" ${common} stroke-linejoin="round"/>`;
+    if (type === "waiting")
+        return `<circle data-marker-core="waiting" cx="${c}" cy="${c}" r="${r}" fill="${MARKER_GAP}" stroke="${color}" stroke-width="3.5"/>`;
+    return `<circle data-marker-core="punctual" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
 }
 
-/** Small, shape-based marker showing that the bot posted about this journey. */
-export function featuredPostBadge(isFeatured) {
+/** Small corner tag showing that the bot posted about this journey. */
+export function featuredPostBadge(isFeatured, c = 22, ringR = 14) {
     if (!isFeatured) return "";
+    const x = c + ringR - 5;
+    const y = c - ringR - 3;
     return `<g class="busbot-post-badge" aria-hidden="true">
-        <path d="M24.5 2.5h7.2a2.3 2.3 0 0 1 2.3 2.3v4.5a2.3 2.3 0 0 1-2.3 2.3h-2.8l-3.7 2.7.8-2.7h-1.5a2.3 2.3 0 0 1-2.3-2.3V4.8a2.3 2.3 0 0 1 2.3-2.3Z"
-              fill="#F59E0B" stroke="#0D0F11" stroke-width="1.4"/>
-        <circle cx="26.8" cy="7" r="1" fill="#0D0F11"/>
-        <circle cx="30.4" cy="7" r="1" fill="#0D0F11"/>
+        <path d="M ${x} ${y} h 9 a 2 2 0 0 1 2 2 v 7 a 2 2 0 0 1 -2 2 h -3 l -3 3 .7 -3 h -3.7 a 2 2 0 0 1 -2 -2 v -7 a 2 2 0 0 1 2 -2 Z"
+              fill="#FFDD00" stroke="${MARKER_INK}" stroke-width="1.5"/>
     </g>`;
+}
+
+function markerAriaLabel(bus, isFeatured) {
+    const parts = [];
+    if (bus.line) parts.push(`Route ${bus.line}`);
+    if (bus.destination) parts.push(`to ${bus.destination}`);
+    parts.push(tooltipStatus(bus).text);
+    if (Number.isFinite(Number(bus.bearing)))
+        parts.push(`heading ${Math.round(Number(bus.bearing))} degrees`);
+    if (isFeatured) parts.push("bot posted about this journey");
+    return parts.join(", ");
+}
+
+function escapeAttribute(value) {
+    return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 export function busIcon(bus, isFeatured, options = {}) {
     const eventType = String(bus.waitingAtOrigin ? "waiting" : bus.eventType);
     const hollow = Boolean(options.hollow);
-    const ring = hollow
-        ? "var(--sign-edge, #7E8582)"
-        : (options.ringColor || liveryColor(bus.livery) || "#7E8582");
-    const emphasized = Boolean(isFeatured || options.emphasized);
-    const size = emphasized ? 36 : 28;
+    const emphasized = Boolean(options.emphasized);
+    const size = emphasized ? 48 : 44;
     const c = size / 2;
-    const coreR = emphasized ? 10 : 8;
+    const ringR = emphasized ? 17 : 16;
+    const coreR = emphasized ? 9 : 7;
+    const ringColor = options.ringColor || liveryColor(bus.livery) || MARKER_MUTED;
     const bearing = Number.isFinite(Number(bus.bearing)) ? Number(bus.bearing) : null;
-    const chevH = emphasized ? 5.5 : 4.5, chevW = emphasized ? 5 : 4;
-    const pointer = bearing !== null
-        ? `<g transform="rotate(${bearing} ${c} ${c})">
-             <path d="M${c - chevW} ${c + chevH * 0.3} L${c} ${c - chevH} L${c + chevW} ${c + chevH * 0.3}"
-                   fill="none" stroke="${hollow ? "var(--sign-edge, #7E8582)" : "#fff"}" stroke-width="2.5" stroke-linecap="square"/></g>`
-        : (eventType === "waiting" ? ""
-            : `<circle cx="${c}" cy="${c}" r="2.5" fill="${hollow ? "var(--sign-edge, #7E8582)" : "#fff"}"/>`);
+    const waiting = eventType === "waiting";
+    const ring = waiting
+        ? `<circle data-marker-ring="waiting" cx="${c}" cy="${c}" r="${ringR - 5}" fill="${WAITING_BG}" stroke="${MARKER_INK}" stroke-width="1.5"/>`
+        : hollow
+            ? `<circle data-marker-ring="livery" cx="${c}" cy="${c}" r="${ringR}" fill="none" stroke="${MARKER_MUTED}" stroke-width="1.5"/>`
+            : `<circle data-marker-ring="livery" cx="${c}" cy="${c}" r="${ringR}" fill="${ringColor}" stroke="${MARKER_INK}" stroke-width="1.5"/>
+               <circle cx="${c}" cy="${c}" r="${ringR - 5}" fill="${MARKER_GAP}"/>`;
+    const noseW = emphasized ? 5.5 : 4.5;
+    const noseTop = c - ringR - (emphasized ? 7 : 6);
+    const noseBase = c - ringR + 1;
+    const pointer = bearing !== null && !waiting
+        ? `<g data-marker-nose="direction" transform="rotate(${bearing} ${c} ${c})">
+             <path d="M ${c} ${noseTop} L ${c + noseW} ${noseBase} L ${c - noseW} ${noseBase} Z"
+                   fill="${hollow ? "none" : MARKER_INK}" stroke="${hollow ? MARKER_MUTED : MARKER_INK}" stroke-width="1.5" stroke-linejoin="round"/></g>`
+        : "";
+    const aria = escapeAttribute(markerAriaLabel(bus, isFeatured));
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"
-             ${isFeatured ? 'role="img" aria-label="Bot posted about this journey"' : 'aria-hidden="true"'}>
-            ${isFeatured ? "<title>Bot posted about this journey</title>" : ""}
-            <circle cx="${c}" cy="${c}" r="${coreR + 3}" fill="none" stroke="${ring}" stroke-width="3"/>
-            ${corePath(eventType, c, coreR, hollow)}
+             role="img" aria-label="${aria}">
+            <title>${aria}</title>
             ${pointer}
-            ${featuredPostBadge(isFeatured)}
+            ${ring}
+            ${corePath(eventType, c, waiting ? coreR - 1 : coreR, hollow)}
+            ${featuredPostBadge(isFeatured, c, ringR)}
         </svg>`;
     return L.divIcon({ html: svg,
                        className: ["bus-marker", isFeatured ? "featured" : "",
@@ -85,19 +119,17 @@ export function busIcon(bus, isFeatured, options = {}) {
 
 export function depotIcon(livery, options = {}) {
     const hollow = Boolean(options.hollow);
-    const ring = hollow
-        ? "var(--sign-edge, #7E8582)"
-        : (liveryColor(livery) || "#7E8582");
-    const innerFill = hollow ? "none" : "#7E8582";
-    const centreFill = hollow ? "var(--sign-edge, #7E8582)" : "#495049";
+    const size = 44, c = size / 2, r = 7;
+    const fill = hollow ? "none" : "var(--marker-status-depot, #6B7480)";
+    const stroke = hollow ? MARKER_MUTED : MARKER_INK;
     return L.divIcon({
-        html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
-                 <circle cx="11" cy="11" r="9" fill="none" stroke="${ring}" stroke-width="2"/>
-                 <circle cx="11" cy="11" r="5.5" fill="${innerFill}" stroke="var(--sign-edge, #7E8582)" stroke-width="1"/>
-                 <circle cx="11" cy="11" r="2" fill="${centreFill}"/></svg>`,
+        html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"
+                    role="img" aria-label="Bus at depot">
+                 <title>Bus at depot</title>
+                 <circle data-marker-core="depot" cx="${c}" cy="${c}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/></svg>`,
         className: `bus-marker depot${hollow ? " filtered-out" : ""}`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11], popupAnchor: [0, -11] });
+        iconSize: [size, size],
+        iconAnchor: [c, c], popupAnchor: [0, -c] });
 }
 
 function tooltipStatus(bus) {
