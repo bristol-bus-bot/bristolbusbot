@@ -304,16 +304,20 @@ bus gets the wrong joke.
 Acceptance: grep-backed inventory of every consumer read path; collision
 fixtures pass; no fallback-log entries after the migration window.
 
-Implementation evidence (5 August 2026, deployment pending): the read-only Pi
-audit inspected 2,605 fleet records and 995 recently observed identities. It
-found 60 cross-operator active code groups, 13 same-operator reused groups, two
-registration collision groups, 19 actual legacy fleet-record mismatches and 26
-ambiguous description identities. The proposed site/browser/bot readers fix the
-19 mismatches with registration-first operator-scoped lookup, suppress the 26
-ambiguous legacy blurbs, and retain bare-code compatibility only where the data
-proves it safe. The schema-2 blurb scope no longer uses
+Production evidence (5 August 2026): the read-only Pi audit inspected 2,605
+fleet records and 995 recently observed identities. It found 60 cross-operator
+active code groups, 13 same-operator reused groups, two registration collision
+groups, 19 actual legacy fleet-record mismatches and 26 ambiguous description
+identities. PR #50 merged as `77e54c02`; its pipeline, bot and site releases
+were deployed separately and passed their health gates. The live readers now
+fix the 19 mismatches with registration-first operator-scoped lookup, suppress
+the 26 ambiguous legacy blurbs, and retain bare-code compatibility only where
+the data proves it safe. The schema-2 blurb scope no longer uses
 `ref.split("-")[-1]`; it emits scoped keys and withholds collisions from old
 generators. Existing ambiguous prose is not guessed into a new operator key.
+All four core services were active, no units had failed, aggregate/local/public
+health was `ok`, the bot reported both databases connected and 2,605 fleet
+records loaded, and the post-deploy site/bot error journal was empty.
 
 ## WP2 — Durable consumer paths (Phase B continued)
 

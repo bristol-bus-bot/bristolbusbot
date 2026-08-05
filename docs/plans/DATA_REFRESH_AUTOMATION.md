@@ -152,13 +152,17 @@ Then introduce dual-key reads, migrate keyed files deliberately, update site and
 bot together, and remove the lossy reference collapse only after fixtures cover
 multi-operator collisions.
 
-Implementation status (5 August 2026): `audit_vehicle_identity.py` provides the
-bounded read-only evidence above. Site, browser and bot lookups now prefer
-operator-scoped registration and `(NOC, fleet_code)`, accept a legacy bare code
-only when it proves unambiguous, and otherwise omit cosmetic enrichment. Blurb
-scope schema 2 retains operator-scoped keys and excludes collisions from its
-legacy compatibility list. The code and fixtures are ready; production remains
-on the previous lookup until the reviewed site/bot deployment completes.
+Production status (5 August 2026): PR #50 merged as `77e54c02`. Pipeline
+release `20260805t193540334545z-77e54c02`, bot release
+`20260805t193614025127z-77e54c02` and site release
+`20260805t193658843920z-77e54c02` are live. Site, browser and bot lookups now
+prefer operator-scoped registration and `(NOC, fleet_code)`, accept a legacy
+bare code only when it proves unambiguous, and otherwise omit cosmetic
+enrichment. Blurb scope schema 2 retains operator-scoped keys and excludes
+collisions from its legacy compatibility list. Direct read-only checks proved
+`FBRI-36801` resolves to `YM17FKP`, `SSWL-36801` to `MX62LXM` and
+`FBRI-37320` to `WX57HKA`; a bare ambiguous `36801` and its legacy description
+both return no enrichment.
 
 ### Consumer paths
 

@@ -300,6 +300,19 @@ process had loaded. The site unit now pins `BBB_FLEET_JSON` to the same durable
 pipeline. Site releases and reboots therefore no longer determine whether
 vehicle identity and livery data are available.
 
+Operator-safe vehicle identity was deployed on 5 August 2026 after PR #50
+merged as `77e54c02`: pipeline release
+`20260805t193540334545z-77e54c02`, bot release
+`20260805t193614025127z-77e54c02` and site release
+`20260805t193658843920z-77e54c02`. The read-only audit found 19 real historical
+cross-operator fleet matches and 26 ambiguous description identities among 995
+recently observed identities. Live checks proved the known collisions resolve
+correctly (`FBRI-36801` to `YM17FKP`, `SSWL-36801` to `MX62LXM`, and
+`FBRI-37320` to `WX57HKA`) while a bare ambiguous code returns no enrichment.
+All core services were active, no unit had failed, aggregate/local/public
+health was `ok`, the bot had both databases connected and 2,605 fleet records
+loaded, and the post-deploy site/bot error journal was empty.
+
 ## Backups
 
 Nightly encrypted restic snapshots to a dedicated local drive, copied to

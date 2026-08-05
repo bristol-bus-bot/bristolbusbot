@@ -148,12 +148,13 @@ the social deployment.
   promotion on 30 July; the previous database remained available, aggregate
   health is `ok`, and automatic no-change checks stayed harmless through
   5 August.
-- [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
+- [x] Fix operator-safe vehicle identity before changing keyed artifacts.
   Read-only production evidence on 5 August found 19 wrong legacy fleet-record
   matches and 26 ambiguous description identities among 995 recently observed
-  identities. Registration-first operator-scoped readers, safe legacy fallback,
-  schema-2 blurb scope and collision fixtures are implemented on the reviewed
-  branch; check this item only after site/bot deployment and live verification.
+  identities. PR #50 (`77e54c02`) deployed registration-first operator-scoped
+  readers, safe legacy fallback, schema-2 blurb scope and collision fixtures.
+  Exact live checks proved the previously cross-wired examples now resolve to
+  the correct operators, while ambiguous enrichment returns nothing.
 - [ ] Add durable consumer-path overrides for every bot artifact.
 - [ ] Use a small shared promotion library plus fixed artifact-specific
   wrappers; do not create an arbitrary configurable root promoter.
