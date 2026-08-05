@@ -3,8 +3,10 @@ Description=Bristol Bus Bot Cloudflare named tunnel
 Documentation=https://github.com/bristol-bus-bot/bristolbusbot
 Wants=network-online.target
 After=network-online.target bbb-site.service
-StartLimitIntervalSec=300
-StartLimitBurst=5
+# A Pi can reach network-online.target before DNS and its IPv6 route are fully
+# usable after a power cut. Keep retrying instead of entering a permanent
+# start-limit failure during that short boot-time window.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -12,7 +14,7 @@ User=@BBB_DEPLOY_USER@
 Group=@BBB_DEPLOY_USER@
 ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config /etc/bristolbusbot/cloudflared/config.yml tunnel run @BBB_CLOUDFLARE_TUNNEL_ID@
 Restart=always
-RestartSec=5s
+RestartSec=30s
 TimeoutStopSec=30s
 KillSignal=SIGTERM
 UMask=0077
