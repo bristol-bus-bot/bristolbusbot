@@ -103,8 +103,11 @@ scheduled job authority to publish a new factual claim.
 Optional Instagram and Threads publishing must run outside the collector and
 existing Bluesky delivery path. A failure of an optional social integration
 must not delay or alter collection, the websites, the audit or Bluesky. The
-proposed editorial and technical constraints are in
-[`plans/SOCIAL_EXPANSION_PLAN.md`](plans/SOCIAL_EXPANSION_PLAN.md).
+current editorial and technical constraints are in
+[`plans/SOCIAL_EXPANSION_PLAN_V2.md`](plans/SOCIAL_EXPANSION_PLAN_V2.md).
+Exact post-to-map provenance and review-only card/selection tooling may live in
+the main application because they add no Meta authority. Any publisher remains
+an isolated, optional service whose failure cannot affect the core estate.
 
 ## Daylight interface
 

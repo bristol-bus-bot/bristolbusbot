@@ -123,9 +123,11 @@ published reading count and on-time count exactly or generation fails.
 Social expansion is downstream of successful Bluesky posts and published audit
 data. `social/threads_candidates.py` produces a logging-only selection report;
 it does not contact Meta. The Instagram generator produces one standalone
-observation card and an ordered three-slide weekly carousel (headline, daily
-shape, delay distribution), plus captions, alt text and source facts for human
-review. It does not publish, call Gemini or create another BODS consumer.
+observation card and an ordered six-slide weekly carousel: headline, WECA target
+gap, daily shape, signed delay distribution, electric versus diesel/other, and
+operator comparison. It also emits captions, per-slide alt text and source
+facts for human review. It does not publish, call Gemini or create another BODS
+consumer.
 
 ## Deployment shape
 
@@ -144,12 +146,15 @@ delivery; the project has no cron jobs.
 
 Timetable automation is end to end. The Pi is the scheduler of record, GitHub
 does the heavy build, and the Pi independently validates and promotes the
-candidate under the shared maintenance lock. The complete production `auto`
-path was accepted on 22 July 2026 and the daily timer is enabled. That run was
-manually initiated while commissioning; the first scheduler-triggered due
-rebuild remains routine evidence rather than an implementation dependency. A
-failed source, workflow, download, validator, restart or functional health
-check leaves or restores the previous timetable.
+candidate under the shared maintenance lock. The production `auto` path was
+accepted on 22 July 2026 and the daily timer is enabled. The first due timer run
+on 29 July built successfully but was rejected before promotion by a raw-row
+gate that did not distinguish upcoming service from superseded editions. The
+accepted timetable remained live. The service-window validator and correlated
+monitoring correction are implemented in repository source; a
+promotion-disabled Pi shadow proof is pending. A failed source, workflow,
+download, validator, restart or functional health check continues to leave or
+restore the previous timetable.
 
 Facts and news remain human decisions, but their discovery and safe delivery
 are automated: an official-source candidate becomes eligible only after a
