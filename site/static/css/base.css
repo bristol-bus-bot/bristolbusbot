@@ -59,14 +59,6 @@
         .leaflet-control-zoom a:hover { background: var(--surface-2) !important; color: var(--fg-1) !important; }
 
         .bus-marker { animation: none !important; }
-        .bus-marker.featured {
-            filter: drop-shadow(0 0 4px rgba(32, 139, 254, 0.6));
-            animation: bsky-glow 2.5s ease-in-out infinite !important;
-        }
-        @keyframes bsky-glow {
-            0%, 100% { filter: drop-shadow(0 0 4px rgba(32, 139, 254, 0.5)); }
-            50% { filter: drop-shadow(0 0 8px rgba(32, 139, 254, 0.85)); }
-        }
 
         /* pulse for DUE */
         @keyframes pulse-glow {
