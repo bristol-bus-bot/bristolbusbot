@@ -597,6 +597,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "validate_production_config.py", "verify_release.py",
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
+        "data_health.py",
         "configure_timetable_delivery.py", "configure_social_curation.py",
         "enrichment_layout.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",

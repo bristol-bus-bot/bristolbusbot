@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Twice-daily estate digest sent to Slack by the systemd timer.
 
-One message, five sections:
+One message, seven sections:
   collector  - freshest vehicle age, active count, match rate
   matching   - vehicles matched to a timetable trip
                whose delay is NULL (every reading refused by the distance
@@ -10,6 +10,7 @@ One message, five sections:
   bot        - successful Bluesky posts today from durable delivery records
   site       - production site /healthz on :5002
   timetable  - aggregate last accepted and last attempted automation state
+  data       - report-only enrichment completeness findings
   social     - Slack curation rollout mode and durable card deliveries
   pi         - disk, memory, CPU temperature
 
@@ -153,6 +154,52 @@ def social_line() -> str:
         return f"*social*  aggregate probe failed: {type(exc).__name__}"
 
 
+def data_health_line() -> str:
+    """Render the bounded, report-only data-health result from aggregate health."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        report = snapshot.get("data_health")
+        if not isinstance(report, dict):
+            return "*data*  report unavailable"
+        status = str(report.get("status") or "unavailable")
+        if status in {"unavailable", "stale"}:
+            return f"*data*  :warning: report {status}"
+        summary = report.get("summary")
+        summary = summary if isinstance(summary, dict) else {}
+        observed = int(summary.get("observed_identities", 0))
+        if status == "clean":
+            age = float(summary.get("fleet_age_days", 0))
+            return (f"*data*  :white_check_mark: {observed} recent buses checked"
+                    f" - fleet file {age:.1f}d old - report-only")
+
+        collapses = int(summary.get("operator_collapses", 0))
+        if collapses:
+            fleet = report.get("fleet")
+            fleet = fleet if isinstance(fleet, dict) else {}
+            details = fleet.get("operator_collapses")
+            details = details if isinstance(details, list) else []
+            first = details[0] if details and isinstance(details[0], dict) else {}
+            operator = str(first.get("operator") or "operator")
+            previous = int(first.get("previous", 0))
+            current = int(first.get("current", 0))
+            return (f"*data*  :warning: {operator} fleet count collapsed "
+                    f"{previous}->{current} - report-only")
+
+        missing_fleet = int(summary.get("missing_fleet", 0))
+        missing_livery = int(summary.get("missing_livery", 0))
+        missing_stops = int(summary.get("missing_stop_localities", 0))
+        blurbs = summary.get("missing_blurbs")
+        blurbs = blurbs if isinstance(blurbs, dict) else {}
+        missing_blurbs = max((int(value) for value in blurbs.values()), default=0)
+        return (
+            f"*data*  :warning: {missing_fleet} without fleet data - "
+            f"{missing_livery} without livery - {missing_blurbs} without blurbs - "
+            f"{missing_stops} stops without locality - report-only"
+        )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*data*  aggregate probe failed: {type(exc).__name__}"
+
+
 def pi_line() -> str:
     try:
         du = shutil.disk_usage("/")
@@ -175,7 +222,8 @@ def main() -> None:
     stamp = datetime.now().strftime("%a %H:%M")
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
-    lines += [bot_line(), site_line(), timetable_line(), social_line(), pi_line()]
+    lines += [bot_line(), site_line(), timetable_line(), data_health_line(),
+              social_line(), pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 

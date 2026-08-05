@@ -63,6 +63,7 @@ done
     "$stage/timetable_service_profile.py" \
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
+    "$stage/data_health.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/enrichment_layout.py" \
     "$stage/editorial_context.py" \
@@ -99,6 +100,7 @@ for destination in \
     /usr/local/libexec/bbb-run-recorded-job \
     /usr/local/libexec/bbb-aggregate-health \
     /usr/local/libexec/bbb-sample-resources \
+    /usr/local/libexec/bbb-data-health \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/sbin/bbb-configure-social-curation \
@@ -300,6 +302,7 @@ install -o root -g root -m 0755 "$stage/run_audit_rollup.sh" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/run_recorded_job.py" /usr/local/libexec/bbb-run-recorded-job
 install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/bbb-aggregate-health
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
+install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation

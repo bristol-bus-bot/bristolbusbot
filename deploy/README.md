@@ -83,6 +83,14 @@ bot release that omits those files. The bot health gate then requires the
 durable layout, both databases and a non-empty fleet before accepting the new
 release.
 
+`--install-layout` also installs a networkless, read-only data-health job at
+04:15 each day. It compares recently observed operator-scoped vehicles with the
+fleet, livery and three description inputs, checks timetable stop localities,
+and detects a collapsed per-operator fleet count. It writes only
+`/var/lib/bristolbusbot/monitoring/data-health.json`; findings are report-only
+and appear in the twice-daily digest. A failed or stale job is an operational
+health problem, but a completeness warning cannot edit or promote any data.
+
 Database initialisation is idempotent. Any incompatible schema change must use
 an explicit migration with a documented rollback rather than running silently
 during application startup.

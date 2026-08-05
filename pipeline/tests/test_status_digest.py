@@ -66,3 +66,20 @@ def test_social_digest_reads_mode_and_durable_delivery_count(tmp_path, monkeypat
 
     assert status_digest.social_line() == (
         "*social*  enabled - live mode - 3 card(s) delivered")
+
+
+def test_data_health_line_surfaces_operator_collapse(tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "data_health": {
+            "status": "warning",
+            "summary": {"operator_collapses": 1},
+            "fleet": {"operator_collapses": [{
+                "operator": "FBRI", "previous": 583, "current": 100,
+            }]},
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.data_health_line() == (
+        "*data*  :warning: FBRI fleet count collapsed 583->100 - report-only")

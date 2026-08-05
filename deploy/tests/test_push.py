@@ -256,9 +256,13 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert "enable --now bbb-editorial-refresh.timer" in installer
     assert (extract / "configure_social_curation.py").is_file()
     assert (extract / "enrichment_layout.py").is_file()
+    assert (extract / "data_health.py").is_file()
+    assert (extract / "systemd/bbb-data-health.service").is_file()
+    assert (extract / "systemd/bbb-data-health.timer").is_file()
     assert (extract / "systemd/bbb-social-curation.service").is_file()
     assert (extract / "systemd/bbb-social-curation.timer").is_file()
     assert "Social curation timer installed but left disabled" in installer
+    assert "/usr/local/libexec/bbb-data-health" in installer
 
 
 def test_layout_migrates_and_health_gates_durable_bot_enrichment():

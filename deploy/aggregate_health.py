@@ -23,6 +23,8 @@ SOCIAL_DB = Path("/var/lib/bristolbusbot/social/social.db")
 SOCIAL_CONFIG = Path("/etc/bristolbusbot/social.env")
 SOCIAL_TOKEN = Path("/etc/bristolbusbot/social-slack.token")
 SOCIAL_LIVE_MARKER = Path("/etc/bristolbusbot/social-live-enabled")
+DATA_HEALTH_REPORT = Path(
+    "/var/lib/bristolbusbot/monitoring/data-health.json")
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
@@ -36,6 +38,7 @@ JOB_MAX_AGE_HOURS = {
     "audit-snapshot": 30,
     "staleness": 2,
     "digest": 14,
+    "data-health": 30,
 }
 TIMETABLE_DELIVERY_STATE = Path(
     "/var/lib/bristolbusbot/timetable-shadow/state.json")
@@ -604,6 +607,25 @@ def social_curation_check() -> tuple[dict, list[str]]:
     return result, issues
 
 
+def data_health_check() -> tuple[dict, list[str]]:
+    """Expose the report-only data audit without opening incidents for findings."""
+    try:
+        report = json.loads(DATA_HEALTH_REPORT.read_text(encoding="utf-8"))
+        if not isinstance(report, dict) or report.get("schema_version") != 1:
+            raise ValueError("unsupported data-health report")
+        generated_at = report.get("generated_at")
+        age_h = age_seconds(str(generated_at)) / 3600 if generated_at else None
+        result = dict(report)
+        result["age_hours"] = round(age_h, 2) if age_h is not None else None
+        if age_h is None or age_h > JOB_MAX_AGE_HOURS["data-health"]:
+            result["status"] = "stale"
+        # Completeness findings stay report-only. A missing/failed/stale job is
+        # still caught by job_checks through its recorded wrapper state.
+        return result, []
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {"status": "unavailable", "error": type(exc).__name__}, []
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -788,6 +810,8 @@ def main() -> int:
     issues.extend(found)
     social_deliveries, found = social_curation_check()
     issues.extend(found)
+    data_health, found = data_health_check()
+    issues.extend(found)
 
     try:
         feed_at = sqlite_value(
@@ -862,6 +886,7 @@ def main() -> int:
         "posting": {"last_success_at": last_post,
                     "silence_is_not_an_incident": True},
         "social_deliveries": social_deliveries,
+        "data_health": data_health,
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
     }

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the read-only enrichment completeness report nightly
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=5min
+Unit=bbb-data-health.service
+
+[Install]
+WantedBy=timers.target
