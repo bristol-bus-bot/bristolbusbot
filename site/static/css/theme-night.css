@@ -18,6 +18,15 @@
   --led-bg: #0b0c0d;
   --led-edge: rgba(245, 158, 11, 0.30);
   --sign-edge: #e7ecf1;
+  --marker-ink: #f4efe4;
+  --marker-gap: #0d0f11;
+  --marker-muted-ring: #8b93a0;
+  --marker-waiting-bg: #191c1f;
+  --marker-status-ontime: #34d399;
+  --marker-status-early: #f59e0b;
+  --marker-status-late: #ff6b57;
+  --marker-status-waiting: #5b93c7;
+  --marker-status-depot: #5f6a75;
 
   --ev-ontime: #4ade80;
   --ev-early: #fbbf24;

@@ -28,6 +28,17 @@ deploy restarts only the site, checks data-aware readiness and automatically
 restores the previous release on failure. It never modifies or restarts the
 named tunnel.
 
+## Map marker language
+
+The marker centre is the live running state: a green circle is on time, a red
+square is late, an amber upward triangle is early, a blue doughnut is waiting
+at the route origin, and a small grey dot is at a depot. The surrounding ring
+is the vehicle livery and the outside nose points in its reported direction of
+travel. A yellow corner tag means the bot posted about that journey. Route and
+status filters redraw non-matches as outlines while retaining their status
+colour and shape. The visible moving-bus mark is 32 px inside a 44 px pointer
+target for mobile use.
+
 ## Browser privacy and third-party requests
 
 Fonts and Leaflet JavaScript/CSS are served by bristolbuses.live itself.
