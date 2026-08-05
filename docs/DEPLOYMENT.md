@@ -289,6 +289,13 @@ The validated live bot copy was atomically seeded with SHA-256
 then succeeded, aggregate health reported `ok` with no issues, all core
 services and audit timers were active, and no failed units remained.
 
+A power-cut restart on 5 August exposed that the selected site release did not
+contain the private, untracked fleet file that its previous long-running
+process had loaded. The site unit now pins `BBB_FLEET_JSON` to the same durable
+`/var/lib/bristolbusbot/enrichment/fbribuses.json` copy used by the audit
+pipeline. Site releases and reboots therefore no longer determine whether
+vehicle identity and livery data are available.
+
 ## Backups
 
 Nightly encrypted restic snapshots to a dedicated local drive, copied to
@@ -313,8 +320,13 @@ must be checked separately before claiming backup coverage.
 - A first social release that fails its ARM64 render gate removes its new
   `current/social` link; it never starts a service or contacts Slack.
 - The timetable deploy retains the previous database on the Pi.
-- If the tunnel is unhealthy, inspect its logs and named-tunnel
-  configuration; do not replace it with an ad-hoc quick tunnel.
+- The tunnel retries every 30 seconds without a systemd start limit. This is
+  deliberate: after a power cut, `network-online.target` can be reached before
+  DNS and the IPv6 route are fully usable. A temporary boot-time network
+  failure must therefore recover without manual intervention.
+- If the tunnel remains unhealthy after networking has recovered, inspect its
+  logs and named-tunnel configuration; do not replace it with an ad-hoc quick
+  tunnel.
 
 ## Inspecting production
 
