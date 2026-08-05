@@ -25,6 +25,73 @@ def test_fleet_search_payload_from_list_shaped_file(client, app, tmp_path):
     assert f.details("YX23_ABC")["model"] == "Yutong E12"
 
 
+def test_fleet_lookup_prefers_operator_and_suppresses_ambiguous_legacy_blurbs(
+        tmp_path):
+    fleet_file = tmp_path / "fleet.json"
+    fleet_file.write_text(json.dumps([
+        {"fleet_code": "101", "reg": "AA11 AAA",
+         "operator": {"id": "OPAA"},
+         "vehicle_type": {"name": "Operator A model"},
+         "livery": {"name": "Operator A", "left": "#aa0000"}},
+        {"fleet_code": "101", "reg": "BB11 BBB",
+         "operator": {"id": "OPBB"},
+         "vehicle_type": {"name": "Operator B model"},
+         "livery": {"name": "Operator B", "left": "#0000bb"}},
+    ]), encoding="utf-8")
+    descriptions = tmp_path / "descriptions.json"
+    descriptions.write_text(json.dumps({
+        "101": "Ambiguous old description",
+        "OPAA:101": "Scoped operator A description",
+    }), encoding="utf-8")
+
+    from app.services.fleet import Fleet
+    fleet = Fleet(str(fleet_file), str(descriptions))
+
+    assert fleet.details("OPAA-101", "OPAA")["model"] == "Operator A model"
+    assert fleet.details("OPBB-101", "OPBB")["model"] == "Operator B model"
+    assert fleet.details("OPAA-101", "OPAA")["reg"] == "AA11 AAA"
+    assert fleet.description("101", operator_ref="OPAA") == \
+        "Scoped operator A description"
+    assert fleet.description("101", operator_ref="OPBB") is None
+
+
+def test_same_operator_reused_code_requires_registration(tmp_path):
+    fleet_file = tmp_path / "fleet.json"
+    fleet_file.write_text(json.dumps([
+        {"fleet_code": "303", "reg": "AA30 AAA",
+         "operator": {"id": "OPAA"},
+         "vehicle_type": {"name": "First vehicle"}},
+        {"fleet_code": "303", "reg": "AA30 BBB",
+         "operator": {"id": "OPAA"},
+         "vehicle_type": {"name": "Second vehicle"}},
+    ]), encoding="utf-8")
+
+    from app.services.fleet import Fleet
+    fleet = Fleet(str(fleet_file))
+
+    assert fleet.details("OPAA-303", "OPAA")["model"] is None
+    assert fleet.details("AA30_AAA", "OPAA")["model"] == "First vehicle"
+
+
+def test_registration_collision_requires_operator(tmp_path):
+    fleet_file = tmp_path / "fleet.json"
+    fleet_file.write_text(json.dumps([
+        {"fleet_code": "401", "reg": "ZZ40 ZZZ",
+         "operator": {"id": "OPAA"},
+         "vehicle_type": {"name": "Operator A vehicle"}},
+        {"fleet_code": "402", "reg": "ZZ40 ZZZ",
+         "operator": {"id": "OPBB"},
+         "vehicle_type": {"name": "Operator B vehicle"}},
+    ]), encoding="utf-8")
+
+    from app.services.fleet import Fleet
+    fleet = Fleet(str(fleet_file))
+
+    assert fleet.details("ZZ40ZZZ")["model"] is None
+    assert fleet.details("ZZ40ZZZ", "OPAA")["model"] == "Operator A vehicle"
+    assert fleet.details("ZZ40ZZZ", "OPBB")["model"] == "Operator B vehicle"
+
+
 def test_situations_endpoint(client, app):
     import sqlite3
     cfg = app.config["BBB"]

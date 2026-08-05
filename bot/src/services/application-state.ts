@@ -3,6 +3,7 @@
 import { DateTime } from 'luxon';
 import { logger, TARGET_TIMEZONE } from '../utils/logging.js';
 import type { BusEvent, DelayHistory, NetworkStatus, SystemMetrics, SIRIVehicleActivity } from '../types/bus-types.js';
+import { emptyFleetIdentityIndex, type FleetIdentityIndex } from './vehicle-identity.js';
 
 /**
  * Application State Manager - Singleton
@@ -25,7 +26,7 @@ export class ApplicationState {
     public dbIsReloading: boolean = false;
 
     // Bus details and lookup data
-    public busDetailsLookup: { results: any[] } = { results: [] };
+    public busDetailsLookup: FleetIdentityIndex = emptyFleetIdentityIndex();
     public routeDetails: { [routeNumber: string]: any } = {};  // Route/stop details for AI context
     public terminusStopNames: Set<string> = new Set();
     public zenComments: any = {};
