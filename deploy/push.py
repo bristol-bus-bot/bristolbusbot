@@ -226,7 +226,7 @@ def populate_release(component: str, root: Path) -> None:
                   root / "stop_localities.json")
         copy_tree(REPO / "audit-site", root / "audit_site_assets")
         copy_file(REPO / "LICENSE", root / "LICENSE")
-        copy_file(REPO / "docs/AUDIT_METHODOLOGY.md",
+        copy_file(REPO / "audit-site/AUDIT_METHODOLOGY.md",
                   root / "AUDIT_METHODOLOGY.md")
         copy_file(DEPLOY / "publish_to_github.sh", root / "publish_to_github.sh")
     else:

@@ -15,7 +15,6 @@ After many damp waits for rush hour buses in East Bristol, I decided to weaponis
 | `pipeline/` | Offline data jobs: 3-layer timetable build (BODS GTFS → operator TransXChange → TNDS), fleet data refresh, AI blurb generation, route shapes. | Python | GitHub Actions + Pi timers; workstation fallback |
 | `audit-site/` | Source of the **WECA bus punctuality audit** static site, published via GitHub Pages (nightly data push from the Pi). | HTML/CSS/JS | GitHub Pages |
 | `deploy/` | Immutable release deployment, systemd units, health/rollback gates, backups, Slack monitoring and named-tunnel configuration. | Python | Workstation → Pi |
-| `docs/` | Architecture, decisions, deployment, roadmap and audit methodology. | — | — |
 
 ## Architecture
 
@@ -67,8 +66,8 @@ These are the principles that shape the code:
   to inspect its scope without building, connecting or changing anything.
 
 Production code is deployed only through `python deploy\push.py`; see
-`deploy/README.md` for the exact scope of every command and
-`docs/DEPLOYMENT.md` for the overall production shape.
+`deploy/README.md` for the exact scope, safety gates and rollback behaviour of
+every command.
 
 ## Data sources & licence
 

@@ -71,6 +71,6 @@ python3 audit_vehicle_identity.py --max-examples 10
 `OPERATOR:fleet_code` keys. Its legacy `codes` list deliberately excludes
 collisions, so the old generators cannot silently create cross-operator text.
 
-Known source-data hazards and matching rules are documented in
-`docs/plans/COLLECTOR_SPEC.md`; audit definitions and limitations are in
-`docs/AUDIT_METHODOLOGY.md`.
+Collector matching behaviour is covered by its tests and package README; audit
+definitions and limitations are published with the audit site in
+`audit-site/AUDIT_METHODOLOGY.md`.

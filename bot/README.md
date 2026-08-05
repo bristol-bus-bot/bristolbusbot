@@ -60,4 +60,4 @@ included in public posts. Usage survives restarts.
 GitHub may open a PR for a recent official Department for Transport bus story.
 Merging approves its exact wording; closing rejects it. The Pi checks merged
 content on `main`, validates it again and accepts it only if the restarted bot
-reports the exact promoted SHA-256. See `docs/DEPLOYMENT.md`.
+reports the exact promoted SHA-256. See `deploy/README.md`.

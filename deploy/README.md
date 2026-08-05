@@ -130,9 +130,9 @@ was accepted after database, consumer, stop-search and public-health gates. The
 first timer-triggered due build, run `30421182234`, was safely rejected before
 promotion by the total `stop_times` collapse gate even though its next 28 days
 of service were complete. The live database was not changed. The correction is
-implemented in repository source but is not live until it passes the rollout in
-`docs/plans/TIMETABLE_BUILD_PI_EXECUTION.md`. Do not use a broad force or lower
-the old floor on the installed service.
+implemented in repository source but is not live until it passes the attended
+shadow and exact-hash promotion gates. Do not use a broad force or lower the old
+floor on the installed service.
 
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without
@@ -234,8 +234,7 @@ layout. This keeps both the old and new unit valid throughout the transition.
 
 Backup and credential-configuration tools remain separate
 because they are destructive or interactive operational procedures, not code
-deployments. See `docs/DEPLOYMENT.md` for the overall production shape. Real
-secrets must never be
+deployments. This README is the public production contract. Real secrets must never be
 printed, copied into this repository or passed on a command line.
 
 To rotate the bot control token after the unified layout has been installed:

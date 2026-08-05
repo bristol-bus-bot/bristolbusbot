@@ -2,8 +2,8 @@
 // events table.
 //
 // The collector has already matched the vehicle, measured the delay
-// (observed, corroborated across polls — see docs/plans/COLLECTOR_SPEC.md
-// §5) and enriched with stop names. This reader:
+// (observed and corroborated across polls) and enriched with stop names. This
+// reader:
 //   1. polls live.db for unconsumed events (operator-filtered)
 //   2. maps rows to the BusEvent shape the persona code expects
 //   3. runs the same freshness + significance selection as direct ingest

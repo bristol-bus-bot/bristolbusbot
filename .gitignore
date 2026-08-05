@@ -54,6 +54,9 @@ Thumbs.db
 
 docs/DOMAIN.md
 
+# Private working plans, handovers and operational notes stay local-only.
+/docs/
+
 # Disposable deployment/test workspaces (always removed after the command).
 /.bbb-push-*/
 /.bbb-pytest-*/
