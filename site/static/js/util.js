@@ -30,6 +30,8 @@ export function el(tag, attrs = {}, children = []) {
             node.setAttribute(key, String(value));
         else if (key === "for" && tag === "label")
             node.setAttribute("for", String(value));
+        else if (key === "datetime" && tag === "time")
+            node.setAttribute("datetime", String(value));
         else if (key === "onClick") node.addEventListener("click", value);
         else if (key === "onChange") node.addEventListener("change", value);
         else if (key === "onInput") node.addEventListener("input", value);
