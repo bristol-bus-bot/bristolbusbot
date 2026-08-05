@@ -370,6 +370,7 @@ if [ "$social_timer_enabled" -eq 1 ]; then
 fi
 
 /usr/bin/systemctl enable --now bbb-editorial-refresh.timer
+/usr/bin/systemctl enable --now bbb-data-health.timer
 for timer in "$stage/systemd"/*.timer; do
     timer_name=$(basename "$timer")
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \
