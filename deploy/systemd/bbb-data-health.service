@@ -1,0 +1,29 @@
+[Unit]
+Description=Read-only Bristol Bus Bot enrichment completeness report
+After=bbb-collector.service bbb-site.service
+Requires=bbb-collector.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name data-health -- /usr/local/libexec/bbb-data-health --in-service-descriptions @BBB_DEPLOY_BASE@/current/site/bus-descriptions.json --waiting-descriptions @BBB_DEPLOY_BASE@/current/site/waiting-descriptions.json --depot-descriptions @BBB_DEPLOY_BASE@/current/site/depot-descriptions.json
+TimeoutStartSec=5min
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bristolbusbot/monitoring
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

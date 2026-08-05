@@ -7,6 +7,25 @@ from types import SimpleNamespace
 from deploy import aggregate_health
 
 
+def test_data_health_findings_remain_report_only(tmp_path, monkeypatch):
+    report = tmp_path / "data-health.json"
+    report.write_text(json.dumps({
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "report_only",
+        "status": "warning",
+        "summary": {"missing_livery": 2},
+        "findings": [{"code": "observed_vehicle_missing_livery"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "DATA_HEALTH_REPORT", report)
+
+    result, issues = aggregate_health.data_health_check()
+
+    assert result["status"] == "warning"
+    assert result["mode"] == "report_only"
+    assert issues == []
+
+
 def test_social_curation_health_reads_enabled_job_and_ledger(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"

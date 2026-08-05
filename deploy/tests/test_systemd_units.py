@@ -133,6 +133,23 @@ def test_every_timer_job_has_baseline_sandboxing():
         assert "TimeoutStartSec=" in source, path.name
 
 
+def test_data_health_job_is_nightly_networkless_and_report_only():
+    service = (SYSTEMD / "bbb-data-health.service").read_text(encoding="utf-8")
+    timer = (SYSTEMD / "bbb-data-health.timer").read_text(encoding="utf-8")
+    for setting in (
+        "--name data-health",
+        "/usr/local/libexec/bbb-data-health",
+        "ReadWritePaths=/var/lib/bristolbusbot/monitoring",
+        "ProtectSystem=strict",
+        "IPAddressDeny=any",
+        "RestrictAddressFamilies=AF_UNIX",
+    ):
+        assert setting in service
+    assert "OnCalendar=*-*-* 04:15:00" in timer
+    assert "Persistent=true" in timer
+    assert "Unit=bbb-data-health.service" in timer
+
+
 def test_social_curation_is_credentialed_isolated_and_shadow_gated():
     service = (SYSTEMD / "bbb-social-curation.service").read_text(
         encoding="utf-8")
