@@ -34,8 +34,10 @@ def databases(tmp_path: Path, *, vehicle_ref: str = "FBRI-100") -> tuple[Path, P
 
     timetable = tmp_path / "timetable.db"
     with sqlite3.connect(timetable) as connection:
-        connection.execute("CREATE TABLE stops (stop_code TEXT)")
-        connection.execute("INSERT INTO stops VALUES ('0100BRA10000')")
+        connection.execute(
+            "CREATE TABLE stops (stop_code TEXT, stop_lat REAL, stop_lon REAL)")
+        connection.execute(
+            "INSERT INTO stops VALUES ('0100BRA10000', 51.45, -2.60)")
     return live, audit, timetable
 
 
@@ -139,3 +141,16 @@ def test_shared_code_requires_operator_scoped_description(tmp_path):
 
     assert report["summary"]["missing_blurbs"] == {
         "in_service": 1, "waiting": 1, "depot": 1}
+
+
+def test_out_of_area_timetable_stops_do_not_need_weca_locality_data(tmp_path):
+    inputs = paths(tmp_path, [vehicle(100)])
+    with sqlite3.connect(inputs["timetable_db"]) as connection:
+        connection.execute(
+            "INSERT INTO stops VALUES ('outside-weca', 52.50, -1.90)")
+
+    report = data_health.build_report(**inputs)
+
+    assert report["status"] == "clean"
+    assert report["stops"]["timetable"] == 1
+    assert report["stops"]["missing"] == 0

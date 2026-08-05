@@ -36,6 +36,8 @@ DEFAULT_MODEL_CONTEXT = Path(
     "/var/lib/bristolbusbot/enrichment/model-context.json")
 _NON_ALNUM = re.compile(r"[^A-Z0-9]+")
 _WHITE_LIVERIES = {"white", "#fff", "#ffffff", "rgb(255,255,255)"}
+# Must remain aligned with geocode_stops.py and the public stop-search scope.
+WECA_BBOX = (51.2731, 51.6773, -3.1151, -2.2521)
 
 
 def utcnow() -> datetime:
@@ -203,7 +205,9 @@ def timetable_stop_codes(path: Path) -> set[str]:
     with connect_read_only(path) as connection:
         rows = connection.execute(
             "SELECT DISTINCT stop_code FROM stops "
-            "WHERE stop_code IS NOT NULL AND TRIM(stop_code) <> ''")
+            "WHERE stop_code IS NOT NULL AND TRIM(stop_code) <> '' "
+            "AND stop_lat BETWEEN ? AND ? AND stop_lon BETWEEN ? AND ?",
+            WECA_BBOX)
         return {str(row[0]).strip() for row in rows}
 
 
