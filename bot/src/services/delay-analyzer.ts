@@ -5,6 +5,7 @@ import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { cleanStopName } from '../utils/stop-name-cleaner.js';
 import { ApplicationState } from './application-state.js';
+import { resolveFleetVehicle } from './vehicle-identity.js';
 import type { DatabaseManager } from './database-manager.js';
 import type {
   BusEvent,
@@ -337,7 +338,8 @@ export class DelayAnalyzer {
       if (eventAnalysis.type === 'ignore') return null;
 
       // Bus details
-      const busDetails = this.extractBusDetails(activity.vehicleRef || '');
+      const busDetails = this.extractBusDetails(
+        activity.vehicleRef || '', activity.operatorRef || '');
 
       // Event
       const busEvent: BusEvent = {
@@ -560,17 +562,10 @@ export class DelayAnalyzer {
     }
 
   // public: the EventReader (collector-events ingest) reuses this lookup
-  public extractBusDetails(vehicleRef: string): BusVehicleDetails | null {
-    if (!vehicleRef || !this.appState.busDetailsLookup?.results) return null;
-    const fleetMatch = vehicleRef.match(/(\d+)$/);
-    if (!fleetMatch) return null;
-    const fleetNumber = parseInt(fleetMatch[1]);
-    for (const bus of this.appState.busDetailsLookup.results) {
-      if (bus.fleet_number === fleetNumber) {
-        return bus;
-      }
-    }
-    return null;
+  public extractBusDetails(vehicleRef: string, operatorRef = ''): BusVehicleDetails | null {
+    return resolveFleetVehicle(
+      this.appState.busDetailsLookup, vehicleRef, operatorRef,
+    ) as BusVehicleDetails | null;
   }
 
   async storeDelayReport(delay: BusEvent, history: DelayHistory): Promise<void> {

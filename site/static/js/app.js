@@ -758,7 +758,9 @@
         // search to mark which vehicles are currently on the road.
         let fleetData = [];
         let fleetByOperatorCode = {}; // operator + fleet code -> fleet entry
-        let fleetByReg = {};    // reg plate (uppercase, no spaces) -> fleet entry
+        let fleetByOperatorReg = {};  // operator + registration -> fleet entry
+        let fleetByReg = {};          // only globally unambiguous registrations
+        let ambiguousDescriptionCodes = new Set();
 
         async function fetchSearchStops(retries = 1) {
             try {
@@ -789,18 +791,12 @@
                     return;
                 }
                 // Build lookup tables for instant active-bus matching
-                fleetByOperatorCode = {};
-                fleetByReg = {};
-                fleetData.forEach(v => {
-                    if (v.fleet_code && v.operator_id) {
-                        fleetByOperatorCode[
-                            `${v.operator_id}:${String(v.fleet_code)}`] = v;
-                    }
-                    if (v.reg) {
-                        const r = v.reg.toUpperCase().replace(/\s+/g, '');
-                        fleetByReg[r] = v;
-                    }
-                });
+                const identityLookups = window.BBB.buildFleetLookups(fleetData);
+                fleetByOperatorCode = identityLookups.byOperatorCode;
+                fleetByOperatorReg = identityLookups.scopedRegistrations;
+                fleetByReg = identityLookups.byUniqueRegistration;
+                ambiguousDescriptionCodes = window.BBB.ambiguousFleetCodes(
+                    fleetData);
                 console.log(`Loaded ${fleetData.length} vehicles for fleet search`);
             } catch (e) {
                 console.error(`fetchFleet failed (${retries} retries left):`, e);
@@ -810,7 +806,8 @@
         }
 
         // --- AI bus descriptions ---
-        // Three sets keyed by fleet_code: in_service, depot, waiting.
+        // Sets prefer OPERATOR:fleet_code. Legacy bare codes are used only
+        // where the fleet data proves that the code is unambiguous.
         // Picked per-vehicle based on state in pickDescriptionFor().
         let busDescriptions = { in_service: {}, depot: {}, waiting: {} };
 
@@ -837,16 +834,21 @@
         function pickDescriptionFor(vehicle, activeBus) {
             if (!vehicle || !vehicle.fleet_code) return null;
             const code = String(vehicle.fleet_code);
+            const operator = vehicle.operator_id || activeBus?.operatorRef || '';
+            const from = pool => window.BBB.vehicleDescription(
+                pool, operator, code, ambiguousDescriptionCodes);
             if (activeBus) {
-                if (activeBus.waitingAtOrigin && busDescriptions.waiting[code]) {
-                    return busDescriptions.waiting[code];
+                if (activeBus.waitingAtOrigin) {
+                    const waiting = from(busDescriptions.waiting);
+                    if (waiting) return waiting;
                 }
-                if (activeBus.eventType === 'depot' && busDescriptions.depot[code]) {
-                    return busDescriptions.depot[code];
+                if (activeBus.eventType === 'depot') {
+                    const depot = from(busDescriptions.depot);
+                    if (depot) return depot;
                 }
             }
             // Fall back to the in-service description as flavour text
-            return busDescriptions.in_service[code] || null;
+            return from(busDescriptions.in_service);
         }
 
         function onStopSearchFocus() {
@@ -1118,12 +1120,16 @@
         const vehicleProfileCache = new Map();
 
         function normaliseReg(value) {
-            return String(value || '').toUpperCase().replace(/\s+/g, '');
+            return String(value || '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
         }
 
         function findFleetVehicleForBus(bus) {
             if (!bus) return null;
             const reg = normaliseReg(bus.reg);
+            const operatorReg = bus.operatorRef && reg
+                ? `${bus.operatorRef}:${reg}` : '';
+            if (operatorReg && fleetByOperatorReg[operatorReg])
+                return fleetByOperatorReg[operatorReg];
             if (reg && fleetByReg[reg]) return fleetByReg[reg];
             const key = bus.operatorRef && bus.fleetNumber
                 ? `${bus.operatorRef}:${String(bus.fleetNumber)}` : '';

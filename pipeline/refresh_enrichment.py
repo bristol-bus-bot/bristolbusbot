@@ -91,35 +91,94 @@ def audit() -> dict:
     return report
 
 
+def scoped_blurb_payload(fleet: list[dict],
+                         observed: set[tuple[str, str]]) -> dict:
+    """Build a fail-closed scope without collapsing operators into one code."""
+    from audit_vehicle_identity import (
+        fleet_code,
+        indexes,
+        normalise_registration,
+        safe_match,
+    )
+    index = indexes(fleet)
+    shared = {
+        code for code, owners in index["active_code_operators"].items()
+        if len(owners) > 1
+    }
+    scoped_keys: set[str] = set()
+    legacy_codes: set[str] = set()
+    registrations: set[str] = set()
+    unresolved = 0
+    for operator, vehicle_ref in observed:
+        record = safe_match(index, operator, vehicle_ref)
+        if record is None:
+            unresolved += 1
+            continue
+        code = fleet_code(record)
+        registration = normalise_registration(record.get("reg"))
+        if code:
+            scoped_keys.add(f"{operator}:{code}")
+            # Existing generators may consume only the legacy list. Never put
+            # a cross-operator collision into that unsafe compatibility seam.
+            if code not in shared:
+                legacy_codes.add(code)
+        if registration:
+            registrations.add(registration)
+    return {
+        "schema": 2,
+        "observed_identities": len(observed),
+        "matched_identities": len(observed) - unresolved,
+        "unresolved_identities": unresolved,
+        "scoped_keys": sorted(scoped_keys),
+        "registrations": sorted(registrations),
+        # Backward-compatible key for the current generators. Ambiguous codes
+        # are deliberately absent until they emit operator-scoped keys.
+        "codes": sorted(legacy_codes),
+    }
+
+
 def build_blurb_scope() -> None:
-    """Write the vehicle codes observed by the collector in WECA."""
+    """Write operator-scoped identities observed by the collector in WECA."""
     import sqlite3
-    refs: set[str] = set()
+    observed: set[tuple[str, str]] = set()
     for db, sql in ((REPO / "collector" / "live.db",
-                     "SELECT DISTINCT vehicle_ref FROM vehicles"),
+                     "SELECT DISTINCT operator_ref, vehicle_ref FROM vehicles"),
                     (REPO / "collector" / "audit.db",
-                     "SELECT DISTINCT vehicle_ref FROM timepoint_observations")):
+                     "SELECT DISTINCT operator, vehicle_ref "
+                     "FROM timepoint_observations")):
         if not db.exists():
             continue
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-            refs.update(r[0] for r in conn.execute(sql) if r[0])
+            observed.update(
+                (str(operator or "").strip().upper(),
+                 str(vehicle_ref or "").strip())
+                for operator, vehicle_ref in conn.execute(sql)
+                if str(operator or "").strip()
+                and str(vehicle_ref or "").strip())
             conn.close()
         except sqlite3.Error as e:
             print(f"(scope: could not read {db.name}: {e})")
-    if not refs:
-        print("(scope: no collector data found - generators run UNFENCED; "
-              "run the collector first to build the observed-vehicles list)")
-        return
-    codes = set()
-    for ref in refs:
-        codes.add(ref.split("-")[-1])                      # FBRI-12345 -> 12345
-        codes.add(ref.upper().replace("_", "").replace("-", ""))  # reg forms
+    source = FLEET if FLEET.exists() else SITE / "fbribuses.json"
+    fleet = load_json(source)
+    if not isinstance(fleet, list):
+        fleet = []
+    payload = scoped_blurb_payload(fleet, observed) if fleet else {
+        "schema": 2,
+        "observed_identities": len(observed),
+        "matched_identities": 0,
+        "unresolved_identities": len(observed),
+        "scoped_keys": [],
+        "registrations": [],
+        "codes": [],
+    }
+    payload["built"] = datetime.now().isoformat(timespec="seconds")
     out = HERE / "blurb_scope.json"
-    out.write_text(json.dumps({"built": datetime.now().isoformat(timespec="seconds"),
-                               "observed_refs": len(refs),
-                               "codes": sorted(codes)}, indent=1))
-    print(f"blurb scope: {len(refs)} observed vehicles -> {len(codes)} fleet codes")
+    out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    print("blurb scope: "
+          f"{payload['observed_identities']} observed identities -> "
+          f"{len(payload['scoped_keys'])} scoped keys, "
+          f"{payload['unresolved_identities']} unresolved")
 
 
 def run_step(label: str, argv: list[str]) -> bool:

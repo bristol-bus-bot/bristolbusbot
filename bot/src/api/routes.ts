@@ -9,6 +9,7 @@ import { logger, PerformanceTimer } from '../utils/logging.js';
 import { ApplicationState } from '../services/application-state.js';
 import { HealthMonitor } from '../services/health-monitor.js';
 import { DatabaseManager } from '../services/database-manager.js';
+import { resolveFleetVehicle } from '../services/vehicle-identity.js';
 
 /**
  * Express API routes service: health, logs, runtime control and
@@ -431,7 +432,8 @@ export class APIRoutes {
 
             // Convert to array with journey info
             const journeys = Array.from(journeyMap.entries()).map(([vehicleRef, events]) => {
-                const busDetails = this.extractBusDetails(vehicleRef);
+                const busDetails = this.extractBusDetails(
+                    vehicleRef, events[0]?.operatorRef || '');
 
                 return {
                     vehicleRef,
@@ -479,17 +481,9 @@ export class APIRoutes {
      * Extract bus details from vehicle reference
      * Looks up fleet number in busDetailsLookup to get livery and other bus info
      */
-    private extractBusDetails(vehicleRef: string): any | null {
-        if (!vehicleRef || !this.appState.busDetailsLookup?.results) return null;
-        const fleetMatch = vehicleRef.match(/(\d+)$/);
-        if (!fleetMatch) return null;
-        const fleetNumber = parseInt(fleetMatch[1]);
-        for (const bus of this.appState.busDetailsLookup.results) {
-            if (bus.fleet_number === fleetNumber) {
-                return bus;
-            }
-        }
-        return null;
+    private extractBusDetails(vehicleRef: string, operatorRef = ''): any | null {
+        return resolveFleetVehicle(
+            this.appState.busDetailsLookup, vehicleRef, operatorRef);
     }
 
     /**
@@ -510,7 +504,8 @@ export class APIRoutes {
                     // Only keep the most recent location for each vehicle
                     const existing = vehicleLocationMap.get(vehicleRef);
                     if (!existing || new Date(event.timestamp) > new Date(existing.timestamp)) {
-                        const busDetails = this.extractBusDetails(vehicleRef);
+                        const busDetails = this.extractBusDetails(
+                            vehicleRef, event.operatorRef || '');
 
                         vehicleLocationMap.set(vehicleRef, {
                             vehicleRef,

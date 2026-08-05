@@ -7,6 +7,7 @@ import * as path from 'path';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
+import { buildFleetIdentityIndex, emptyFleetIdentityIndex } from './vehicle-identity.js';
 import { DatabaseError } from '../types/bus-types.js';
 import type { 
     DatabaseStop, 
@@ -233,22 +234,28 @@ export class DatabaseManager {
             
             if (!fs.existsSync(busDetailsPath)) {
                 logger.warn(`Bus details file not found at ${busDetailsPath}`);
-                this.appState.busDetailsLookup = { results: [] };
+                this.appState.busDetailsLookup = emptyFleetIdentityIndex();
                 return;
             }
             
             const rawBusData = JSON.parse(fs.readFileSync(busDetailsPath, 'utf-8'));
 
             // Accept either a root-level array or a { results: [...] } wrapper.
+            let records: any[];
             if (Array.isArray(rawBusData)) {
-                this.appState.busDetailsLookup.results = rawBusData;
-                logger.info(`[BUS_DETAILS] Loaded ${this.appState.busDetailsLookup.results.length} vehicle details from 'fbribuses.json'.`);
+                records = rawBusData;
             } else {
                 // This handles the case where the file might be { "results": [...] } in the future
                 logger.warn(`[BUS_DETAILS] 'fbribuses.json' is not a root-level array. Looking for a 'results' property.`);
-                this.appState.busDetailsLookup.results = rawBusData.results || [];
-                logger.info(`[BUS_DETAILS] Loaded ${this.appState.busDetailsLookup.results.length} vehicle details from 'fbribuses.json'.`);
+                records = rawBusData.results || [];
             }
+            this.appState.busDetailsLookup = buildFleetIdentityIndex(records);
+            const sharedCodeGroups = [
+                ...this.appState.busDetailsLookup.codeOwners.values(),
+            ].filter(owners => owners.size > 1).length;
+            logger.info(`[BUS_DETAILS] Loaded ${this.appState.busDetailsLookup.results.length} operator-scoped vehicle details from 'fbribuses.json'.`, {
+                sharedCodeGroups,
+            });
             
             timer.complete({
                 vehiclesLoaded: this.appState.busDetailsLookup.results.length
@@ -257,7 +264,7 @@ export class DatabaseManager {
         } catch (error: any) {
             timer.fail(error);
             logger.error(`Could not load or parse 'fbribuses.json'`, { err: error });
-            this.appState.busDetailsLookup = { results: [] }; // Ensure it's a predictable empty state on error
+            this.appState.busDetailsLookup = emptyFleetIdentityIndex();
         }
     }
     

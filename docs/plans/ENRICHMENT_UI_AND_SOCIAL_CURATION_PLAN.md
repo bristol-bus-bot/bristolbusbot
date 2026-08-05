@@ -304,6 +304,17 @@ bus gets the wrong joke.
 Acceptance: grep-backed inventory of every consumer read path; collision
 fixtures pass; no fallback-log entries after the migration window.
 
+Implementation evidence (5 August 2026, deployment pending): the read-only Pi
+audit inspected 2,605 fleet records and 995 recently observed identities. It
+found 60 cross-operator active code groups, 13 same-operator reused groups, two
+registration collision groups, 19 actual legacy fleet-record mismatches and 26
+ambiguous description identities. The proposed site/browser/bot readers fix the
+19 mismatches with registration-first operator-scoped lookup, suppress the 26
+ambiguous legacy blurbs, and retain bare-code compatibility only where the data
+proves it safe. The schema-2 blurb scope no longer uses
+`ref.split("-")[-1]`; it emits scoped keys and withholds collisions from old
+generators. Existing ambiguous prose is not guessed into a new operator key.
+
 ## WP2 — Durable consumer paths (Phase B continued)
 
 Add tested environment-variable overrides for every bot-consumed artifact

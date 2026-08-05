@@ -87,7 +87,8 @@ export class EventReader {
         // behaves identically regardless of ingest mode.
         const analysis = this.delayAnalyzer.calculateEventSignificance(
             delayMinutes, DateTime.fromISO(row.created_at).setZone(TARGET_TIMEZONE));
-        const busDetails = this.delayAnalyzer.extractBusDetails(row.vehicle_ref || '');
+        const busDetails = this.delayAnalyzer.extractBusDetails(
+            row.vehicle_ref || '', row.operator_ref || '');
         return {
             collectorEventId: row.id,
             operatorRef: row.operator_ref,
