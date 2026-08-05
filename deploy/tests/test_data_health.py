@@ -8,6 +8,11 @@ from pathlib import Path
 from deploy import data_health
 
 
+def test_default_timetable_path_matches_the_durable_production_layout():
+    assert data_health.DEFAULT_TIMETABLE_DB == Path(
+        "/var/lib/bristolbusbot/pipeline/timetable.db")
+
+
 def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
