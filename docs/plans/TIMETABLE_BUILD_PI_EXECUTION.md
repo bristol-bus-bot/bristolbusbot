@@ -1,10 +1,10 @@
 # Timetable delivery execution plan: GitHub build, Pi promotion
 
-Status: enabled and live on the timetable accepted by the production `auto`
-path on 22 July 2026. The first scheduler-triggered due delivery on 29 July
-failed safely before promotion and exposed validator and monitoring corrections
-specified in this document. Those corrections are implemented in repository
-source and tests but have not yet passed review or the Pi rollout gates.
+Status: enabled, live and fully proved. The first scheduler-triggered due
+delivery on 29 July failed safely before promotion and exposed validator and
+monitoring defects. Their corrections passed review, an attended diagnostic
+shadow, exact-hash promotion and harmless automatic follow-up on and after
+30 July 2026 as run `30568434088`.
 
 The filename is retained because earlier discussions and documentation link to
 it. This is no longer a plan to make the production Pi perform the normal full
@@ -478,7 +478,10 @@ service-health impact merely confirms that GitHub remains the build plane.
 The architecture and original work packages went live on 22 July 2026, with an
 attended promotion, rollback proof and automatic no-change exercise. The first
 scheduler-triggered due delivery on 29 July failed safely but exposed a false
-negative completeness gate and a false downstream alert. Final completion now
-also requires the correction package above, a fresh attended acceptance, a
-clean unattended no-update exercise, and clear Slack/digest evidence. Until
-then the accepted timetable remains safe and the laptop remains fallback only.
+negative completeness gate and a false downstream alert. The correction package
+passed as run `30568434088`: attended diagnostic shadow at 18:05–18:08 UTC on
+30 July, separate exact-hash promotion at 18:11–18:13 UTC, live SHA-256
+`611c55cd1a381a49e781c6ab58ce363076e3865de8aacc58477d28112e54d068`,
+previous database retained, aggregate health and digest healthy, and harmless
+automatic no-update exercises through 5 August. Phase A is complete and the
+laptop remains fallback only.

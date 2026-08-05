@@ -17,8 +17,10 @@ The core system is live:
   of routine timetable production. The first timer-due build on 29 July was
   safely rejected before promotion: its near-term service was complete, but a
   flat total-row gate counted superseded editions. The accepted timetable stayed
-  live. Service-window validation and correlated alerting are the current
-  hardening task.
+  live. The corrected service-window validation and correlated alerting then
+  passed an attended, promotion-disabled shadow and exact-hash promotion on
+  30 July as run `30568434088`; subsequent unattended no-change runs remained
+  harmless.
 - Encrypted local and off-site backups, weekly repository checks, restore
   verification tooling and independent dead-man monitoring.
 - Self-hosted fonts and Leaflet; content-addressed frontend assets;
@@ -50,36 +52,28 @@ before Threads; it does not waive any timetable or data-safety gate.
 
 In rough order, each gated on the one before where it matters:
 
-1. **Correct the timetable acceptance and alerting defects found on 29 July.**
-   Compare usable service by date/operator/route rather than raw historical row
-   bulk; correlate shadow and promotion as one incident; distinguish lock
-   timeout from a harmless skip; pin attended promotion to the reviewed run;
-   and expose the result in the daily digest. Prove it with the exact failed
-   artifact pair, hostile fixtures and a promotion-disabled Pi shadow before a
-   fresh attended promotion. Full handover:
-   `docs/handovers/2026-07-29_TIMETABLE_AUTOMATION_HANDOVER.md`.
-2. **Continue the remaining data-estate automation.** Next come operator-safe
+1. **Continue the remaining data-estate automation.** Next come operator-safe
    vehicle identity and durable consumer paths, decoupling generated data from
    code releases, a unified data-health audit, then fail-closed fleet/locality
    refreshes and human-gated description generation. The authoritative sequence
    is `docs/plans/DATA_REFRESH_AUTOMATION.md`.
-3. **Isolated Slack-to-card curation.** A separate process reads an allowlisted
+2. **Isolated Slack-to-card curation.** A separate process reads an allowlisted
    private Slack channel, verifies a shared Bluesky link against exact stored
    provenance, and returns a deterministic Instagram card for manual posting.
    Social failures must be unable to affect the collector, site, audit
    or Bluesky — killing the social service leaves everything else
    healthy. No deployment target exists until the service is implemented.
-4. **Continue the Instagram manual pilot.** Branded data cards are generated
+3. **Continue the Instagram manual pilot.** Branded data cards are generated
    from stored post provenance and the audit archive, delivered to the phone,
    and posted manually. Numbers and quoted text are deterministic; Slack text
    never becomes card content. Full execution checklist:
    `docs/plans/ENRICHMENT_UI_SOCIAL_EXECUTION_INDEX.md`.
-5. **Threads as a curated mirror.** Reuses the exact final Bluesky text
+4. **Threads as a curated mirror.** Reuses the exact final Bluesky text
    (no second AI call, no second BODS consumer), selected by a significance
    budget with route cooldowns and a hard ceiling of 15 posts per day. Runs
    logging-only for at least one complete service day and 50 decisions before
    thresholds are chosen and publishing is built.
-6. **Longer tail** (unordered): depot
+5. **Longer tail** (unordered): depot
    allocation visualisation, an open read-only API, SIRI-SX disruption
    posts once a verifiable source/corroboration contract exists for
    them.

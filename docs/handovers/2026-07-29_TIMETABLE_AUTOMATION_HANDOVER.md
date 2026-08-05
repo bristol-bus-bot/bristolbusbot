@@ -440,3 +440,12 @@ unattended follow-up. Until then the accurate statement is: **production is safe
 on the previously accepted timetable; the first due refresh exposed a false
 negative validator and a false positive alert, both with a fully specified
 repair plan.**
+
+Closure update, verified 5 August 2026: those gates passed on and after 30 July.
+Corrected run `30568434088` completed an attended diagnostic shadow with no
+automatic promotion edge, followed by a separate exact-hash attended promotion.
+The live database is SHA-256
+`611c55cd1a381a49e781c6ab58ce363076e3865de8aacc58477d28112e54d068`,
+the previous database remains available, aggregate health is `ok`, the digest
+job is healthy, and subsequent automatic no-change checks were harmless. This
+handover is closed; Phase B vehicle identity and consumer-path work is next.

@@ -1,8 +1,9 @@
 # Full data-refresh automation: master plan
 
-Status: Phase A timetable delivery is live and fail-closed, but the first due
-timer run on 29 July 2026 exposed an acceptance-policy and monitoring defect
-that must be corrected before Phase A is considered fully proven. Phases B-F
+Status: Phase A timetable delivery is live, fail-closed and proved. The first
+due timer run on 29 July 2026 exposed an acceptance-policy and monitoring
+defect; the correction passed an attended diagnostic shadow, exact-hash
+promotion and harmless automatic follow-up on and after 30 July. Phases B-F
 remain the next core data track. Independent low-risk social quick wins have
 landed; Meta publishing remains outside this plan.
 
@@ -110,7 +111,7 @@ Complete WP1-WP8 in `TIMETABLE_BUILD_PI_EXECUTION.md`:
 This is the priority because every other timetable-derived artifact depends on
 it. A full build on the 1 GB Pi is optional fallback work, not a gate.
 
-Acceptance evidence (updated 29 July 2026): attended promotion, forced rollback
+Acceptance evidence (updated 5 August 2026): attended promotion, forced rollback
 tests, automatic no-change handling and a manually initiated production `auto`
 GitHub build -> Pi delivery -> live promotion all passed. The accepted run was
 `29944744744`; its consumer and functional health gates passed and the previous
@@ -118,9 +119,14 @@ database remained available. The first due timer build, `30421182234`, then
 failed safely before promotion because the flat 75% raw `stop_times` gate
 mistook fewer superseded editions for missing current service. Direct semantic
 comparison showed 100.3% of live trips and stop times over the next 28 days.
-The accepted database remained healthy; the laptop is still fallback only.
-The service-window validator and correlated monitoring work in
-`TIMETABLE_BUILD_PI_EXECUTION.md` is now the remaining Phase A gate.
+The accepted database remained healthy. Corrected run `30568434088` then passed
+the `service-window-v1` comparison in an attended shadow with no automatic
+promotion edge on 30 July. The separately invoked run/hash-pinned promoter
+accepted SHA-256
+`611c55cd1a381a49e781c6ab58ce363076e3865de8aacc58477d28112e54d068`,
+retained the previous database, passed the consumer health transaction and was
+followed by harmless automatic no-change runs through 5 August. Phase A is
+complete and the laptop remains fallback only.
 
 ## Phase B - Identity and complete consumer-path audit
 
@@ -202,8 +208,10 @@ The job writes one versioned JSON report through `run_recorded_job.py`.
 `aggregate_health.py` consumes job records and `status_digest.py` consumes only
 aggregate health. Thresholds live in one configuration block.
 
-Acceptance: report-only mode runs for two weeks with counts that can be checked
-by eye, and injected failures appear as useful digest sentences.
+Acceptance: report-only mode produces three consecutive clean daily reports
+whose counts can be checked by eye. An injected operator-count collapse and
+other representative failures must appear as useful digest sentences before
+any automation may act on the report.
 
 ## Phase E - Deterministic Pi regenerators
 
@@ -302,7 +310,8 @@ Pi promotion, and a restore drill have all proved reliable.
 
 ## Rollout order
 
-1. Phase A: timetable delivery. **Complete 22 July 2026.**
+1. Phase A: timetable delivery. **Commissioned 22 July; incident hardening
+   proved 30 July 2026.**
 2. Phase B: identity and consumer paths.
 3. Phase C: decouple data from code releases.
 4. Phase D: health audit in report-only mode.

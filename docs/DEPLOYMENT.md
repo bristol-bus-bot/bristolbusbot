@@ -94,11 +94,15 @@ The first genuinely due timer run, `30421182234` on 29 July, built successfully
 but was rejected before promotion. The existing flat total-row comparison
 mistook the removal of superseded timetable editions for missing current
 service; a direct 7/14/28-day comparison found the candidate at 100.3% of the
-accepted database. Production was never changed and remains healthy. A
-service-window validator and correlated monitoring correction are implemented
-in repository source, but they must pass a promotion-disabled Pi shadow before
-another live swap. Do not lower or bypass the installed count threshold as a
-shortcut.
+accepted database. Production was never changed. The corrected default branch
+then built run `30568434088`. On 30 July its attended exact-run shadow passed
+the `service-window-v1` policy without an automatic promotion edge, and the
+separate run/hash-pinned promoter accepted database SHA-256
+`611c55cd1a381a49e781c6ab58ce363076e3865de8aacc58477d28112e54d068`.
+The previous database SHA-256 beginning `c42a857e` remains the rollback copy.
+Consumer health gates passed, the timer and marker were restored, and harmless
+daily no-change handling has continued through 5 August. Do not lower or bypass
+the installed policy as a shortcut.
 
 The later “promotion rejected / unknown_failure” Slack alert was a monitoring
 false positive: a failed shadow correctly prevented promotion, but the monitor
