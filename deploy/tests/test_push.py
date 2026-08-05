@@ -254,6 +254,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-editorial-promote.service").is_file()
     assert (extract / "systemd/bbb-editorial-refresh.timer").is_file()
     assert "enable --now bbb-editorial-refresh.timer" in installer
+    assert "enable --now bbb-data-health.timer" in installer
     assert (extract / "configure_social_curation.py").is_file()
     assert (extract / "enrichment_layout.py").is_file()
     assert (extract / "data_health.py").is_file()
