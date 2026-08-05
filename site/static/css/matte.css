@@ -810,6 +810,11 @@ body {
   z-index: 2;
 }
 
+.bus-marker,
+.bus-marker svg {
+  overflow: visible;
+}
+
 /* Shared vehicle card pieces ------------------------------------------- */
 
 .uk-plate {
@@ -1051,9 +1056,11 @@ body {
 }
 
 .vs-shape-early {
-  border-radius: 2px;
+  width: 13px;
+  height: 11px;
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
   color: var(--ev-early);
-  transform: rotate(45deg);
 }
 
 .vs-shape-late {

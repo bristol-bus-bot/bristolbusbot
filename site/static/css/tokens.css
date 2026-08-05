@@ -45,6 +45,15 @@
   --plate-blue: #003399;
   --sign-edge: #7e8582;
   --sign-edge-w: 2px;
+  --marker-ink: #14181d;
+  --marker-gap: #ffffff;
+  --marker-muted-ring: #8b93a0;
+  --marker-waiting-bg: #e9e7e1;
+  --marker-status-ontime: #00703c;
+  --marker-status-early: #f59e0b;
+  --marker-status-late: #d4351c;
+  --marker-status-waiting: #1d70b8;
+  --marker-status-depot: #6b7480;
   --toggle-brown: var(--uk-brown);
   --toggle-brown-ink: #ffffff;
 
