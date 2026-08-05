@@ -11,6 +11,8 @@ def test_site_unit_has_required_lifecycle_and_accounting():
         "Restart=always",
         "RestartSec=5s",
         "WantedBy=multi-user.target",
+        "Environment=BBB_FLEET_JSON=/var/lib/bristolbusbot/enrichment/"
+        "fbribuses.json",
         "CPUAccounting=yes",
         "MemoryAccounting=yes",
         "TasksAccounting=yes",
@@ -86,6 +88,8 @@ def test_tunnel_unit_is_fully_read_only_and_has_no_home_access():
     for setting in (
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
+        "RestartSec=30s",
+        "StartLimitIntervalSec=0",
         "ProtectSystem=strict",
         "ProtectHome=yes",
         "MemoryDenyWriteExecute=yes",
@@ -93,6 +97,7 @@ def test_tunnel_unit_is_fully_read_only_and_has_no_home_access():
         "/etc/bristolbusbot/cloudflared/config.yml",
     ):
         assert setting in source
+    assert "StartLimitBurst=" not in source
     assert "ReadWritePaths=" not in source
 
 
