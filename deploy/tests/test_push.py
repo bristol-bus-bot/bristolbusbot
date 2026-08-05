@@ -65,8 +65,6 @@ def test_social_gate_installs_locked_node_dependencies_before_tests(monkeypatch)
 def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
     if component == "bot" and not (push.REPO / "bot/dist/index.js").exists():
         pytest.skip("bot has not been built in this checkout")
-    if component == "bot" and not (push.REPO / "bot/data/fbribuses.json").exists():
-        pytest.skip("ignored runtime fleet cache is not present in this checkout")
     built = push.build_release(component, tmp_path, release="test-release")
     extract = tmp_path / "extract"
     extract.mkdir()
@@ -77,8 +75,8 @@ def test_built_release_is_complete_and_contains_no_state(component, tmp_path):
     names = {path.name for path in extract.rglob("*") if path.is_file()}
     assert not names.intersection(push.FORBIDDEN_NAMES)
     if component == "bot":
-        assert (extract / "stop_enrichment.json").is_file()
-        assert (extract / "route_details.json").is_file()
+        for name in (*push.BOT_ENRICHMENT_FILES, "editorial-context.json"):
+            assert not (extract / name).exists()
     if component == "site":
         assert (extract / "_collector/pyproject.toml").is_file()
     if component == "collector":
@@ -257,9 +255,33 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-editorial-refresh.timer").is_file()
     assert "enable --now bbb-editorial-refresh.timer" in installer
     assert (extract / "configure_social_curation.py").is_file()
+    assert (extract / "enrichment_layout.py").is_file()
     assert (extract / "systemd/bbb-social-curation.service").is_file()
     assert (extract / "systemd/bbb-social-curation.timer").is_file()
     assert "Social curation timer installed but left disabled" in installer
+
+
+def test_layout_migrates_and_health_gates_durable_bot_enrichment():
+    installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert installer.count("bbb-enrichment-layout migrate") == 1
+    assert '--source "$current/bot"' in installer
+    assert '--destination "$enrichment_dir"' in installer
+    assert "bbb-enrichment-layout validate --quiet" in installer
+    for name in push.BOT_ENRICHMENT_FILES:
+        assert f'"$enrichment_dir/{name}"' in installer
+    assert "/etc/bristolbusbot/backup.json" in installer
+
+
+def test_bot_health_requires_durable_data_databases_and_fleet():
+    remote = FakeRemote()
+
+    assert push.healthy(remote, "bot") is True
+    command = remote.commands[0]
+    assert "bbb-enrichment-layout validate --quiet" in command
+    assert '["timetable"]["connected"] is True' in command
+    assert '["appData"]["connected"] is True' in command
+    assert '["busDetailsLoaded"] > 0' in command
 
 
 def test_layout_update_preserves_existing_current_release_links():

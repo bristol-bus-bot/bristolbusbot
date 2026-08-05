@@ -29,20 +29,29 @@ PORT=3010
 BSKY_HANDLE=bristolbusbot.live
 EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot-editorial/editorial-context.json
 EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json
+BBB_FLEET_JSON=/var/lib/bristolbusbot/enrichment/fbribuses.json
+BBB_LOCALITIES_JSON=/var/lib/bristolbusbot/enrichment/stop_localities.json
+BBB_ENRICHMENT_JSON=/var/lib/bristolbusbot/enrichment/stop_enrichment.json
+BBB_LOCAL_FLAVOUR_JSON=/var/lib/bristolbusbot/enrichment/local_flavour.json
+BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_details.json
 ```
 
 ## Production
 
 - Current release: `~/bristolbusbot/current/bot` on the Pi
 - Durable state: `/var/lib/bristolbusbot/bot/app_data.db`
+- Durable enrichment: `/var/lib/bristolbusbot/enrichment/*.json`
 - systemd unit: `bbb-bot.service`
 - API: `127.0.0.1:3010`
 - Deploy: `python deploy/push.py --component bot` from the repository root
 
 The deploy builds and tests locally, installs production dependencies in a new
 immutable release, atomically switches code and requires a successful health
-response identifying systemd as the runtime. Pi-owned config and durable state
-are never included in a release; the previous code remains the rollback target.
+response identifying systemd as the runtime. Pi-owned config, editorial
+context and enrichment data are never included in a bot release; the previous
+code remains the rollback target. Local development keeps working-directory
+fallbacks, but production pins all five enrichment inputs to the durable
+directory through the systemd unit.
 
 Fleet model and livery enrichment is registration-first, then keyed by
 `(operator, fleet code)`. A shared or reused fleet number that cannot identify

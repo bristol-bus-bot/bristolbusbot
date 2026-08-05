@@ -3,12 +3,8 @@
 // with manual overrides for edge cases and creative local names.
 
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { logger } from './logging.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { BOT_DATA_PATHS } from '../config/data-paths.js';
 
 // --- Data-driven enrichment loaded once at module init ---
 
@@ -23,7 +19,7 @@ interface StopEnrichment {
 let stopEnrichment: Record<string, StopEnrichment> = {};
 
 try {
-    const enrichmentPath = join(__dirname, '../../stop_enrichment.json');
+    const enrichmentPath = BOT_DATA_PATHS.stopEnrichment;
     const data = readFileSync(enrichmentPath, 'utf-8');
     stopEnrichment = JSON.parse(data);
     logger.info(`Loaded ${Object.keys(stopEnrichment).length} enriched stop names from Bristol Open Data`);

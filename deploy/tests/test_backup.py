@@ -65,6 +65,10 @@ def test_production_example_config_is_valid(tmp_path):
         "pipeline-timetable",
         "social",
     }
+    enrichment = next(
+        item for item in config.paths if item.name == "enrichment-state")
+    assert enrichment.path == Path("/var/lib/bristolbusbot/enrichment")
+    assert enrichment.required is True
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX wrapper is checked on Linux CI")

@@ -8,6 +8,7 @@ import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
 import { buildFleetIdentityIndex, emptyFleetIdentityIndex } from './vehicle-identity.js';
+import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import { DatabaseError } from '../types/bus-types.js';
 import type { 
     DatabaseStop, 
@@ -230,7 +231,7 @@ export class DatabaseManager {
         const timer = new PerformanceTimer('load_bus_details', logger);
         
         try {
-            const busDetailsPath = path.join(process.cwd(), 'fbribuses.json');
+            const busDetailsPath = BOT_DATA_PATHS.fleet;
             
             if (!fs.existsSync(busDetailsPath)) {
                 logger.warn(`Bus details file not found at ${busDetailsPath}`);
@@ -275,7 +276,7 @@ export class DatabaseManager {
         const timer = new PerformanceTimer('load_route_details', logger);
 
         try {
-            const routeDetailsPath = path.join(process.cwd(), 'route_details.json');
+            const routeDetailsPath = BOT_DATA_PATHS.routeDetails;
 
             if (!fs.existsSync(routeDetailsPath)) {
                 logger.warn(`Route details file not found at ${routeDetailsPath}`);

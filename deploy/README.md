@@ -29,7 +29,7 @@ render private values only into temporary upload payloads.
 |---|---|---|---|
 | `python deploy/push.py --component collector` | collector and its monitoring scripts | collector | site, bot, tunnel, timetable, secrets |
 | `python deploy/push.py --component site` | Flask site, static assets and its collector-library snapshot | site | collector process, bot, tunnel, state, secrets |
-| `python deploy/push.py --component bot` | locally built bot, Node dependencies and runtime JSON | bot | collector, site, tunnel, state, secrets |
+| `python deploy/push.py --component bot` | locally built bot and Node dependencies | bot | collector, site, tunnel, durable enrichment, state, secrets |
 | `python deploy/push.py --component pipeline` | scheduled audit job code and reviewed audit-site assets | none | timetable, live services, secrets |
 | `python deploy/push.py --component tunnel` | non-secret named-tunnel ingress config | tunnel | credential JSON and application code |
 | `python deploy/push.py --component social` | isolated renderer and Slack-curation code | none; ARM64 render health gate only | core services, timer state, credentials, databases |
@@ -72,6 +72,16 @@ timer. The full commands and kill switch are in `social/README.md`.
 Production settings remain under `/etc/bristolbusbot`; mutable databases remain
 under `/var/lib/bristolbusbot`. Current code releases are under
 `~/bristolbusbot/releases` on the Pi.
+
+Bot enrichment is also durable state. `--install-layout` safely seeds any
+missing `fbribuses.json`, `stop_localities.json`, `stop_enrichment.json`,
+`local_flavour.json` and `route_details.json` files from the currently verified
+bot release into `/var/lib/bristolbusbot/enrichment`, preserves any files
+already authoritative there, validates all five, and makes that directory a
+required backup source. Run this layout migration before deploying the first
+bot release that omits those files. The bot health gate then requires the
+durable layout, both databases and a non-empty fleet before accepting the new
+release.
 
 Database initialisation is idempotent. Any incompatible schema change must use
 an explicit migration with a documented rollback rather than running silently
