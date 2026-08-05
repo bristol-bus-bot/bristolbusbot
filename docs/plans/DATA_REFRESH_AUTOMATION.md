@@ -134,9 +134,11 @@ Do this before fleet and blurb automation.
 
 ### Vehicle identity
 
-The current data has 71 duplicated active fleet-code groups. A fleet code alone
-is not a safe cross-operator identity, and `build_blurb_scope()` currently
-collapses references with `ref.split("-")[-1]`.
+The 5 August read-only production audit found 60 active fleet-code groups shared
+across operators, 13 reused within one operator and two registration collision
+groups. Among 995 recently observed identities, the historical bare-code lookup
+could attach the wrong fleet record to 19 and ambiguous description text to 26.
+A fleet code alone is therefore not a safe identity.
 
 Adopt the following model:
 
@@ -149,6 +151,14 @@ First audit whether collisions cause wrong descriptions in production today.
 Then introduce dual-key reads, migrate keyed files deliberately, update site and
 bot together, and remove the lossy reference collapse only after fixtures cover
 multi-operator collisions.
+
+Implementation status (5 August 2026): `audit_vehicle_identity.py` provides the
+bounded read-only evidence above. Site, browser and bot lookups now prefer
+operator-scoped registration and `(NOC, fleet_code)`, accept a legacy bare code
+only when it proves unambiguous, and otherwise omit cosmetic enrichment. Blurb
+scope schema 2 retains operator-scoped keys and excludes collisions from its
+legacy compatibility list. The code and fixtures are ready; production remains
+on the previous lookup until the reviewed site/bot deployment completes.
 
 ### Consumer paths
 

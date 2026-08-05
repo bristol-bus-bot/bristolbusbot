@@ -149,6 +149,11 @@ the social deployment.
   health is `ok`, and automatic no-change checks stayed harmless through
   5 August.
 - [ ] Fix operator-safe vehicle identity before changing keyed artifacts.
+  Read-only production evidence on 5 August found 19 wrong legacy fleet-record
+  matches and 26 ambiguous description identities among 995 recently observed
+  identities. Registration-first operator-scoped readers, safe legacy fallback,
+  schema-2 blurb scope and collision fixtures are implemented on the reviewed
+  branch; check this item only after site/bot deployment and live verification.
 - [ ] Add durable consumer-path overrides for every bot artifact.
 - [ ] Use a small shared promotion library plus fixed artifact-specific
   wrappers; do not create an arbitrary configurable root promoter.
