@@ -56,7 +56,7 @@
     {
       "name": "enrichment-state",
       "path": "/var/lib/bristolbusbot/enrichment",
-      "required": false
+      "required": true
     }
   ],
   "git_repositories": [

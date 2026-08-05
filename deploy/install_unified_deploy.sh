@@ -24,6 +24,7 @@ social_config=/etc/bristolbusbot/social.env
 social_legacy_db=/var/lib/bristolbusbot/social.db
 social_state_dir=/var/lib/bristolbusbot/social
 social_db=$social_state_dir/social.db
+enrichment_dir=/var/lib/bristolbusbot/enrichment
 social_db_migrated=0
 social_timer_enabled=0
 changed=0
@@ -63,6 +64,7 @@ done
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
+    "$stage/enrichment_layout.py" \
     "$stage/editorial_context.py" \
     "$stage/editorial_fetch.py" "$stage/editorial_promote.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
@@ -97,6 +99,7 @@ for destination in \
     /usr/local/libexec/bbb-run-recorded-job \
     /usr/local/libexec/bbb-aggregate-health \
     /usr/local/libexec/bbb-sample-resources \
+    /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/sbin/bbb-configure-social-curation \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
@@ -110,6 +113,12 @@ for destination in \
     /usr/local/libexec/bristolbusbot-editorial/editorial_promote.py \
     /etc/sudoers.d/bristolbusbot-deploy \
     /etc/tmpfiles.d/bristolbusbot.conf \
+    /etc/bristolbusbot/backup.json \
+    "$enrichment_dir/fbribuses.json" \
+    "$enrichment_dir/stop_localities.json" \
+    "$enrichment_dir/stop_enrichment.json" \
+    "$enrichment_dir/local_flavour.json" \
+    "$enrichment_dir/route_details.json" \
     "$social_config" \
     "$remote_home/bus-audit/publish_to_github.sh"
 do
@@ -185,7 +194,8 @@ wait_site() {
 wait_bot() {
     tries=0
     while [ "$tries" -lt 30 ]; do
-        if /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); e=d["details"]["healthData"]["application"]["editorialContext"]; assert d.get("success") is True and d.get("runtime") == "systemd" and e.get("loaded") is True' >/dev/null 2>&1; then
+        if /usr/local/libexec/bbb-enrichment-layout validate --quiet >/dev/null 2>&1 && \
+           /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); h=d["details"]["healthData"]; e=h["application"]["editorialContext"]; assert d.get("success") is True and d.get("runtime") == "systemd" and e.get("loaded") is True and h["database"]["timetable"]["connected"] is True and h["database"]["appData"]["connected"] is True and h["application"]["state"]["busDetailsLoaded"] > 0' >/dev/null 2>&1; then
             return 0
         fi
         tries=$((tries + 1))
@@ -290,6 +300,7 @@ install -o root -g root -m 0755 "$stage/run_audit_rollup.sh" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/run_recorded_job.py" /usr/local/libexec/bbb-run-recorded-job
 install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/bbb-aggregate-health
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
+install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
@@ -327,6 +338,11 @@ do
     fi
 done
 /usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/bristolbusbot.conf
+/usr/local/libexec/bbb-enrichment-layout migrate \
+    --source "$current/bot" \
+    --destination "$enrichment_dir" \
+    --backup-config /etc/bristolbusbot/backup.json \
+    --owner "$deploy_user" >/dev/null
 if [ ! -e /var/lib/bristolbusbot-editorial/editorial-context.json ]; then
     install -o root -g "$deploy_user" -m 0640 \
         "$stage/editorial-context.json" \

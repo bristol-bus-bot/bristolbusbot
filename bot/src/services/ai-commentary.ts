@@ -11,8 +11,7 @@ import type { BusEvent, DelayPattern, DelayHistory, AICommentaryContext, AIComme
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { getStopEnrichment } from '../utils/stop-name-cleaner.js';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import {
     EditorialContextStore,
     type EditorialSelection,
@@ -90,10 +89,8 @@ export function buildGeminiStructuredGenerationConfig(
 }
 
 // Load stop localities (ward names from geographic boundaries)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const STOP_LOCALITIES_PATH = join(__dirname, '../../stop_localities.json');
-const LOCAL_FLAVOUR_PATH = join(__dirname, '../../local_flavour.json');
+const STOP_LOCALITIES_PATH = BOT_DATA_PATHS.stopLocalities;
+const LOCAL_FLAVOUR_PATH = BOT_DATA_PATHS.localFlavour;
 
 let stopLocalities: Record<string, {
     stop_code: string;

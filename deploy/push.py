@@ -26,8 +26,16 @@ from local_config import DeploySettings, LocalConfigError, load_deploy_settings
 REPO = Path(__file__).resolve().parent.parent
 DEPLOY = REPO / "deploy"
 MARKER = "/etc/bristolbusbot/unified-deploy-layout"
-DURABLE_FLEET_FILE = PurePosixPath(
-    "/var/lib/bristolbusbot/enrichment/fbribuses.json")
+DURABLE_ENRICHMENT_DIRECTORY = PurePosixPath(
+    "/var/lib/bristolbusbot/enrichment")
+DURABLE_FLEET_FILE = DURABLE_ENRICHMENT_DIRECTORY / "fbribuses.json"
+BOT_ENRICHMENT_FILES = (
+    "fbribuses.json",
+    "stop_localities.json",
+    "stop_enrichment.json",
+    "local_flavour.json",
+    "route_details.json",
+)
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,79}")
 CORE_CODE_COMPONENTS = ("pipeline", "collector", "site", "bot")
 CODE_COMPONENTS = (*CORE_CODE_COMPONENTS, "social")
@@ -203,10 +211,6 @@ def populate_release(component: str, root: Path) -> None:
         copy_tree(REPO / "bot/dist", root / "dist")
         for name in ("package.json", "package-lock.json"):
             copy_file(REPO / "bot" / name, root / name)
-        for name in ("fbribuses.json", "local_flavour.json", "route_details.json",
-                     "stop_localities.json", "editorial-context.json"):
-            copy_file(REPO / "bot/data" / name, root / name)
-        copy_file(REPO / "site/stop_enrichment.json", root / "stop_enrichment.json")
     elif component == "social":
         for name in ("package.json", "package-lock.json"):
             copy_file(REPO / "social" / name, root / name)
@@ -218,6 +222,8 @@ def populate_release(component: str, root: Path) -> None:
     elif component == "pipeline":
         for pattern in ("*.py", "*.json", "*.geojson", "requirements-runtime.txt"):
             for path in (REPO / "pipeline").glob(pattern):
+                if path.name == "fbribuses.json":
+                    continue
                 copy_file(path, root / path.name)
         # Geography is an audited, versioned input.  Pin the site's canonical
         # copy into the pipeline release so the networkless rollup cannot
@@ -381,10 +387,14 @@ def healthy(remote: Remote, component: str) -> bool:
             "in (\"ok\",\"warn\")'"
         ),
         "bot": (
+            "/usr/local/libexec/bbb-enrichment-layout validate --quiet && "
             "systemctl is-active --quiet bbb-bot.service && "
             "python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("
-            "\"http://127.0.0.1:3010/api/health\",timeout=10)); assert d.get(\"success\") "
-            "is True and d.get(\"runtime\")==\"systemd\"'"
+            "\"http://127.0.0.1:3010/api/health\",timeout=10)); h=d[\"details\"][\"healthData\"]; "
+            "assert d.get(\"success\") is True and d.get(\"runtime\")==\"systemd\" "
+            "and h[\"database\"][\"timetable\"][\"connected\"] is True "
+            "and h[\"database\"][\"appData\"][\"connected\"] is True "
+            "and h[\"application\"][\"state\"][\"busDetailsLoaded\"] > 0'"
         ),
         "pipeline": (
             f"test -x {q(pipeline / 'venv/bin/python3')} && "
@@ -588,6 +598,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "configure_timetable_delivery.py", "configure_social_curation.py",
+        "enrichment_layout.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)

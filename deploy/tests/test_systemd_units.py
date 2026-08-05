@@ -76,6 +76,12 @@ def test_bot_unit_allows_only_its_two_writable_databases():
         "Environment=AUDIT_INTEGRATION_PATH=/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json",
         "Environment=EDITORIAL_CONTEXT_PATH=/var/lib/bristolbusbot-editorial/editorial-context.json",
         "Environment=EDITORIAL_USAGE_PATH=/var/lib/bristolbusbot/bot/editorial-usage.json",
+        "Environment=BBB_FLEET_JSON=/var/lib/bristolbusbot/enrichment/fbribuses.json",
+        "Environment=BBB_LOCALITIES_JSON=/var/lib/bristolbusbot/enrichment/stop_localities.json",
+        "Environment=BBB_ENRICHMENT_JSON=/var/lib/bristolbusbot/enrichment/stop_enrichment.json",
+        "Environment=BBB_LOCAL_FLAVOUR_JSON=/var/lib/bristolbusbot/enrichment/local_flavour.json",
+        "Environment=BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_details.json",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment",
         "MemoryAccounting=yes",
     ):
         assert setting in source
