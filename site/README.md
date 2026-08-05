@@ -39,6 +39,12 @@ status filters redraw non-matches as outlines while retaining their status
 colour and shape. The visible moving-bus mark is 32 px inside a 44 px pointer
 target for mobile use.
 
+Fleet identity is registration-first and otherwise scoped by
+`(operator, fleet code)`. Shared numbers never fall through to another
+operator's model or livery. Legacy bare-code descriptions remain available for
+unambiguous vehicles; an ambiguous description is omitted until a reviewed
+operator-scoped key such as `FBRI:36801` exists.
+
 ## Browser privacy and third-party requests
 
 Fonts and Leaflet JavaScript/CSS are served by bristolbuses.live itself.

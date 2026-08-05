@@ -44,6 +44,11 @@ immutable release, atomically switches code and requires a successful health
 response identifying systemd as the runtime. Pi-owned config and durable state
 are never included in a release; the previous code remains the rollback target.
 
+Fleet model and livery enrichment is registration-first, then keyed by
+`(operator, fleet code)`. A shared or reused fleet number that cannot identify
+one physical vehicle fails closed to no enrichment; it can never borrow another
+operator's record. The raw fleet file remains a private runtime input.
+
 ## Approved facts, occasions and news
 
 `data/editorial-context.json` contains sourced claims and their active windows.

@@ -83,7 +83,8 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
             # bearing straight from the feed (better than deriving it)
             "bearing": r["bearing"],
             "lastStopName": r["stop_code"] or "unknown",  # name filled by caller
-            "description": fleet.description(d["fleetNumber"], state),
+            "description": fleet.description(
+                d["fleetNumber"], state, r["operator_ref"] or ""),
             "livery": d["livery"],
             "model": d["model"],
             "fleetNumber": d["fleetNumber"],

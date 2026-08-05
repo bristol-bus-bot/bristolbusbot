@@ -57,6 +57,20 @@ entries. The later enrichment automation phase will own candidate generation
 and atomic promotion. Legacy site and bot release paths remain read-only
 fallbacks for development and recovery, not the production source of truth.
 
+`audit_vehicle_identity.py` is the read-only collision check. It compares the
+historical bare-fleet-code lookup with registration-first, operator-scoped
+matching across vehicles observed in `live.db` and recent `audit.db` data. It
+prints bounded counts/examples, never description text, and opens both databases
+read-only. For example on the Pi:
+
+```sh
+python3 audit_vehicle_identity.py --max-examples 10
+```
+
+`refresh_enrichment.py` now writes schema-2 blurb scope with
+`OPERATOR:fleet_code` keys. Its legacy `codes` list deliberately excludes
+collisions, so the old generators cannot silently create cross-operator text.
+
 Known source-data hazards and matching rules are documented in
 `docs/plans/COLLECTOR_SPEC.md`; audit definitions and limitations are in
 `docs/AUDIT_METHODOLOGY.md`.
