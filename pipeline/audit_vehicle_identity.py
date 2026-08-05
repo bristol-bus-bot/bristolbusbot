@@ -23,10 +23,11 @@ from typing import Iterable
 DEFAULT_FLEET = Path("/var/lib/bristolbusbot/enrichment/fbribuses.json")
 DEFAULT_LIVE_DB = Path("/var/lib/bristolbusbot/collector/live.db")
 DEFAULT_AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
+DEFAULT_SITE_DIR = Path(__file__).absolute().parent.parent / "site"
 DEFAULT_DESCRIPTIONS = (
-    Path("/var/lib/bristolbusbot/enrichment/bus-descriptions.json"),
-    Path("/var/lib/bristolbusbot/enrichment/waiting-descriptions.json"),
-    Path("/var/lib/bristolbusbot/enrichment/depot-descriptions.json"),
+    DEFAULT_SITE_DIR / "bus-descriptions.json",
+    DEFAULT_SITE_DIR / "waiting-descriptions.json",
+    DEFAULT_SITE_DIR / "depot-descriptions.json",
 )
 _NON_ALNUM = re.compile(r"[^A-Z0-9]+")
 

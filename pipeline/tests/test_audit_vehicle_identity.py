@@ -139,3 +139,13 @@ def test_loaders_fail_closed_without_printing_description_text(tmp_path):
                             encoding="utf-8")
     with pytest.raises(RuntimeError, match="not an object"):
         identity_audit.load_description_keys([descriptions])
+
+
+def test_default_descriptions_follow_the_active_site_sibling():
+    assert [path.name for path in identity_audit.DEFAULT_DESCRIPTIONS] == [
+        "bus-descriptions.json",
+        "waiting-descriptions.json",
+        "depot-descriptions.json",
+    ]
+    assert all(path.parent.name == "site"
+               for path in identity_audit.DEFAULT_DESCRIPTIONS)
