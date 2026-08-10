@@ -84,4 +84,7 @@ stop-code coverage before `bbb-enrichment-promote@localities.service` performs
 the atomic swap. The site and bot must then report the exact promoted digest
 and record count or the previous locality file is restored. The separate
 `bbb-locality-shadow.service` has no promotion edge and always refetches the
-approved boundary edition for attended inspection.
+approved boundary edition for attended inspection. Automatic triggering is
+installed off until the root-owned `locality-refresh-enabled` marker is created
+through the fixed deploy control; removing that marker pauses future locality
+refreshes without disabling timetable updates or changing the live file.

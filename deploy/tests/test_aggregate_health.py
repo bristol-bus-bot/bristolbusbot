@@ -147,6 +147,9 @@ def test_locality_automation_correlates_exact_candidate_and_coverage(
     monkeypatch.setattr(
         aggregate_health, "LOCALITY_PROMOTION_STATE", promotion)
     monkeypatch.setattr(aggregate_health, "LOCALITY_SHADOW_REPORT", shadow)
+    marker = tmp_path / "locality-refresh-enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "LOCALITY_REFRESH_MARKER", marker)
     monkeypatch.setattr(
         aggregate_health.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0))

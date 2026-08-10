@@ -35,6 +35,8 @@ LOCALITY_PROMOTION_STATE = Path(
     "/var/lib/bristolbusbot/monitoring/enrichment-localities-promotion.json")
 LOCALITY_SHADOW_REPORT = Path(
     "/var/lib/bristolbusbot/monitoring/locality-shadow.json")
+LOCALITY_REFRESH_MARKER = Path(
+    "/etc/bristolbusbot/locality-refresh-enabled")
 LOCALITY_MAX_AGE_HOURS = 30
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
@@ -732,6 +734,15 @@ def fleet_automation_check() -> tuple[dict, list[str]]:
 
 def locality_automation_check() -> tuple[dict, list[str]]:
     """Summarise the timetable-triggered locality refresh transaction."""
+    if not LOCALITY_REFRESH_MARKER.exists() \
+            and not LOCALITY_REFRESH_MARKER.is_symlink():
+        return {"status": "disabled"}, []
+    if LOCALITY_REFRESH_MARKER.is_symlink() \
+            or not LOCALITY_REFRESH_MARKER.is_file():
+        return {
+            "status": "failed",
+            "failure_code": "unsafe_enable_marker",
+        }, ["job:locality-automation"]
     timetable_enabled = subprocess.run(
         ["systemctl", "is-enabled", "bbb-timetable-shadow.timer"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

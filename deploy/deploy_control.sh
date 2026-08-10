@@ -17,6 +17,42 @@ case "$action:$component" in
     fleet-shadow:) exec /usr/bin/systemctl start bbb-fleet-shadow.service ;;
     fleet-promote:) exec /usr/bin/systemctl start bbb-fleet-stage.service ;;
     fleet-auto-run:) exec /usr/bin/systemctl start bbb-fleet-refresh.service ;;
+    locality-shadow:) exec /usr/bin/systemctl start bbb-locality-shadow.service ;;
+    locality-promote:) exec /usr/bin/systemctl start bbb-locality-stage.service ;;
+    locality-auto-run:) exec /usr/bin/systemctl start bbb-locality-refresh.service ;;
+    locality-auto-enable:)
+        target=/etc/bristolbusbot/locality-refresh-enabled
+        candidate=/etc/bristolbusbot/.locality-refresh-enabled.new
+        test -d /etc/bristolbusbot
+        test ! -L /etc/bristolbusbot
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            test -f "$target"
+            test ! -L "$target"
+            test "$(stat -c %U "$target")" = root
+            test "$(stat -c %G "$target")" = root
+            test "$(stat -c %a "$target")" = 644
+            exit 0
+        fi
+        test ! -e "$candidate"
+        test ! -L "$candidate"
+        install -o root -g root -m 0644 /dev/null "$candidate"
+        printf '%s\n' "enabled=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$candidate"
+        mv -f "$candidate" "$target"
+        exit 0
+        ;;
+    locality-auto-disable:)
+        target=/etc/bristolbusbot/locality-refresh-enabled
+        if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+            exit 0
+        fi
+        test -f "$target"
+        test ! -L "$target"
+        test "$(stat -c %U "$target")" = root
+        test "$(stat -c %G "$target")" = root
+        test "$(stat -c %a "$target")" = 644
+        rm -f "$target"
+        exit 0
+        ;;
     fleet-auto-enable:)
         target=/etc/bristolbusbot/fleet-refresh-enabled
         candidate=/etc/bristolbusbot/.fleet-refresh-enabled.new

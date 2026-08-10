@@ -3,6 +3,7 @@ Description=Build and validate Bristol Bus Bot stop localities after timetable c
 Wants=network-online.target
 After=network-online.target
 OnSuccess=bbb-locality-stage.service
+ConditionPathExists=/etc/bristolbusbot/locality-refresh-enabled
 
 [Service]
 Type=oneshot

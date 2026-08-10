@@ -126,6 +126,7 @@ for destination in \
     /etc/sudoers.d/bristolbusbot-deploy \
     /etc/tmpfiles.d/bristolbusbot.conf \
     /etc/bristolbusbot/backup.json \
+    /etc/bristolbusbot/locality-refresh-enabled \
     "$enrichment_dir/fbribuses.json" \
     "$enrichment_dir/stop_localities.json" \
     "$enrichment_dir/stop_enrichment.json" \
