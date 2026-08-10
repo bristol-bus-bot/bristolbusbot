@@ -16,6 +16,11 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from .enrichment_contracts import FLEET_OPERATOR_TRANSITIONS
+except ImportError:  # production installs both modules side by side
+    from enrichment_contracts import FLEET_OPERATOR_TRANSITIONS
+
 
 SCHEMA_VERSION = 1
 THRESHOLDS = {
@@ -227,6 +232,30 @@ def previous_operator_counts(path: Path) -> dict[str, int]:
         return {}
 
 
+def operator_transition_baseline(
+    previous: dict[str, int], current: dict[str, int]
+) -> tuple[dict[str, int], list[dict[str, object]]]:
+    """Merge only explicit legacy operator ids into their replacement ids."""
+    adjusted = dict(previous)
+    transitions: list[dict[str, object]] = []
+    for legacy, replacement in FLEET_OPERATOR_TRANSITIONS.items():
+        legacy_previous = adjusted.get(legacy, 0)
+        if not legacy_previous or current.get(legacy, 0):
+            continue
+        replacement_previous = adjusted.get(replacement, 0)
+        adjusted.pop(legacy, None)
+        adjusted[replacement] = replacement_previous + legacy_previous
+        transitions.append({
+            "legacy": legacy,
+            "replacement": replacement,
+            "status": "explicit-transition-baseline",
+            "previous_legacy": legacy_previous,
+            "previous_replacement": replacement_previous,
+            "current_replacement": current.get(replacement, 0),
+        })
+    return adjusted, transitions
+
+
 def build_report(*, output: Path, live_db: Path, audit_db: Path,
                  timetable_db: Path, fleet_path: Path,
                  localities_path: Path, description_paths: dict[str, Path],
@@ -273,8 +302,10 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
         operator for operator, _vehicle in observed).items()))
     collapse_ratio = float(THRESHOLDS["operator_collapse_ratio"])
     collapse_minimum = int(THRESHOLDS["operator_collapse_min_previous"])
+    comparison_operator_counts, operator_transitions = \
+        operator_transition_baseline(old_operator_counts, active_by_operator)
     collapses = []
-    for operator, previous in sorted(old_operator_counts.items()):
+    for operator, previous in sorted(comparison_operator_counts.items()):
         current = active_by_operator.get(operator, 0)
         if previous >= collapse_minimum and current < previous * collapse_ratio:
             collapses.append({
@@ -379,6 +410,7 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
             "observed_by_operator": observed_by_operator,
             "age_days": round(fleet_age_days, 2),
             "operator_collapses": collapses,
+            "operator_transitions": operator_transitions,
         },
         "enrichment": {
             "missing_fleet_examples": missing_fleet[:max_examples],
