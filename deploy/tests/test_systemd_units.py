@@ -406,6 +406,7 @@ def test_locality_refresh_is_timetable_triggered_exact_and_independently_promote
         encoding="utf-8")
     for setting in (
         "OnSuccess=bbb-locality-stage.service",
+        "ConditionPathExists=/etc/bristolbusbot/locality-refresh-enabled",
         "--name locality-refresh",
         "geocode_stops.py",
         "--timetable /var/lib/bristolbusbot/pipeline/timetable.db",

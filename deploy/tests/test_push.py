@@ -205,10 +205,20 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "fleet-auto-run:)" in helper
     assert "fleet-auto-enable:)" in helper
     assert "fleet-auto-disable:)" in helper
+    assert "locality-shadow:)" in helper
+    assert "locality-promote:)" in helper
+    assert "locality-auto-run:)" in helper
+    assert "locality-auto-enable:)" in helper
+    assert "locality-auto-disable:)" in helper
     assert "bbb-deploy-control fleet-promote" in sudoers
     assert "bbb-deploy-control fleet-auto-run" in sudoers
     assert "bbb-deploy-control fleet-auto-enable" in sudoers
     assert "bbb-deploy-control fleet-auto-disable" in sudoers
+    assert "bbb-deploy-control locality-shadow" in sudoers
+    assert "bbb-deploy-control locality-promote" in sudoers
+    assert "bbb-deploy-control locality-auto-run" in sudoers
+    assert "bbb-deploy-control locality-auto-enable" in sudoers
+    assert "bbb-deploy-control locality-auto-disable" in sudoers
     assert "bbb-deploy-control timetable-promote" in sudoers
     assert "timetable-auto-enable:)" in helper
     assert "timetable-auto-disable:)" in helper
