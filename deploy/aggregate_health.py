@@ -25,6 +25,12 @@ SOCIAL_TOKEN = Path("/etc/bristolbusbot/social-slack.token")
 SOCIAL_LIVE_MARKER = Path("/etc/bristolbusbot/social-live-enabled")
 DATA_HEALTH_REPORT = Path(
     "/var/lib/bristolbusbot/monitoring/data-health.json")
+FLEET_REFRESH_MARKER = Path("/etc/bristolbusbot/fleet-refresh-enabled")
+FLEET_PROMOTION_STATE = Path(
+    "/var/lib/bristolbusbot/monitoring/enrichment-fleet-promotion.json")
+FLEET_SHADOW_REPORT = Path(
+    "/var/lib/bristolbusbot/monitoring/fleet-shadow.json")
+FLEET_MAX_AGE_HOURS = 24 * 8
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
@@ -555,6 +561,170 @@ def editorial_refresh_check() -> tuple[dict, list[str]]:
     return result, issues
 
 
+def _fleet_job(name: str) -> dict[str, object]:
+    path = STATE / "jobs" / f"{name}.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("job record is not an object")
+        last_result = value.get("last_result")
+        last_ok = (value.get("last_skipped_at")
+                   if last_result == "skipped"
+                   else value.get("last_success_at"))
+        last_finished = value.get("last_finished_at")
+        age_from = last_ok or last_finished
+        age_h = age_seconds(str(age_from)) / 3600 if age_from else None
+        return {
+            "result": last_result,
+            "last_ok_at": last_ok,
+            "last_finished_at": last_finished,
+            "age_hours": round(age_h, 2) if age_h is not None else None,
+            "failure_code": value.get("failure_code"),
+        }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {"result": "missing", "error": type(exc).__name__}
+
+
+def fleet_automation_check() -> tuple[dict, list[str]]:
+    """Summarise the low-touch weekly fleet refresh as one health contract."""
+    if not FLEET_REFRESH_MARKER.exists() \
+            and not FLEET_REFRESH_MARKER.is_symlink():
+        return {"status": "disabled"}, []
+    if FLEET_REFRESH_MARKER.is_symlink() or not FLEET_REFRESH_MARKER.is_file():
+        return {
+            "status": "failed",
+            "failure_code": "unsafe_enable_marker",
+        }, ["job:fleet-automation"]
+
+    timer_enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-fleet-refresh.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    timer_active = subprocess.run(
+        ["systemctl", "is-active", "bbb-fleet-refresh.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    result: dict[str, object] = {
+        "status": "pending",
+        "timer": {"enabled": timer_enabled, "active": timer_active},
+    }
+    if not timer_enabled or not timer_active:
+        result.update({
+            "status": "failed",
+            "failure_code": "timer_not_running",
+        })
+        return result, ["job:fleet-automation"]
+
+    jobs = {
+        name: _fleet_job(name)
+        for name in ("fleet-refresh", "fleet-stage", "enrichment-promote-fleet")
+    }
+    result["jobs"] = jobs
+    if any(job.get("result") == "missing" for job in jobs.values()):
+        if any(job.get("result") == "failure" for job in jobs.values()):
+            result.update({
+                "status": "failed",
+                "failure_code": "refresh_or_promotion_failed",
+            })
+            return result, ["job:fleet-automation"]
+        result["summary"] = "enabled; waiting for the first commissioned run"
+        return result, []
+
+    try:
+        promotion = json.loads(FLEET_PROMOTION_STATE.read_text(encoding="utf-8"))
+        shadow = json.loads(FLEET_SHADOW_REPORT.read_text(encoding="utf-8"))
+        if not isinstance(promotion, dict) or not isinstance(shadow, dict):
+            raise ValueError("fleet state has the wrong shape")
+        difference = shadow.get("difference")
+        difference = difference if isinstance(difference, dict) else {}
+        candidate = shadow.get("candidate")
+        candidate = candidate if isinstance(candidate, dict) else {}
+        candidate_summary = candidate.get("summary")
+        candidate_summary = (candidate_summary
+                             if isinstance(candidate_summary, dict) else {})
+        live = shadow.get("live")
+        live = live if isinstance(live, dict) else {}
+        live_summary = live.get("summary")
+        live_summary = live_summary if isinstance(live_summary, dict) else {}
+        promoted_candidate = promotion.get("candidate")
+        promoted_candidate = (promoted_candidate
+                              if isinstance(promoted_candidate, dict) else {})
+        result["last_attempt"] = {
+            "outcome": promotion.get("outcome"),
+            "finished_at": promotion.get("finished_at"),
+            "error": promotion.get("error"),
+            "recovery_healthy": promotion.get("recovery_healthy"),
+            "candidate_sha256": candidate.get("sha256"),
+            "promoted_candidate_sha256": promoted_candidate.get("sha256"),
+            "live_sha256_before": live.get("sha256"),
+            "candidate_records": candidate_summary.get("records"),
+            "live_records_before": live_summary.get("records"),
+            "added": difference.get("added"),
+            "removed": difference.get("removed"),
+            "changed": difference.get("changed"),
+            "operator_transitions": shadow.get("operator_transitions", []),
+        }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        result.update({
+            "status": "failed",
+            "failure_code": "missing_detail",
+            "error": type(exc).__name__,
+        })
+        return result, ["job:fleet-automation"]
+
+    refresh = jobs["fleet-refresh"]
+    stage = jobs["fleet-stage"]
+    promote = jobs["enrichment-promote-fleet"]
+    attempt = result["last_attempt"]
+    attempt = attempt if isinstance(attempt, dict) else {}
+    outcome = attempt.get("outcome")
+    digests_match = (
+        isinstance(attempt.get("candidate_sha256"), str)
+        and attempt.get("candidate_sha256")
+        == attempt.get("promoted_candidate_sha256")
+    )
+    ages = [job.get("age_hours") for job in jobs.values()]
+    if refresh.get("result") != "success":
+        failed_phase = "refresh"
+    elif stage.get("result") != "success":
+        failed_phase = "stage"
+    elif promote.get("result") not in {"success", "skipped"}:
+        failed_phase = "promotion"
+    elif not digests_match:
+        failed_phase = "correlation"
+    elif any(not isinstance(age, (int, float))
+             or age > FLEET_MAX_AGE_HOURS for age in ages):
+        failed_phase = "overdue"
+    else:
+        failed_phase = None
+    failed = (
+        failed_phase is not None
+        or outcome not in {"accepted", "no_change"}
+    )
+    if failed:
+        failed_phase = failed_phase or "promotion"
+        if failed_phase in {"refresh", "stage"}:
+            failed_job = jobs[f"fleet-{failed_phase}"]
+            attempt.update({
+                "outcome": "failure",
+                "finished_at": failed_job.get("last_finished_at"),
+                "error": failed_job.get("failure_code"),
+            })
+        result.update({
+            "status": "failed",
+            "phase": failed_phase,
+            "failure_code": (
+                "safe_rollback" if outcome == "rolled_back"
+                else "refresh_or_promotion_failed"),
+        })
+        return result, ["job:fleet-automation"]
+    result.update({
+        "status": "healthy",
+        "summary": "latest weekly fleet refresh completed safely",
+    })
+    return result, []
+
+
 def social_curation_check() -> tuple[dict, list[str]]:
     enabled = subprocess.run(
         ["systemctl", "is-enabled", "bbb-social-curation.timer"],
@@ -792,6 +962,29 @@ def editorial_failure_message(refresh: dict[str, object]) -> str:
     ))
 
 
+def fleet_failure_message(refresh: dict[str, object]) -> str:
+    attempt = refresh.get("last_attempt")
+    attempt = attempt if isinstance(attempt, dict) else {}
+    outcome = str(attempt.get("outcome") or "not completed")
+    if outcome == "rolled_back" and attempt.get("recovery_healthy") is True:
+        safety = "The previous fleet data was restored and is healthy."
+    elif outcome == "rollback_failed":
+        safety = (
+            "Automatic rollback was not proven healthy; please check this now.")
+    else:
+        safety = (
+            "The candidate was not accepted, so the existing fleet data remains live.")
+    return "\n".join((
+        ":rotating_light: *Fleet information refresh needs attention*",
+        f"When checked: {_display_time(utcnow().isoformat())}",
+        f"Result: {outcome}",
+        f"Reason: {refresh.get('failure_code', 'see the recorded job')}",
+        f"Safety: {safety}",
+        "You do not need to check routine successful runs; they appear in "
+        "the estate digest.",
+    ))
+
+
 def main() -> int:
     issues: list[str] = []
     services, found = service_checks()
@@ -806,6 +999,8 @@ def main() -> int:
     timetable_promotion = timetable_automation.get("promotion")
     timetable_promotion = timetable_promotion if isinstance(
         timetable_promotion, dict) else {}
+    fleet_automation, found = fleet_automation_check()
+    issues.extend(found)
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
     social_deliveries, found = social_curation_check()
@@ -874,6 +1069,7 @@ def main() -> int:
         "timetable_delivery": timetable_delivery,
         "timetable_promotion": timetable_promotion,
         "timetable_automation": timetable_automation,
+        "fleet_automation": fleet_automation,
         "editorial_refresh": editorial_refresh,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
@@ -956,6 +1152,9 @@ def main() -> int:
             issue for issue in remaining_opened
             if issue not in editorial_issues
         ]
+    if "job:fleet-automation" in remaining_opened:
+        notify(fleet_failure_message(fleet_automation))
+        remaining_opened.remove("job:fleet-automation")
     if remaining_opened:
         notify(":rotating_light: BBB health incident: " + ", ".join(remaining_opened))
 

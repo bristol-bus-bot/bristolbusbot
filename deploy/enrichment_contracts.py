@@ -24,6 +24,12 @@ WECA_AREAS = {
 AREA_ALIASES = {
     "Bath": "Bath and North East Somerset",
 }
+FLEET_OPERATOR_TRANSITIONS = {
+    # Westlink's bustimes records moved from the legacy VITR operator id to
+    # KEMT.  Count this as a rename only when every exact live vehicle id is
+    # still present under KEMT; otherwise the normal collapse guard rejects it.
+    "VITR": "KEMT",
+}
 
 
 class EnrichmentContractError(ValueError):
@@ -57,6 +63,7 @@ def validate_fleet(raw: bytes) -> dict[str, object]:
     slugs: set[str] = set()
     operator_counts: Counter[str] = Counter()
     active_operator_counts: Counter[str] = Counter()
+    active_operator_record_ids: dict[str, list[int]] = {}
     unidentified_records = 0
     for index, record in enumerate(value):
         label = f"fleet record {index}"
@@ -110,6 +117,8 @@ def validate_fleet(raw: bytes) -> dict[str, object]:
         operator_counts[operator_id] += 1
         if not withdrawn:
             active_operator_counts[operator_id] += 1
+            active_operator_record_ids.setdefault(
+                operator_id, []).append(record_id)
 
     return {
         "policy": "fleet-structure-v1",
@@ -118,6 +127,10 @@ def validate_fleet(raw: bytes) -> dict[str, object]:
         "unidentified_records": unidentified_records,
         "operator_counts": dict(sorted(operator_counts.items())),
         "active_operator_counts": dict(sorted(active_operator_counts.items())),
+        "active_operator_record_ids": {
+            operator: sorted(ids)
+            for operator, ids in sorted(active_operator_record_ids.items())
+        },
     }
 
 
@@ -176,6 +189,23 @@ def _counts(summary: Mapping[str, object], field: str) -> dict[str, int]:
     return value
 
 
+def _record_ids(summary: Mapping[str, object], field: str) \
+        -> dict[str, set[int]]:
+    value = summary.get(field)
+    if not isinstance(value, dict):
+        raise EnrichmentContractError(f"{field} summary is invalid")
+    result: dict[str, set[int]] = {}
+    for operator, ids in value.items():
+        if not isinstance(operator, str) or not isinstance(ids, list) \
+                or not all(isinstance(record_id, int)
+                           and not isinstance(record_id, bool)
+                           and record_id > 0 for record_id in ids) \
+                or len(ids) != len(set(ids)):
+            raise EnrichmentContractError(f"{field} summary is invalid")
+        result[operator] = set(ids)
+    return result
+
+
 def _bounded(candidate: int, live: int, label: str) -> dict[str, int]:
     minimum = max(1, math.ceil(live * MINIMUM_RATIO))
     maximum = max(math.ceil(live * MAXIMUM_RATIO), live + 5)
@@ -199,6 +229,40 @@ def _not_collapsed(candidate: int, live: int, label: str) -> dict[str, int]:
 
 def compare_fleet(candidate: Mapping[str, object],
                   live: Mapping[str, object]) -> dict[str, object]:
+    candidate_counts = dict(_counts(candidate, "active_operator_counts"))
+    live_counts = dict(_counts(live, "active_operator_counts"))
+    candidate_ids = _record_ids(candidate, "active_operator_record_ids")
+    live_ids = _record_ids(live, "active_operator_record_ids")
+    transitions: list[dict[str, object]] = []
+    for legacy, replacement in FLEET_OPERATOR_TRANSITIONS.items():
+        legacy_ids = live_ids.get(legacy, set())
+        if not legacy_ids:
+            continue
+        remaining_legacy_ids = candidate_ids.get(legacy, set())
+        if remaining_legacy_ids:
+            transitions.append({
+                "legacy": legacy,
+                "replacement": replacement,
+                "status": "source-still-uses-legacy-id",
+                "live_legacy_records": len(legacy_ids),
+                "candidate_legacy_records": len(remaining_legacy_ids),
+            })
+            continue
+        missing = sorted(legacy_ids - candidate_ids.get(replacement, set()))
+        if missing:
+            raise EnrichmentContractError(
+                f"operator transition {legacy}->{replacement} is incomplete; "
+                f"{len(missing)} live vehicle ids are missing")
+        moved = live_counts.pop(legacy, 0)
+        live_counts[replacement] = live_counts.get(replacement, 0) + moved
+        transitions.append({
+            "legacy": legacy,
+            "replacement": replacement,
+            "status": "exact-id-transition-accepted",
+            "live_legacy_records": len(legacy_ids),
+            "matched_replacement_records": len(legacy_ids),
+            "missing_ids": 0,
+        })
     records = _bounded(
         int(candidate.get("records", -1)), int(live.get("records", -1)),
         "fleet total")
@@ -206,8 +270,6 @@ def compare_fleet(candidate: Mapping[str, object],
         int(candidate.get("active_records", -1)),
         int(live.get("active_records", -1)),
         "active fleet total")
-    candidate_counts = _counts(candidate, "active_operator_counts")
-    live_counts = _counts(live, "active_operator_counts")
     operators = {
         operator: _not_collapsed(
             candidate_counts.get(operator, 0), count, f"operator {operator}")
@@ -224,11 +286,12 @@ def compare_fleet(candidate: Mapping[str, object],
             f"{live_unidentified} to {candidate_unidentified}; maximum is "
             f"{maximum_unidentified}")
     return {
-        "policy": "fleet-bounded-count-v1",
+        "policy": "fleet-bounded-count-v2",
         "records": records,
         "totals": totals,
         "operators": operators,
         "new_operators": sorted(set(candidate_counts) - set(live_counts)),
+        "operator_transitions": transitions,
         "unidentified_records": {
             "live": live_unidentified,
             "candidate": candidate_unidentified,

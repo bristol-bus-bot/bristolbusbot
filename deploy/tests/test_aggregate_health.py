@@ -26,6 +26,92 @@ def test_data_health_findings_remain_report_only(tmp_path, monkeypatch):
     assert issues == []
 
 
+def test_fleet_automation_health_collapses_three_safe_steps_into_one_result(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    jobs = state / "jobs"
+    jobs.mkdir(parents=True)
+    marker = tmp_path / "fleet-refresh-enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    now = datetime.now(timezone.utc).isoformat()
+    for name, result in (
+        ("fleet-refresh", "success"),
+        ("fleet-stage", "success"),
+        ("enrichment-promote-fleet", "success"),
+    ):
+        (jobs / f"{name}.json").write_text(json.dumps({
+            "last_result": result,
+            "last_success_at": now,
+            "last_finished_at": now,
+        }), encoding="utf-8")
+    promotion = state / "enrichment-fleet-promotion.json"
+    promotion.write_text(json.dumps({
+        "outcome": "accepted", "finished_at": now,
+        "candidate": {"sha256": "b" * 64},
+    }), encoding="utf-8")
+    shadow = state / "fleet-shadow.json"
+    shadow.write_text(json.dumps({
+        "candidate": {"sha256": "b" * 64, "summary": {"records": 2746}},
+        "live": {"sha256": "a" * 64, "summary": {"records": 2605}},
+        "difference": {"added": 199, "removed": 58, "changed": 557},
+        "operator_transitions": [{"legacy": "VITR", "replacement": "KEMT"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "FLEET_REFRESH_MARKER", marker)
+    monkeypatch.setattr(aggregate_health, "FLEET_PROMOTION_STATE", promotion)
+    monkeypatch.setattr(aggregate_health, "FLEET_SHADOW_REPORT", shadow)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    result, issues = aggregate_health.fleet_automation_check()
+
+    assert issues == []
+    assert result["status"] == "healthy"
+    assert result["last_attempt"]["candidate_records"] == 2746
+    assert result["last_attempt"]["added"] == 199
+
+
+def test_fleet_automation_failure_says_existing_data_is_safe(
+        tmp_path, monkeypatch):
+    refresh = {
+        "status": "failed",
+        "failure_code": "refresh_or_promotion_failed",
+        "last_attempt": {"outcome": "failed_before_replace"},
+    }
+
+    message = aggregate_health.fleet_failure_message(refresh)
+
+    assert "needs attention" in message
+    assert "existing fleet data remains live" in message
+    assert "do not need to check routine successful runs" in message
+
+
+def test_fleet_refresh_failure_is_not_hidden_by_missing_downstream_jobs(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    jobs = state / "jobs"
+    jobs.mkdir(parents=True)
+    marker = tmp_path / "fleet-refresh-enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    now = datetime.now(timezone.utc).isoformat()
+    (jobs / "fleet-refresh.json").write_text(json.dumps({
+        "last_result": "failure",
+        "last_finished_at": now,
+        "failure_code": "command_failed",
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "FLEET_REFRESH_MARKER", marker)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    result, issues = aggregate_health.fleet_automation_check()
+
+    assert result["status"] == "failed"
+    assert issues == ["job:fleet-automation"]
+
+
 def test_social_curation_health_reads_enabled_job_and_ledger(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"

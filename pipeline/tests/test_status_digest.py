@@ -83,3 +83,28 @@ def test_data_health_line_surfaces_operator_collapse(tmp_path, monkeypatch):
 
     assert status_digest.data_health_line() == (
         "*data*  :warning: FBRI fleet count collapsed 583->100 - report-only")
+
+
+def test_fleet_line_summarises_the_latest_guarded_refresh(
+        tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "fleet_automation": {
+            "status": "healthy",
+            "last_attempt": {
+                "outcome": "accepted",
+                "finished_at": "2026-08-10T20:00:00+00:00",
+                "live_records_before": 2605,
+                "candidate_records": 2746,
+                "added": 199,
+                "removed": 58,
+                "changed": 557,
+            },
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.fleet_line() == (
+        "*fleet*  :white_check_mark: accepted (2026-08-10) - "
+        "records 2605->2746 - +199/-58/557 changed"
+    )

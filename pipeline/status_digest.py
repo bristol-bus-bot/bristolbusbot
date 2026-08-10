@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Twice-daily estate digest sent to Slack by the systemd timer.
 
-One message, seven sections:
+One message with these sections:
   collector  - freshest vehicle age, active count, match rate
   matching   - vehicles matched to a timetable trip
                whose delay is NULL (every reading refused by the distance
@@ -10,6 +10,7 @@ One message, seven sections:
   bot        - successful Bluesky posts today from durable delivery records
   site       - production site /healthz on :5002
   timetable  - aggregate last accepted and last attempted automation state
+  fleet      - latest guarded weekly fleet-data refresh outcome
   data       - report-only enrichment completeness findings
   social     - Slack curation rollout mode and durable card deliveries
   pi         - disk, memory, CPU temperature
@@ -154,6 +155,36 @@ def social_line() -> str:
         return f"*social*  aggregate probe failed: {type(exc).__name__}"
 
 
+def fleet_line() -> str:
+    """Render the single low-touch fleet automation result."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        automation = snapshot.get("fleet_automation")
+        if not isinstance(automation, dict):
+            return "*fleet*  aggregate status unavailable"
+        status = str(automation.get("status") or "unknown")
+        if status == "disabled":
+            return "*fleet*  weekly safe refresh is off"
+        if status == "pending":
+            return "*fleet*  weekly safe refresh enabled - first run pending"
+        attempt = automation.get("last_attempt")
+        attempt = attempt if isinstance(attempt, dict) else {}
+        outcome = str(attempt.get("outcome") or "unknown")
+        finished = str(attempt.get("finished_at") or "unknown")[:10]
+        before = attempt.get("live_records_before")
+        after = attempt.get("candidate_records")
+        added = attempt.get("added")
+        removed = attempt.get("removed")
+        changed = attempt.get("changed")
+        flag = ":white_check_mark:" if status == "healthy" else ":warning:"
+        return (
+            f"*fleet*  {flag} {outcome} ({finished}) - records {before}->{after} - "
+            f"+{added}/-{removed}/{changed} changed"
+        )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*fleet*  aggregate probe failed: {type(exc).__name__}"
+
+
 def data_health_line() -> str:
     """Render the bounded, report-only data-health result from aggregate health."""
     try:
@@ -222,8 +253,8 @@ def main() -> None:
     stamp = datetime.now().strftime("%a %H:%M")
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
-    lines += [bot_line(), site_line(), timetable_line(), data_health_line(),
-              social_line(), pi_line()]
+    lines += [bot_line(), site_line(), timetable_line(), fleet_line(),
+              data_health_line(), social_line(), pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 

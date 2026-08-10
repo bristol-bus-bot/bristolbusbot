@@ -78,7 +78,7 @@ def test_named_fleet_promotion_uses_fixed_contract_and_exact_health(tmp_path):
 
     assert code == 0
     assert record["outcome"] == "accepted"
-    assert record["comparison"]["policy"] == "fleet-bounded-count-v1"
+    assert record["comparison"]["policy"] == "fleet-bounded-count-v2"
     assert restarts == ["site+bot"]
     assert health_calls == [(
         "fleet",

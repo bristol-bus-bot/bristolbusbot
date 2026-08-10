@@ -1,0 +1,31 @@
+[Unit]
+Description=Stage the accepted Bristol Bus Bot fleet candidate
+After=bbb-fleet-refresh.service bbb-fleet-shadow.service
+OnSuccess=bbb-enrichment-promote@fleet.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name fleet-stage -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-enrichment/fleet_candidate_stage.py
+TimeoutStartSec=20min
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/var/lib/bristolbusbot/fleet-shadow/fbribuses.json /var/lib/bristolbusbot/enrichment/fbribuses.json
+ReadWritePaths=/var/lib/bristolbusbot/enrichment/incoming /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

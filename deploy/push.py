@@ -606,6 +606,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "configure_timetable_delivery.py", "configure_social_curation.py",
         "enrichment_layout.py", "data_promotion.py",
         "enrichment_contracts.py", "enrichment_promote.py",
+        "fleet_candidate_stage.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)

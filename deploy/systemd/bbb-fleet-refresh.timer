@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly safe Bristol Bus Bot fleet-data refresh
+
+[Timer]
+OnCalendar=Mon *-*-* 00:45:00
+Persistent=true
+RandomizedDelaySec=5min
+Unit=bbb-fleet-refresh.service
+
+[Install]
+WantedBy=timers.target
