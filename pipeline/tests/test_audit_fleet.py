@@ -34,6 +34,26 @@ def test_operator_scoped_and_fallback_fleet_keys(tmp_path):
     assert index[("*", "39461")]["fuel"] == "Gas"
 
 
+def test_prefixed_registration_enriches_a_code_less_vehicle(tmp_path):
+    source = tmp_path / "fleet.json"
+    source.write_text(json.dumps([{
+        "fleet_code": "",
+        "reg": "YW68 PDO",
+        "operator": {"id": "EUTX"},
+        "vehicle_type": {
+            "name": "Eurotaxis vehicle",
+            "electric": False,
+            "fuel": "diesel",
+        },
+    }]), encoding="utf-8")
+
+    index = audit_fleet.load_fleet_index(source)
+
+    assert audit_fleet.fleet_for(
+        index, "EUTX", "EUTX-YW68_PDO")["model"] == "Eurotaxis vehicle"
+    assert audit_fleet.fleet_for(index, "OPAA", "OPAA-YW68_PDO") is None
+
+
 def test_missing_or_invalid_fleet_data_is_a_hard_failure(tmp_path):
     with pytest.raises(RuntimeError, match="required audit fleet data"):
         audit_fleet.load_fleet_index(tmp_path / "missing.json")

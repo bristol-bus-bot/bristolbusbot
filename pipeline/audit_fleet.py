@@ -21,6 +21,7 @@ PRODUCTION_BOT_FLEET_FILE = (
     Path.home() / "bristolbusbot" / "current" / "bot" / "fbribuses.json"
 )
 DIGITS = re.compile(r"(\d+)")
+NON_ALNUM = re.compile(r"[^A-Z0-9]+")
 
 
 def fleet_path(path=None):
@@ -62,16 +63,21 @@ def load_fleet_index(path=None):
         operator = v.get("operator") or {}
         noc = operator.get("id") if isinstance(operator, dict) else None
         fleet = str(v.get("fleet_code") or v.get("fleet_number") or "").strip()
-        if not fleet:
+        registration = NON_ALNUM.sub(
+            "", str(v.get("reg") or "").strip().upper())
+        if not fleet and not registration:
             continue
         entry = {
             "model": vt.get("name") or "Unknown",
             "electric": bool(vt.get("electric")),
             "fuel": vt.get("fuel") or "",
         }
-        if noc:
+        if noc and fleet:
             index[(noc, fleet)] = entry
-        index.setdefault(("*", fleet), entry)
+        if noc and registration:
+            index[(noc, f"registration:{registration}")] = entry
+        if fleet:
+            index.setdefault(("*", fleet), entry)
     if not index:
         raise RuntimeError(
             f"required audit fleet data contains no usable vehicles: {source}"
@@ -87,7 +93,15 @@ def fleet_number(vehicle_ref):
 
 
 def fleet_for(index, operator_noc, vehicle_ref):
+    values = [str(vehicle_ref or "").strip()]
+    if "-" in values[0]:
+        values.append(values[0].rsplit("-", 1)[-1])
+    for value in values:
+        registration = NON_ALNUM.sub("", value.upper())
+        matched = index.get((operator_noc, f"registration:{registration}"))
+        if matched:
+            return matched
     fleet = fleet_number(vehicle_ref)
-    if not fleet:
-        return None
-    return index.get((operator_noc, fleet)) or index.get(("*", fleet))
+    if fleet:
+        return index.get((operator_noc, fleet)) or index.get(("*", fleet))
+    return None

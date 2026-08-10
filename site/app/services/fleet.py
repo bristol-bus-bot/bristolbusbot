@@ -20,8 +20,16 @@ OPERATOR_LIVERIES = {
     "EUTX": {"name": "Eurocoaches", "left": "#555"},
     "VITR": {"name": "Kempsford Transport", "left": "#555"},
 }
+# Do not invent a specific brand when the source only says "White". A neutral
+# contrast-safe marker is honest, visible on the map, and clearly labelled as
+# a fallback in the API extras.
+UNKNOWN_LIVERY = {
+    "name": "Livery not supplied",
+    "left": "#64748b",
+    "right": "#475569",
+}
 
-_WHITES = ("#fff", "#FFF", "#ffffff", "#FFFFFF", "white")
+_WHITES = {"#fff", "#ffffff", "white"}
 _NON_ALNUM = re.compile(r"[^A-Z0-9]+")
 
 
@@ -170,16 +178,20 @@ class Fleet:
 
     def _record(self, vehicle_ref: str, operator_ref: str) -> dict | None:
         operator = str(operator_ref or "").strip().upper()
-        registration = _registration(vehicle_ref)
-        if operator:
-            record = self._registration_scoped.get((operator, registration))
-            if record:
-                return record
-        else:
-            record = _preferred_registration(
-                self._by_registration.get(registration, []))
-            if record:
-                return record
+        # Live references may be OPERATOR-REGISTRATION. Try the full value and
+        # the suffix as registrations before falling back to fleet codes.
+        for value in self._possible_codes(vehicle_ref):
+            registration = _registration(value)
+            if operator:
+                record = self._registration_scoped.get(
+                    (operator, registration))
+                if record:
+                    return record
+            else:
+                record = _preferred_registration(
+                    self._by_registration.get(registration, []))
+                if record:
+                    return record
 
         for code in self._possible_codes(vehicle_ref):
             if operator and (operator, code) in self._scoped:
@@ -220,10 +232,17 @@ class Fleet:
                 "garage": garage.get("name"),
                 "branding": record.get("branding") or None,
             }
-        if not livery or (isinstance(livery, dict)
-                          and livery.get("left") in _WHITES):
-            livery = OPERATOR_LIVERIES.get(
-                str(operator_ref or "").upper()) or livery
+        missing_livery = bool(record) and (
+            not livery or (isinstance(livery, dict)
+                           and (str(livery.get("left") or "").lower() in _WHITES
+                                or str(livery.get("right") or "").lower()
+                                in _WHITES)))
+        if not livery or missing_livery:
+            fallback = OPERATOR_LIVERIES.get(
+                str(operator_ref or "").upper())
+            if fallback or missing_livery:
+                livery = dict(fallback or UNKNOWN_LIVERY)
+                extras["liveryFallback"] = True
         return {"livery": livery, "model": model, "fleetNumber": fleet_number,
                 "reg": reg, "extras": extras}
 

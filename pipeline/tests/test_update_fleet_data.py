@@ -231,7 +231,25 @@ def test_explicitly_explained_empty_operator_is_recorded(tmp_path):
         "pages": 1,
         "active_records": 0,
         "empty_reason": "known empty baseline",
+        "published_as": "KEMT",
     }
+
+
+def test_alternate_source_operator_is_published_as_live_operator(tmp_path):
+    source_record = record(1, "LEMN")
+    live_record = record(1, "LEMB")
+
+    result, candidate, _report = run(
+        tmp_path,
+        [live_record],
+        {"LEMN": [{"results": [source_record], "next": None}]},
+        (fleet_shadow.Operator("LEMN", publish_as="LEMB"),),
+    )
+
+    published = json.loads(candidate.read_text())
+    assert published[0]["operator"]["id"] == "LEMB"
+    assert result["operators"][0]["code"] == "LEMN"
+    assert result["operators"][0]["published_as"] == "LEMB"
 
 
 def test_one_operator_count_collapse_is_rejected_after_fetch(tmp_path):

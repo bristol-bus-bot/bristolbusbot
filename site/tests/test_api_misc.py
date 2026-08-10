@@ -92,6 +92,39 @@ def test_registration_collision_requires_operator(tmp_path):
     assert fleet.details("ZZ40ZZZ", "OPBB")["model"] == "Operator B vehicle"
 
 
+def test_prefixed_registration_matches_only_within_operator(tmp_path):
+    fleet_file = tmp_path / "fleet.json"
+    fleet_file.write_text(json.dumps([{
+        "fleet_code": "", "reg": "YW68 PDO",
+        "operator": {"id": "EUTX"},
+        "vehicle_type": {"name": "Eurotaxis vehicle"},
+    }]), encoding="utf-8")
+
+    from app.services.fleet import Fleet
+    fleet = Fleet(str(fleet_file))
+
+    assert fleet.details("EUTX-YW68_PDO", "EUTX")["model"] == \
+        "Eurotaxis vehicle"
+    assert fleet.details("ABUS-YW68_PDO", "ABUS")["model"] is None
+
+
+def test_white_source_livery_uses_honest_visible_fallback(tmp_path):
+    fleet_file = tmp_path / "fleet.json"
+    fleet_file.write_text(json.dumps([{
+        "fleet_code": "10", "reg": "AA10 AAA",
+        "operator": {"id": "UNKN"},
+        "vehicle_type": {"name": "Test vehicle"},
+        "livery": {"name": "White", "left": "#fff", "right": "#fff"},
+    }]), encoding="utf-8")
+
+    from app.services.fleet import Fleet
+    details = Fleet(str(fleet_file)).details("UNKN-10", "UNKN")
+
+    assert details["livery"]["name"] == "Livery not supplied"
+    assert details["livery"]["left"] != "#fff"
+    assert details["extras"]["liveryFallback"] is True
+
+
 def test_situations_endpoint(client, app):
     import sqlite3
     cfg = app.config["BBB"]
