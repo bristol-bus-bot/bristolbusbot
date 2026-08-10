@@ -63,6 +63,11 @@ def test_health_endpoints(client):
     assert h["checks"]["fleet"]["loaded"] is True
     assert h["checks"]["fleet"]["records"] == 1
     assert len(h["checks"]["fleet"]["sha256"]) == 64
+    descriptions = h["checks"]["fleet"]["descriptions"]
+    assert set(descriptions) == {"in_service", "waiting", "depot"}
+    assert all(value["loaded"] is True for value in descriptions.values())
+    assert all(value["records"] > 0 for value in descriptions.values())
+    assert all(len(value["sha256"]) == 64 for value in descriptions.values())
     assert h["checks"]["localities"]["loaded"] is True
     assert len(h["checks"]["localities"]["sha256"]) == 64
 

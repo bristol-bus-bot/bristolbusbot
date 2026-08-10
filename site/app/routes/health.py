@@ -23,6 +23,14 @@ def healthz():
     checks["fleet"] = fleet
     if not fleet.get("loaded") or not fleet.get("records"):
         overall = "fail"
+    descriptions = fleet.get("descriptions")
+    descriptions = descriptions if isinstance(descriptions, dict) else {}
+    if set(descriptions) != {"in_service", "waiting", "depot"} or any(
+            not value.get("loaded") or not value.get("records")
+            for value in descriptions.values()
+            if isinstance(value, dict)) or any(
+                not isinstance(value, dict) for value in descriptions.values()):
+        overall = "fail"
     localities = current_app.extensions["bbb_localities"]
     checks["localities"] = localities
     if not localities.get("loaded") or not localities.get("records"):

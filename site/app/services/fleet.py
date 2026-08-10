@@ -88,9 +88,15 @@ class Fleet:
             self._records = []
         self._status["records"] = len(self._records)
 
-        self._descriptions = self._load_dict(descriptions_path)
-        self._waiting = self._load_dict(waiting_path)
-        self._depot = self._load_dict(depot_path)
+        self._descriptions, in_service_status = self._load_description(
+            descriptions_path)
+        self._waiting, waiting_status = self._load_description(waiting_path)
+        self._depot, depot_status = self._load_description(depot_path)
+        self._status["descriptions"] = {
+            "in_service": in_service_status,
+            "waiting": waiting_status,
+            "depot": depot_status,
+        }
         self._scoped: dict[tuple[str, str], list[dict]] = defaultdict(list)
         self._by_code: dict[str, list[dict]] = defaultdict(list)
         self._registration_scoped: dict[tuple[str, str], dict] = {}
@@ -133,6 +139,34 @@ class Fleet:
     def _load_dict(cls, path: str) -> dict:
         value = cls._load(path)
         return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _load_description(path: str) -> tuple[dict, dict]:
+        status = {"loaded": False, "path": path, "sha256": None,
+                  "records": 0}
+        try:
+            raw = Path(path).read_bytes()
+            value = json.loads(raw)
+            if not isinstance(value, dict):
+                raise ValueError("description file is not an object")
+            descriptions = {
+                str(key): text for key, text in value.items()
+                if isinstance(text, str) and text.strip()
+            }
+            if len(descriptions) != len(value):
+                raise ValueError("description file has invalid entries")
+            status.update({
+                "loaded": True,
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "records": len(descriptions),
+            })
+            return descriptions, status
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError,
+                ValueError) as exc:
+            logger.warning("description data could not be loaded %s: %s",
+                           path, exc)
+            status["error"] = str(exc)[:200]
+            return {}, status
 
     @staticmethod
     def _load_fleet(path: str) -> tuple[object, dict]:

@@ -435,6 +435,42 @@ def test_locality_refresh_is_timetable_triggered_exact_and_independently_promote
     ) in tmpfiles
 
 
+def test_blurb_generation_is_bounded_pending_only_and_human_promoted():
+    generation = (SYSTEMD / "bbb-blurb-generate.service").read_text(
+        encoding="utf-8")
+    timer = (SYSTEMD / "bbb-blurb-generate.timer").read_text(
+        encoding="utf-8")
+    promotion = (SYSTEMD / "bbb-blurb-promote.service").read_text(
+        encoding="utf-8")
+    for setting in (
+        "User=@BBB_DEPLOY_USER@",
+        "ConditionPathExists=/etc/bristolbusbot/blurb-generation-enabled",
+        "EnvironmentFile=-/etc/bristolbusbot/blurb.env",
+        "--name blurb-generate --skip-exit-code 75",
+        "blurb_automation.py generate",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment",
+        "ReadWritePaths=/var/lib/bristolbusbot/blurb-pending "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    ):
+        assert setting in generation
+    assert "OnCalendar=Mon *-*-* 02:15:00" in timer
+    assert "OnSuccess=" not in generation
+    for setting in (
+        "User=root",
+        "--name blurb-promote",
+        "blurb_automation.py promote",
+        "ReadWritePaths=/var/lib/bristolbusbot/enrichment "
+        "/var/lib/bristolbusbot/blurb-pending "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "IPAddressDeny=any",
+        "IPAddressAllow=localhost",
+        "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
+    ):
+        assert setting in promotion
+    assert not (SYSTEMD / "bbb-blurb-promote.timer").exists()
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",
@@ -450,6 +486,8 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-locality-shadow.service",
         "bbb-locality-refresh.service",
         "bbb-locality-stage.service",
+        "bbb-blurb-generate.service",
+        "bbb-blurb-promote.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source

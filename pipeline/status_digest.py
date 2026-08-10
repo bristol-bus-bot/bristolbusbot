@@ -11,6 +11,7 @@ One message with these sections:
   site       - production site /healthz on :5002
   timetable  - aggregate last accepted and last attempted automation state
   fleet      - latest guarded weekly fleet-data refresh outcome
+  blurbs     - pending human review and bounded Gemini usage
   data       - report-only enrichment completeness findings
   social     - Slack curation rollout mode and durable card deliveries
   pi         - disk, memory, CPU temperature
@@ -231,6 +232,38 @@ def data_health_line() -> str:
         return f"*data*  aggregate probe failed: {type(exc).__name__}"
 
 
+def blurb_line() -> str:
+    """Show only whether a review is waiting and this month's bounded use."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        generation = snapshot.get("blurb_generation")
+        if not isinstance(generation, dict):
+            return "*blurbs*  aggregate status unavailable"
+        status = str(generation.get("status") or "unknown")
+        if status == "disabled":
+            return "*blurbs*  weekly missing-description check is off"
+        usage = generation.get("month_usage")
+        usage = usage if isinstance(usage, dict) else {}
+        requests = int(usage.get("requests", 0))
+        tokens = int(usage.get("input_tokens", 0)) \
+            + int(usage.get("output_tokens", 0))
+        if status == "pending_review":
+            pending = generation.get("pending_review")
+            pending = pending if isinstance(pending, dict) else {}
+            return (f"*blurbs*  {int(pending.get('buses', 0))} bus(es) "
+                    f"waiting for your review - {requests} request(s), "
+                    f"{tokens} token(s) this month")
+        if status == "healthy":
+            return (f"*blurbs*  :white_check_mark: nothing waiting - "
+                    f"{requests} request(s), {tokens} token(s) this month")
+        if status == "pending":
+            return "*blurbs*  weekly safe generation enabled - first run pending"
+        return (f"*blurbs*  :warning: {status} - "
+                f"{str(generation.get('failure_code') or 'check the job record')}")
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*blurbs*  aggregate probe failed: {type(exc).__name__}"
+
+
 def pi_line() -> str:
     try:
         du = shutil.disk_usage("/")
@@ -254,7 +287,7 @@ def main() -> None:
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
     lines += [bot_line(), site_line(), timetable_line(), fleet_line(),
-              data_health_line(), social_line(), pi_line()]
+              data_health_line(), blurb_line(), social_line(), pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 

@@ -38,6 +38,11 @@ LOCALITY_SHADOW_REPORT = Path(
 LOCALITY_REFRESH_MARKER = Path(
     "/etc/bristolbusbot/locality-refresh-enabled")
 LOCALITY_MAX_AGE_HOURS = 30
+BLURB_GENERATION_MARKER = Path(
+    "/etc/bristolbusbot/blurb-generation-enabled")
+BLURB_PENDING = Path("/var/lib/bristolbusbot/blurb-pending/pending.json")
+BLURB_USAGE = Path("/var/lib/bristolbusbot/monitoring/blurb-usage.json")
+BLURB_MAX_AGE_HOURS = 24 * 8
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
@@ -830,6 +835,110 @@ def locality_automation_check() -> tuple[dict, list[str]]:
     return result, []
 
 
+def blurb_generation_check() -> tuple[dict, list[str]]:
+    """Summarise safe weekly generation and the attended review queue."""
+    if not BLURB_GENERATION_MARKER.exists() \
+            and not BLURB_GENERATION_MARKER.is_symlink():
+        return {"status": "disabled"}, []
+    if BLURB_GENERATION_MARKER.is_symlink() \
+            or not BLURB_GENERATION_MARKER.is_file():
+        return {
+            "status": "failed", "failure_code": "unsafe_enable_marker",
+        }, ["job:blurb-generation"]
+    timer_enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-blurb-generate.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    timer_active = subprocess.run(
+        ["systemctl", "is-active", "bbb-blurb-generate.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    result: dict[str, object] = {
+        "status": "pending",
+        "timer": {"enabled": timer_enabled, "active": timer_active},
+    }
+    if not timer_enabled or not timer_active:
+        result.update({"status": "failed",
+                       "failure_code": "timer_not_running"})
+        return result, ["job:blurb-generation"]
+
+    job = _fleet_job("blurb-generate")
+    result["job"] = job
+    try:
+        if BLURB_PENDING.is_symlink():
+            raise ValueError("pending path is a symlink")
+        if BLURB_PENDING.is_file():
+            pending = json.loads(BLURB_PENDING.read_text(encoding="utf-8"))
+            additions = pending.get("additions")
+            if pending.get("status") != "pending_review" \
+                    or not isinstance(additions, dict):
+                raise ValueError("pending batch has the wrong shape")
+            keys = set()
+            lines = 0
+            for values in additions.values():
+                if not isinstance(values, dict):
+                    raise ValueError("pending additions have the wrong shape")
+                keys.update(map(str, values))
+                lines += len(values)
+            result["pending_review"] = {
+                "batch_id": pending.get("batch_id"),
+                "buses": len(keys),
+                "lines": lines,
+                "created_at": pending.get("created_at"),
+            }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        result.update({"status": "failed",
+                       "failure_code": "unsafe_pending_batch",
+                       "error": type(exc).__name__})
+        return result, ["job:blurb-generation"]
+
+    usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
+    try:
+        ledger = json.loads(BLURB_USAGE.read_text(encoding="utf-8"))
+        if ledger.get("schema") != 1 or not isinstance(
+                ledger.get("events"), list):
+            raise ValueError("usage ledger has the wrong shape")
+        month = utcnow().strftime("%Y-%m")
+        for event in ledger["events"]:
+            if not isinstance(event, dict) or event.get("month") != month:
+                continue
+            usage["requests"] += 1
+            usage["input_tokens"] += int(
+                event.get("actual_input_tokens")
+                or event.get("reserved_input_tokens") or 0)
+            usage["output_tokens"] += int(
+                event.get("actual_output_tokens")
+                or event.get("reserved_output_tokens") or 0)
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        result.update({"status": "failed",
+                       "failure_code": "unsafe_usage_ledger",
+                       "error": type(exc).__name__})
+        return result, ["job:blurb-generation"]
+    result["month_usage"] = usage
+
+    if job.get("result") == "failure":
+        result.update({"status": "failed",
+                       "failure_code": job.get("failure_code")
+                       or "generation_failed"})
+        return result, ["job:blurb-generation"]
+    age = job.get("age_hours")
+    if job.get("result") in {"success", "skipped"} and (
+            not isinstance(age, (int, float)) or age > BLURB_MAX_AGE_HOURS):
+        result.update({"status": "failed", "failure_code": "overdue"})
+        return result, ["job:blurb-generation"]
+    if "pending_review" in result:
+        result["status"] = "pending_review"
+        result["summary"] = "generated text is waiting for human approval"
+    elif job.get("result") in {"success", "skipped"}:
+        result["status"] = "healthy"
+        result["summary"] = "weekly check completed with no pending batch"
+    else:
+        result["summary"] = "enabled; waiting for the first attended run"
+    return result, []
+
+
 def social_curation_check() -> tuple[dict, list[str]]:
     enabled = subprocess.run(
         ["systemctl", "is-enabled", "bbb-social-curation.timer"],
@@ -1108,6 +1217,8 @@ def main() -> int:
     issues.extend(found)
     locality_automation, found = locality_automation_check()
     issues.extend(found)
+    blurb_generation, found = blurb_generation_check()
+    issues.extend(found)
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
     social_deliveries, found = social_curation_check()
@@ -1178,6 +1289,7 @@ def main() -> int:
         "timetable_automation": timetable_automation,
         "fleet_automation": fleet_automation,
         "locality_automation": locality_automation,
+        "blurb_generation": blurb_generation,
         "editorial_refresh": editorial_refresh,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
