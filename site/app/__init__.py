@@ -53,6 +53,9 @@ def create_app(config: Config | None = None) -> Flask:
     app.extensions["bbb_fleet"] = Fleet(cfg.fleet_json, cfg.descriptions_json,
                                         cfg.waiting_json,
                                         cfg.depot_descriptions_json)
+    from .services import localities as loc_svc
+    app.extensions["bbb_localities"] = loc_svc.locality_status(
+        cfg.localities_json)
     from .services.audit_integration import AuditIntegration
     app.extensions["bbb_audit_integration"] = AuditIntegration(
         cfg.audit_integration_json, cfg.audit_max_age_seconds)

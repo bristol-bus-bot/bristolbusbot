@@ -23,6 +23,10 @@ def healthz():
     checks["fleet"] = fleet
     if not fleet.get("loaded") or not fleet.get("records"):
         overall = "fail"
+    localities = current_app.extensions["bbb_localities"]
+    checks["localities"] = localities
+    if not localities.get("loaded") or not localities.get("records"):
+        overall = "fail"
     try:
         db.gtfs().execute("SELECT 1 FROM stops LIMIT 1").fetchone()
         checks["gtfs_db"] = "ok"

@@ -307,15 +307,59 @@ def compare_localities(candidate: Mapping[str, object],
         "locality total")
     candidate_counts = _counts(candidate, "area_counts")
     live_counts = _counts(live, "area_counts")
-    areas = {
-        area: _not_collapsed(
-            candidate_counts.get(area, 0), count, f"area {area}")
-        for area, count in live_counts.items() if area != "Unknown"
-    }
+    # The legacy generator assigned each ward to whichever overlapping search
+    # box downloaded it first.  That left South Gloucestershire implausibly
+    # small and Bristol implausibly large.  Permit that one-way repair only
+    # while the legacy signature is still live, and bound the combined pair so
+    # it cannot disguise lost stops.  Once repaired, normal per-area collapse
+    # checks apply forever after.
+    live_bristol = live_counts.get("Bristol", 0)
+    live_south_glos = live_counts.get("South Gloucestershire", 0)
+    candidate_bristol = candidate_counts.get("Bristol", 0)
+    candidate_south_glos = candidate_counts.get("South Gloucestershire", 0)
+    legacy_overlap_repair = (
+        live_bristol >= 1_500
+        and 0 < live_south_glos <= 200
+        and candidate_bristol >= 1_000
+        and candidate_south_glos >= 1_000
+        and candidate_south_glos >= live_south_glos * 5
+    )
+    transitions: list[dict[str, object]] = []
+    if legacy_overlap_repair:
+        areas = {
+            area: _not_collapsed(
+                candidate_counts.get(area, 0), count, f"area {area}")
+            for area, count in live_counts.items()
+            if area not in {"Unknown", "Bristol", "South Gloucestershire"}
+        }
+        areas["Bristol + South Gloucestershire"] = _bounded(
+            candidate_bristol + candidate_south_glos,
+            live_bristol + live_south_glos,
+            "combined Bristol and South Gloucestershire",
+        )
+        transitions.append({
+            "name": "legacy-overlapping-search-box-repair",
+            "status": "bounded-combined-area-reclassification-accepted",
+            "live": {
+                "Bristol": live_bristol,
+                "South Gloucestershire": live_south_glos,
+            },
+            "candidate": {
+                "Bristol": candidate_bristol,
+                "South Gloucestershire": candidate_south_glos,
+            },
+        })
+    else:
+        areas = {
+            area: _not_collapsed(
+                candidate_counts.get(area, 0), count, f"area {area}")
+            for area, count in live_counts.items() if area != "Unknown"
+        }
     return {
-        "policy": "locality-bounded-count-v1",
+        "policy": "locality-bounded-count-v2",
         "totals": totals,
         "areas": areas,
+        "area_transitions": transitions,
         "unknown": {
             "live": live_counts.get("Unknown", 0),
             "candidate": candidate_counts.get("Unknown", 0),

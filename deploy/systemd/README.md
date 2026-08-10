@@ -75,3 +75,13 @@ the same heavy-I/O lock as backup and timetable work, revalidates the candidate,
 keeps one previous file, restarts the site and bot, and requires their reported
 digest and record count before accepting the swap. Installing the unit does not
 stage or promote any data. A real promotion remains a separate reviewed action.
+
+Stop localities use a stricter three-step chain. After a successful timetable
+promotion check, `bbb-locality-refresh.service` builds a shadow candidate from
+the exact live timetable and the fixed ONS December 2025 ward endpoint.
+`bbb-locality-stage.service` independently rechecks freshness, hashes and exact
+stop-code coverage before `bbb-enrichment-promote@localities.service` performs
+the atomic swap. The site and bot must then report the exact promoted digest
+and record count or the previous locality file is restored. The separate
+`bbb-locality-shadow.service` has no promotion edge and always refetches the
+approved boundary edition for attended inspection.

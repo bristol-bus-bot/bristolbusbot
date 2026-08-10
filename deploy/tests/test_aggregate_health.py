@@ -112,6 +112,52 @@ def test_fleet_refresh_failure_is_not_hidden_by_missing_downstream_jobs(
     assert issues == ["job:fleet-automation"]
 
 
+def test_locality_automation_correlates_exact_candidate_and_coverage(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    jobs = state / "jobs"
+    jobs.mkdir(parents=True)
+    now = datetime.now(timezone.utc).isoformat()
+    for name, result in (
+        ("locality-refresh", "success"),
+        ("locality-stage", "success"),
+        ("enrichment-promote-localities", "success"),
+    ):
+        (jobs / f"{name}.json").write_text(json.dumps({
+            "last_result": result,
+            "last_success_at": now,
+            "last_finished_at": now,
+        }), encoding="utf-8")
+    promotion = state / "enrichment-localities-promotion.json"
+    promotion.write_text(json.dumps({
+        "outcome": "accepted",
+        "finished_at": now,
+        "candidate": {"sha256": "a" * 64},
+    }), encoding="utf-8")
+    shadow = state / "locality-shadow.json"
+    shadow.write_text(json.dumps({
+        "candidate": {
+            "sha256": "a" * 64,
+            "summary": {"records": 4815},
+        },
+        "coverage": {"missing": 0, "extra": 0},
+        "boundary": {"edition": "December 2025"},
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(
+        aggregate_health, "LOCALITY_PROMOTION_STATE", promotion)
+    monkeypatch.setattr(aggregate_health, "LOCALITY_SHADOW_REPORT", shadow)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    result, issues = aggregate_health.locality_automation_check()
+
+    assert result["status"] == "healthy"
+    assert result["last_attempt"]["records"] == 4815
+    assert issues == []
+
+
 def test_social_curation_health_reads_enabled_job_and_ledger(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"

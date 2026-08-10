@@ -191,3 +191,49 @@ def test_health_gate_requires_exact_digest_and_count_from_consumers(
         spec, live, digest, {"records": 1}) is True
     assert enrichment_promote.health_once(
         spec, live, "0" * 64, {"records": 1}) is False
+
+
+def test_locality_health_gate_requires_exact_site_endpoint_metadata(
+        tmp_path, monkeypatch):
+    live = tmp_path / "stop_localities.json"
+    payload = raw({"A": place("A")})
+    live.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    spec = enrichment_promote.SPECS["localities"]
+    monkeypatch.setattr(enrichment_promote, "_service_active", lambda: True)
+
+    def response(url: str, maximum: int = 0) -> dict:
+        del maximum
+        status = {"loaded": True, "sha256": digest, "records": 1}
+        if url == enrichment_promote.SITE_HEALTH:
+            return {"status": "ok", "checks": {"localities": status}}
+        if url == enrichment_promote.SITE_LOCALITIES:
+            return {"stops": [{"stop_code": "A"}], "localities": status}
+        return {
+            "success": True,
+            "runtime": "systemd",
+            "details": {"healthData": {
+                "database": {
+                    "timetable": {"connected": True},
+                    "appData": {"connected": True},
+                },
+                "application": {"enrichmentData": {"localities": status}},
+            }},
+        }
+
+    monkeypatch.setattr(enrichment_promote, "_json_url", response)
+    assert enrichment_promote.health_once(
+        spec, live, digest, {"records": 1}) is True
+
+    original = response
+    monkeypatch.setattr(
+        enrichment_promote,
+        "_json_url",
+        lambda url, maximum=0: (
+            {**original(url, maximum), "localities": {
+                "loaded": True, "sha256": "0" * 64, "records": 1,
+            }} if url == enrichment_promote.SITE_LOCALITIES
+            else original(url, maximum)),
+    )
+    assert enrichment_promote.health_once(
+        spec, live, digest, {"records": 1}) is False

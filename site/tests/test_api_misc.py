@@ -194,6 +194,9 @@ def test_index_serves_frontend(client):
 
 def test_stops_with_locality_shape(client):
     data = client.get("/api/stops-with-locality").get_json()
+    assert data["localities"]["loaded"] is True
+    assert len(data["localities"]["sha256"]) == 64
+    assert data["localities"]["records"] > 0
     s = {x["stop_code"]: x for x in data["stops"]}
     assert s["0100C"]["routes"] == ["75"]
     for key in ("ward", "area", "street", "enriched_locality", "local_authority"):

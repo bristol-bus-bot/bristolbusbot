@@ -1,6 +1,7 @@
 """Build stop-search data with localities, enrichment and served routes."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -22,6 +23,29 @@ def _load_json(path: str) -> dict:
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("locality load failed %s: %s", path, e)
         return {}
+
+
+def locality_status(path: str) -> dict:
+    """Return the exact locality bytes and parsed record count on disk."""
+    status = {
+        "loaded": False,
+        "path": path,
+        "sha256": None,
+        "records": 0,
+    }
+    try:
+        raw = Path(path).read_bytes()
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError("locality data is not an object")
+        status.update({
+            "loaded": True,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "records": len(value),
+        })
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        status["error"] = str(exc)[:200]
+    return status
 
 
 def routes_per_stop(gtfs_conn) -> dict[str, list[str]]:

@@ -274,6 +274,8 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "enrichment_promote.py").is_file()
     assert (extract / "update_fleet_data.py").is_file()
     assert (extract / "fleet_candidate_stage.py").is_file()
+    assert (extract / "geocode_stops.py").is_file()
+    assert (extract / "locality_candidate_stage.py").is_file()
     assert (extract / "systemd/bbb-enrichment-promote@.service").is_file()
     assert not (extract / "systemd/bbb-enrichment-promote.timer").exists()
     assert (extract / "systemd/bbb-fleet-shadow.service").is_file()
@@ -281,6 +283,9 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-fleet-refresh.service").is_file()
     assert (extract / "systemd/bbb-fleet-stage.service").is_file()
     assert (extract / "systemd/bbb-fleet-refresh.timer").is_file()
+    assert (extract / "systemd/bbb-locality-refresh.service").is_file()
+    assert (extract / "systemd/bbb-locality-shadow.service").is_file()
+    assert (extract / "systemd/bbb-locality-stage.service").is_file()
     assert "Fleet refresh timer installed but left disabled" in installer
     assert (extract / "data_health.py").is_file()
     assert (extract / "systemd/bbb-data-health.service").is_file()
@@ -295,6 +300,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
         "update_fleet_data.py" in installer
     assert "/usr/local/libexec/bristolbusbot-enrichment/" \
         "fleet_candidate_stage.py" in installer
+    assert "/usr/local/libexec/bristolbusbot-enrichment/" \
+        "geocode_stops.py" in installer
+    assert "/usr/local/libexec/bristolbusbot-enrichment/" \
+        "locality_candidate_stage.py" in installer
     assert '"$enrichment_dir/incoming"' in installer
 
 

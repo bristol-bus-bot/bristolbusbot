@@ -1,0 +1,31 @@
+[Unit]
+Description=Build a shadow-only Bristol Bus Bot stop-locality candidate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name locality-shadow -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock @BBB_REMOTE_HOME@/bristolbusbot/current/site/venv/bin/python /usr/local/libexec/bristolbusbot-enrichment/geocode_stops.py --timetable /var/lib/bristolbusbot/pipeline/timetable.db --live /var/lib/bristolbusbot/enrichment/stop_localities.json --candidate /var/lib/bristolbusbot/locality-shadow/stop_localities.json --report /var/lib/bristolbusbot/monitoring/locality-shadow.json --force-boundary-refresh
+TimeoutStartSec=20min
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/var/lib/bristolbusbot/pipeline/timetable.db /var/lib/bristolbusbot/enrichment/stop_localities.json
+ReadWritePaths=/var/lib/bristolbusbot/locality-shadow /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
