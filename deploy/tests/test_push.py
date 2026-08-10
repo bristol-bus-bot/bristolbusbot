@@ -278,6 +278,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert "enable --now bbb-editorial-refresh.timer" in installer
     assert "enable --now bbb-data-health.timer" in installer
     assert (extract / "configure_social_curation.py").is_file()
+    assert (extract / "configure_blurb_generation.py").is_file()
+    assert (extract / "blurb_automation.py").is_file()
+    assert (extract / "blurb_review.sh").is_file()
+    assert (extract / "model-context.json").is_file()
     assert (extract / "enrichment_layout.py").is_file()
     assert (extract / "data_promotion.py").is_file()
     assert (extract / "enrichment_contracts.py").is_file()
@@ -300,6 +304,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "data_health.py").is_file()
     assert (extract / "systemd/bbb-data-health.service").is_file()
     assert (extract / "systemd/bbb-data-health.timer").is_file()
+    assert (extract / "systemd/bbb-blurb-generate.service").is_file()
+    assert (extract / "systemd/bbb-blurb-generate.timer").is_file()
+    assert (extract / "systemd/bbb-blurb-promote.service").is_file()
+    assert "Blurb generation timer installed but left disabled" in installer
     assert (extract / "systemd/bbb-social-curation.service").is_file()
     assert (extract / "systemd/bbb-social-curation.timer").is_file()
     assert "Social curation timer installed but left disabled" in installer
@@ -322,10 +330,19 @@ def test_layout_migrates_and_health_gates_durable_bot_enrichment():
         encoding="utf-8")
     assert installer.count("bbb-enrichment-layout migrate") == 1
     assert '--source "$current/bot"' in installer
+    assert '--source "$current/site"' in installer
+    assert '--source "$stage"' in installer
     assert '--destination "$enrichment_dir"' in installer
     assert "bbb-enrichment-layout validate --quiet" in installer
     for name in push.BOT_ENRICHMENT_FILES:
         assert f'"$enrichment_dir/{name}"' in installer
+    for name in (
+        "bus-descriptions.json", "waiting-descriptions.json",
+        "depot-descriptions.json", "model-context.json",
+    ):
+        assert f'"$enrichment_dir/{name}"' in installer
+    assert "bbb-configure-blurb-generation" in installer
+    assert "/usr/local/bin/bbb-blurb-review" in installer
     assert "/etc/bristolbusbot/backup.json" in installer
 
 

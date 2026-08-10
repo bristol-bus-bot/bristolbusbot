@@ -19,6 +19,10 @@ def payloads(marker: str = "source") -> dict[str, object]:
         "stop_enrichment.json": {"stop": {"name": marker}},
         "local_flavour.json": {"place": {"flavour": marker}},
         "route_details.json": {"route": {"name": marker}},
+        "bus-descriptions.json": {"101": marker},
+        "waiting-descriptions.json": {"101": marker},
+        "depot-descriptions.json": {"101": marker},
+        "model-context.json": {"Known model": marker * 20},
     }
 
 
@@ -61,6 +65,37 @@ def test_invalid_or_empty_source_fails_closed(tmp_path):
             source, destination,
             uid=os.getuid() if hasattr(os, "getuid") else 0,
             gid=os.getgid() if hasattr(os, "getgid") else 0)
+
+
+def test_multiple_sources_seed_one_durable_contract(tmp_path):
+    bot_source = tmp_path / "bot"
+    site_source = tmp_path / "site"
+    context_source = tmp_path / "context"
+    destination = tmp_path / "durable"
+    values = payloads()
+    write_payloads(bot_source, {
+        name: value for name, value in values.items()
+        if name in {"fbribuses.json", "stop_localities.json",
+                    "stop_enrichment.json", "local_flavour.json",
+                    "route_details.json"}
+    })
+    write_payloads(site_source, {
+        name: value for name, value in values.items()
+        if name.endswith("-descriptions.json")
+        or name == "bus-descriptions.json"
+    })
+    write_payloads(context_source, {
+        "model-context.json": values["model-context.json"]})
+    destination.mkdir()
+
+    result = enrichment_layout.seed_missing(
+        [bot_source, site_source, context_source], destination,
+        uid=os.getuid() if hasattr(os, "getuid") else 0,
+        gid=os.getgid() if hasattr(os, "getgid") else 0)
+
+    assert set(result) == set(enrichment_layout.SPECS)
+    assert set(enrichment_layout.validate_directory(destination)) == set(
+        enrichment_layout.SPECS)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="creating symlinks needs Windows privilege")

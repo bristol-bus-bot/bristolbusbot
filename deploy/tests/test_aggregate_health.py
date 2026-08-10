@@ -592,6 +592,55 @@ def test_attended_shadow_is_diagnostic_and_does_not_expect_promotion(monkeypatch
     assert issues == []
 
 
+def test_blurb_generation_reports_pending_review_without_an_incident(
+        tmp_path, monkeypatch):
+    marker = tmp_path / "enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    pending = tmp_path / "pending.json"
+    pending.write_text(json.dumps({
+        "status": "pending_review",
+        "batch_id": "20260811T120000Z-abcdef12",
+        "created_at": "2026-08-11T12:00:00+00:00",
+        "additions": {
+            "in_service": {"OPAA:101": "one"},
+            "waiting": {"OPAA:101": "two"},
+            "depot": {"OPAA:101": "three"},
+        },
+    }), encoding="utf-8")
+    usage = tmp_path / "usage.json"
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    usage.write_text(json.dumps({
+        "schema": 1,
+        "events": [{
+            "month": month,
+            "actual_input_tokens": 100,
+            "actual_output_tokens": 20,
+        }],
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "BLURB_GENERATION_MARKER", marker)
+    monkeypatch.setattr(aggregate_health, "BLURB_PENDING", pending)
+    monkeypatch.setattr(aggregate_health, "BLURB_USAGE", usage)
+    monkeypatch.setattr(
+        aggregate_health, "_fleet_job",
+        lambda name: {"result": "success", "age_hours": 1, "name": name})
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    status, issues = aggregate_health.blurb_generation_check()
+
+    assert status["status"] == "pending_review"
+    assert status["pending_review"] == {
+        "batch_id": "20260811T120000Z-abcdef12",
+        "buses": 1,
+        "lines": 3,
+        "created_at": "2026-08-11T12:00:00+00:00",
+    }
+    assert status["month_usage"] == {
+        "requests": 1, "input_tokens": 100, "output_tokens": 20}
+    assert issues == []
+
+
 def test_timetable_notification_state_advances_only_after_successful_send(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"

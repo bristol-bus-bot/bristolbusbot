@@ -604,6 +604,8 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "data_health.py",
         "configure_timetable_delivery.py", "configure_social_curation.py",
+        "configure_blurb_generation.py", "blurb_automation.py",
+        "blurb_review.sh",
         "enrichment_layout.py", "data_promotion.py",
         "enrichment_contracts.py", "enrichment_promote.py",
         "fleet_candidate_stage.py", "locality_candidate_stage.py",
@@ -612,6 +614,8 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         copy_file(DEPLOY / name, root / name)
     copy_file(REPO / "bot/data/editorial-context.json",
               root / "editorial-context.json")
+    copy_file(REPO / "pipeline/model-context.json",
+              root / "model-context.json")
     copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
     copy_file(REPO / "pipeline/timetable_editions.py", root / "timetable_editions.py")
     copy_file(REPO / "pipeline/update_fleet_data.py", root / "update_fleet_data.py")

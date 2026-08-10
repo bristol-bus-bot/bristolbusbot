@@ -65,6 +65,7 @@ done
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
+    "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
     "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
     "$stage/enrichment_contracts.py" "$stage/enrichment_promote.py" \
     "$stage/update_fleet_data.py" "$stage/fleet_candidate_stage.py" \
@@ -105,6 +106,8 @@ for destination in \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/libexec/bbb-data-health \
     /usr/local/libexec/bbb-enrichment-layout \
+    /usr/local/bin/bbb-blurb-review \
+    /usr/local/sbin/bbb-configure-blurb-generation \
     /usr/local/libexec/bristolbusbot-enrichment/data_promotion.py \
     /usr/local/libexec/bristolbusbot-enrichment/enrichment_contracts.py \
     /usr/local/libexec/bristolbusbot-enrichment/enrichment_promote.py \
@@ -112,6 +115,8 @@ for destination in \
     /usr/local/libexec/bristolbusbot-enrichment/fleet_candidate_stage.py \
     /usr/local/libexec/bristolbusbot-enrichment/geocode_stops.py \
     /usr/local/libexec/bristolbusbot-enrichment/locality_candidate_stage.py \
+    /usr/local/libexec/bristolbusbot-enrichment/data_health.py \
+    /usr/local/libexec/bristolbusbot-enrichment/blurb_automation.py \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/sbin/bbb-configure-social-curation \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
@@ -127,11 +132,17 @@ for destination in \
     /etc/tmpfiles.d/bristolbusbot.conf \
     /etc/bristolbusbot/backup.json \
     /etc/bristolbusbot/locality-refresh-enabled \
+    /etc/bristolbusbot/blurb.env \
+    /etc/bristolbusbot/blurb-generation-enabled \
     "$enrichment_dir/fbribuses.json" \
     "$enrichment_dir/stop_localities.json" \
     "$enrichment_dir/stop_enrichment.json" \
     "$enrichment_dir/local_flavour.json" \
     "$enrichment_dir/route_details.json" \
+    "$enrichment_dir/bus-descriptions.json" \
+    "$enrichment_dir/waiting-descriptions.json" \
+    "$enrichment_dir/depot-descriptions.json" \
+    "$enrichment_dir/model-context.json" \
     "$social_config" \
     "$remote_home/bus-audit/publish_to_github.sh"
 do
@@ -315,6 +326,8 @@ install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
 install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
+install -o root -g root -m 0755 "$stage/blurb_review.sh" /usr/local/bin/bbb-blurb-review
+install -o root -g root -m 0755 "$stage/configure_blurb_generation.py" /usr/local/sbin/bbb-configure-blurb-generation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-enrichment
 install -o root -g root -m 0644 "$stage/data_promotion.py" /usr/local/libexec/bristolbusbot-enrichment/data_promotion.py
 install -o root -g root -m 0644 "$stage/enrichment_contracts.py" /usr/local/libexec/bristolbusbot-enrichment/enrichment_contracts.py
@@ -323,6 +336,8 @@ install -o root -g root -m 0755 "$stage/update_fleet_data.py" /usr/local/libexec
 install -o root -g root -m 0755 "$stage/fleet_candidate_stage.py" /usr/local/libexec/bristolbusbot-enrichment/fleet_candidate_stage.py
 install -o root -g root -m 0755 "$stage/geocode_stops.py" /usr/local/libexec/bristolbusbot-enrichment/geocode_stops.py
 install -o root -g root -m 0755 "$stage/locality_candidate_stage.py" /usr/local/libexec/bristolbusbot-enrichment/locality_candidate_stage.py
+install -o root -g root -m 0644 "$stage/data_health.py" /usr/local/libexec/bristolbusbot-enrichment/data_health.py
+install -o root -g root -m 0755 "$stage/blurb_automation.py" /usr/local/libexec/bristolbusbot-enrichment/blurb_automation.py
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
@@ -363,9 +378,13 @@ done
 install -o "$deploy_user" -g "$deploy_user" -m 0750 -d "$enrichment_dir/incoming"
 /usr/local/libexec/bbb-enrichment-layout migrate \
     --source "$current/bot" \
+    --source "$current/site" \
+    --source "$stage" \
     --destination "$enrichment_dir" \
     --backup-config /etc/bristolbusbot/backup.json \
     --owner "$deploy_user" >/dev/null
+/usr/bin/python3 /usr/local/sbin/bbb-configure-blurb-generation \
+    --owner "$deploy_user"
 if [ ! -e /var/lib/bristolbusbot-editorial/editorial-context.json ]; then
     install -o root -g "$deploy_user" -m 0640 \
         "$stage/editorial-context.json" \
@@ -406,6 +425,11 @@ for timer in "$stage/systemd"/*.timer; do
     if [ "$timer_name" = bbb-fleet-refresh.timer ] && \
        ! /usr/bin/systemctl is-enabled --quiet "$timer_name"; then
         echo "Fleet refresh timer installed but left disabled until the first guarded promotion passes."
+        continue
+    fi
+    if [ "$timer_name" = bbb-blurb-generate.timer ] && \
+       ! /usr/bin/systemctl is-enabled --quiet "$timer_name"; then
+        echo "Blurb generation timer installed but left disabled until an attended pending batch passes."
         continue
     fi
     /usr/bin/systemctl is-enabled --quiet "$timer_name"

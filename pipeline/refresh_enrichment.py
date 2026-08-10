@@ -2,14 +2,12 @@
 """Audit and refresh fleet, description and route-shape enrichment.
 
     python refresh_enrichment.py             audit only (safe, no writes)
-    python refresh_enrichment.py --fix       build a fleet shadow candidate,
-                                             generate missing blurbs, import
-                                             shapes and copy only the generated
-                                             description files
+    python refresh_enrichment.py --fix       build a fleet shadow candidate
+                                             and import available shapes
 
---fix requirements: network (bustimes.org), GEMINI_API_KEY in .env here
-(for blurbs), and for shapes: BBB_GTFS_DIR containing shapes.txt plus
-BBB_TIMETABLE_DB. Steps that lack their requirements are reported and skipped.
+Description generation now runs only through the Pi's fail-closed pending-review
+workflow. For shapes, --fix requires BBB_GTFS_DIR containing shapes.txt plus
+BBB_TIMETABLE_DB. Steps that lack requirements are reported and skipped.
 """
 from __future__ import annotations
 
@@ -31,11 +29,6 @@ BLURB_SETS = {
     "in-service": HERE / "bus-descriptions.json",
     "depot": HERE / "depot-descriptions.json",
     "waiting": HERE / "waiting-descriptions.json",
-}
-GENERATORS = {
-    "in-service": "generate_bus_descriptions.py",
-    "depot": "generate_depot_descriptions.py",
-    "waiting": "generate_waiting_descriptions.py",
 }
 _WHITES = {"#fff", "#FFF", "#ffffff", "#FFFFFF", "white"}
 
@@ -192,32 +185,9 @@ def run_step(label: str, argv: list[str]) -> bool:
 
 
 def distribute() -> None:
-    """Copy generated descriptions; fleet promotion is deliberately separate."""
-    import shutil
-    targets = {
-        BLURB_SETS["in-service"]: [SITE / "bus-descriptions.json"],
-        BLURB_SETS["depot"]: [SITE / "depot-descriptions.json"],
-        BLURB_SETS["waiting"]: [SITE / "waiting-descriptions.json"],
-    }
-    def size_of(p: Path) -> int:
-        d = load_json(p)
-        return len(d) if isinstance(d, (dict, list)) else 0
-
-    for src, dests in targets.items():
-        if not src.exists():
-            continue
-        for dest in dests:
-            if not dest.parent.exists():
-                continue
-            src_n, dest_n = size_of(src), size_of(dest)
-            # Refuse an unexpectedly large reduction in generated data.
-            if dest_n > 0 and src_n < dest_n // 2:
-                print(f"REFUSED: {src.name} has {src_n} entries but "
-                      f"{dest.relative_to(REPO)} has {dest_n} — not overwriting "
-                      f"(delete the destination manually if this is intended)")
-                continue
-            shutil.copy2(src, dest)
-            print(f"distributed {src.name} ({src_n} entries) -> {dest.relative_to(REPO)}")
+    """The old direct-to-release description copy is deliberately retired."""
+    raise RuntimeError(
+        "description distribution requires Pi pending review and approval")
 
 
 def main() -> int:
@@ -235,27 +205,14 @@ def main() -> int:
             "--candidate", str(FLEET_CANDIDATE),
             "--report", str(FLEET_REPORT),
         ])
-        if os.getenv("GEMINI_API_KEY"):
-            # Seed staging with the current descriptions before generating.
-            build_blurb_scope()
-            import shutil
-            for path in BLURB_SETS.values():
-                consumer = SITE / path.name
-                if not path.exists() and consumer.exists():
-                    shutil.copy2(consumer, path)
-                    print(f"seeded staging {path.name} from site/")
-            for name, script in GENERATORS.items():
-                run_step(f"blurbs: {name} (incremental)", [script])
-        else:
-            print("\n(skipping blurb generation: GEMINI_API_KEY not set in "
-                  "pipeline/.env)")
+        print("\n(skipping direct blurb generation: use the Pi's pending-review "
+              "workflow; this command cannot publish descriptions)")
         gtfs = Path(os.getenv("BBB_GTFS_DIR", HERE / "itm_south_west_gtfs"))
         if (gtfs / "shapes.txt").exists() and os.getenv("BBB_TIMETABLE_DB"):
             run_step("route shapes import", ["import_shapes.py"])
         else:
             print("\n(skipping shapes: need shapes.txt in BBB_GTFS_DIR and "
                   "BBB_TIMETABLE_DB set)")
-        distribute()
 
     report = audit()
     print("\n" + "=" * 60)

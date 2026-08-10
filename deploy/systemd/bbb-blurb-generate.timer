@@ -1,0 +1,12 @@
+[Unit]
+Description=Check weekly for missing vehicle descriptions
+
+[Timer]
+OnCalendar=Mon *-*-* 02:15:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=5min
+Unit=bbb-blurb-generate.service
+
+[Install]
+WantedBy=timers.target

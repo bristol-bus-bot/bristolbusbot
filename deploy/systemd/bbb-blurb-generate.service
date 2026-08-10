@@ -1,0 +1,33 @@
+[Unit]
+Description=Prepare missing Bristol Bus Bot descriptions for human review
+Wants=network-online.target
+After=network-online.target bbb-fleet-refresh.service
+ConditionPathExists=/etc/bristolbusbot/blurb-generation-enabled
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+EnvironmentFile=-/etc/bristolbusbot/blurb.env
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name blurb-generate --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-enrichment/blurb_automation.py generate
+TimeoutStartSec=15min
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/var/lib/bristolbusbot/enrichment /var/lib/bristolbusbot/collector/live.db /var/lib/bristolbusbot/collector/audit.db
+ReadWritePaths=/var/lib/bristolbusbot/blurb-pending /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

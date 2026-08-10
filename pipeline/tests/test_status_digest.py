@@ -108,3 +108,22 @@ def test_fleet_line_summarises_the_latest_guarded_refresh(
         "*fleet*  :white_check_mark: accepted (2026-08-10) - "
         "records 2605->2746 - +199/-58/557 changed"
     )
+
+
+def test_blurb_line_surfaces_pending_review_and_bounded_usage(
+        tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "blurb_generation": {
+            "status": "pending_review",
+            "pending_review": {"buses": 12, "lines": 36},
+            "month_usage": {
+                "requests": 3, "input_tokens": 1200, "output_tokens": 300,
+            },
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.blurb_line() == (
+        "*blurbs*  12 bus(es) waiting for your review - "
+        "3 request(s), 1500 token(s) this month")

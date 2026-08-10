@@ -20,6 +20,48 @@ case "$action:$component" in
     locality-shadow:) exec /usr/bin/systemctl start bbb-locality-shadow.service ;;
     locality-promote:) exec /usr/bin/systemctl start bbb-locality-stage.service ;;
     locality-auto-run:) exec /usr/bin/systemctl start bbb-locality-refresh.service ;;
+    blurb-generate:) exec /usr/bin/systemctl start bbb-blurb-generate.service ;;
+    blurb-promote:) exec /usr/bin/systemctl start bbb-blurb-promote.service ;;
+    blurb-auto-enable:)
+        target=/etc/bristolbusbot/blurb-generation-enabled
+        candidate=/etc/bristolbusbot/.blurb-generation-enabled.new
+        test -f /etc/bristolbusbot/blurb.env
+        test ! -L /etc/bristolbusbot/blurb.env
+        test -d /etc/bristolbusbot
+        test ! -L /etc/bristolbusbot
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            test -f "$target"
+            test ! -L "$target"
+            test "$(stat -c %U "$target")" = root
+            test "$(stat -c %G "$target")" = root
+            test "$(stat -c %a "$target")" = 644
+        else
+            test ! -e "$candidate"
+            test ! -L "$candidate"
+            install -o root -g root -m 0644 /dev/null "$candidate"
+            printf '%s\n' "enabled=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$candidate"
+            mv -f "$candidate" "$target"
+        fi
+        if ! /usr/bin/systemctl enable --now bbb-blurb-generate.timer; then
+            rm -f "$target"
+            exit 1
+        fi
+        exit 0
+        ;;
+    blurb-auto-disable:)
+        target=/etc/bristolbusbot/blurb-generation-enabled
+        /usr/bin/systemctl disable --now bbb-blurb-generate.timer
+        if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+            exit 0
+        fi
+        test -f "$target"
+        test ! -L "$target"
+        test "$(stat -c %U "$target")" = root
+        test "$(stat -c %G "$target")" = root
+        test "$(stat -c %a "$target")" = 644
+        rm -f "$target"
+        exit 0
+        ;;
     locality-auto-enable:)
         target=/etc/bristolbusbot/locality-refresh-enabled
         candidate=/etc/bristolbusbot/.locality-refresh-enabled.new

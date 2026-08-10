@@ -19,6 +19,10 @@ SPECS: dict[str, type] = {
     "stop_enrichment.json": dict,
     "local_flavour.json": dict,
     "route_details.json": dict,
+    "bus-descriptions.json": dict,
+    "waiting-descriptions.json": dict,
+    "depot-descriptions.json": dict,
+    "model-context.json": dict,
 }
 
 
@@ -98,10 +102,16 @@ def _atomic_write(path: Path, raw: bytes, *, uid: int, gid: int,
         candidate.unlink(missing_ok=True)
 
 
-def seed_missing(source: Path, destination: Path, *, uid: int,
+def seed_missing(source: Path | list[Path] | tuple[Path, ...],
+                 destination: Path, *, uid: int,
                  gid: int) -> dict[str, str]:
     """Copy only absent files; existing durable authority is never replaced."""
     _directory(destination, "enrichment directory")
+    sources = (source,) if isinstance(source, Path) else tuple(source)
+    if not sources:
+        raise EnrichmentLayoutError("at least one migration source is required")
+    for item in sources:
+        _directory(item, "migration source")
     status: dict[str, str] = {}
     for name, expected in SPECS.items():
         target = destination / name
@@ -109,7 +119,12 @@ def seed_missing(source: Path, destination: Path, *, uid: int,
             validate_file(target, expected)
             status[name] = "preserved"
             continue
-        origin = source / name
+        origin = next((item / name for item in sources
+                       if (item / name).exists() or (item / name).is_symlink()),
+                      None)
+        if origin is None:
+            raise EnrichmentLayoutError(
+                f"enrichment seed source is absent: {name}")
         validate_file(origin, expected)
         _atomic_write(target, origin.read_bytes(), uid=uid, gid=gid, mode=0o640)
         validate_file(target, expected)
@@ -152,7 +167,8 @@ def ensure_backup_include(path: Path = BACKUP_CONFIG) -> bool:
     return changed
 
 
-def migrate(source: Path, destination: Path, backup_config: Path, *,
+def migrate(source: Path | list[Path] | tuple[Path, ...],
+            destination: Path, backup_config: Path, *,
             owner: str) -> dict[str, object]:
     import pwd  # POSIX-only production migration; validation remains portable.
     try:
@@ -176,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("--directory", type=Path, default=DURABLE_DIRECTORY)
     validate.add_argument("--quiet", action="store_true")
     migration = subparsers.add_parser("migrate")
-    migration.add_argument("--source", type=Path, required=True)
+    migration.add_argument("--source", type=Path, action="append", required=True)
     migration.add_argument("--destination", type=Path,
                            default=DURABLE_DIRECTORY)
     migration.add_argument("--backup-config", type=Path, default=BACKUP_CONFIG)
