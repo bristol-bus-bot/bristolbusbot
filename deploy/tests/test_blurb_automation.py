@@ -180,7 +180,8 @@ def pending_payload(paths: dict[str, Path]) -> dict:
     }
 
 
-def test_attended_approval_promotes_additions_without_changing_existing(tmp_path):
+def test_attended_approval_promotes_additions_without_changing_existing(
+        tmp_path, monkeypatch):
     paths = {
         variant: tmp_path / f"{variant}.json" for variant in blurbs.VARIANTS
     }
@@ -192,6 +193,7 @@ def test_attended_approval_promotes_additions_without_changing_existing(tmp_path
     state = tmp_path / "state.json"
     write_json(pending, pending_payload(paths))
     blurbs.approve_pending(pending, approval)
+    monkeypatch.setattr(blurbs, "_running_as_root", lambda: True)
     restarts = []
 
     result = blurbs.promote_pending(
@@ -221,7 +223,8 @@ def test_attended_approval_promotes_additions_without_changing_existing(tmp_path
             }
 
 
-def test_changed_pending_bytes_invalidate_attended_approval(tmp_path):
+def test_changed_pending_bytes_invalidate_attended_approval(
+        tmp_path, monkeypatch):
     paths = {
         variant: tmp_path / f"{variant}.json" for variant in blurbs.VARIANTS
     }
@@ -232,6 +235,7 @@ def test_changed_pending_bytes_invalidate_attended_approval(tmp_path):
     payload = pending_payload(paths)
     write_json(pending, payload)
     blurbs.approve_pending(pending, approval)
+    monkeypatch.setattr(blurbs, "_running_as_root", lambda: True)
     payload["additions"]["depot"]["OPAA:101"] = "Known Model. altered after approval."
     write_json(pending, payload)
 
@@ -239,6 +243,19 @@ def test_changed_pending_bytes_invalidate_attended_approval(tmp_path):
         blurbs.promote_pending(
             pending_path=pending, approval_path=approval, paths=paths,
             incoming_root=tmp_path / "incoming",
+            history=tmp_path / "history", state_path=tmp_path / "state.json",
+            restart=lambda: None, healthy=lambda _expected: True,
+        )
+
+
+def test_promotion_refuses_non_root_even_with_valid_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(blurbs, "_running_as_root", lambda: False)
+
+    with pytest.raises(blurbs.BlurbError, match="must run as root"):
+        blurbs.promote_pending(
+            pending_path=tmp_path / "pending.json",
+            approval_path=tmp_path / "approval.json",
+            paths={}, incoming_root=tmp_path / "incoming",
             history=tmp_path / "history", state_path=tmp_path / "state.json",
             restart=lambda: None, healthy=lambda _expected: True,
         )

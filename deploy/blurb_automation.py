@@ -131,6 +131,10 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _running_as_root() -> bool:
+    return os.name == "nt" or os.geteuid() == 0
+
+
 def sha256_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
@@ -809,7 +813,7 @@ def promote_pending(*, pending_path: Path = PENDING,
                     restart: Callable[[], None] = _restart_site,
                     healthy: Callable[[Mapping[str, Mapping[str, object]]], bool]
                     = _wait_site) -> dict[str, object]:
-    if os.name != "nt" and os.geteuid() != 0:
+    if not _running_as_root():
         raise BlurbError("promotion must run as root")
     pending_raw = _regular_bytes(pending_path)
     pending = validate_pending(json.loads(pending_raw))
