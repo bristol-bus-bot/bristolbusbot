@@ -2,9 +2,10 @@
 """Audit and refresh fleet, description and route-shape enrichment.
 
     python refresh_enrichment.py             audit only (safe, no writes)
-    python refresh_enrichment.py --fix       fetch fleet + generate missing
-                                             blurbs + import shapes + copy
-                                             fresh files to site/ and bot/
+    python refresh_enrichment.py --fix       build a fleet shadow candidate,
+                                             generate missing blurbs, import
+                                             shapes and copy only the generated
+                                             description files
 
 --fix requirements: network (bustimes.org), GEMINI_API_KEY in .env here
 (for blurbs), and for shapes: BBB_GTFS_DIR containing shapes.txt plus
@@ -22,9 +23,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 SITE = REPO / "site"
-BOT_DATA = REPO / "bot" / "data"
 
 FLEET = HERE / "fbribuses.json"
+FLEET_CANDIDATE = HERE / "fbribuses.candidate.json"
+FLEET_REPORT = HERE / "fleet-shadow-report.json"
 BLURB_SETS = {
     "in-service": HERE / "bus-descriptions.json",
     "depot": HERE / "depot-descriptions.json",
@@ -190,10 +192,9 @@ def run_step(label: str, argv: list[str]) -> bool:
 
 
 def distribute() -> None:
-    """Fresh enrichment files to their consumers (site/ and bot/data/)."""
+    """Copy generated descriptions; fleet promotion is deliberately separate."""
     import shutil
     targets = {
-        FLEET: [SITE / "fbribuses.json", BOT_DATA / "fbribuses.json"],
         BLURB_SETS["in-service"]: [SITE / "bus-descriptions.json"],
         BLURB_SETS["depot"]: [SITE / "depot-descriptions.json"],
         BLURB_SETS["waiting"]: [SITE / "waiting-descriptions.json"],
@@ -227,7 +228,13 @@ def main() -> int:
             load_dotenv(HERE / ".env")
         except ImportError:
             pass
-        run_step("fleet refresh (bustimes.org)", ["update_fleet_data.py"])
+        live_fleet = FLEET if FLEET.exists() else SITE / "fbribuses.json"
+        run_step("fleet shadow candidate (bustimes.org)", [
+            "update_fleet_data.py",
+            "--live", str(live_fleet),
+            "--candidate", str(FLEET_CANDIDATE),
+            "--report", str(FLEET_REPORT),
+        ])
         if os.getenv("GEMINI_API_KEY"):
             # Seed staging with the current descriptions before generating.
             build_blurb_scope()

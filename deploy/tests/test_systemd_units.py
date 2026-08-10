@@ -339,6 +339,28 @@ def test_enrichment_promoter_is_fixed_dormant_and_uses_shared_lock():
     assert not (SYSTEMD / "bbb-enrichment-promote.timer").exists()
 
 
+def test_fleet_shadow_is_isolated_networked_and_never_scheduled():
+    service = (SYSTEMD / "bbb-fleet-shadow.service").read_text(
+        encoding="utf-8")
+    for setting in (
+        "User=@BBB_DEPLOY_USER@",
+        "--name fleet-shadow",
+        "flock -w 900 -E 73",
+        "/usr/local/libexec/bristolbusbot-enrichment/update_fleet_data.py",
+        "--live /var/lib/bristolbusbot/enrichment/fbribuses.json",
+        "--candidate /var/lib/bristolbusbot/fleet-shadow/fbribuses.json",
+        "--report /var/lib/bristolbusbot/monitoring/fleet-shadow.json",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment/fbribuses.json",
+        "ReadWritePaths=/var/lib/bristolbusbot/fleet-shadow "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "ProtectSystem=strict",
+        "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    ):
+        assert setting in service
+    assert "OnSuccess=" not in service
+    assert not (SYSTEMD / "bbb-fleet-shadow.timer").exists()
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",
@@ -348,6 +370,7 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-timetable-shadow@.service",
         "bbb-timetable-promote@.service",
         "bbb-enrichment-promote@.service",
+        "bbb-fleet-shadow.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source

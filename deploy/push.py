@@ -613,6 +613,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
               root / "editorial-context.json")
     copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
     copy_file(REPO / "pipeline/timetable_editions.py", root / "timetable_editions.py")
+    copy_file(REPO / "pipeline/update_fleet_data.py", root / "update_fleet_data.py")
     copy_tree(DEPLOY / "systemd", root / "systemd")
     copy_tree(DEPLOY / "sudoers", root / "sudoers")
     copy_tree(DEPLOY / "tmpfiles", root / "tmpfiles")

@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 
 
@@ -46,3 +47,28 @@ def test_blurb_scope_records_unknown_vehicles_without_guessing():
     assert payload["unresolved_identities"] == 1
     assert payload["scoped_keys"] == []
     assert payload["codes"] == []
+
+
+def test_description_distribution_never_copies_a_fleet_candidate(
+        tmp_path, monkeypatch):
+    site = tmp_path / "site"
+    site.mkdir()
+    live = site / "fbribuses.json"
+    live.write_text(json.dumps([{"id": "live"}]), encoding="utf-8")
+    candidate = tmp_path / "fbribuses.candidate.json"
+    candidate.write_text(json.dumps([{"id": "candidate"}]), encoding="utf-8")
+    monkeypatch.setattr(refresh_enrichment, "SITE", site)
+    monkeypatch.setattr(refresh_enrichment, "FLEET", candidate)
+    monkeypatch.setattr(
+        refresh_enrichment,
+        "BLURB_SETS",
+        {
+            "in-service": tmp_path / "missing-description.json",
+            "depot": tmp_path / "missing-depot-description.json",
+            "waiting": tmp_path / "missing-waiting-description.json",
+        },
+    )
+
+    refresh_enrichment.distribute()
+
+    assert json.loads(live.read_text(encoding="utf-8")) == [{"id": "live"}]
