@@ -50,6 +50,7 @@ WHITE_LIVERIES = {"#fff", "#ffffff", "white"}
 class Operator:
     code: str
     empty_reason: str | None = None
+    publish_as: str | None = None
 
 
 KNOWN_EMPTY = (
@@ -70,6 +71,7 @@ OPERATORS: tuple[Operator, ...] = (
     Operator("FSRV"),
     Operator("NWPT"),
     Operator("ABUS"),
+    Operator("BYCO"),
     Operator("BDOL"),
     Operator("CTCO"),
     Operator("FRMN"),
@@ -81,6 +83,9 @@ OPERATORS: tuple[Operator, ...] = (
     Operator("TYSW", KNOWN_EMPTY),
     Operator("COAC", KNOWN_EMPTY),
     Operator("LTRV", KNOWN_EMPTY),
+    # The live feed uses LEMB, while bustimes publishes the same operator's
+    # fleet under its alternate national code LEMN.
+    Operator("LEMN", publish_as="LEMB"),
 )
 
 
@@ -298,6 +303,11 @@ def fetch_operator(
                     f"operator {operator.code} returned an invalid withdrawn flag",
                 )
             if not withdrawn:
+                if operator.publish_as:
+                    record = dict(record)
+                    published_operator = dict(source_operator)
+                    published_operator["id"] = operator.publish_as
+                    record["operator"] = published_operator
                 records.append(record)
         following = value.get("next")
         if following is not None and not isinstance(following, str):
@@ -318,6 +328,7 @@ def fetch_operator(
         "pages": pages,
         "active_records": len(records),
         "empty_reason": operator.empty_reason if not records else None,
+        "published_as": operator.publish_as or operator.code,
     }
 
 

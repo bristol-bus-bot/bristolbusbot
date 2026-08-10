@@ -206,6 +206,16 @@ def test_operator_scope_prevents_cross_operator_fleet_match(tmp_path):
     assert report["enrichment"]["missing_fleet_examples"] == ["ABUS:FBRI-100"]
 
 
+def test_prefixed_registration_matches_within_observed_operator():
+    record = vehicle(100, operator="EUTX")
+    record["fleet_code"] = ""
+    record["reg"] = "YW68 PDO"
+    index = data_health.build_fleet_index([record])
+
+    assert data_health.match_vehicle(index, "EUTX", "EUTX-YW68_PDO") is record
+    assert data_health.match_vehicle(index, "ABUS", "ABUS-YW68_PDO") is None
+
+
 def test_shared_code_requires_operator_scoped_description(tmp_path):
     inputs = paths(tmp_path, [vehicle(100), vehicle(100, operator="ABUS")])
 

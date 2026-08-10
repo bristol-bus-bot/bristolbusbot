@@ -176,10 +176,11 @@ def preferred_scoped_record(records: list[dict]) -> dict | None:
 
 
 def safe_match(index: dict, operator: str, vehicle_ref: str) -> dict | None:
-    registration = normalise_registration(vehicle_ref)
-    direct = index["registrations_scoped"].get((operator, registration))
-    if direct:
-        return direct
+    for value in possible_fleet_codes(vehicle_ref):
+        registration = normalise_registration(value)
+        direct = index["registrations_scoped"].get((operator, registration))
+        if direct:
+            return direct
     for code in possible_fleet_codes(vehicle_ref):
         record = preferred_scoped_record(
             index["scoped_groups"].get((operator, code), []))

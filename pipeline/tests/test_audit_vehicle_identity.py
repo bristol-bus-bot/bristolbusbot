@@ -84,6 +84,16 @@ def test_registration_match_is_operator_scoped_and_precedes_code():
     assert identity_audit.safe_match(index, "OPAA", "BB11-BBB") is None
 
 
+def test_operator_prefixed_registration_is_matched_from_its_suffix():
+    fleet = [record("EUTX", "", "YW68PDO")]
+    index = identity_audit.indexes(fleet)
+
+    assert identity_audit.safe_match(
+        index, "EUTX", "EUTX-YW68_PDO") is fleet[0]
+    assert identity_audit.safe_match(
+        index, "OPAA", "OPAA-YW68_PDO") is None
+
+
 def test_unambiguous_bare_code_fallback_remains_compatible():
     fleet = [record("OPAA", "202", "AA22AAA")]
     index = identity_audit.indexes(fleet)

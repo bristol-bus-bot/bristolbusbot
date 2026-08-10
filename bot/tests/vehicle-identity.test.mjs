@@ -37,6 +37,21 @@ test('registration is canonical and scoped to the observed operator', () => {
     assert.equal(resolveFleetVehicle(index, 'BB11-BBB', 'OPAA'), null);
 });
 
+test('operator-prefixed registration resolves only within that operator', () => {
+    const vehicle = {
+        operator: { id: 'EUTX' },
+        fleet_code: '',
+        reg: 'YW68 PDO',
+        vehicle_type: { name: 'Eurotaxis vehicle' },
+    };
+    const index = buildFleetIdentityIndex([vehicle]);
+
+    assert.equal(resolveFleetVehicle(
+        index, 'EUTX-YW68_PDO', 'EUTX'), vehicle);
+    assert.equal(resolveFleetVehicle(
+        index, 'ABUS-YW68_PDO', 'ABUS'), null);
+});
+
 test('same-operator reused code fails closed without a registration', () => {
     const first = bus('OPAA', 303, 'AA30 AAA', 'First vehicle');
     const second = bus('OPAA', 303, 'AA30 BBB', 'Second vehicle');

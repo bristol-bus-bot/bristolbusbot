@@ -96,10 +96,14 @@ export function resolveFleetVehicle(
 ): any | null {
     if (!index || !vehicleRef) return null;
     const noc = text(operatorRef).toUpperCase();
-    const reg = registration(vehicleRef);
     if (noc) {
-        const direct = index.registrationsScoped.get(key(noc, reg));
-        if (direct) return direct;
+        // Some SIRI feeds prefix registrations with the operator code.
+        // Resolve both the complete reference and its suffix as registrations.
+        for (const value of possibleCodes(vehicleRef)) {
+            const direct = index.registrationsScoped.get(
+                key(noc, registration(value)));
+            if (direct) return direct;
+        }
     }
     for (const fleetCode of possibleCodes(vehicleRef)) {
         if (!noc) break;

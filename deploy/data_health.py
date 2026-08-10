@@ -146,10 +146,14 @@ def unambiguous(records: list[dict]) -> dict | None:
 
 def match_vehicle(index: dict, operator: str,
                   vehicle_ref: str) -> dict | None:
-    reg = registration(vehicle_ref)
-    direct = unambiguous(index["registrations"].get((operator, reg), []))
-    if direct:
-        return direct
+    # Some feeds prefix a registration with the operator code (for example
+    # EUTX-YW68_PDO). Check both the complete reference and its suffix as
+    # registrations before treating the suffix as a fleet code.
+    for value in candidate_codes(vehicle_ref):
+        reg = registration(value)
+        direct = unambiguous(index["registrations"].get((operator, reg), []))
+        if direct:
+            return direct
     for code in candidate_codes(vehicle_ref):
         direct = unambiguous(index["codes"].get((operator, code), []))
         if direct:
