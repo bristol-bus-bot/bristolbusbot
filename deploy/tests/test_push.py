@@ -329,8 +329,11 @@ def test_layout_migrates_and_health_gates_durable_bot_enrichment():
     installer = (push.DEPLOY / "install_unified_deploy.sh").read_text(
         encoding="utf-8")
     assert installer.count("bbb-enrichment-layout migrate") == 1
-    assert '--source "$current/bot"' in installer
-    assert '--source "$current/site"' in installer
+    assert 'bot_migration_source=$(resolve_migration_source' in installer
+    assert 'site_migration_source=$(resolve_migration_source' in installer
+    assert '"$releases/$component/"*|"$legacy"' in installer
+    assert '--source "$bot_migration_source"' in installer
+    assert '--source "$site_migration_source"' in installer
     assert '--source "$stage"' in installer
     assert '--destination "$enrichment_dir"' in installer
     assert "bbb-enrichment-layout validate --quiet" in installer
