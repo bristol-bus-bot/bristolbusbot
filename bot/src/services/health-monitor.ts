@@ -110,6 +110,7 @@ export class HealthMonitor {
                 },
                 application: {
                     editorialContext: this.appState.editorialContextStatus,
+                    enrichmentData: this.appState.enrichmentDataStatus,
                     dailyStats: {
                         postsToday: this.appState.postsTodayCount,
                         aiCallsToday: this.appState.aiCallsToday,

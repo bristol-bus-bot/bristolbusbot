@@ -19,6 +19,10 @@ def livez():
 def healthz():
     checks: dict = {}
     overall = "ok"
+    fleet = current_app.extensions["bbb_fleet"].status
+    checks["fleet"] = fleet
+    if not fleet.get("loaded") or not fleet.get("records"):
+        overall = "fail"
     try:
         db.gtfs().execute("SELECT 1 FROM stops LIMIT 1").fetchone()
         checks["gtfs_db"] = "ok"

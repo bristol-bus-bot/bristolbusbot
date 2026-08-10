@@ -257,6 +257,11 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert "enable --now bbb-data-health.timer" in installer
     assert (extract / "configure_social_curation.py").is_file()
     assert (extract / "enrichment_layout.py").is_file()
+    assert (extract / "data_promotion.py").is_file()
+    assert (extract / "enrichment_contracts.py").is_file()
+    assert (extract / "enrichment_promote.py").is_file()
+    assert (extract / "systemd/bbb-enrichment-promote@.service").is_file()
+    assert not (extract / "systemd/bbb-enrichment-promote.timer").exists()
     assert (extract / "data_health.py").is_file()
     assert (extract / "systemd/bbb-data-health.service").is_file()
     assert (extract / "systemd/bbb-data-health.timer").is_file()
@@ -264,6 +269,9 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-social-curation.timer").is_file()
     assert "Social curation timer installed but left disabled" in installer
     assert "/usr/local/libexec/bbb-data-health" in installer
+    assert "/usr/local/libexec/bristolbusbot-enrichment/" \
+        "enrichment_promote.py" in installer
+    assert '"$enrichment_dir/incoming"' in installer
 
 
 def test_layout_migrates_and_health_gates_durable_bot_enrichment():
@@ -286,7 +294,10 @@ def test_bot_health_requires_durable_data_databases_and_fleet():
     assert "bbb-enrichment-layout validate --quiet" in command
     assert '["timetable"]["connected"] is True' in command
     assert '["appData"]["connected"] is True' in command
-    assert '["busDetailsLoaded"] > 0' in command
+    assert '["fleet"]["loaded"] is True' in command
+    assert '["fleet"]["records"] ==' in command
+    assert '["localities"]["loaded"] is True' in command
+    assert '["localities"]["records"] > 0' in command
 
 
 def test_layout_update_preserves_existing_current_release_links():

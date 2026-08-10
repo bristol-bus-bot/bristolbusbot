@@ -60,6 +60,9 @@ def test_health_endpoints(client):
     assert client.get("/livez").status_code == 200
     h = client.get("/healthz").get_json()
     assert h["checks"]["gtfs_db"] == "ok"
+    assert h["checks"]["fleet"]["loaded"] is True
+    assert h["checks"]["fleet"]["records"] == 1
+    assert len(h["checks"]["fleet"]["sha256"]) == 64
 
 
 def test_eurocoaches_yard_detected():

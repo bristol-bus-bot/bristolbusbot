@@ -4,6 +4,7 @@
 import sqlite3 from 'sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
@@ -236,10 +237,18 @@ export class DatabaseManager {
             if (!fs.existsSync(busDetailsPath)) {
                 logger.warn(`Bus details file not found at ${busDetailsPath}`);
                 this.appState.busDetailsLookup = emptyFleetIdentityIndex();
+                this.appState.enrichmentDataStatus.fleet = {
+                    loaded: false,
+                    path: busDetailsPath,
+                    sha256: null,
+                    records: 0,
+                    error: 'fleet data file is absent',
+                };
                 return;
             }
             
-            const rawBusData = JSON.parse(fs.readFileSync(busDetailsPath, 'utf-8'));
+            const rawFleetBytes = fs.readFileSync(busDetailsPath);
+            const rawBusData = JSON.parse(rawFleetBytes.toString('utf-8'));
 
             // Accept either a root-level array or a { results: [...] } wrapper.
             let records: any[];
@@ -251,6 +260,12 @@ export class DatabaseManager {
                 records = rawBusData.results || [];
             }
             this.appState.busDetailsLookup = buildFleetIdentityIndex(records);
+            this.appState.enrichmentDataStatus.fleet = {
+                loaded: true,
+                path: busDetailsPath,
+                sha256: createHash('sha256').update(rawFleetBytes).digest('hex'),
+                records: records.length,
+            };
             const sharedCodeGroups = [
                 ...this.appState.busDetailsLookup.codeOwners.values(),
             ].filter(owners => owners.size > 1).length;
@@ -266,6 +281,13 @@ export class DatabaseManager {
             timer.fail(error);
             logger.error(`Could not load or parse 'fbribuses.json'`, { err: error });
             this.appState.busDetailsLookup = emptyFleetIdentityIndex();
+            this.appState.enrichmentDataStatus.fleet = {
+                loaded: false,
+                path: BOT_DATA_PATHS.fleet,
+                sha256: null,
+                records: 0,
+                error: String(error?.message || error).slice(0, 200),
+            };
         }
     }
     

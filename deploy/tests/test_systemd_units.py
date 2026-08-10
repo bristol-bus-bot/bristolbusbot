@@ -317,6 +317,28 @@ def test_timetable_promoter_is_root_fixed_path_and_sandboxed():
         line for line in service.splitlines() if line.startswith("ReadWritePaths="))
 
 
+def test_enrichment_promoter_is_fixed_dormant_and_uses_shared_lock():
+    service = (SYSTEMD / "bbb-enrichment-promote@.service").read_text(
+        encoding="utf-8")
+    for setting in (
+        "User=root",
+        "--name enrichment-promote-%i --skip-exit-code 75",
+        "/run/lock/bristolbusbot/heavy-io.lock",
+        "flock -w 900 -E 73",
+        "/usr/local/libexec/bristolbusbot-enrichment/"
+        "enrichment_promote.py %i",
+        "ProtectSystem=strict",
+        "ReadWritePaths=/var/lib/bristolbusbot/enrichment "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
+        "IPAddressDeny=any",
+        "IPAddressAllow=localhost",
+        "TimeoutStartSec=10min",
+    ):
+        assert setting in service
+    assert not (SYSTEMD / "bbb-enrichment-promote.timer").exists()
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",
@@ -325,6 +347,7 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-timetable-shadow-auto.service",
         "bbb-timetable-shadow@.service",
         "bbb-timetable-promote@.service",
+        "bbb-enrichment-promote@.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source
