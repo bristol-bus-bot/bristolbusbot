@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,10 @@ from pathlib import Path
 try:
     from .enrichment_contracts import FLEET_OPERATOR_TRANSITIONS
 except ImportError:  # production installs both modules side by side
+    enrichment_lib = (
+        Path(__file__).resolve().parent / "bristolbusbot-enrichment")
+    if enrichment_lib.is_dir():
+        sys.path.insert(0, str(enrichment_lib))
     from enrichment_contracts import FLEET_OPERATOR_TRANSITIONS
 
 

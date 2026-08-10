@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +14,28 @@ from deploy import data_health
 def test_default_timetable_path_matches_the_durable_production_layout():
     assert data_health.DEFAULT_TIMETABLE_DB == Path(
         "/var/lib/bristolbusbot/pipeline/timetable.db")
+
+
+def test_standalone_installed_script_finds_the_enrichment_contract(tmp_path):
+    libexec = tmp_path / "libexec"
+    enrichment = libexec / "bristolbusbot-enrichment"
+    enrichment.mkdir(parents=True)
+    script = libexec / "bbb-data-health"
+    shutil.copy2(Path(data_health.__file__), script)
+    shutil.copy2(
+        Path(data_health.__file__).with_name("enrichment_contracts.py"),
+        enrichment / "enrichment_contracts.py",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def write_json(path: Path, payload: object) -> None:
