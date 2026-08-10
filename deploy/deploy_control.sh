@@ -14,6 +14,7 @@ case "$action:$component" in
     restart:site) exec /usr/bin/systemctl restart bbb-site.service ;;
     restart:bot) exec /usr/bin/systemctl restart bbb-bot.service ;;
     restart:tunnel) exec /usr/bin/systemctl restart bbb-tunnel.service ;;
+    fleet-shadow:) exec /usr/bin/systemctl start bbb-fleet-shadow.service ;;
     bot-token-promote:)
         source=@BBB_DEPLOY_BASE@/incoming/bot.env.token-new
         target=/etc/bristolbusbot/bot.env
