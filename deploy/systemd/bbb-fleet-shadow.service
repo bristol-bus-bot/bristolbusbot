@@ -1,0 +1,31 @@
+[Unit]
+Description=Build and validate a shadow-only Bristol Bus Bot fleet candidate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name fleet-shadow -- /usr/bin/flock -w 900 -E 73 /run/lock/bristolbusbot/heavy-io.lock /usr/bin/python3 /usr/local/libexec/bristolbusbot-enrichment/update_fleet_data.py --live /var/lib/bristolbusbot/enrichment/fbribuses.json --candidate /var/lib/bristolbusbot/fleet-shadow/fbribuses.json --report /var/lib/bristolbusbot/monitoring/fleet-shadow.json
+TimeoutStartSec=40min
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/var/lib/bristolbusbot/enrichment/fbribuses.json
+ReadWritePaths=/var/lib/bristolbusbot/fleet-shadow /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
