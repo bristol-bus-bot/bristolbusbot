@@ -197,6 +197,9 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "restart:$component" not in helper
     assert "systemctl $" not in helper
     assert "NOPASSWD: ALL" not in sudoers
+    assert "fleet-shadow:)" in helper
+    assert "systemctl start bbb-fleet-shadow.service" in helper
+    assert "bbb-deploy-control fleet-shadow" in sudoers
     assert "bbb-deploy-control timetable-promote" in sudoers
     assert "timetable-auto-enable:)" in helper
     assert "timetable-auto-disable:)" in helper
