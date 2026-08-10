@@ -123,6 +123,53 @@ def test_previous_operator_count_collapse_is_detected(tmp_path):
         finding["code"] for finding in report["findings"]}
 
 
+def test_explicit_vitr_to_kemt_transition_is_not_a_false_collapse(tmp_path):
+    fleet = [
+        *(vehicle(code, operator="KEMT") for code in range(100, 114)),
+        *(vehicle(code) for code in range(200, 220)),
+    ]
+    inputs = paths(tmp_path, fleet)
+    write_json(inputs["output"], {
+        "schema_version": data_health.SCHEMA_VERSION,
+        "fleet": {"active_by_operator": {
+            "FBRI": 20, "KEMT": 3, "VITR": 11,
+        }},
+    })
+
+    report = data_health.build_report(**inputs)
+
+    assert report["fleet"]["operator_collapses"] == []
+    assert report["fleet"]["operator_transitions"] == [{
+        "legacy": "VITR",
+        "replacement": "KEMT",
+        "status": "explicit-transition-baseline",
+        "previous_legacy": 11,
+        "previous_replacement": 3,
+        "current_replacement": 14,
+    }]
+
+
+def test_explicit_operator_transition_still_detects_replacement_collapse(
+        tmp_path):
+    fleet = [
+        *(vehicle(code, operator="KEMT") for code in range(100, 103)),
+        *(vehicle(code) for code in range(200, 220)),
+    ]
+    inputs = paths(tmp_path, fleet)
+    write_json(inputs["output"], {
+        "schema_version": data_health.SCHEMA_VERSION,
+        "fleet": {"active_by_operator": {
+            "FBRI": 20, "KEMT": 3, "VITR": 11,
+        }},
+    })
+
+    report = data_health.build_report(**inputs)
+
+    assert report["fleet"]["operator_collapses"] == [{
+        "operator": "KEMT", "previous": 14, "current": 3, "ratio": 0.214,
+    }]
+
+
 def test_operator_scope_prevents_cross_operator_fleet_match(tmp_path):
     inputs = paths(tmp_path, [vehicle(100)])
     with sqlite3.connect(inputs["live_db"]) as connection:
