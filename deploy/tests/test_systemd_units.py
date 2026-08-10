@@ -361,6 +361,39 @@ def test_fleet_shadow_is_isolated_networked_and_never_scheduled():
     assert not (SYSTEMD / "bbb-fleet-shadow.timer").exists()
 
 
+def test_fleet_refresh_chains_validation_staging_and_guarded_promotion():
+    refresh = (SYSTEMD / "bbb-fleet-refresh.service").read_text(
+        encoding="utf-8")
+    stage = (SYSTEMD / "bbb-fleet-stage.service").read_text(encoding="utf-8")
+    timer = (SYSTEMD / "bbb-fleet-refresh.timer").read_text(encoding="utf-8")
+    for setting in (
+        "User=@BBB_DEPLOY_USER@",
+        "OnSuccess=bbb-fleet-stage.service",
+        "--name fleet-refresh",
+        "update_fleet_data.py",
+        "/run/lock/bristolbusbot/heavy-io.lock",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment/fbribuses.json",
+        "ProtectSystem=strict",
+    ):
+        assert setting in refresh
+    for setting in (
+        "User=@BBB_DEPLOY_USER@",
+        "OnSuccess=bbb-enrichment-promote@fleet.service",
+        "--name fleet-stage",
+        "fleet_candidate_stage.py",
+        "/run/lock/bristolbusbot/heavy-io.lock",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/fleet-shadow/fbribuses.json "
+        "/var/lib/bristolbusbot/enrichment/fbribuses.json",
+        "ReadWritePaths=/var/lib/bristolbusbot/enrichment/incoming "
+        "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
+        "IPAddressDeny=any",
+    ):
+        assert setting in stage
+    assert "OnCalendar=Mon *-*-* 00:45:00" in timer
+    assert "Persistent=true" in timer
+    assert "RandomizedDelaySec=5min" in timer
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",
@@ -371,6 +404,8 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-timetable-promote@.service",
         "bbb-enrichment-promote@.service",
         "bbb-fleet-shadow.service",
+        "bbb-fleet-refresh.service",
+        "bbb-fleet-stage.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source

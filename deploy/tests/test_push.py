@@ -200,6 +200,15 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "fleet-shadow:)" in helper
     assert "systemctl start bbb-fleet-shadow.service" in helper
     assert "bbb-deploy-control fleet-shadow" in sudoers
+    assert "fleet-promote:)" in helper
+    assert "systemctl start bbb-fleet-stage.service" in helper
+    assert "fleet-auto-run:)" in helper
+    assert "fleet-auto-enable:)" in helper
+    assert "fleet-auto-disable:)" in helper
+    assert "bbb-deploy-control fleet-promote" in sudoers
+    assert "bbb-deploy-control fleet-auto-run" in sudoers
+    assert "bbb-deploy-control fleet-auto-enable" in sudoers
+    assert "bbb-deploy-control fleet-auto-disable" in sudoers
     assert "bbb-deploy-control timetable-promote" in sudoers
     assert "timetable-auto-enable:)" in helper
     assert "timetable-auto-disable:)" in helper
@@ -264,10 +273,15 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "enrichment_contracts.py").is_file()
     assert (extract / "enrichment_promote.py").is_file()
     assert (extract / "update_fleet_data.py").is_file()
+    assert (extract / "fleet_candidate_stage.py").is_file()
     assert (extract / "systemd/bbb-enrichment-promote@.service").is_file()
     assert not (extract / "systemd/bbb-enrichment-promote.timer").exists()
     assert (extract / "systemd/bbb-fleet-shadow.service").is_file()
     assert not (extract / "systemd/bbb-fleet-shadow.timer").exists()
+    assert (extract / "systemd/bbb-fleet-refresh.service").is_file()
+    assert (extract / "systemd/bbb-fleet-stage.service").is_file()
+    assert (extract / "systemd/bbb-fleet-refresh.timer").is_file()
+    assert "Fleet refresh timer installed but left disabled" in installer
     assert (extract / "data_health.py").is_file()
     assert (extract / "systemd/bbb-data-health.service").is_file()
     assert (extract / "systemd/bbb-data-health.timer").is_file()
@@ -279,6 +293,8 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
         "enrichment_promote.py" in installer
     assert "/usr/local/libexec/bristolbusbot-enrichment/" \
         "update_fleet_data.py" in installer
+    assert "/usr/local/libexec/bristolbusbot-enrichment/" \
+        "fleet_candidate_stage.py" in installer
     assert '"$enrichment_dir/incoming"' in installer
 
 

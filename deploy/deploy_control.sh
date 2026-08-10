@@ -15,6 +15,46 @@ case "$action:$component" in
     restart:bot) exec /usr/bin/systemctl restart bbb-bot.service ;;
     restart:tunnel) exec /usr/bin/systemctl restart bbb-tunnel.service ;;
     fleet-shadow:) exec /usr/bin/systemctl start bbb-fleet-shadow.service ;;
+    fleet-promote:) exec /usr/bin/systemctl start bbb-fleet-stage.service ;;
+    fleet-auto-run:) exec /usr/bin/systemctl start bbb-fleet-refresh.service ;;
+    fleet-auto-enable:)
+        target=/etc/bristolbusbot/fleet-refresh-enabled
+        candidate=/etc/bristolbusbot/.fleet-refresh-enabled.new
+        test -d /etc/bristolbusbot
+        test ! -L /etc/bristolbusbot
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            test -f "$target"
+            test ! -L "$target"
+            test "$(stat -c %U "$target")" = root
+            test "$(stat -c %G "$target")" = root
+            test "$(stat -c %a "$target")" = 644
+        else
+            test ! -e "$candidate"
+            test ! -L "$candidate"
+            install -o root -g root -m 0644 /dev/null "$candidate"
+            printf '%s\n' "enabled=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$candidate"
+            mv -f "$candidate" "$target"
+        fi
+        if ! /usr/bin/systemctl enable --now bbb-fleet-refresh.timer; then
+            rm -f "$target"
+            exit 1
+        fi
+        exit 0
+        ;;
+    fleet-auto-disable:)
+        target=/etc/bristolbusbot/fleet-refresh-enabled
+        /usr/bin/systemctl disable --now bbb-fleet-refresh.timer
+        if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+            exit 0
+        fi
+        test -f "$target"
+        test ! -L "$target"
+        test "$(stat -c %U "$target")" = root
+        test "$(stat -c %G "$target")" = root
+        test "$(stat -c %a "$target")" = 644
+        rm -f "$target"
+        exit 0
+        ;;
     bot-token-promote:)
         source=@BBB_DEPLOY_BASE@/incoming/bot.env.token-new
         target=/etc/bristolbusbot/bot.env

@@ -4,7 +4,7 @@
 The production systemd unit supplies fixed paths for the durable live fleet,
 the isolated shadow candidate and the review report.  This program has no
 promotion mode: accepting a candidate still requires the separate guarded
-promotion helper and explicit operator approval.
+staging and promotion services, whether an attended or scheduled run invoked it.
 """
 from __future__ import annotations
 
@@ -59,7 +59,6 @@ VITR_TRANSITION = (
     "bustimes moved these records to KEMT; every live VITR id must be present "
     "under KEMT before the transition is accepted"
 )
-OPERATOR_TRANSITIONS = {"VITR": "KEMT"}
 OPERATORS: tuple[Operator, ...] = (
     Operator("FBRI"),
     Operator("SSWL"),
@@ -402,73 +401,6 @@ def _difference(
     }
 
 
-def _comparison_baseline(
-    live: Sequence[Mapping[str, object]],
-    candidate: Sequence[Mapping[str, object]],
-    live_summary: Mapping[str, object],
-) -> tuple[dict[str, object], list[dict[str, object]]]:
-    """Apply only explicit, exact-ID operator transitions to comparison counts."""
-    adjusted = json.loads(json.dumps(live_summary))
-    transitions: list[dict[str, object]] = []
-    for legacy, replacement in OPERATOR_TRANSITIONS.items():
-        live_legacy_ids = {
-            int(record["id"])
-            for record in live
-            if record.get("withdrawn") is not True
-            and isinstance(record.get("operator"), dict)
-            and str(record["operator"].get("id") or "").upper() == legacy  # type: ignore[union-attr]
-        }
-        if not live_legacy_ids:
-            continue
-        candidate_legacy_ids = {
-            int(record["id"])
-            for record in candidate
-            if record.get("withdrawn") is not True
-            and isinstance(record.get("operator"), dict)
-            and str(record["operator"].get("id") or "").upper() == legacy  # type: ignore[union-attr]
-        }
-        if candidate_legacy_ids:
-            transitions.append({
-                "legacy": legacy,
-                "replacement": replacement,
-                "status": "source-still-uses-legacy-id",
-                "live_legacy_records": len(live_legacy_ids),
-                "candidate_legacy_records": len(candidate_legacy_ids),
-            })
-            continue
-        replacement_ids = {
-            int(record["id"])
-            for record in candidate
-            if record.get("withdrawn") is not True
-            and isinstance(record.get("operator"), dict)
-            and str(record["operator"].get("id") or "").upper() == replacement  # type: ignore[union-attr]
-        }
-        missing = sorted(live_legacy_ids - replacement_ids)
-        if missing:
-            raise FleetShadowError(
-                "operator_transition_incomplete",
-                f"operator {legacy} moved to {replacement}, but "
-                f"{len(missing)} live vehicle ids are missing from the replacement",
-            )
-        for field in ("operator_counts", "active_operator_counts"):
-            counts = adjusted.get(field)
-            if not isinstance(counts, dict):
-                raise FleetShadowError(
-                    "live_contract", f"live {field} summary is invalid")
-            moved = int(counts.pop(legacy, 0))
-            counts[replacement] = int(counts.get(replacement, 0)) + moved
-            adjusted[field] = dict(sorted(counts.items()))
-        transitions.append({
-            "legacy": legacy,
-            "replacement": replacement,
-            "status": "exact-id-transition-accepted",
-            "live_legacy_records": len(live_legacy_ids),
-            "matched_replacement_records": len(live_legacy_ids),
-            "missing_ids": 0,
-        })
-    return adjusted, transitions
-
-
 def _sort_key(record: Mapping[str, object]) -> tuple[str, str, int]:
     operator = record.get("operator")
     code = str(operator.get("id") or "") if isinstance(operator, dict) else ""
@@ -548,15 +480,14 @@ def build_shadow(
         fetched.sort(key=_sort_key)
         candidate_raw = (json.dumps(fetched, indent=2) + "\n").encode()
         candidate_summary = validate_fleet(candidate_raw)
-        comparison_live, transitions = _comparison_baseline(
-            live_value, fetched, live_summary)
-        comparison = compare_fleet(candidate_summary, comparison_live)
+        comparison = compare_fleet(candidate_summary, live_summary)
         report["candidate"] = {
             "sha256": digest(candidate_raw),
             "summary": candidate_summary,
         }
         report["comparison"] = comparison
-        report["operator_transitions"] = transitions
+        report["operator_transitions"] = comparison.get(
+            "operator_transitions", [])
         report["difference"] = _difference(live_value, fetched)
         _atomic_bytes(candidate, candidate_raw)
         report.update({
@@ -573,6 +504,8 @@ def build_shadow(
             code = exc.code
         elif isinstance(exc, OSError):
             code = "io_failure"
+        elif "operator transition" in str(exc):
+            code = "operator_transition_incomplete"
         else:
             code = "candidate_contract"
         report.update({

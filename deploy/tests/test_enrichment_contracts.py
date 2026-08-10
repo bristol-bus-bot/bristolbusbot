@@ -64,6 +64,8 @@ def test_fleet_validator_records_operator_coverage():
 
     assert summary["records"] == 3
     assert summary["active_operator_counts"] == {"FBRI": 2, "NATX": 1}
+    assert summary["active_operator_record_ids"] == {
+        "FBRI": [1, 2], "NATX": [3]}
     assert summary["policy"] == "fleet-structure-v1"
 
 
@@ -115,6 +117,45 @@ def test_fleet_comparator_records_bounded_change_and_new_operator():
 
     assert result["operators"]["FBRI"]["candidate"] == 10
     assert result["new_operators"] == ["ABUS"]
+
+
+def test_fleet_comparator_accepts_exact_vitr_to_kemt_transition():
+    live = validate_fleet(raw([
+        *(fleet_record(index, "VITR") for index in range(1, 4)),
+        *(fleet_record(index) for index in range(4, 14)),
+    ]))
+    candidate = validate_fleet(raw([
+        *(fleet_record(index, "KEMT") for index in range(1, 4)),
+        *(fleet_record(index) for index in range(4, 14)),
+    ]))
+
+    result = compare_fleet(candidate, live)
+
+    assert result["operator_transitions"] == [{
+        "legacy": "VITR",
+        "replacement": "KEMT",
+        "status": "exact-id-transition-accepted",
+        "live_legacy_records": 3,
+        "matched_replacement_records": 3,
+        "missing_ids": 0,
+    }]
+    assert "VITR" not in result["operators"]
+    assert result["operators"]["KEMT"]["live"] == 3
+
+
+def test_fleet_comparator_rejects_incomplete_vitr_to_kemt_transition():
+    live = validate_fleet(raw([
+        *(fleet_record(index, "VITR") for index in range(1, 4)),
+        *(fleet_record(index) for index in range(4, 14)),
+    ]))
+    candidate = validate_fleet(raw([
+        *(fleet_record(index, "KEMT") for index in range(1, 3)),
+        *(fleet_record(index) for index in range(4, 14)),
+    ]))
+
+    with pytest.raises(EnrichmentContractError,
+                       match="transition VITR->KEMT is incomplete"):
+        compare_fleet(candidate, live)
 
 
 def test_fleet_validator_counts_records_without_public_identity():
