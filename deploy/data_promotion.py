@@ -57,6 +57,8 @@ class ArtifactContract:
 
 
 Validator = Callable[[bytes], Mapping[str, object]]
+Comparator = Callable[
+    [Mapping[str, object], Mapping[str, object]], Mapping[str, object]]
 Restarter = Callable[[], None]
 HealthCheck = Callable[[str, Mapping[str, object]], bool]
 FaultHook = Callable[[str], None]
@@ -291,6 +293,7 @@ def promote(
     validate: Validator,
     restart: Restarter,
     healthy: HealthCheck,
+    compare: Comparator | None = None,
     context: Mapping[str, object] | None = None,
     fault: FaultHook | None = None,
 ) -> tuple[int, dict[str, object]]:
@@ -304,6 +307,14 @@ def promote(
     live_raw, live_info = _read_regular(
         contract.live, contract.maximum_bytes, "live artifact")
     live_summary = _validated(live_raw, validate, "live artifact")
+    comparison: dict[str, object] | None = None
+    if compare:
+        try:
+            comparison = dict(compare(candidate_summary, live_summary))
+            json.dumps(comparison, allow_nan=False)
+        except Exception as exc:
+            raise DataPromotionError(
+                f"candidate comparison failed: {exc}") from exc
 
     prior_state = _load_state(contract)
     if prior_state and prior_state.get("outcome") == "running":
@@ -329,6 +340,8 @@ def promote(
         "candidate": candidate_summary,
         "previous": live_summary,
     }
+    if comparison is not None:
+        record["comparison"] = comparison
     if context:
         try:
             json.dumps(context, allow_nan=False)

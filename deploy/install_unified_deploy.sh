@@ -65,7 +65,8 @@ done
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
-    "$stage/enrichment_layout.py" \
+    "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
+    "$stage/enrichment_contracts.py" "$stage/enrichment_promote.py" \
     "$stage/editorial_context.py" \
     "$stage/editorial_fetch.py" "$stage/editorial_promote.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
@@ -102,6 +103,9 @@ for destination in \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/libexec/bbb-data-health \
     /usr/local/libexec/bbb-enrichment-layout \
+    /usr/local/libexec/bristolbusbot-enrichment/data_promotion.py \
+    /usr/local/libexec/bristolbusbot-enrichment/enrichment_contracts.py \
+    /usr/local/libexec/bristolbusbot-enrichment/enrichment_promote.py \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/sbin/bbb-configure-social-curation \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
@@ -197,7 +201,7 @@ wait_bot() {
     tries=0
     while [ "$tries" -lt 30 ]; do
         if /usr/local/libexec/bbb-enrichment-layout validate --quiet >/dev/null 2>&1 && \
-           /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); h=d["details"]["healthData"]; e=h["application"]["editorialContext"]; assert d.get("success") is True and d.get("runtime") == "systemd" and e.get("loaded") is True and h["database"]["timetable"]["connected"] is True and h["database"]["appData"]["connected"] is True and h["application"]["state"]["busDetailsLoaded"] > 0' >/dev/null 2>&1; then
+           /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:3010/api/health", timeout=10)); h=d["details"]["healthData"]; e=h["application"]["editorialContext"]; n=h["application"]["enrichmentData"]; assert d.get("success") is True and d.get("runtime") == "systemd" and e.get("loaded") is True and h["database"]["timetable"]["connected"] is True and h["database"]["appData"]["connected"] is True and n["fleet"]["loaded"] is True and n["fleet"]["records"] == h["application"]["state"]["busDetailsLoaded"] and n["localities"]["loaded"] is True and n["localities"]["records"] > 0' >/dev/null 2>&1; then
             return 0
         fi
         tries=$((tries + 1))
@@ -304,6 +308,10 @@ install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
 install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
+install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-enrichment
+install -o root -g root -m 0644 "$stage/data_promotion.py" /usr/local/libexec/bristolbusbot-enrichment/data_promotion.py
+install -o root -g root -m 0644 "$stage/enrichment_contracts.py" /usr/local/libexec/bristolbusbot-enrichment/enrichment_contracts.py
+install -o root -g root -m 0755 "$stage/enrichment_promote.py" /usr/local/libexec/bristolbusbot-enrichment/enrichment_promote.py
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
@@ -341,6 +349,7 @@ do
     fi
 done
 /usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/bristolbusbot.conf
+install -o "$deploy_user" -g "$deploy_user" -m 0750 -d "$enrichment_dir/incoming"
 /usr/local/libexec/bbb-enrichment-layout migrate \
     --source "$current/bot" \
     --destination "$enrichment_dir" \

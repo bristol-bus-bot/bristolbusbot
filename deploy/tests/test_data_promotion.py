@@ -140,6 +140,26 @@ def test_rejects_candidate_over_the_code_owned_size_limit(tmp_path):
     assert details.live.read_bytes() == old
 
 
+def test_comparison_can_reject_structurally_valid_candidate_before_state(
+        tmp_path):
+    details, old, candidate = seed(tmp_path)
+
+    with pytest.raises(DataPromotionError, match="comparison failed"):
+        promote(
+            details,
+            validate=validator,
+            compare=lambda _candidate, _live: (_ for _ in ()).throw(
+                ValueError("record count collapsed")),
+            restart=lambda: pytest.fail("restart must not run"),
+            healthy=lambda _expected, _summary: True,
+        )
+
+    assert details.live.read_bytes() == old
+    assert details.candidate.read_bytes() == candidate
+    assert not details.previous.exists()
+    assert not details.state.exists()
+
+
 def test_rolls_back_when_promoted_digest_is_not_healthy(tmp_path):
     details, old, candidate = seed(tmp_path)
     old_digest = hashlib.sha256(old).hexdigest()

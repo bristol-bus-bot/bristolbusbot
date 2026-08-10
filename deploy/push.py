@@ -391,10 +391,15 @@ def healthy(remote: Remote, component: str) -> bool:
             "systemctl is-active --quiet bbb-bot.service && "
             "python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("
             "\"http://127.0.0.1:3010/api/health\",timeout=10)); h=d[\"details\"][\"healthData\"]; "
+            "e=h[\"application\"][\"enrichmentData\"]; "
             "assert d.get(\"success\") is True and d.get(\"runtime\")==\"systemd\" "
             "and h[\"database\"][\"timetable\"][\"connected\"] is True "
             "and h[\"database\"][\"appData\"][\"connected\"] is True "
-            "and h[\"application\"][\"state\"][\"busDetailsLoaded\"] > 0'"
+            "and e[\"fleet\"][\"loaded\"] is True "
+            "and e[\"fleet\"][\"records\"] == "
+            "h[\"application\"][\"state\"][\"busDetailsLoaded\"] "
+            "and e[\"localities\"][\"loaded\"] is True "
+            "and e[\"localities\"][\"records\"] > 0'"
         ),
         "pipeline": (
             f"test -x {q(pipeline / 'venv/bin/python3')} && "
@@ -599,7 +604,8 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "data_health.py",
         "configure_timetable_delivery.py", "configure_social_curation.py",
-        "enrichment_layout.py",
+        "enrichment_layout.py", "data_promotion.py",
+        "enrichment_contracts.py", "enrichment_promote.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)

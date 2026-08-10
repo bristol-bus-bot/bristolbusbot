@@ -67,3 +67,11 @@ They use exit 73 for `flock` timeout, which the job wrapper records as
 `lock_timeout`; exit 75 is reserved for a benign application skip. These source
 templates are not production evidence until the reviewed layout is installed
 and the promotion-disabled shadow/attended rollout passes.
+
+`bbb-enrichment-promote@.service` is an attended-only, dormant data promoter.
+It has no timer and its Python entrypoint accepts only the fixed names `fleet`
+and `localities`; it does not accept source or destination paths. Each run uses
+the same heavy-I/O lock as backup and timetable work, revalidates the candidate,
+keeps one previous file, restarts the site and bot, and requires their reported
+digest and record count before accepting the swap. Installing the unit does not
+stage or promote any data. A real promotion remains a separate reviewed action.

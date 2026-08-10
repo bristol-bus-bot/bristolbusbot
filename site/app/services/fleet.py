@@ -1,6 +1,7 @@
 """Load operator-safe fleet identity, livery and vehicle-description data."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -64,7 +65,7 @@ def _preferred_registration(records: list[dict]) -> dict | None:
 class Fleet:
     def __init__(self, fleet_path: str, descriptions_path: str = "",
                  waiting_path: str = "", depot_path: str = ""):
-        raw = self._load(fleet_path)
+        raw, self._status = self._load_fleet(fleet_path)
         if isinstance(raw, list):
             self._records = [item for item in raw if isinstance(item, dict)]
         elif isinstance(raw, dict):
@@ -77,6 +78,7 @@ class Fleet:
                     self._records.append(record)
         else:
             self._records = []
+        self._status["records"] = len(self._records)
 
         self._descriptions = self._load_dict(descriptions_path)
         self._waiting = self._load_dict(waiting_path)
@@ -123,6 +125,31 @@ class Fleet:
     def _load_dict(cls, path: str) -> dict:
         value = cls._load(path)
         return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _load_fleet(path: str) -> tuple[object, dict]:
+        status = {
+            "loaded": False,
+            "path": path,
+            "sha256": None,
+            "records": 0,
+        }
+        try:
+            raw = Path(path).read_bytes()
+            value = json.loads(raw)
+            status.update({
+                "loaded": True,
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            })
+            return value, status
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            status["error"] = str(exc)[:200]
+            return {}, status
+
+    @property
+    def status(self) -> dict:
+        """Exact fleet bytes and parsed record count loaded at process start."""
+        return dict(self._status)
 
     @property
     def raw_list(self) -> list:

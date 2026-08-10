@@ -11,6 +11,7 @@ import type { BusEvent, DelayPattern, DelayHistory, AICommentaryContext, AIComme
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { getStopEnrichment } from '../utils/stop-name-cleaner.js';
 import { readFileSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import {
     EditorialContextStore,
@@ -101,6 +102,13 @@ let stopLocalities: Record<string, {
     lat: number;
     lon: number;
 }> = {};
+let stopLocalitiesStatus = {
+    loaded: false,
+    path: STOP_LOCALITIES_PATH,
+    sha256: null as string | null,
+    records: 0,
+    error: undefined as string | undefined,
+};
 
 let localFlavour: Record<string, {
     flavour: string;
@@ -110,10 +118,19 @@ let localFlavour: Record<string, {
 
 // Load localities at module initialization
 try {
-    const localitiesData = readFileSync(STOP_LOCALITIES_PATH, 'utf-8');
-    stopLocalities = JSON.parse(localitiesData);
+    const localitiesData = readFileSync(STOP_LOCALITIES_PATH);
+    stopLocalities = JSON.parse(localitiesData.toString('utf-8'));
+    stopLocalitiesStatus = {
+        loaded: true,
+        path: STOP_LOCALITIES_PATH,
+        sha256: createHash('sha256').update(localitiesData).digest('hex'),
+        records: Object.keys(stopLocalities).length,
+        error: undefined,
+    };
     logger.info(`Loaded ${Object.keys(stopLocalities).length} stop localities for geographic context`);
 } catch (error) {
+    stopLocalitiesStatus.error = String(
+        error instanceof Error ? error.message : error).slice(0, 200);
     logger.warn('Failed to load stop_localities.json - locality context will be unavailable', { error });
 }
 
@@ -190,6 +207,9 @@ export class AICommentary {
             this.aiConfig.editorialUsagePath,
         );
         this.appState.editorialContextStatus = this.editorialContext.getStatus();
+        this.appState.enrichmentDataStatus.localities = {
+            ...stopLocalitiesStatus,
+        };
 
         logger.info('AI Commentary service initialized', {
             model: this.aiConfig.model,

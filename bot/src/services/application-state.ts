@@ -5,6 +5,14 @@ import { logger, TARGET_TIMEZONE } from '../utils/logging.js';
 import type { BusEvent, DelayHistory, NetworkStatus, SystemMetrics, SIRIVehicleActivity } from '../types/bus-types.js';
 import { emptyFleetIdentityIndex, type FleetIdentityIndex } from './vehicle-identity.js';
 
+export interface EnrichmentDataFileStatus {
+    loaded: boolean;
+    path: string;
+    sha256: string | null;
+    records: number;
+    error?: string;
+}
+
 /**
  * Application State Manager - Singleton
  * Central in-memory state shared across services: event collection,
@@ -27,6 +35,13 @@ export class ApplicationState {
 
     // Bus details and lookup data
     public busDetailsLookup: FleetIdentityIndex = emptyFleetIdentityIndex();
+    public enrichmentDataStatus: {
+        fleet: EnrichmentDataFileStatus;
+        localities: EnrichmentDataFileStatus;
+    } = {
+        fleet: { loaded: false, path: '', sha256: null, records: 0 },
+        localities: { loaded: false, path: '', sha256: null, records: 0 },
+    };
     public routeDetails: { [routeNumber: string]: any } = {};  // Route/stop details for AI context
     public terminusStopNames: Set<string> = new Set();
     public zenComments: any = {};
