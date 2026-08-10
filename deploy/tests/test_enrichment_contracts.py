@@ -242,3 +242,56 @@ def test_locality_comparator_allows_unknowns_to_be_resolved():
     result = compare_localities(candidate, live)
 
     assert result["unknown"] == {"live": 5, "candidate": 0}
+
+
+def test_locality_comparator_accepts_bounded_legacy_area_reclassification():
+    live = validate_localities(raw({
+        **{f"B{index}": locality(f"B{index}") for index in range(2034)},
+        **{f"S{index}": locality(f"S{index}", "South Gloucestershire")
+           for index in range(98)},
+        **{f"N{index}": locality(f"N{index}", "North Somerset")
+           for index in range(911)},
+        **{f"A{index}": locality(
+            f"A{index}", "Bath and North East Somerset") for index in range(1053)},
+        **{f"U{index}": locality(f"U{index}", "Unknown")
+           for index in range(352)},
+    }))
+    candidate = validate_localities(raw({
+        **{f"B{index}": locality(f"B{index}") for index in range(1229)},
+        **{f"S{index}": locality(f"S{index}", "South Gloucestershire")
+           for index in range(1258)},
+        **{f"N{index}": locality(f"N{index}", "North Somerset")
+           for index in range(911)},
+        **{f"A{index}": locality(
+            f"A{index}", "Bath and North East Somerset") for index in range(1041)},
+        **{f"U{index}": locality(f"U{index}", "Unknown")
+           for index in range(376)},
+    }))
+
+    result = compare_localities(candidate, live)
+
+    assert result["policy"] == "locality-bounded-count-v2"
+    assert result["area_transitions"] == [{
+        "name": "legacy-overlapping-search-box-repair",
+        "status": "bounded-combined-area-reclassification-accepted",
+        "live": {"Bristol": 2034, "South Gloucestershire": 98},
+        "candidate": {"Bristol": 1229, "South Gloucestershire": 1258},
+    }]
+
+
+def test_locality_comparator_does_not_reapply_legacy_repair_after_cutover():
+    live = validate_localities(raw({
+        **{f"B{index}": locality(f"B{index}") for index in range(1229)},
+        **{f"S{index}": locality(f"S{index}", "South Gloucestershire")
+           for index in range(1258)},
+    }))
+    candidate = validate_localities(raw({
+        **{f"B{index}": locality(f"B{index}") for index in range(1229)},
+        **{f"S{index}": locality(f"S{index}", "South Gloucestershire")
+           for index in range(500)},
+        **{f"X{index}": locality(f"X{index}") for index in range(758)},
+    }))
+
+    with pytest.raises(EnrichmentContractError,
+                       match="area South Gloucestershire collapsed"):
+        compare_localities(candidate, live)

@@ -13,6 +13,8 @@ def test_site_unit_has_required_lifecycle_and_accounting():
         "WantedBy=multi-user.target",
         "Environment=BBB_FLEET_JSON=/var/lib/bristolbusbot/enrichment/"
         "fbribuses.json",
+        "Environment=BBB_LOCALITIES_JSON=/var/lib/bristolbusbot/enrichment/"
+        "stop_localities.json",
         "CPUAccounting=yes",
         "MemoryAccounting=yes",
         "TasksAccounting=yes",
@@ -315,6 +317,7 @@ def test_timetable_promoter_is_root_fixed_path_and_sandboxed():
         assert setting in service
     assert "/var/lib/bristolbusbot/timetable-shadow" not in next(
         line for line in service.splitlines() if line.startswith("ReadWritePaths="))
+    assert "OnSuccess=bbb-locality-refresh.service" in service
 
 
 def test_enrichment_promoter_is_fixed_dormant_and_uses_shared_lock():
@@ -394,6 +397,43 @@ def test_fleet_refresh_chains_validation_staging_and_guarded_promotion():
     assert "RandomizedDelaySec=5min" in timer
 
 
+def test_locality_refresh_is_timetable_triggered_exact_and_independently_promoted():
+    refresh = (SYSTEMD / "bbb-locality-refresh.service").read_text(
+        encoding="utf-8")
+    shadow = (SYSTEMD / "bbb-locality-shadow.service").read_text(
+        encoding="utf-8")
+    stage = (SYSTEMD / "bbb-locality-stage.service").read_text(
+        encoding="utf-8")
+    for setting in (
+        "OnSuccess=bbb-locality-stage.service",
+        "--name locality-refresh",
+        "geocode_stops.py",
+        "--timetable /var/lib/bristolbusbot/pipeline/timetable.db",
+        "--live /var/lib/bristolbusbot/enrichment/stop_localities.json",
+        "--candidate /var/lib/bristolbusbot/locality-shadow/stop_localities.json",
+        "--report /var/lib/bristolbusbot/monitoring/locality-shadow.json",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/pipeline/timetable.db "
+        "/var/lib/bristolbusbot/enrichment/stop_localities.json",
+    ):
+        assert setting in refresh
+    assert "OnSuccess=" not in shadow
+    assert "--force-boundary-refresh" in shadow
+    for setting in (
+        "OnSuccess=bbb-enrichment-promote@localities.service",
+        "--name locality-stage",
+        "locality_candidate_stage.py",
+        "IPAddressDeny=any",
+    ):
+        assert setting in stage
+    assert not (SYSTEMD / "bbb-locality-refresh.timer").exists()
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(
+        encoding="utf-8")
+    assert (
+        "d /var/lib/bristolbusbot/locality-shadow 0750 "
+        "@BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
+    ) in tmpfiles
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",
@@ -406,6 +446,9 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
         "bbb-fleet-shadow.service",
         "bbb-fleet-refresh.service",
         "bbb-fleet-stage.service",
+        "bbb-locality-shadow.service",
+        "bbb-locality-refresh.service",
+        "bbb-locality-stage.service",
     ):
         source = (SYSTEMD / name).read_text(encoding="utf-8")
         assert "/run/lock/bristolbusbot/heavy-io.lock" in source

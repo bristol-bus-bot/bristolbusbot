@@ -606,7 +606,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "configure_timetable_delivery.py", "configure_social_curation.py",
         "enrichment_layout.py", "data_promotion.py",
         "enrichment_contracts.py", "enrichment_promote.py",
-        "fleet_candidate_stage.py",
+        "fleet_candidate_stage.py", "locality_candidate_stage.py",
         "editorial_context.py", "editorial_fetch.py", "editorial_promote.py",
     ):
         copy_file(DEPLOY / name, root / name)
@@ -615,6 +615,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
     copy_file(REPO / "pipeline/timetable_manifest.py", root / "timetable_manifest.py")
     copy_file(REPO / "pipeline/timetable_editions.py", root / "timetable_editions.py")
     copy_file(REPO / "pipeline/update_fleet_data.py", root / "update_fleet_data.py")
+    copy_file(REPO / "pipeline/geocode_stops.py", root / "geocode_stops.py")
     copy_tree(DEPLOY / "systemd", root / "systemd")
     copy_tree(DEPLOY / "sudoers", root / "sudoers")
     copy_tree(DEPLOY / "tmpfiles", root / "tmpfiles")

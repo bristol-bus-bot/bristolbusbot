@@ -31,6 +31,11 @@ FLEET_PROMOTION_STATE = Path(
 FLEET_SHADOW_REPORT = Path(
     "/var/lib/bristolbusbot/monitoring/fleet-shadow.json")
 FLEET_MAX_AGE_HOURS = 24 * 8
+LOCALITY_PROMOTION_STATE = Path(
+    "/var/lib/bristolbusbot/monitoring/enrichment-localities-promotion.json")
+LOCALITY_SHADOW_REPORT = Path(
+    "/var/lib/bristolbusbot/monitoring/locality-shadow.json")
+LOCALITY_MAX_AGE_HOURS = 30
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
@@ -725,6 +730,95 @@ def fleet_automation_check() -> tuple[dict, list[str]]:
     return result, []
 
 
+def locality_automation_check() -> tuple[dict, list[str]]:
+    """Summarise the timetable-triggered locality refresh transaction."""
+    timetable_enabled = subprocess.run(
+        ["systemctl", "is-enabled", "bbb-timetable-shadow.timer"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False).returncode == 0
+    if not timetable_enabled:
+        return {"status": "disabled_with_timetable"}, []
+    jobs = {
+        name: _fleet_job(name)
+        for name in (
+            "locality-refresh", "locality-stage",
+            "enrichment-promote-localities")
+    }
+    result: dict[str, object] = {
+        "status": "pending",
+        "trigger": "successful timetable promotion check",
+        "jobs": jobs,
+    }
+    if any(job.get("result") == "missing" for job in jobs.values()):
+        if any(job.get("result") == "failure" for job in jobs.values()):
+            result.update({
+                "status": "failed",
+                "failure_code": "refresh_or_promotion_failed",
+            })
+            return result, ["job:locality-automation"]
+        result["summary"] = "waiting for the first commissioned run"
+        return result, []
+    try:
+        promotion = json.loads(
+            LOCALITY_PROMOTION_STATE.read_text(encoding="utf-8"))
+        shadow = json.loads(LOCALITY_SHADOW_REPORT.read_text(encoding="utf-8"))
+        candidate = shadow.get("candidate")
+        candidate = candidate if isinstance(candidate, dict) else {}
+        promoted = promotion.get("candidate")
+        promoted = promoted if isinstance(promoted, dict) else {}
+        coverage = shadow.get("coverage")
+        coverage = coverage if isinstance(coverage, dict) else {}
+        result["last_attempt"] = {
+            "outcome": promotion.get("outcome"),
+            "finished_at": promotion.get("finished_at"),
+            "candidate_sha256": candidate.get("sha256"),
+            "promoted_candidate_sha256": promoted.get("sha256"),
+            "records": (candidate.get("summary") or {}).get("records")
+            if isinstance(candidate.get("summary"), dict) else None,
+            "coverage": coverage,
+            "boundary": shadow.get("boundary"),
+            "error": promotion.get("error"),
+            "recovery_healthy": promotion.get("recovery_healthy"),
+        }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        result.update({
+            "status": "failed",
+            "failure_code": "missing_detail",
+            "error": type(exc).__name__,
+        })
+        return result, ["job:locality-automation"]
+    refresh = jobs["locality-refresh"]
+    stage = jobs["locality-stage"]
+    promote = jobs["enrichment-promote-localities"]
+    attempt = result["last_attempt"]
+    attempt = attempt if isinstance(attempt, dict) else {}
+    ages = [job.get("age_hours") for job in jobs.values()]
+    failed = (
+        refresh.get("result") != "success"
+        or stage.get("result") != "success"
+        or promote.get("result") not in {"success", "skipped"}
+        or attempt.get("outcome") not in {"accepted", "no_change"}
+        or not isinstance(attempt.get("candidate_sha256"), str)
+        or attempt.get("candidate_sha256")
+        != attempt.get("promoted_candidate_sha256")
+        or any(not isinstance(age, (int, float))
+               or age > LOCALITY_MAX_AGE_HOURS for age in ages)
+        or (attempt.get("coverage") or {}).get("missing") != 0
+        or (attempt.get("coverage") or {}).get("extra") != 0
+    )
+    if failed:
+        result.update({
+            "status": "failed",
+            "failure_code": "refresh_or_promotion_failed",
+        })
+        return result, ["job:locality-automation"]
+    result.update({
+        "status": "healthy",
+        "summary": "latest timetable-triggered locality refresh completed safely",
+    })
+    return result, []
+
+
 def social_curation_check() -> tuple[dict, list[str]]:
     enabled = subprocess.run(
         ["systemctl", "is-enabled", "bbb-social-curation.timer"],
@@ -1001,6 +1095,8 @@ def main() -> int:
         timetable_promotion, dict) else {}
     fleet_automation, found = fleet_automation_check()
     issues.extend(found)
+    locality_automation, found = locality_automation_check()
+    issues.extend(found)
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
     social_deliveries, found = social_curation_check()
@@ -1070,6 +1166,7 @@ def main() -> int:
         "timetable_promotion": timetable_promotion,
         "timetable_automation": timetable_automation,
         "fleet_automation": fleet_automation,
+        "locality_automation": locality_automation,
         "editorial_refresh": editorial_refresh,
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},

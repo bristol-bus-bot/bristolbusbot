@@ -2,6 +2,7 @@
 Description=Bristol Bus Bot guarded timetable promotion transaction (%i)
 Wants=network-online.target
 After=network-online.target bbb-collector.service bbb-site.service bbb-bot.service
+OnSuccess=bbb-locality-refresh.service
 
 [Service]
 Type=oneshot

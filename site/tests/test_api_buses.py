@@ -63,6 +63,8 @@ def test_health_endpoints(client):
     assert h["checks"]["fleet"]["loaded"] is True
     assert h["checks"]["fleet"]["records"] == 1
     assert len(h["checks"]["fleet"]["sha256"]) == 64
+    assert h["checks"]["localities"]["loaded"] is True
+    assert len(h["checks"]["localities"]["sha256"]) == 64
 
 
 def test_eurocoaches_yard_detected():

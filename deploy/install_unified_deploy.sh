@@ -68,6 +68,7 @@ done
     "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
     "$stage/enrichment_contracts.py" "$stage/enrichment_promote.py" \
     "$stage/update_fleet_data.py" "$stage/fleet_candidate_stage.py" \
+    "$stage/geocode_stops.py" "$stage/locality_candidate_stage.py" \
     "$stage/editorial_context.py" \
     "$stage/editorial_fetch.py" "$stage/editorial_promote.py"
 /usr/bin/systemd-analyze verify "$stage/systemd"/*.service "$stage/systemd"/*.timer
@@ -109,6 +110,8 @@ for destination in \
     /usr/local/libexec/bristolbusbot-enrichment/enrichment_promote.py \
     /usr/local/libexec/bristolbusbot-enrichment/update_fleet_data.py \
     /usr/local/libexec/bristolbusbot-enrichment/fleet_candidate_stage.py \
+    /usr/local/libexec/bristolbusbot-enrichment/geocode_stops.py \
+    /usr/local/libexec/bristolbusbot-enrichment/locality_candidate_stage.py \
     /usr/local/sbin/bbb-configure-timetable-delivery \
     /usr/local/sbin/bbb-configure-social-curation \
     /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py \
@@ -317,6 +320,8 @@ install -o root -g root -m 0644 "$stage/enrichment_contracts.py" /usr/local/libe
 install -o root -g root -m 0755 "$stage/enrichment_promote.py" /usr/local/libexec/bristolbusbot-enrichment/enrichment_promote.py
 install -o root -g root -m 0755 "$stage/update_fleet_data.py" /usr/local/libexec/bristolbusbot-enrichment/update_fleet_data.py
 install -o root -g root -m 0755 "$stage/fleet_candidate_stage.py" /usr/local/libexec/bristolbusbot-enrichment/fleet_candidate_stage.py
+install -o root -g root -m 0755 "$stage/geocode_stops.py" /usr/local/libexec/bristolbusbot-enrichment/geocode_stops.py
+install -o root -g root -m 0755 "$stage/locality_candidate_stage.py" /usr/local/libexec/bristolbusbot-enrichment/locality_candidate_stage.py
 install -o root -g root -m 0755 "$stage/configure_timetable_delivery.py" /usr/local/sbin/bbb-configure-timetable-delivery
 install -o root -g root -m 0755 "$stage/configure_social_curation.py" /usr/local/sbin/bbb-configure-social-curation
 install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable

@@ -113,13 +113,20 @@ def health_once(spec: ArtifactSpec, live: Path, expected: str,
                 or bot_status.get("sha256") != expected \
                 or bot_status.get("records") != summary.get("records"):
             return False
+        site_status = site["checks"][spec.name]
+        if site_status.get("loaded") is not True \
+                or site_status.get("sha256") != expected \
+                or site_status.get("records") != summary.get("records"):
+            return False
         if spec.name == "fleet":
-            site_status = site["checks"]["fleet"]
-            return site_status.get("loaded") is True \
-                and site_status.get("sha256") == expected \
-                and site_status.get("records") == summary.get("records")
+            return True
         stops = _json_url(SITE_LOCALITIES, maximum=16 * 1024 * 1024)
-        return isinstance(stops.get("stops"), list) and bool(stops["stops"])
+        endpoint_status = stops.get("localities")
+        return isinstance(stops.get("stops"), list) and bool(stops["stops"]) \
+            and isinstance(endpoint_status, dict) \
+            and endpoint_status.get("loaded") is True \
+            and endpoint_status.get("sha256") == expected \
+            and endpoint_status.get("records") == summary.get("records")
     except (DataPromotionError, json.JSONDecodeError, KeyError, OSError,
             TypeError, ValueError):
         return False

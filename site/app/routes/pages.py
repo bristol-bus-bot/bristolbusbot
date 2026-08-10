@@ -140,4 +140,9 @@ def api_stops_with_locality():
         cfg = current_app.config["BBB"]
         cache["stops_locality"] = loc_svc.stops_with_locality(
             db.gtfs(), cfg.localities_json, cfg.enrichment_json)
-    return jsonify({"stops": cache["stops_locality"]})
+        cache["stops_locality_status"] = current_app.extensions[
+            "bbb_localities"]
+    return jsonify({
+        "stops": cache["stops_locality"],
+        "localities": cache["stops_locality_status"],
+    })
