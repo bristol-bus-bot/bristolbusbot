@@ -1,3 +1,4 @@
+import io
 import json
 import sqlite3
 import sys
@@ -290,3 +291,71 @@ def test_usage_reservation_enforces_monthly_ceiling_before_request(tmp_path):
         ledger.reserve(
             run={"requests": 0, "input_tokens": 0, "output_tokens": 0},
             variant="waiting", input_tokens=100, output_tokens=100)
+
+
+def test_gemini_3_request_uses_minimal_thinking_and_exact_json_schema(
+        monkeypatch):
+    captured = {}
+
+    def open_response(request, timeout):
+        captured["payload"] = json.loads(request.data)
+        captured["timeout"] = timeout
+        response = {
+            "candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{
+                    "text": json.dumps({
+                        "OPAA:101": "Known Model. waiting with quiet patience."
+                    })
+                }]},
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 12,
+            },
+        }
+        return io.BytesIO(json.dumps(response).encode("utf-8"))
+
+    monkeypatch.setattr(blurbs.urllib.request, "urlopen", open_response)
+    client = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash")
+
+    result, usage = client.generate(
+        "waiting", {"OPAA:101": {"model": "Known Model"}}, 512)
+
+    assert result == {
+        "OPAA:101": "Known Model. waiting with quiet patience."
+    }
+    assert usage == {"input_tokens": 100, "output_tokens": 12}
+    assert captured["timeout"] == 120
+    config = captured["payload"]["generationConfig"]
+    assert "temperature" not in config
+    assert config["thinkingConfig"] == {"thinkingLevel": "MINIMAL"}
+    assert config["responseJsonSchema"] == {
+        "type": "object",
+        "properties": {"OPAA:101": {"type": "string"}},
+        "required": ["OPAA:101"],
+        "additionalProperties": False,
+        "propertyOrdering": ["OPAA:101"],
+    }
+
+
+def test_gemini_non_stop_response_reports_safe_reason_and_token_counts(
+        monkeypatch):
+    response = {
+        "candidates": [{"finishReason": "MAX_TOKENS"}],
+        "usageMetadata": {
+            "candidatesTokenCount": 20,
+            "thoughtsTokenCount": 492,
+        },
+    }
+    monkeypatch.setattr(
+        blurbs.urllib.request, "urlopen",
+        lambda _request, timeout: io.BytesIO(
+            json.dumps(response).encode("utf-8")))
+    client = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash")
+
+    with pytest.raises(
+            blurbs.BlurbError,
+            match=r"reason=MAX_TOKENS, output_tokens=20, thought_tokens=492"):
+        client.generate(
+            "in_service", {"OPAA:101": {"model": "Known Model"}}, 512)
