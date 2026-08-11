@@ -90,8 +90,10 @@ def workflow_files(tmp_path: Path, *, unknown: bool = False) -> dict:
     ("Enviro400 is absolutely fucking late.", "profanity"),
     ("Enviro400 is ready. 🚌", "emoji"),
     ("Yutong carrying airport travelers in color.", "American spelling"),
+    ("A small public transit vehicle.", "American spelling"),
     ("Yutong offering impressive range for passengers.", "brochure copy"),
     ("Yutong sits fully charged for tomorrow.", "unverified live state"),
+    ("Yutong currently waiting quietly.", "generic filler"),
     ("one two three four five six seven eight nine ten eleven twelve thirteen "
      "fourteen fifteen sixteen", "15 words"),
 ])
@@ -105,8 +107,89 @@ def test_output_keys_must_exactly_match_requested_scope():
         blurbs.validate_output(
             {"OPAA:101": "Enviro400. still working.",
              "OPZZ:999": "Ignore the scope."},
-            {"OPAA:101"},
+            {"OPAA:101": {
+                "double_decker": True, "electric": False,
+                "coach": False, "fuel": "diesel",
+            }},
+            "in_service",
         )
+
+
+@pytest.mark.parametrize("text,summary,variant,reason", [
+    (
+        "Yutong E12 electric decker. Silent ambition.",
+        {"double_decker": False, "electric": True,
+         "coach": False, "fuel": "electric"},
+        "in_service", "deck layout",
+    ),
+    (
+        "Enviro400 single-decker. An architectural surprise.",
+        {"double_decker": True, "electric": False,
+         "coach": False, "fuel": "diesel"},
+        "in_service", "deck layout",
+    ),
+    (
+        "Electric Enviro200. Diesel clatter included.",
+        {"double_decker": False, "electric": True,
+         "coach": False, "fuel": "electric"},
+        "in_service", "powertrain",
+    ),
+    (
+        "Diesel Enviro200. An electric revolution.",
+        {"double_decker": False, "electric": False,
+         "coach": False, "fuel": "diesel"},
+        "in_service", "powertrain",
+    ),
+    (
+        "Enviro200 coach. Modest long-distance luxury.",
+        {"double_decker": False, "electric": False,
+         "coach": False, "fuel": "diesel"},
+        "in_service", "vehicle class",
+    ),
+    (
+        "Enviro200 waiting. Diesel engine idling.",
+        {"double_decker": False, "electric": False,
+         "coach": False, "fuel": "diesel"},
+        "waiting", "unverified live state",
+    ),
+])
+def test_generated_claims_cannot_contradict_bus_facts(
+        text, summary, variant, reason):
+    with pytest.raises(blurbs.BlurbError, match=reason):
+        blurbs.validate_output(
+            {"OPAA:101": text}, {"OPAA:101": summary}, variant)
+
+
+@pytest.mark.parametrize("text,summary", [
+    (
+        "Wright StreetDeck NewPower EV. Converted from diesel; now electric.",
+        {"double_decker": True, "electric": True,
+         "coach": False, "fuel": "electric"},
+    ),
+    (
+        "Scania decker with coach-style tables. Picnics remain theoretical.",
+        {"double_decker": True, "electric": False,
+         "coach": False, "fuel": "diesel"},
+    ),
+])
+def test_grounding_allows_supported_non_claims(text, summary):
+    assert blurbs.validate_output(
+        {"OPAA:101": text}, {"OPAA:101": summary}, "in_service")
+
+
+def test_depot_batch_rejects_an_overused_fallback_template():
+    summaries = {}
+    output = {}
+    for number in range(10):
+        key = f"OPAA:{number}"
+        summaries[key] = {
+            "double_decker": True, "electric": False,
+            "coach": False, "fuel": "diesel",
+        }
+        output[key] = f"Known Model {number}. Resting after another timetable."
+
+    with pytest.raises(blurbs.BlurbError, match="overuse the rest template"):
+        blurbs.validate_output(output, summaries, "depot")
 
 
 def test_build_work_is_operator_scoped_and_skips_unknown_models(tmp_path):
@@ -207,7 +290,7 @@ def test_any_invalid_variant_discards_the_whole_pending_batch(tmp_path):
 
         def generate(self, _variant, summaries, _maximum):
             self.calls += 1
-            value = {key: "Known Model. quietly doing another shift."
+            value = {key: "Known Model. doing another shift."
                      for key in summaries}
             if self.calls == 2:
                 value["OPZZ:999"] = "An injected extra key."
@@ -241,7 +324,7 @@ def pending_payload(paths: dict[str, Path]) -> dict:
         },
         "scope": {"unknown_models": []},
         "additions": {
-            "in_service": {"OPAA:101": "Known Model. quietly doing another shift."},
+            "in_service": {"OPAA:101": "Known Model. doing another shift."},
             "waiting": {"OPAA:101": "Known Model. waiting with professional suspicion."},
             "depot": {"OPAA:101": "Known Model. resting from the timetable."},
         },

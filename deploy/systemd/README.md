@@ -86,9 +86,11 @@ Pending description generation retains the terse, sardonic voice already used
 by the approved public description files, with separate in-service, waiting and
 depot examples. Selection round-robins operator/model groups and caps a single
 review batch at 20 identities from one operator and 10 from one model. Strict
-validation rejects generic brochure language, US spellings and claims of an
-unsupplied live battery state. Generation still writes only a pending batch;
-review, approval and promotion remain separate attended actions.
+validation rejects generic brochure/filler language, US wording, duplicate or
+over-repeated depot templates, claims of unsupplied momentary state, and deck,
+vehicle-class or powertrain claims that contradict the scoped fleet facts.
+Generation still writes only a pending batch; review, approval and promotion
+remain separate attended actions.
 
 Stop localities use a stricter three-step chain. After a successful timetable
 promotion check, `bbb-locality-refresh.service` builds a shadow candidate from

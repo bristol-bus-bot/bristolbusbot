@@ -80,7 +80,8 @@ _PROFANITY = re.compile(
     r"bastard|bollocks|twat)\b", re.IGNORECASE)
 _AMERICAN_SPELLING = re.compile(
     r"\b(?:color|colors|colored|favorite|favorites|neighbor|neighbors|"
-    r"traveler|travelers|traveling|center|centers)\b", re.IGNORECASE)
+    r"traveler|travelers|traveling|center|centers|"
+    r"public transit|mass transit)\b", re.IGNORECASE)
 _BROCHURE_COPY = re.compile(
     r"\b(?:boasts?|boasting|offers?|offering|provides?|providing|"
     r"features?|featuring|utili[sz](?:e|es|ed|ing)|"
@@ -88,6 +89,30 @@ _BROCHURE_COPY = re.compile(
 _UNVERIFIED_STATE = re.compile(
     r"\b(?:fully charged|full battery|battery fully charged|"
     r"holding (?:its )?(?:full|potential) range)\b", re.IGNORECASE)
+_GENERIC_FILLER = re.compile(
+    r"\b(?:quietly|peacefully|gently|presently|currently|thoroughly)\b",
+    re.IGNORECASE)
+_DOUBLE_DECKER_CLAIM = re.compile(
+    r"\b(?:double[- ]deck(?:er)?|decker)\b", re.IGNORECASE)
+_SINGLE_DECKER_CLAIM = re.compile(
+    r"\b(?:single[- ]deck(?:er)?|midibus|minibus)\b", re.IGNORECASE)
+_ELECTRIC_CLAIM = re.compile(
+    r"\b(?:battery[- ]electric|electric|zero[- ]emission|EV)\b",
+    re.IGNORECASE)
+_DIESEL_CLAIM = re.compile(r"\bdiesel\b", re.IGNORECASE)
+_DIESEL_CONVERSION = re.compile(
+    r"\b(?:converted|repowered|former(?:ly)?|once)\b[^.]{0,50}\bdiesel\b|"
+    r"\bdiesel\b[^.]{0,50}\b(?:converted|repowered)\b", re.IGNORECASE)
+_COACH_CLAIM = re.compile(r"\bcoach(?:es)?\b(?!-)", re.IGNORECASE)
+_WAITING_LIVE_STATE = re.compile(
+    r"\b(?:idl(?:e|es|ed|ing)|engine (?:is )?running|"
+    r"(?:luggage )?doors? (?:are )?open)\b", re.IGNORECASE)
+_DEPOT_POSTURES = {
+    "rest": re.compile(r"\brest(?:s|ed|ing)?\b", re.IGNORECASE),
+    "sleep": re.compile(r"\bsleep(?:s|ing)?\b", re.IGNORECASE),
+    "hide": re.compile(r"\b(?:hide|hides|hiding)\b", re.IGNORECASE),
+    "sulk": re.compile(r"\bsulk(?:s|ed|ing)?\b", re.IGNORECASE),
+}
 _SAFE_OPERATOR = re.compile(r"^[A-Z0-9]{2,12}$")
 _SAFE_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ /-]{0,39}$")
 
@@ -247,19 +272,71 @@ def validate_text(value: object) -> str:
         raise BlurbError("generated description sounds like brochure copy")
     if _UNVERIFIED_STATE.search(value):
         raise BlurbError("generated description claims an unverified live state")
+    if _GENERIC_FILLER.search(value):
+        raise BlurbError("generated description uses generic filler")
     return value
 
 
-def validate_output(value: object, requested: set[str]) -> dict[str, str]:
+def validate_grounding(value: str, summary: Mapping[str, object],
+                       variant: str) -> None:
+    if variant not in VARIANTS:
+        raise BlurbError("unknown description variant")
+    double_decker = summary.get("double_decker")
+    electric = summary.get("electric")
+    coach = summary.get("coach")
+    fuel = summary.get("fuel")
+    if not isinstance(double_decker, bool) or not isinstance(electric, bool) \
+            or not isinstance(coach, bool) or not isinstance(fuel, str):
+        raise BlurbError("bus summary has an unsafe factual shape")
+
+    if not double_decker and _DOUBLE_DECKER_CLAIM.search(value):
+        raise BlurbError("generated description contradicts the deck layout")
+    if double_decker and _SINGLE_DECKER_CLAIM.search(value):
+        raise BlurbError("generated description contradicts the deck layout")
+    if not coach and _COACH_CLAIM.search(value):
+        raise BlurbError("generated description contradicts the vehicle class")
+
+    fuel = fuel.casefold()
+    if electric and _DIESEL_CLAIM.search(value) \
+            and not _DIESEL_CONVERSION.search(value):
+        raise BlurbError("generated description contradicts the powertrain")
+    if not electric and fuel in {"diesel", "gas", "biogas", "cng"} \
+            and _ELECTRIC_CLAIM.search(value):
+        raise BlurbError("generated description contradicts the powertrain")
+    if variant == "waiting" and _WAITING_LIVE_STATE.search(value):
+        raise BlurbError("generated description claims an unverified live state")
+
+
+def validate_batch_variety(values: Mapping[str, str], variant: str) -> None:
+    if len(set(values.values())) != len(values):
+        raise BlurbError("generated descriptions contain duplicate lines")
+    if variant != "depot" or len(values) < 10:
+        return
+    maximum = max(2, (len(values) + 4) // 5)
+    for label, pattern in _DEPOT_POSTURES.items():
+        count = sum(bool(pattern.search(value)) for value in values.values())
+        if count > maximum:
+            raise BlurbError(
+                f"generated depot descriptions overuse the {label} template")
+
+
+def validate_output(value: object,
+                    summaries: Mapping[str, Mapping[str, object]],
+                    variant: str) -> dict[str, str]:
     if not isinstance(value, dict):
         raise BlurbError("Gemini response is not a JSON object")
+    requested = set(summaries)
     keys = set(map(str, value))
     if keys != requested:
         missing = sorted(requested - keys)[:3]
         extra = sorted(keys - requested)[:3]
         raise BlurbError(
             f"Gemini returned unexpected keys (missing={missing}, extra={extra})")
-    return {key: validate_text(value[key]) for key in sorted(requested)}
+    cleaned = {key: validate_text(value[key]) for key in sorted(requested)}
+    for key, text in cleaned.items():
+        validate_grounding(text, summaries[key], variant)
+    validate_batch_variety(cleaned, variant)
+    return cleaned
 
 
 def load_contexts(path: Path = MODEL_CONTEXT) -> dict[str, str]:
@@ -451,7 +528,9 @@ Rules:
 - Do not invent technical, route, passenger, delay, battery or destination facts
   beyond model_context, BUS_DATA and the stated map status.
 - No URLs, handles, hashtags, HTML, emoji or profanity.
-- Use British spelling. Never write travelers, color, center or similar US forms.
+- Use British English. Never write travelers, color, center, public transit or
+  similar US forms; say public transport.
+- Do not use generic filler such as quietly, peacefully, gently or currently.
 - Vary the angle across the batch. Do not repeat the same fact-and-adjective
   template for vehicles of the same model.
 - Return exactly one JSON string value for every requested scoped key.
@@ -472,9 +551,9 @@ Approved voice anchors (match the rhythm, never copy them):
 """,
     "waiting": """The bus is waiting at its first stop before departure. Use the
 almost-time moment: clock-watching, a grumbling diesel, electric silence, the
-queue or the indignity of a coach at a bus stop. Doors-open and idling language
-may be comic scene-setting, not claimed telemetry. Do not invent a stand, route,
-destination, battery level, actual passenger action or actual lateness.
+queue or the indignity of a coach at a bus stop. Do not claim that doors are
+open, an engine is idling or any other momentary telemetry. Do not invent a
+stand, route, destination, battery level, actual passenger action or lateness.
 
 Approved voice anchors (match the rhythm, never copy them):
 - Electric decker. Hum of the cooling fans the only sound.
@@ -485,6 +564,8 @@ Approved voice anchors (match the rhythm, never copy them):
 resting, hiding, sulking, looming or drinking electrons are allowed
 personification. Electric charging jokes are fine; never claim a full battery,
 an exact charge state, the next duty or a depot that BUS_DATA did not supply.
+Across a batch, do not use any one of resting, sleeping, hiding or sulking for
+more than one fifth of the buses.
 
 Approved voice anchors (match the rhythm, never copy them):
 - Plugged in at the fancy new depot. La-di-da.
@@ -734,7 +815,7 @@ def generate_pending(*, fleet_path: Path = FLEET,
             try:
                 raw, usage = client.generate(
                     variant, summaries, reserved_output)
-                additions[variant] = validate_output(raw, set(summaries))
+                additions[variant] = validate_output(raw, summaries, variant)
                 ledger.settle(
                     event_id, status="success",
                     input_tokens=usage["input_tokens"],
