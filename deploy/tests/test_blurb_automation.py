@@ -119,6 +119,24 @@ def test_build_work_is_operator_scoped_and_skips_unknown_models(tmp_path):
         assert len(request["OPAA:101"]["branding"]) <= 80
 
 
+def test_curated_context_covers_first_commissioning_model_gaps():
+    contexts = blurbs.load_contexts(
+        Path(__file__).resolve().parents[2] / "pipeline" / "model-context.json")
+    expected = {
+        "ADL Enviro200EV", "ADL/TransBus Enviro300", "Ayats Bravo 1R City",
+        "Mercedes-Benz Sprinter City 45", "Optare Solo",
+        "Scania K230UB ADL Enviro300", "Scania K410EB6 Caetano Levante 3",
+        "Scania N230UD ADL Enviro400", "VDL Futura FHD2",
+        "VDL SDD141 Synergy", "Van Hool TD921 Altano",
+        "Van Hool TDX25 Astromega", "Volvo B11R Jonckheere JHV2",
+        "Volvo B11RLET Plaxton Panorama", "Volvo B5TL UNVI Urbis 2.5 DD",
+        "Volvo B9TL Optare Visionaire", "Volvo B9TL UNVI Urbis 2.5 DD",
+        "Yutong E10",
+    }
+
+    assert expected <= contexts.keys()
+
+
 def test_missing_scope_fails_closed(tmp_path):
     paths = workflow_files(tmp_path)
     sqlite3.connect(paths["live_db"]).execute("DELETE FROM vehicles").connection.commit()
