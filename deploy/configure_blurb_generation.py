@@ -13,7 +13,7 @@ from pathlib import Path
 BOT_ENV = Path("/etc/bristolbusbot/bot.env")
 BLURB_ENV = Path("/etc/bristolbusbot/blurb.env")
 SAFE_MODEL = re.compile(r"^[A-Za-z0-9._-]{3,80}$")
-SAFE_KEY = re.compile(r"^[A-Za-z0-9_-]{20,200}$")
+SAFE_KEY = re.compile(r"^[A-Za-z0-9._-]{20,200}$")
 
 
 class ConfigError(RuntimeError):
