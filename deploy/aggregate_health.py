@@ -57,6 +57,7 @@ JOB_MAX_AGE_HOURS = {
     "staleness": 2,
     "digest": 14,
     "data-health": 30,
+    "collector-anomaly": 30,
 }
 TIMETABLE_DELIVERY_STATE = Path(
     "/var/lib/bristolbusbot/timetable-shadow/state.json")

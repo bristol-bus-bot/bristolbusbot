@@ -85,7 +85,7 @@ done
     "$stage/timetable_service_profile.py" \
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
-    "$stage/data_health.py" \
+    "$stage/data_health.py" "$stage/collector_anomaly_report.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
     "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
@@ -127,6 +127,7 @@ for destination in \
     /usr/local/libexec/bbb-aggregate-health \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/libexec/bbb-data-health \
+    /usr/local/libexec/bbb-collector-anomaly \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/bin/bbb-blurb-review \
     /usr/local/sbin/bbb-configure-blurb-generation \
@@ -347,6 +348,7 @@ install -o root -g root -m 0755 "$stage/run_recorded_job.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/bbb-aggregate-health
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
 install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
+install -o root -g root -m 0755 "$stage/collector_anomaly_report.py" /usr/local/libexec/bbb-collector-anomaly
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
 install -o root -g root -m 0755 "$stage/blurb_review.sh" /usr/local/bin/bbb-blurb-review
 install -o root -g root -m 0755 "$stage/configure_blurb_generation.py" /usr/local/sbin/bbb-configure-blurb-generation
@@ -432,6 +434,8 @@ fi
 
 /usr/bin/systemctl enable --now bbb-editorial-refresh.timer
 /usr/bin/systemctl enable --now bbb-data-health.timer
+/usr/bin/systemctl start bbb-collector-anomaly.service
+/usr/bin/systemctl enable --now bbb-collector-anomaly.timer
 for timer in "$stage/systemd"/*.timer; do
     timer_name=$(basename "$timer")
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \
