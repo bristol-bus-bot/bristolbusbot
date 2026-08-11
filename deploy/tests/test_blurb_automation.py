@@ -89,6 +89,9 @@ def workflow_files(tmp_path: Path, *, unknown: bool = False) -> dict:
     ("<b>Enviro400</b> at the depot.", "HTML"),
     ("Enviro400 is absolutely fucking late.", "profanity"),
     ("Enviro400 is ready. 🚌", "emoji"),
+    ("Yutong carrying airport travelers in color.", "American spelling"),
+    ("Yutong offering impressive range for passengers.", "brochure copy"),
+    ("Yutong sits fully charged for tomorrow.", "unverified live state"),
     ("one two three four five six seven eight nine ten eleven twelve thirteen "
      "fourteen fifteen sixteen", "15 words"),
 ])
@@ -118,6 +121,53 @@ def test_build_work_is_operator_scoped_and_skips_unknown_models(tmp_path):
         assert set(request) == {"OPAA:101"}
         assert "\n" not in request["OPAA:101"]["branding"]
         assert len(request["OPAA:101"]["branding"]) <= 80
+
+
+def test_batch_selection_round_robins_models_and_operators():
+    scoped = {}
+    eligible = []
+    for operator in ("OPAA", "OPBB", "OPCC"):
+        for model_number in range(15):
+            model = f"Model {model_number:02d}"
+            for vehicle_number in range(2):
+                code = f"{model_number:02d}{vehicle_number}"
+                key = f"{operator}:{code}"
+                scoped[key] = fleet_record(operator, code, model)
+                eligible.append(key)
+
+    selected = blurbs._select_diverse(sorted(eligible), scoped, 40)
+
+    assert len(selected) == 40
+    operator_counts = {}
+    model_counts = {}
+    for key in selected:
+        operator = key.split(":", 1)[0]
+        model = scoped[key]["vehicle_type"]["name"]
+        operator_counts[operator] = operator_counts.get(operator, 0) + 1
+        model_counts[model] = model_counts.get(model, 0) + 1
+    assert max(operator_counts.values()) <= blurbs.MAX_IDENTITIES_PER_OPERATOR
+    assert max(model_counts.values()) <= blurbs.MAX_IDENTITIES_PER_MODEL
+    assert len(model_counts) == 15
+
+
+def test_batch_selection_stops_at_diversity_caps():
+    one_operator = {}
+    for number in range(50):
+        key = f"OPAA:{number}"
+        one_operator[key] = fleet_record(
+            "OPAA", str(number), f"Model {number % 20}")
+    assert len(blurbs._select_diverse(
+        sorted(one_operator), one_operator, 40)) == 20
+
+    one_model = {}
+    for operator_number in range(5):
+        operator = f"OP{operator_number:02d}"
+        for number in range(10):
+            key = f"{operator}:{number}"
+            one_model[key] = fleet_record(
+                operator, str(number), "One Repeated Model")
+    assert len(blurbs._select_diverse(
+        sorted(one_model), one_model, 40)) == 10
 
 
 def test_curated_context_covers_first_commissioning_model_gaps():
@@ -327,6 +377,9 @@ def test_gemini_3_request_uses_minimal_thinking_and_exact_json_schema(
     }
     assert usage == {"input_tokens": 100, "output_tokens": 12}
     assert captured["timeout"] == 120
+    instruction = captured["payload"]["system_instruction"]["parts"][0]["text"]
+    assert "cold fury underneath" in instruction
+    assert "Electric decker. Hum of the cooling fans" in instruction
     config = captured["payload"]["generationConfig"]
     assert "temperature" not in config
     assert config["thinkingConfig"] == {"thinkingLevel": "MINIMAL"}
