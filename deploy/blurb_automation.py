@@ -332,10 +332,21 @@ def validate_output(value: object,
         extra = sorted(keys - requested)[:3]
         raise BlurbError(
             f"Gemini returned unexpected keys (missing={missing}, extra={extra})")
-    cleaned = {key: validate_text(value[key]) for key in sorted(requested)}
-    for key, text in cleaned.items():
-        validate_grounding(text, summaries[key], variant)
-    validate_batch_variety(cleaned, variant)
+    cleaned: dict[str, str] = {}
+    for key in sorted(requested):
+        try:
+            text = validate_text(value[key])
+            validate_grounding(text, summaries[key], variant)
+        except BlurbError as exc:
+            # Scoped fleet keys are safe operational identifiers.  Include the
+            # failing key and variant, but never echo generated text into logs.
+            raise BlurbError(
+                f"{variant} description for {key} rejected: {exc}") from exc
+        cleaned[key] = text
+    try:
+        validate_batch_variety(cleaned, variant)
+    except BlurbError as exc:
+        raise BlurbError(f"{variant} batch rejected: {exc}") from exc
     return cleaned
 
 
@@ -815,14 +826,24 @@ def generate_pending(*, fleet_path: Path = FLEET,
             try:
                 raw, usage = client.generate(
                     variant, summaries, reserved_output)
-                additions[variant] = validate_output(raw, summaries, variant)
-                ledger.settle(
-                    event_id, status="success",
-                    input_tokens=usage["input_tokens"],
-                    output_tokens=usage["output_tokens"])
             except Exception:
                 ledger.settle(event_id, status="failed")
                 raise
+            try:
+                additions[variant] = validate_output(raw, summaries, variant)
+            except Exception:
+                # The API call completed and is billable even if local policy
+                # rejects its output.  Preserve exact usage without preserving
+                # or logging the rejected generated text.
+                ledger.settle(
+                    event_id, status="rejected",
+                    input_tokens=usage["input_tokens"],
+                    output_tokens=usage["output_tokens"])
+                raise
+            ledger.settle(
+                event_id, status="success",
+                input_tokens=usage["input_tokens"],
+                output_tokens=usage["output_tokens"])
     except Exception:
         # No pending file exists until every variant in the batch succeeds.
         pending_path.unlink(missing_ok=True)
