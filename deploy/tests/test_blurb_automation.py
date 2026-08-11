@@ -527,6 +527,61 @@ def test_changed_pending_bytes_invalidate_attended_approval(
         )
 
 
+def test_human_rejection_archives_original_and_keeps_other_lines(tmp_path):
+    descriptions = {
+        variant: tmp_path / f"{variant}.json" for variant in blurbs.VARIANTS
+    }
+    for path in descriptions.values():
+        write_json(path, {"999": "An existing approved description."})
+    pending = tmp_path / "pending.json"
+    approval = tmp_path / "approval.json"
+    history = tmp_path / "history"
+    payload = pending_payload(descriptions)
+    write_json(pending, payload)
+    original = pending.read_bytes()
+    write_json(approval, {"stale": True})
+
+    updated, archived = blurbs.reject_pending_lines(
+        ["waiting:OPAA:101"], pending_path=pending,
+        approval_path=approval, history=history)
+
+    assert archived.read_bytes() == original
+    assert not approval.exists()
+    assert updated["additions"]["waiting"] == {}
+    assert updated["additions"]["in_service"]
+    assert updated["additions"]["depot"]
+    assert updated["rejections"] == [{
+        "variant": "waiting",
+        "key": "OPAA:101",
+        "reason": "generated description rejected by human review",
+    }]
+    assert json.loads(pending.read_text()) == updated
+
+
+def test_human_rejection_refuses_unknown_or_last_line(tmp_path):
+    descriptions = {
+        variant: tmp_path / f"{variant}.json" for variant in blurbs.VARIANTS
+    }
+    for path in descriptions.values():
+        write_json(path, {"999": "An existing approved description."})
+    pending = tmp_path / "pending.json"
+    payload = pending_payload(descriptions)
+    payload["additions"]["waiting"] = {}
+    payload["additions"]["depot"] = {}
+    write_json(pending, payload)
+
+    with pytest.raises(blurbs.BlurbError, match="has no waiting line"):
+        blurbs.reject_pending_lines(
+            ["waiting:OPAA:101"], pending_path=pending,
+            approval_path=tmp_path / "approval.json",
+            history=tmp_path / "history")
+    with pytest.raises(blurbs.BlurbError, match="pending batch is empty"):
+        blurbs.reject_pending_lines(
+            ["in_service:OPAA:101"], pending_path=pending,
+            approval_path=tmp_path / "approval.json",
+            history=tmp_path / "history")
+
+
 def test_promotion_refuses_non_root_even_with_valid_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(blurbs, "_running_as_root", lambda: False)
 
