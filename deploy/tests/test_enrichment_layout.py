@@ -98,6 +98,67 @@ def test_multiple_sources_seed_one_durable_contract(tmp_path):
         enrichment_layout.SPECS)
 
 
+def test_reviewed_model_context_sync_is_append_only_and_atomic(tmp_path):
+    source = tmp_path / "source"
+    destination = tmp_path / "durable"
+    source.mkdir()
+    destination.mkdir()
+    live = {"Known model": "existing context remains exactly unchanged"}
+    candidate = {
+        **live,
+        "New model": "new reviewed context is added through the installer",
+    }
+    (destination / "model-context.json").write_text(
+        json.dumps(live), encoding="utf-8")
+    (source / "model-context.json").write_text(
+        json.dumps(candidate), encoding="utf-8")
+
+    result = enrichment_layout.sync_model_context(
+        source, destination,
+        uid=os.getuid() if hasattr(os, "getuid") else 0,
+        gid=os.getgid() if hasattr(os, "getgid") else 0,
+    )
+
+    assert result == "updated"
+    assert json.loads((destination / "model-context.json").read_text()) \
+        == candidate
+    assert not list(destination.glob(".*.migration"))
+
+
+def test_model_context_sync_rejects_removal_or_broad_correction(tmp_path):
+    source = tmp_path / "source"
+    destination = tmp_path / "durable"
+    source.mkdir()
+    destination.mkdir()
+    live = {
+        f"Model {index}": f"existing reviewed context number {index:02d} stays safe"
+        for index in range(22)
+    }
+    target = destination / "model-context.json"
+    target.write_text(json.dumps(live), encoding="utf-8")
+    candidate = dict(live)
+    candidate.pop("Model 0")
+    (source / "model-context.json").write_text(
+        json.dumps(candidate), encoding="utf-8")
+
+    with pytest.raises(enrichment_layout.EnrichmentLayoutError,
+                       match="would remove"):
+        enrichment_layout.sync_model_context(
+            source, destination, uid=0, gid=0)
+
+    candidate = {
+        key: f"corrected reviewed context number {index:02d} remains safe"
+        for index, key in enumerate(live)
+    }
+    (source / "model-context.json").write_text(
+        json.dumps(candidate), encoding="utf-8")
+    with pytest.raises(enrichment_layout.EnrichmentLayoutError,
+                       match="too many existing entries"):
+        enrichment_layout.sync_model_context(
+            source, destination, uid=0, gid=0)
+    assert json.loads(target.read_text()) == live
+
+
 @pytest.mark.skipif(os.name == "nt", reason="creating symlinks needs Windows privilege")
 def test_existing_symlink_is_rejected(tmp_path):
     source = tmp_path / "source"
