@@ -26,6 +26,27 @@ def test_data_health_findings_remain_report_only(tmp_path, monkeypatch):
     assert issues == []
 
 
+def test_collector_anomaly_findings_reach_aggregate_without_opening_incident(
+        tmp_path, monkeypatch):
+    report = tmp_path / "collector-anomaly.json"
+    report.write_text(json.dumps({
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "read_only_report",
+        "status": "attention",
+        "coverage": {"observations": 65799},
+        "detectors": {"extreme_delays": {"count": 1099}},
+    }), encoding="utf-8")
+    monkeypatch.setattr(
+        aggregate_health, "COLLECTOR_ANOMALY_REPORT", report)
+
+    result, issues = aggregate_health.collector_anomaly_check()
+
+    assert result["status"] == "attention"
+    assert result["coverage"]["observations"] == 65799
+    assert issues == []
+
+
 def test_fleet_automation_health_collapses_three_safe_steps_into_one_result(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"
