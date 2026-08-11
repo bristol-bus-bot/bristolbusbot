@@ -134,6 +134,60 @@ def test_output_rejection_names_variant_and_key_without_echoing_text():
     assert generated not in str(exc.value)
 
 
+def test_filter_valid_output_keeps_good_lines_and_drops_bad_line():
+    summaries = {
+        "OPAA:101": {
+            "double_decker": False, "electric": True,
+            "coach": False, "fuel": "electric",
+        },
+        "OPBB:202": {
+            "double_decker": False, "electric": True,
+            "coach": False, "fuel": "electric",
+        },
+    }
+
+    accepted, rejected = blurbs.filter_valid_output(
+        {
+            "OPAA:101": "Yutong E12. Bristol traffic remains undefeated.",
+            "OPBB:202": "Yutong offering impressive range for passengers.",
+        },
+        summaries,
+        "in_service",
+    )
+
+    assert accepted == {
+        "OPAA:101": "Yutong E12. Bristol traffic remains undefeated."
+    }
+    assert rejected == {
+        "OPBB:202": "generated description sounds like brochure copy"
+    }
+
+
+def test_filter_valid_output_drops_duplicates_and_depot_repetition():
+    summaries = {
+        f"OPAA:{number}": {
+            "double_decker": True, "electric": False,
+            "coach": False, "fuel": "diesel",
+        }
+        for number in range(12)
+    }
+    output = {
+        key: f"Known Model {number}. Resting after another timetable."
+        for number, key in enumerate(summaries)
+    }
+    output["OPAA:1"] = output["OPAA:0"]
+
+    accepted, rejected = blurbs.filter_valid_output(
+        output, summaries, "depot")
+
+    assert len(accepted) == 2
+    assert len(rejected) == 10
+    assert rejected["OPAA:1"] == (
+        "generated description duplicates another line")
+    assert sum("overuse the rest template" in reason
+               for reason in rejected.values()) == 9
+
+
 @pytest.mark.parametrize("text,summary,variant,reason", [
     (
         "Yutong E12 electric decker. Silent ambition.",
@@ -298,7 +352,7 @@ def test_missing_scope_fails_closed(tmp_path):
         blurbs.build_work(**paths)
 
 
-def test_any_invalid_variant_discards_the_whole_pending_batch(tmp_path):
+def test_structurally_invalid_variant_discards_the_whole_pending_batch(tmp_path):
     paths = workflow_files(tmp_path)
     pending = tmp_path / "pending.json"
     ledger = tmp_path / "usage.json"
@@ -327,6 +381,58 @@ def test_any_invalid_variant_discards_the_whole_pending_batch(tmp_path):
     assert [event["status"] for event in events] == ["success", "rejected"]
     assert events[1]["actual_input_tokens"] == 10
     assert events[1]["actual_output_tokens"] == 5
+
+
+def test_invalid_line_is_dropped_without_losing_other_variant_lines(tmp_path):
+    paths = workflow_files(tmp_path)
+    pending = tmp_path / "pending.json"
+    ledger = tmp_path / "usage.json"
+
+    class Client:
+        model = "test-model"
+        calls = 0
+
+        def generate(self, _variant, summaries, _maximum):
+            self.calls += 1
+            if self.calls == 2:
+                value = {
+                    key: "Known Model offering impressive passenger comfort."
+                    for key in summaries
+                }
+            else:
+                value = {
+                    key: "Known Model. doing another shift."
+                    for key in summaries
+                }
+            return value, {"input_tokens": 10, "output_tokens": 5}
+
+    result = blurbs.generate_pending(
+        **paths, pending_path=pending, ledger_path=ledger,
+        limits=blurbs.Limits(40, 3, 50000, 12000, 18, 300000, 75000),
+        client=Client(),
+    )
+
+    assert pending.exists()
+    assert result["additions"]["in_service"] == {
+        "OPAA:101": "Known Model. doing another shift."
+    }
+    assert result["additions"]["waiting"] == {}
+    assert result["additions"]["depot"] == {
+        "OPAA:101": "Known Model. doing another shift."
+    }
+    assert result["rejections"] == [{
+        "variant": "waiting",
+        "key": "OPAA:101",
+        "reason": "generated description sounds like brochure copy",
+    }]
+    events = json.loads(ledger.read_text())["events"]
+    assert [event["status"] for event in events] == [
+        "success", "rejected", "success"]
+    assert all(event["actual_input_tokens"] == 10 for event in events)
+    assert all(event["actual_output_tokens"] == 5 for event in events)
+    review = blurbs.show_pending(pending)
+    assert "1 bus(es), 2 new lines" in review
+    assert "Dropped 1 invalid generated line(s)" in review
 
 
 def pending_payload(paths: dict[str, Path]) -> dict:

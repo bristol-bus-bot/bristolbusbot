@@ -326,7 +326,7 @@ def validate_output(value: object,
     if not isinstance(value, dict):
         raise BlurbError("Gemini response is not a JSON object")
     requested = set(summaries)
-    keys = set(map(str, value))
+    keys = set(value) if all(isinstance(key, str) for key in value) else set()
     if keys != requested:
         missing = sorted(requested - keys)[:3]
         extra = sorted(keys - requested)[:3]
@@ -348,6 +348,66 @@ def validate_output(value: object,
     except BlurbError as exc:
         raise BlurbError(f"{variant} batch rejected: {exc}") from exc
     return cleaned
+
+
+def filter_valid_output(
+        value: object,
+        summaries: Mapping[str, Mapping[str, object]],
+        variant: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Keep independently valid lines while reporting safe rejection reasons.
+
+    A malformed response contract still fails the complete request.  Once the
+    exact requested key set is established, one bad sentence cannot make the
+    other independently validated sentences disappear.
+    """
+    if not isinstance(value, dict):
+        raise BlurbError("Gemini response is not a JSON object")
+    requested = set(summaries)
+    keys = set(value) if all(isinstance(key, str) for key in value) else set()
+    if keys != requested:
+        missing = sorted(requested - keys)[:3]
+        extra = sorted(keys - requested)[:3]
+        raise BlurbError(
+            f"Gemini returned unexpected keys (missing={missing}, extra={extra})")
+
+    accepted: dict[str, str] = {}
+    rejected: dict[str, str] = {}
+    for key in sorted(requested):
+        try:
+            text = validate_text(value[key])
+            validate_grounding(text, summaries[key], variant)
+        except BlurbError as exc:
+            rejected[key] = str(exc)
+            continue
+        accepted[key] = text
+
+    seen: dict[str, str] = {}
+    for key in sorted(tuple(accepted)):
+        text = accepted[key]
+        if text in seen:
+            rejected[key] = "generated description duplicates another line"
+            del accepted[key]
+        else:
+            seen[text] = key
+
+    # The strict rule always permits at least two uses of each fallback.  Keep
+    # the first two sorted examples and drop later repetitions; that remains
+    # valid even after other rejected lines make the accepted subset smaller.
+    if variant == "depot" and len(accepted) >= 10:
+        for label, pattern in _DEPOT_POSTURES.items():
+            matching = [
+                key for key in sorted(accepted)
+                if pattern.search(accepted[key])
+            ]
+            for key in matching[2:]:
+                rejected[key] = (
+                    f"generated depot descriptions overuse the {label} template")
+                del accepted[key]
+
+    # This is an internal assertion over text which has already passed every
+    # individual validator and the deterministic de-duplication above.
+    validate_batch_variety(accepted, variant)
+    return accepted, rejected
 
 
 def load_contexts(path: Path = MODEL_CONTEXT) -> dict[str, str]:
@@ -810,6 +870,7 @@ def generate_pending(*, fleet_path: Path = FLEET,
     ledger = UsageLedger(ledger_path, limits)
     run_usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
     additions: dict[str, dict[str, str]] = {variant: {} for variant in VARIANTS}
+    rejections: list[dict[str, str]] = []
     try:
         for variant, summaries in work["requests"].items():
             if not summaries:
@@ -830,7 +891,8 @@ def generate_pending(*, fleet_path: Path = FLEET,
                 ledger.settle(event_id, status="failed")
                 raise
             try:
-                additions[variant] = validate_output(raw, summaries, variant)
+                accepted, rejected = filter_valid_output(
+                    raw, summaries, variant)
             except Exception:
                 # The API call completed and is billable even if local policy
                 # rejects its output.  Preserve exact usage without preserving
@@ -840,8 +902,16 @@ def generate_pending(*, fleet_path: Path = FLEET,
                     input_tokens=usage["input_tokens"],
                     output_tokens=usage["output_tokens"])
                 raise
+            additions[variant] = accepted
+            rejections.extend({
+                "variant": variant,
+                "key": key,
+                "reason": reason,
+            } for key, reason in sorted(rejected.items()))
             ledger.settle(
-                event_id, status="success",
+                event_id,
+                status=("success" if not rejected else
+                        "partial" if accepted else "rejected"),
                 input_tokens=usage["input_tokens"],
                 output_tokens=usage["output_tokens"])
     except Exception:
@@ -872,6 +942,7 @@ def generate_pending(*, fleet_path: Path = FLEET,
             "unknown_models": work["unknown_models"],
         },
         "additions": additions,
+        "rejections": rejections,
         "usage": ledger.current_month(),
     }
     validate_pending(batch)
@@ -913,6 +984,25 @@ def validate_pending(payload: object) -> dict:
             all_keys.add(key)
     if not all_keys:
         raise BlurbError("pending batch is empty")
+    rejections = payload.get("rejections", [])
+    if not isinstance(rejections, list) or len(rejections) > 120:
+        raise BlurbError("pending rejection summary is invalid")
+    for item in rejections:
+        if not isinstance(item, dict) or set(item) != {
+                "variant", "key", "reason"}:
+            raise BlurbError("pending rejection entry is invalid")
+        variant = item.get("variant")
+        key = item.get("key")
+        reason = item.get("reason")
+        if variant not in VARIANTS or not isinstance(key, str) or ":" not in key:
+            raise BlurbError("pending rejection identity is invalid")
+        operator, code = key.split(":", 1)
+        if not _SAFE_OPERATOR.fullmatch(operator) \
+                or not _SAFE_CODE.fullmatch(code):
+            raise BlurbError("pending rejection key is unsafe")
+        if not isinstance(reason, str) or not reason.startswith("generated ") \
+                or len(reason) > 180 or _CONTROL.search(reason):
+            raise BlurbError("pending rejection reason is unsafe")
     return payload
 
 
@@ -935,6 +1025,17 @@ def show_pending(path: Path = PENDING) -> str:
     unknown = payload.get("scope", {}).get("unknown_models", [])
     if unknown:
         lines.append(f"Skipped models needing human context: {', '.join(unknown)}")
+    rejections = payload.get("rejections", [])
+    if rejections:
+        lines.extend((
+            "",
+            f"Dropped {len(rejections)} invalid generated line(s); "
+            "they are not part of this review batch:",
+        ))
+        for item in rejections:
+            lines.append(
+                f"  {item['variant'].replace('_', ' ')} {item['key']}: "
+                f"{item['reason']}")
     lines.extend((
         "To accept this exact batch:",
         "  bbb-blurb-review approve",
@@ -1138,8 +1239,10 @@ def main(argv: list[str] | None = None) -> int:
             result = generate_pending()
             count = len(set().union(*(
                 set(values) for values in result["additions"].values())))
+            rejected = len(result.get("rejections", []))
             print(f"pending blurb batch {result['batch_id']}: "
-                  f"{count} bus(es) need human review")
+                  f"{count} bus(es) need human review; "
+                  f"{rejected} invalid line(s) dropped")
         elif args.command == "show":
             print(show_pending())
         elif args.command == "approve":
