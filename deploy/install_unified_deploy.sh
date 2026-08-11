@@ -51,6 +51,28 @@ bootstrap_link site "$remote_home/bbb-site"
 bootstrap_link bot "$remote_home/bbb-bot"
 bootstrap_link pipeline "$remote_home/bus-audit"
 
+resolve_migration_source() {
+    link=$1
+    component=$2
+    legacy=$3
+    resolved=$(/usr/bin/readlink -f "$link")
+    test -n "$resolved"
+    test -d "$resolved"
+    case "$resolved" in
+        "$releases/$component/"*|"$legacy") ;;
+        *)
+            echo "unsafe migration source target: $link -> $resolved" >&2
+            exit 1
+            ;;
+    esac
+    printf '%s\n' "$resolved"
+}
+
+bot_migration_source=$(resolve_migration_source \
+    "$current/bot" bot "$remote_home/bbb-bot")
+site_migration_source=$(resolve_migration_source \
+    "$current/site" site "$remote_home/bbb-site")
+
 for component in collector site bot pipeline tunnel; do
     /usr/bin/python3 "$stage/validate_production_config.py" "$component"
 done
@@ -377,8 +399,8 @@ done
 /usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/bristolbusbot.conf
 install -o "$deploy_user" -g "$deploy_user" -m 0750 -d "$enrichment_dir/incoming"
 /usr/local/libexec/bbb-enrichment-layout migrate \
-    --source "$current/bot" \
-    --source "$current/site" \
+    --source "$bot_migration_source" \
+    --source "$site_migration_source" \
     --source "$stage" \
     --destination "$enrichment_dir" \
     --backup-config /etc/bristolbusbot/backup.json \
