@@ -471,6 +471,17 @@ def test_blurb_generation_is_bounded_pending_only_and_human_promoted():
     assert not (SYSTEMD / "bbb-blurb-promote.timer").exists()
 
 
+def test_blurb_enable_revalidates_or_seeds_configuration_first():
+    control = (SYSTEMD.parent / "deploy_control.sh").read_text(encoding="utf-8")
+    section = control.split("blurb-auto-enable:)", 1)[1].split(
+        "blurb-auto-disable:)", 1)[0]
+
+    configure = section.index("bbb-configure-blurb-generation")
+    require_env = section.index("test -f /etc/bristolbusbot/blurb.env")
+    enable_timer = section.index("systemctl enable --now bbb-blurb-generate.timer")
+    assert configure < require_env < enable_timer
+
+
 def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     for name in (
         "bbb-backup.service",

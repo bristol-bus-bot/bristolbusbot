@@ -33,7 +33,12 @@ def values(path: Path) -> dict[str, str]:
         key = key.strip()
         if key in result:
             raise ConfigError(f"bot environment repeats {key}")
-        result[key] = value.strip()
+        value = value.strip()
+        if value[:1] in {'"', "'"}:
+            if len(value) < 2 or value[-1] != value[0]:
+                raise ConfigError(f"bot environment has malformed quotes for {key}")
+            value = value[1:-1]
+        result[key] = value
     return result
 
 

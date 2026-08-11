@@ -25,6 +25,8 @@ case "$action:$component" in
     blurb-auto-enable:)
         target=/etc/bristolbusbot/blurb-generation-enabled
         candidate=/etc/bristolbusbot/.blurb-generation-enabled.new
+        /usr/local/sbin/bbb-configure-blurb-generation \
+            --owner @BBB_DEPLOY_USER@ >/dev/null
         test -f /etc/bristolbusbot/blurb.env
         test ! -L /etc/bristolbusbot/blurb.env
         test -d /etc/bristolbusbot
