@@ -8,6 +8,7 @@ the attended ``approve`` command has signed the exact pending bytes.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -1073,6 +1074,57 @@ def discard_pending(pending_path: Path = PENDING,
     return destination
 
 
+def reject_pending_lines(
+        items: list[str], *, pending_path: Path = PENDING,
+        approval_path: Path = APPROVAL,
+        history: Path = HISTORY) -> tuple[dict, Path]:
+    """Remove selected private lines, archiving the exact original batch."""
+    raw = _regular_bytes(pending_path)
+    payload = validate_pending(json.loads(raw))
+    updated = copy.deepcopy(payload)
+    targets: list[tuple[str, str]] = []
+    for item in items:
+        parts = item.split(":", 2)
+        if len(parts) != 3:
+            raise BlurbError(
+                "rejected line must be VARIANT:OPERATOR:CODE")
+        variant, operator, code = parts
+        key = f"{operator}:{code}"
+        if variant not in VARIANTS or not _SAFE_OPERATOR.fullmatch(operator) \
+                or not _SAFE_CODE.fullmatch(code):
+            raise BlurbError("rejected line identity is unsafe")
+        target = (variant, key)
+        if target in targets:
+            raise BlurbError("rejected line was listed twice")
+        if key not in updated["additions"][variant]:
+            raise BlurbError(
+                f"pending batch has no {variant} line for {key}")
+        targets.append(target)
+
+    for variant, key in targets:
+        del updated["additions"][variant][key]
+        updated.setdefault("rejections", []).append({
+            "variant": variant,
+            "key": key,
+            "reason": "generated description rejected by human review",
+        })
+    updated["rejections"] = sorted(
+        updated["rejections"],
+        key=lambda item: (item["variant"], item["key"], item["reason"]))
+    validate_pending(updated)
+
+    history.mkdir(parents=True, exist_ok=True, mode=0o750)
+    stamp = utcnow().strftime("%Y%m%dT%H%M%SZ")
+    destination = history / (
+        f"{payload['batch_id']}.before-reject-{stamp}.json")
+    if destination.exists() or destination.is_symlink():
+        raise BlurbError("curation history destination already exists")
+    atomic_bytes(destination, raw, owner=pending_path.lstat())
+    atomic_json(pending_path, updated)
+    approval_path.unlink(missing_ok=True)
+    return updated, destination
+
+
 def _restart_site() -> None:
     result = subprocess.run(
         ["systemctl", "restart", "bbb-site.service"],
@@ -1232,6 +1284,10 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("show", help="show the current pending batch")
     subparsers.add_parser("approve", help="approve the exact pending bytes")
     subparsers.add_parser("discard", help="archive without changing the site")
+    reject_parser = subparsers.add_parser(
+        "reject", help="remove selected lines from the private review batch")
+    reject_parser.add_argument(
+        "lines", nargs="+", metavar="VARIANT:OPERATOR:CODE")
     subparsers.add_parser("promote", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
@@ -1255,6 +1311,13 @@ def main(argv: list[str] | None = None) -> int:
             if not sys.stdin.isatty() or not sys.stdout.isatty():
                 raise BlurbError("discard requires an attended terminal")
             print(f"discarded pending batch to {discard_pending().name}")
+        elif args.command == "reject":
+            if not sys.stdin.isatty() or not sys.stdout.isatty():
+                raise BlurbError("line rejection requires an attended terminal")
+            result, archived = reject_pending_lines(args.lines)
+            kept = sum(len(values) for values in result["additions"].values())
+            print(f"rejected {len(args.lines)} line(s); {kept} remain; "
+                  f"original archived as {archived.name}")
         else:
             result = promote_pending()
             print(json.dumps({
