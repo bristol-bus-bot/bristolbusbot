@@ -505,13 +505,26 @@ class GeminiClient:
                  summaries: Mapping[str, Mapping[str, object]],
                  max_output_tokens: int) -> tuple[dict, dict[str, int]]:
         prompt = request_prompt(variant, summaries)
+        requested = sorted(summaries)
         payload = {
             "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.9,
                 "maxOutputTokens": max_output_tokens,
                 "responseMimeType": "application/json",
+                "responseJsonSchema": {
+                    "type": "object",
+                    "properties": {
+                        key: {"type": "string"} for key in requested
+                    },
+                    "required": requested,
+                    "additionalProperties": False,
+                    "propertyOrdering": requested,
+                },
+                # These are short editorial lines, not a reasoning task. Gemini
+                # 3.x otherwise spends part of maxOutputTokens on thoughts and
+                # can stop before closing the JSON document.
+                "thinkingConfig": {"thinkingLevel": "MINIMAL"},
             },
         }
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -530,8 +543,25 @@ class GeminiClient:
         try:
             envelope = json.loads(raw)
             candidate = envelope["candidates"][0]
-            if candidate.get("finishReason") != "STOP":
-                raise BlurbError("Gemini response did not finish cleanly")
+            finish_reason = candidate.get("finishReason")
+            if finish_reason != "STOP":
+                reason = (finish_reason if isinstance(finish_reason, str)
+                          and re.fullmatch(r"[A-Z_]{1,40}", finish_reason)
+                          else "UNREPORTED")
+                usage = envelope.get("usageMetadata")
+                usage = usage if isinstance(usage, dict) else {}
+
+                def safe_count(name: str) -> int:
+                    value = usage.get(name)
+                    return (value if isinstance(value, int)
+                            and not isinstance(value, bool) and value >= 0
+                            else 0)
+
+                raise BlurbError(
+                    "Gemini response did not finish cleanly "
+                    f"(reason={reason}, "
+                    f"output_tokens={safe_count('candidatesTokenCount')}, "
+                    f"thought_tokens={safe_count('thoughtsTokenCount')})")
             text = candidate["content"]["parts"][0]["text"]
             result = json.loads(text)
             usage = envelope.get("usageMetadata") or {}
