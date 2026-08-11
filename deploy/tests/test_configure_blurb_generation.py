@@ -7,7 +7,7 @@ from deploy import configure_blurb_generation as config
 
 def test_values_accepts_dotenv_quoted_ai_configuration(tmp_path: Path):
     source = tmp_path / "bot.env"
-    placeholder = "not-a-real-value-" * 2
+    placeholder = "not.a.real.value-" * 2
     source.write_text(
         f'AI_API_KEY="{placeholder}"\n'
         "AI_MODEL='gemini-3.6-flash'\n",
