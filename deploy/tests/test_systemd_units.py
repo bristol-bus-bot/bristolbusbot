@@ -152,6 +152,28 @@ def test_data_health_job_is_nightly_networkless_and_report_only():
     assert "Unit=bbb-data-health.service" in timer
 
 
+def test_collector_anomaly_job_is_networkless_bounded_and_report_only():
+    service = (SYSTEMD / "bbb-collector-anomaly.service").read_text(
+        encoding="utf-8")
+    timer = (SYSTEMD / "bbb-collector-anomaly.timer").read_text(
+        encoding="utf-8")
+    for setting in (
+        "--name collector-anomaly",
+        "/usr/local/libexec/bbb-collector-anomaly",
+        "--window-hours 48",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/collector/audit.db "
+        "/var/lib/bristolbusbot/pipeline/timetable.db",
+        "ReadWritePaths=/var/lib/bristolbusbot/monitoring",
+        "ProtectSystem=strict",
+        "IPAddressDeny=any",
+        "RestrictAddressFamilies=AF_UNIX",
+    ):
+        assert setting in service
+    assert "OnCalendar=*-*-* 04:40:00" in timer
+    assert "Persistent=true" in timer
+    assert "Unit=bbb-collector-anomaly.service" in timer
+
+
 def test_social_curation_is_credentialed_isolated_and_shadow_gated():
     service = (SYSTEMD / "bbb-social-curation.service").read_text(
         encoding="utf-8")

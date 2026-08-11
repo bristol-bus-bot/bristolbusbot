@@ -304,6 +304,10 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "data_health.py").is_file()
     assert (extract / "systemd/bbb-data-health.service").is_file()
     assert (extract / "systemd/bbb-data-health.timer").is_file()
+    assert (extract / "collector_anomaly_report.py").is_file()
+    assert (extract / "systemd/bbb-collector-anomaly.service").is_file()
+    assert (extract / "systemd/bbb-collector-anomaly.timer").is_file()
+    assert "enable --now bbb-collector-anomaly.timer" in installer
     assert (extract / "systemd/bbb-blurb-generate.service").is_file()
     assert (extract / "systemd/bbb-blurb-generate.timer").is_file()
     assert (extract / "systemd/bbb-blurb-promote.service").is_file()
@@ -312,6 +316,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-social-curation.timer").is_file()
     assert "Social curation timer installed but left disabled" in installer
     assert "/usr/local/libexec/bbb-data-health" in installer
+    assert "/usr/local/libexec/bbb-collector-anomaly" in installer
     assert "/usr/local/libexec/bristolbusbot-enrichment/" \
         "enrichment_promote.py" in installer
     assert "/usr/local/libexec/bristolbusbot-enrichment/" \

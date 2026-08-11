@@ -1,0 +1,30 @@
+[Unit]
+Description=Read-only Bristol Bus Bot collector anomaly report
+After=bbb-collector.service
+Requires=bbb-collector.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name collector-anomaly -- /usr/local/libexec/bbb-collector-anomaly --audit-db /var/lib/bristolbusbot/collector/audit.db --timetable-db /var/lib/bristolbusbot/pipeline/timetable.db --output /var/lib/bristolbusbot/monitoring/collector-anomaly/latest.json --history-dir /var/lib/bristolbusbot/monitoring/collector-anomaly/history --window-hours 48
+TimeoutStartSec=5min
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/bristolbusbot/collector/audit.db /var/lib/bristolbusbot/pipeline/timetable.db
+ReadWritePaths=/var/lib/bristolbusbot/monitoring
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
