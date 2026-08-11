@@ -82,6 +82,14 @@ copy atomically. The sync rejects removals, large batches of additions or broad
 rewrites, and the installer's normal file backup and rollback cover the change.
 It never edits or promotes any public description file.
 
+Pending description generation retains the terse, sardonic voice already used
+by the approved public description files, with separate in-service, waiting and
+depot examples. Selection round-robins operator/model groups and caps a single
+review batch at 20 identities from one operator and 10 from one model. Strict
+validation rejects generic brochure language, US spellings and claims of an
+unsupplied live battery state. Generation still writes only a pending batch;
+review, approval and promotion remain separate attended actions.
+
 Stop localities use a stricter three-step chain. After a successful timetable
 promotion check, `bbb-locality-refresh.service` builds a shadow candidate from
 the exact live timetable and the fixed ONS December 2025 ward endpoint.
