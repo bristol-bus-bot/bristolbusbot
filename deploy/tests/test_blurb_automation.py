@@ -115,6 +115,25 @@ def test_output_keys_must_exactly_match_requested_scope():
         )
 
 
+def test_output_rejection_names_variant_and_key_without_echoing_text():
+    generated = "Yutong offering impressive range for passengers."
+
+    with pytest.raises(
+            blurbs.BlurbError,
+            match=(r"in_service description for OPAA:101 rejected: "
+                   r"generated description sounds like brochure copy")) as exc:
+        blurbs.validate_output(
+            {"OPAA:101": generated},
+            {"OPAA:101": {
+                "double_decker": False, "electric": True,
+                "coach": False, "fuel": "electric",
+            }},
+            "in_service",
+        )
+
+    assert generated not in str(exc.value)
+
+
 @pytest.mark.parametrize("text,summary,variant,reason", [
     (
         "Yutong E12 electric decker. Silent ambition.",
@@ -305,7 +324,9 @@ def test_any_invalid_variant_discards_the_whole_pending_batch(tmp_path):
 
     assert not pending.exists()
     events = json.loads(ledger.read_text())["events"]
-    assert [event["status"] for event in events] == ["success", "failed"]
+    assert [event["status"] for event in events] == ["success", "rejected"]
+    assert events[1]["actual_input_tokens"] == 10
+    assert events[1]["actual_output_tokens"] == 5
 
 
 def pending_payload(paths: dict[str, Path]) -> dict:
