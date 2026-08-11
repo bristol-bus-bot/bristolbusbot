@@ -25,6 +25,8 @@ SOCIAL_TOKEN = Path("/etc/bristolbusbot/social-slack.token")
 SOCIAL_LIVE_MARKER = Path("/etc/bristolbusbot/social-live-enabled")
 DATA_HEALTH_REPORT = Path(
     "/var/lib/bristolbusbot/monitoring/data-health.json")
+COLLECTOR_ANOMALY_REPORT = Path(
+    "/var/lib/bristolbusbot/monitoring/collector-anomaly/latest.json")
 FLEET_REFRESH_MARKER = Path("/etc/bristolbusbot/fleet-refresh-enabled")
 FLEET_PROMOTION_STATE = Path(
     "/var/lib/bristolbusbot/monitoring/enrichment-fleet-promotion.json")
@@ -1011,6 +1013,26 @@ def data_health_check() -> tuple[dict, list[str]]:
         return {"status": "unavailable", "error": type(exc).__name__}, []
 
 
+def collector_anomaly_check() -> tuple[dict, list[str]]:
+    """Expose bounded measurement flags without treating findings as failures."""
+    try:
+        report = json.loads(
+            COLLECTOR_ANOMALY_REPORT.read_text(encoding="utf-8"))
+        if not isinstance(report, dict) or report.get("schema_version") != 1:
+            raise ValueError("unsupported collector-anomaly report")
+        generated_at = report.get("generated_at")
+        age_h = age_seconds(str(generated_at)) / 3600 if generated_at else None
+        result = dict(report)
+        result["age_hours"] = round(age_h, 2) if age_h is not None else None
+        if age_h is None or age_h > JOB_MAX_AGE_HOURS["collector-anomaly"]:
+            result["status"] = "stale"
+        # These are investigation flags, not proof of bad published data. The
+        # recorded job freshness/failure remains the operational health gate.
+        return result, []
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {"status": "unavailable", "error": type(exc).__name__}, []
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -1226,6 +1248,8 @@ def main() -> int:
     issues.extend(found)
     data_health, found = data_health_check()
     issues.extend(found)
+    collector_anomaly, found = collector_anomaly_check()
+    issues.extend(found)
 
     try:
         feed_at = sqlite_value(
@@ -1304,6 +1328,7 @@ def main() -> int:
                     "silence_is_not_an_incident": True},
         "social_deliveries": social_deliveries,
         "data_health": data_health,
+        "collector_anomaly": collector_anomaly,
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
     }

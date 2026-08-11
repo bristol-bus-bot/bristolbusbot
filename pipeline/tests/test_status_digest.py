@@ -85,6 +85,33 @@ def test_data_health_line_surfaces_operator_collapse(tmp_path, monkeypatch):
         "*data*  :warning: FBRI fleet count collapsed 583->100 - report-only")
 
 
+def test_data_health_line_labels_source_gaps_without_implying_bad_refresh(
+        tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "data_health": {
+            "status": "warning",
+            "summary": {
+                "operator_collapses": 0,
+                "missing_fleet": 65,
+                "missing_livery": 121,
+                "missing_blurbs": {
+                    "in_service": 121,
+                    "waiting": 127,
+                    "depot": 135,
+                },
+                "missing_stop_localities": 0,
+            },
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.data_health_line() == (
+        "*data*  :information_source: 65 sightings without a safe fleet match - "
+        "121 source livery gaps - blurb gaps 121/127/135 "
+        "(service/wait/depot) - 0 locality gaps - report-only")
+
+
 def test_fleet_line_summarises_the_latest_guarded_refresh(
         tmp_path, monkeypatch):
     health = tmp_path / "health.json"
@@ -127,3 +154,32 @@ def test_blurb_line_surfaces_pending_review_and_bounded_usage(
     assert status_digest.blurb_line() == (
         "*blurbs*  12 bus(es) waiting for your review - "
         "3 request(s), 1500 token(s) this month")
+
+
+def test_anomaly_line_surfaces_counts_and_match_drift(tmp_path, monkeypatch):
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({
+        "collector_anomaly": {
+            "status": "attention",
+            "coverage": {"observations": 65799},
+            "poll_metrics": {
+                "older_half": {"match_rate": 0.9416},
+                "recent_half": {"match_rate": 0.9471},
+            },
+            "detectors": {
+                "extreme_delays": {"count": 1099},
+                "backwards_stop_progress": {"count": 564},
+                "impossible_implied_speeds": {"count": 0},
+                "overlapping_vehicle_trips": {"count": 26},
+                "gps_near_match_gate": {"count": 15},
+                "gps_distance_m": {"p95": 82},
+            },
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
+
+    assert status_digest.anomaly_line() == (
+        "*anomalies*  :warning: 48h/65,799 obs - extreme-delay readings "
+        "1,099 - backwards flags 564 - trip-overlap flags 26 - "
+        "impossible-speed flags 0 - near GPS gate 15 - match "
+        "94.2%->94.7% - GPS p95 82m - report-only")

@@ -13,6 +13,7 @@ One message with these sections:
   fleet      - latest guarded weekly fleet-data refresh outcome
   blurbs     - pending human review and bounded Gemini usage
   data       - report-only enrichment completeness findings
+  anomalies  - bounded 48-hour measurement-quality flags and drift
   social     - Slack curation rollout mode and durable card deliveries
   pi         - disk, memory, CPU temperature
 
@@ -222,11 +223,14 @@ def data_health_line() -> str:
         missing_stops = int(summary.get("missing_stop_localities", 0))
         blurbs = summary.get("missing_blurbs")
         blurbs = blurbs if isinstance(blurbs, dict) else {}
-        missing_blurbs = max((int(value) for value in blurbs.values()), default=0)
+        in_service = int(blurbs.get("in_service", 0))
+        waiting = int(blurbs.get("waiting", 0))
+        depot = int(blurbs.get("depot", 0))
         return (
-            f"*data*  :warning: {missing_fleet} without fleet data - "
-            f"{missing_livery} without livery - {missing_blurbs} without blurbs - "
-            f"{missing_stops} stops without locality - report-only"
+            f"*data*  :information_source: {missing_fleet} sightings without a "
+            f"safe fleet match - {missing_livery} source livery gaps - blurb gaps "
+            f"{in_service}/{waiting}/{depot} (service/wait/depot) - "
+            f"{missing_stops} locality gaps - report-only"
         )
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
         return f"*data*  aggregate probe failed: {type(exc).__name__}"
@@ -264,6 +268,60 @@ def blurb_line() -> str:
         return f"*blurbs*  aggregate probe failed: {type(exc).__name__}"
 
 
+def anomaly_line() -> str:
+    """Render the latest bounded collector-quality report from aggregate health."""
+    try:
+        snapshot = json.loads(AGGREGATE_HEALTH.read_text(encoding="utf-8"))
+        report = snapshot.get("collector_anomaly")
+        if not isinstance(report, dict):
+            return "*anomalies*  report unavailable"
+        status = str(report.get("status") or "unavailable")
+        if status in {"unavailable", "stale"}:
+            return f"*anomalies*  :warning: report {status}"
+
+        coverage = report.get("coverage")
+        coverage = coverage if isinstance(coverage, dict) else {}
+        detectors = report.get("detectors")
+        detectors = detectors if isinstance(detectors, dict) else {}
+        metrics = report.get("poll_metrics")
+        metrics = metrics if isinstance(metrics, dict) else {}
+        older = metrics.get("older_half")
+        older = older if isinstance(older, dict) else {}
+        recent = metrics.get("recent_half")
+        recent = recent if isinstance(recent, dict) else {}
+
+        def detector_count(name: str) -> int:
+            value = detectors.get(name)
+            value = value if isinstance(value, dict) else {}
+            return int(value.get("count", 0))
+
+        def percent(value: object) -> str:
+            return (f"{float(value):.1%}"
+                    if isinstance(value, (int, float)) else "?")
+
+        gps = detectors.get("gps_distance_m")
+        gps = gps if isinstance(gps, dict) else {}
+        counts = {
+            "extreme": detector_count("extreme_delays"),
+            "backwards": detector_count("backwards_stop_progress"),
+            "speeds": detector_count("impossible_implied_speeds"),
+            "overlaps": detector_count("overlapping_vehicle_trips"),
+            "near_gate": detector_count("gps_near_match_gate"),
+        }
+        flag = ":warning:" if any(counts.values()) else ":white_check_mark:"
+        return (
+            f"*anomalies*  {flag} 48h/{int(coverage.get('observations', 0)):,} obs - "
+            f"extreme-delay readings {counts['extreme']:,} - backwards flags "
+            f"{counts['backwards']:,} - trip-overlap flags {counts['overlaps']:,} - "
+            f"impossible-speed flags {counts['speeds']:,} - near GPS gate "
+            f"{counts['near_gate']:,} - "
+            f"match {percent(older.get('match_rate'))}->{percent(recent.get('match_rate'))} - "
+            f"GPS p95 {int(gps.get('p95', 0))}m - report-only"
+        )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return f"*anomalies*  aggregate probe failed: {type(exc).__name__}"
+
+
 def pi_line() -> str:
     try:
         du = shutil.disk_usage("/")
@@ -287,7 +345,8 @@ def main() -> None:
     lines = [f":bus: *estate digest* — {stamp}"]
     lines += collector_lines()
     lines += [bot_line(), site_line(), timetable_line(), fleet_line(),
-              data_health_line(), blurb_line(), social_line(), pi_line()]
+              data_health_line(), blurb_line(), anomaly_line(), social_line(),
+              pi_line()]
     _post("\n".join(lines))
     print("digest posted")
 
