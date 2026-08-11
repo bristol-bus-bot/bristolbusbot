@@ -76,6 +76,12 @@ keeps one previous file, restarts the site and bot, and requires their reported
 digest and record count before accepting the swap. Installing the unit does not
 stage or promote any data. A real promotion remains a separate reviewed action.
 
+The human-curated `model-context.json` is different from downloaded enrichment
+data: an attended unified-layout install synchronises its reviewed repository
+copy atomically. The sync rejects removals, large batches of additions or broad
+rewrites, and the installer's normal file backup and rollback cover the change.
+It never edits or promotes any public description file.
+
 Stop localities use a stricter three-step chain. After a successful timetable
 promotion check, `bbb-locality-refresh.service` builds a shadow candidate from
 the exact live timetable and the fixed ONS December 2025 ward endpoint.

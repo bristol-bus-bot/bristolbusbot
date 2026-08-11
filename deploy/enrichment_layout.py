@@ -13,6 +13,11 @@ from pathlib import Path
 DURABLE_DIRECTORY_TEXT = "/var/lib/bristolbusbot/enrichment"
 DURABLE_DIRECTORY = Path(DURABLE_DIRECTORY_TEXT)
 BACKUP_CONFIG = Path("/etc/bristolbusbot/backup.json")
+MODEL_CONTEXT = "model-context.json"
+MAXIMUM_MODEL_CONTEXT_BYTES = 1024 * 1024
+MAXIMUM_MODEL_CONTEXT_RECORDS = 1000
+MAXIMUM_CONTEXT_ADDITIONS = 100
+MAXIMUM_CONTEXT_CORRECTIONS = 20
 SPECS: dict[str, type] = {
     "fbribuses.json": list,
     "stop_localities.json": dict,
@@ -74,6 +79,63 @@ def validate_directory(directory: Path = DURABLE_DIRECTORY) -> dict[str, dict]:
         name: validate_file(directory / name, expected)
         for name, expected in SPECS.items()
     }
+
+
+def _model_context(path: Path) -> dict[str, str]:
+    info = _regular_file(path, "model context")
+    if info.st_size <= 0 or info.st_size > MAXIMUM_MODEL_CONTEXT_BYTES:
+        raise EnrichmentLayoutError("model context is empty or too large")
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EnrichmentLayoutError("model context is invalid JSON") from exc
+    if not isinstance(value, dict) or not value \
+            or len(value) > MAXIMUM_MODEL_CONTEXT_RECORDS:
+        raise EnrichmentLayoutError("model context has the wrong shape or size")
+    for key, context in value.items():
+        if not isinstance(key, str) or key != key.strip() \
+                or not 1 <= len(key) <= 120:
+            raise EnrichmentLayoutError("model context has an invalid model name")
+        if not isinstance(context, str) \
+                or context != " ".join(context.split()) \
+                or not 20 <= len(context) <= 500:
+            raise EnrichmentLayoutError(
+                f"model context has an invalid entry for {key}")
+    return value
+
+
+def sync_model_context(source: Path | list[Path] | tuple[Path, ...],
+                       destination: Path, *, uid: int, gid: int) -> str:
+    """Atomically sync the reviewed context without allowing a broad rewrite."""
+    sources = (source,) if isinstance(source, Path) else tuple(source)
+    origin = next((item / MODEL_CONTEXT for item in reversed(sources)
+                   if (item / MODEL_CONTEXT).exists()
+                   or (item / MODEL_CONTEXT).is_symlink()), None)
+    if origin is None:
+        raise EnrichmentLayoutError("model context source is absent")
+    target = destination / MODEL_CONTEXT
+    candidate = _model_context(origin)
+    live = _model_context(target)
+    removed = sorted(set(live) - set(candidate))
+    if removed:
+        raise EnrichmentLayoutError(
+            f"model context would remove {len(removed)} existing entries")
+    additions = sorted(set(candidate) - set(live))
+    corrections = sorted(
+        key for key in set(candidate) & set(live)
+        if candidate[key] != live[key])
+    if len(additions) > MAXIMUM_CONTEXT_ADDITIONS:
+        raise EnrichmentLayoutError("model context adds too many entries at once")
+    if len(corrections) > MAXIMUM_CONTEXT_CORRECTIONS:
+        raise EnrichmentLayoutError(
+            "model context changes too many existing entries at once")
+    if not additions and not corrections:
+        return "preserved"
+    _atomic_write(
+        target, origin.read_bytes(), uid=uid, gid=gid, mode=0o640)
+    if _model_context(target) != candidate:
+        raise EnrichmentLayoutError("model context did not sync exactly")
+    return "updated"
 
 
 def _atomic_write(path: Path, raw: bytes, *, uid: int, gid: int,
@@ -176,6 +238,8 @@ def migrate(source: Path | list[Path] | tuple[Path, ...],
     except KeyError as exc:
         raise EnrichmentLayoutError("deployment account does not exist") from exc
     seeded = seed_missing(
+        source, destination, uid=account.pw_uid, gid=account.pw_gid)
+    seeded[MODEL_CONTEXT] = sync_model_context(
         source, destination, uid=account.pw_uid, gid=account.pw_gid)
     backup_changed = ensure_backup_include(backup_config)
     return {
