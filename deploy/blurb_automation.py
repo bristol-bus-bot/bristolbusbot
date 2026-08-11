@@ -694,6 +694,24 @@ class UsageLedger:
                 or event.get("reserved_output_tokens") or 0)
         return totals
 
+    def preflight(self, requests: list[tuple[str, int, int]]) -> None:
+        """Prove the complete API batch fits before making its first call."""
+        request_count = len(requests)
+        input_tokens = sum(item[1] for item in requests)
+        output_tokens = sum(item[2] for item in requests)
+        if request_count > self.limits.requests_per_run \
+                or input_tokens > self.limits.input_tokens_per_run \
+                or output_tokens > self.limits.output_tokens_per_run:
+            raise BlurbError("per-run Gemini cost ceiling reached")
+        totals = self._month_totals(utcnow().strftime("%Y-%m"))
+        if totals["requests"] + request_count \
+                > self.limits.requests_per_month \
+                or totals["input_tokens"] + input_tokens \
+                > self.limits.input_tokens_per_month \
+                or totals["output_tokens"] + output_tokens \
+                > self.limits.output_tokens_per_month:
+            raise NothingToDo("monthly Gemini cost ceiling reached")
+
     def reserve(self, *, run: dict[str, int], variant: str,
                 input_tokens: int, output_tokens: int) -> str:
         if run["requests"] + 1 > self.limits.requests_per_run \
@@ -709,7 +727,7 @@ class UsageLedger:
                 > self.limits.input_tokens_per_month \
                 or totals["output_tokens"] + output_tokens \
                 > self.limits.output_tokens_per_month:
-            raise BlurbError("monthly Gemini cost ceiling reached")
+            raise NothingToDo("monthly Gemini cost ceiling reached")
         event_id = uuid.uuid4().hex
         self.value["events"].append({
             "id": event_id,
@@ -872,15 +890,24 @@ def generate_pending(*, fleet_path: Path = FLEET,
     run_usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
     additions: dict[str, dict[str, str]] = {variant: {} for variant in VARIANTS}
     rejections: list[dict[str, str]] = []
+    request_plans: list[tuple[str, dict[str, dict[str, object]], int, int]] = []
+    for variant, summaries in work["requests"].items():
+        if not summaries:
+            continue
+        prompt = request_prompt(variant, summaries)
+        # For ASCII-framed prompts, character count is a conservative upper
+        # bound on input tokens. Output is capped by the API itself.
+        reserved_input = len(system_prompt(variant)) + len(prompt)
+        reserved_output = min(4096, max(512, len(summaries) * 80))
+        request_plans.append(
+            (variant, summaries, reserved_input, reserved_output))
+    ledger.preflight([
+        (variant, reserved_input, reserved_output)
+        for variant, _summaries, reserved_input, reserved_output
+        in request_plans
+    ])
     try:
-        for variant, summaries in work["requests"].items():
-            if not summaries:
-                continue
-            prompt = request_prompt(variant, summaries)
-            # For ASCII-framed prompts, character count is a conservative
-            # upper bound on input tokens. Output is capped by the API itself.
-            reserved_input = len(system_prompt(variant)) + len(prompt)
-            reserved_output = min(4096, max(512, len(summaries) * 80))
+        for variant, summaries, reserved_input, reserved_output in request_plans:
             event_id = ledger.reserve(
                 run=run_usage, variant=variant,
                 input_tokens=reserved_input,

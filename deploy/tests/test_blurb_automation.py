@@ -602,10 +602,28 @@ def test_usage_reservation_enforces_monthly_ceiling_before_request(tmp_path):
     ledger.reserve(run=run, variant="in_service",
                    input_tokens=100, output_tokens=100)
 
-    with pytest.raises(blurbs.BlurbError, match="monthly"):
+    with pytest.raises(blurbs.NothingToDo, match="monthly"):
         ledger.reserve(
             run={"requests": 0, "input_tokens": 0, "output_tokens": 0},
             variant="waiting", input_tokens=100, output_tokens=100)
+
+
+def test_usage_preflight_refuses_whole_batch_before_first_reservation(tmp_path):
+    limits = blurbs.Limits(40, 3, 1000, 1000, 2, 1000, 1000)
+    ledger_path = tmp_path / "usage.json"
+    ledger = blurbs.UsageLedger(ledger_path, limits)
+    ledger.reserve(
+        run={"requests": 0, "input_tokens": 0, "output_tokens": 0},
+        variant="in_service", input_tokens=100, output_tokens=100)
+    before = ledger_path.read_bytes()
+
+    with pytest.raises(blurbs.NothingToDo, match="monthly"):
+        ledger.preflight([
+            ("waiting", 100, 100),
+            ("depot", 100, 100),
+        ])
+
+    assert ledger_path.read_bytes() == before
 
 
 def test_gemini_3_request_uses_minimal_thinking_and_exact_json_schema(
