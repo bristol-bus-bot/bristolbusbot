@@ -269,3 +269,30 @@ def test_daily_message_makes_pending_description_review_the_only_action(
 
     assert "Review descriptions for 12 buses when convenient" in message
     assert "Nothing will publish by itself" in message
+
+
+def test_daily_message_says_safe_timetable_rejection_did_not_break_live_bot(
+        monkeypatch):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = plain_daily_snapshot()
+    snapshot.update({
+        "status": "error",
+        "issues": ["job:timetable-automation"],
+        "timetable_automation": {
+            "status": "failed",
+            "last_accepted": {"run_id": "31070121269"},
+            "last_attempt": {
+                "outcome": "failure",
+                "failure_code": "candidate_operator_collapse",
+            },
+        },
+    })
+
+    message = status_digest.daily_message(
+        snapshot, today=date(2026, 8, 14))
+
+    assert "live bot and website are working" in message
+    assert "proposed timetable update looked incomplete" in message
+    assert "current working timetable stayed live" in message
+    assert "Pi will retry automatically" in message
+    assert "needs attention" not in message
