@@ -182,6 +182,62 @@ def test_locality_automation_correlates_exact_candidate_and_coverage(
     assert issues == []
 
 
+def test_locality_age_is_event_driven_but_must_follow_latest_timetable(
+        tmp_path, monkeypatch):
+    state = tmp_path / "monitoring"
+    jobs = state / "jobs"
+    jobs.mkdir(parents=True)
+    locality_finished = "2026-08-12T04:02:26+00:00"
+    for name, result in (
+        ("locality-refresh", "success"),
+        ("locality-stage", "success"),
+        ("enrichment-promote-localities", "skipped"),
+    ):
+        (jobs / f"{name}.json").write_text(json.dumps({
+            "last_result": result,
+            "last_success_at": locality_finished,
+            "last_skipped_at": locality_finished,
+            "last_finished_at": locality_finished,
+        }), encoding="utf-8")
+    promotion = state / "enrichment-localities-promotion.json"
+    promotion.write_text(json.dumps({
+        "outcome": "no_change", "finished_at": locality_finished,
+        "candidate": {"sha256": "a" * 64},
+    }), encoding="utf-8")
+    shadow = state / "locality-shadow.json"
+    shadow.write_text(json.dumps({
+        "candidate": {"sha256": "a" * 64, "summary": {"records": 4815}},
+        "coverage": {"missing": 0, "extra": 0},
+    }), encoding="utf-8")
+    timetable = state / "timetable-promotion.json"
+    timetable.write_text(json.dumps({
+        "last_accepted": {"accepted_at": "2026-08-06T04:12:00+00:00"},
+    }), encoding="utf-8")
+    marker = tmp_path / "locality-refresh-enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "LOCALITY_PROMOTION_STATE", promotion)
+    monkeypatch.setattr(aggregate_health, "LOCALITY_SHADOW_REPORT", shadow)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_PROMOTION_STATE", timetable)
+    monkeypatch.setattr(aggregate_health, "LOCALITY_REFRESH_MARKER", marker)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    result, issues = aggregate_health.locality_automation_check()
+    assert result["status"] == "healthy"
+    assert result["current_for_latest_timetable"] is True
+    assert issues == []
+
+    timetable.write_text(json.dumps({
+        "last_accepted": {"accepted_at": "2026-08-13T04:12:00+00:00"},
+    }), encoding="utf-8")
+    result, issues = aggregate_health.locality_automation_check()
+    assert result["status"] == "failed"
+    assert result["current_for_latest_timetable"] is False
+    assert issues == ["job:locality-automation"]
+
+
 def test_social_curation_health_reads_enabled_job_and_ledger(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"
@@ -339,6 +395,7 @@ def test_timetable_promotion_health_keeps_rejection_visible(tmp_path, monkeypatc
     }), encoding="utf-8")
     monkeypatch.setattr(aggregate_health, "STATE", monitoring)
     monkeypatch.setattr(aggregate_health, "TIMETABLE_PROMOTION_MARKER", marker)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_PROMOTION_STATE", detail)
 
     check, issues = aggregate_health.timetable_promotion_check()
     assert check["last_attempt"]["outcome"] == "accepted"
@@ -391,6 +448,20 @@ def test_timetable_messages_explain_success_and_safe_rollback():
     assert "previous timetable was restored" in failure
     assert "blocked from replay" in failure
     assert "site rejected" not in failure
+
+    collapse = aggregate_health.timetable_failure_message("shadow", {
+        "outcome": "failure",
+        "failure_code": "candidate_operator_collapse",
+        "context": {
+            "operator": "SSWL", "current": 17051, "candidate": 8564,
+        },
+    })
+    assert "rejected safely" in collapse
+    assert "about half the usual services" in collapse
+    assert "still running" in collapse
+    assert "Nothing now" in collapse
+    assert "SSWL" not in collapse
+    assert "candidate_operator_collapse" not in collapse
 
 
 def test_general_health_alerts_translate_internal_issue_keys():
@@ -529,6 +600,34 @@ def test_failed_shadow_never_inherits_old_promotion_success(monkeypatch):
     assert check["last_attempt"]["outcome"] == "failure"
     assert "promotion not attempted" in check["summary"]
     assert issues == ["job:timetable-automation"]
+
+
+def test_running_shadow_is_pending_not_a_repeat_of_the_old_attempt(monkeypatch):
+    shadow = {
+        "status": "enabled",
+        "job": {"result": "running", "age_hours": 168},
+        "last_attempt": {
+            "outcome": "failure",
+            "run_id": "old-run",
+            "failure_code": "candidate_operator_collapse",
+        },
+        "token": {"days_remaining": 90},
+    }
+    promotion = {
+        "status": "enabled",
+        "last_attempt": {"outcome": "accepted", "run_id": "older-run"},
+    }
+    monkeypatch.setattr(
+        aggregate_health, "timetable_delivery_check", lambda: (shadow, []))
+    monkeypatch.setattr(
+        aggregate_health, "timetable_promotion_check", lambda: (promotion, []))
+
+    check, issues = aggregate_health.timetable_automation_check()
+
+    assert check["status"] == "pending"
+    assert check["phase"] == "shadow"
+    assert "running" in check["summary"]
+    assert issues == []
 
 
 def test_mismatched_wrapper_and_detail_report_the_new_failure(monkeypatch):

@@ -429,6 +429,18 @@ def overall_line(snapshot: dict) -> str:
             "Live buses, the website, the Bluesky bot and automatic updates "
             "are healthy."
         )
+    safe_update_issues = {
+        "job:timetable-automation", "job:fleet-automation",
+        "job:locality-automation", "job:blurb-generation",
+        "job:editorial-refresh", "job:editorial-fetch",
+        "job:editorial-promote",
+    }
+    if issues and set(map(str, issues)).issubset(safe_update_issues):
+        return (
+            ":white_check_mark: *Overall:* The live bot and website are working. "
+            "A proposed automatic data update was rejected safely, so the "
+            "current good version remains in use."
+        )
     return (
         ":warning: *Overall:* An automatic check needs attention. Existing "
         "safe data stays in place where possible, and urgent failures are sent "
@@ -438,6 +450,13 @@ def overall_line(snapshot: dict) -> str:
 
 def today_lines(snapshot: dict) -> list[str]:
     lines = ["Live bus information and the public website are current."]
+    timetable = _dict(snapshot.get("timetable_automation"))
+    if timetable.get("status") == "failed":
+        lines.append(
+            "A proposed timetable update looked incomplete and was rejected. "
+            "The current working timetable stayed live and the Pi will retry "
+            "automatically."
+        )
     data = _dict(snapshot.get("data_health"))
     summary = _dict(data.get("summary"))
     gaps = any(int(summary.get(key, 0) or 0) for key in (
@@ -477,6 +496,16 @@ def action_line(snapshot: dict) -> str:
             f"*You need to do:* Review descriptions for {buses} {noun} when "
             "convenient. Nothing will publish by itself."
         )
+    issues = snapshot.get("issues")
+    issues = issues if isinstance(issues, list) else []
+    safe_update_issues = {
+        "job:timetable-automation", "job:fleet-automation",
+        "job:locality-automation", "job:blurb-generation",
+        "job:editorial-refresh", "job:editorial-fetch",
+        "job:editorial-promote",
+    }
+    if issues and set(map(str, issues)).issubset(safe_update_issues):
+        return "*You need to do:* Nothing today. The Pi will retry automatically."
     if snapshot.get("status") != "ok":
         return (
             "*You need to do:* Nothing immediately unless a separate alert "

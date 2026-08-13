@@ -39,7 +39,6 @@ LOCALITY_SHADOW_REPORT = Path(
     "/var/lib/bristolbusbot/monitoring/locality-shadow.json")
 LOCALITY_REFRESH_MARKER = Path(
     "/etc/bristolbusbot/locality-refresh-enabled")
-LOCALITY_MAX_AGE_HOURS = 30
 BLURB_GENERATION_MARKER = Path(
     "/etc/bristolbusbot/blurb-generation-enabled")
 BLURB_PENDING = Path("/var/lib/bristolbusbot/blurb-pending/pending.json")
@@ -57,7 +56,9 @@ JOB_MAX_AGE_HOURS = {
     "audit-publish": 30,
     "audit-snapshot": 30,
     "staleness": 2,
-    "digest": 14,
+    # The human digest now runs once each morning. Allow one missed-day window
+    # before opening an incident instead of applying its old twice-daily age.
+    "digest": 30,
     "data-health": 30,
     "collector-anomaly": 30,
 }
@@ -65,6 +66,7 @@ TIMETABLE_DELIVERY_STATE = Path(
     "/var/lib/bristolbusbot/timetable-shadow/state.json")
 TIMETABLE_PROMOTION_MARKER = Path(
     "/etc/bristolbusbot/timetable-promotion-enabled")
+TIMETABLE_PROMOTION_STATE = STATE / "timetable-promotion.json"
 TIMETABLE_TOKEN_WARNING_DAYS = 30
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
@@ -245,7 +247,7 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
         result["job"] = {"result": "missing", "error": str(exc)}
         issues.append("job:timetable-promote")
 
-    detail_path = STATE / "timetable-promotion.json"
+    detail_path = TIMETABLE_PROMOTION_STATE
     try:
         document = json.loads(detail_path.read_text(encoding="utf-8"))
         detail = document.get("last_attempt")
@@ -300,7 +302,7 @@ def _attempt_identity(attempt: object) -> tuple[str, str]:
 
 
 def _not_older(left: object, right: object) -> bool:
-    """Return whether left is at/after right; missing timestamps fail closed."""
+    """Return whether left is at/after right without inventing missing state."""
     if not left or not right:
         return True
     try:
@@ -367,6 +369,20 @@ def timetable_automation_check() -> tuple[dict, list[str]]:
         days = token.get("days_remaining")
         if isinstance(days, (int, float)) and days <= TIMETABLE_TOKEN_WARNING_DAYS:
             issues.append("credential:timetable-token-expiry")
+
+    # The recorded-job wrapper changes to ``running`` before the shadow
+    # transaction has written its new detailed result. A health pass can land
+    # in that small window; the old attempt must not be reclassified as a new
+    # failure while the scheduled update is still in progress.
+    if delivery_job.get("result") == "running":
+        result.update({
+            "status": "pending",
+            "phase": "shadow",
+            "promotion_expected": False,
+            "summary": "scheduled timetable check is running",
+            "next_action": "wait for the bounded transaction",
+        })
+        return result, sorted(set(issues))
 
     if delivery_job.get("result") == "failure" \
             or delivery_attempt.get("outcome") == "failure":
@@ -811,7 +827,23 @@ def locality_automation_check() -> tuple[dict, list[str]]:
     promote = jobs["enrichment-promote-localities"]
     attempt = result["last_attempt"]
     attempt = attempt if isinstance(attempt, dict) else {}
-    ages = [job.get("age_hours") for job in jobs.values()]
+    # Locality refreshes are event-driven after an accepted timetable, not a
+    # daily job. Their calendar age is therefore not an incident. What matters
+    # is that the latest good locality transaction is at least as new as the
+    # timetable acceptance that could have changed the stop estate.
+    try:
+        timetable_state = json.loads(
+            TIMETABLE_PROMOTION_STATE.read_text(encoding="utf-8"))
+        accepted = timetable_state.get("last_accepted")
+        if isinstance(accepted, dict):
+            timetable_accepted_at = accepted.get("accepted_at")
+        else:
+            timetable_accepted_at = timetable_state.get("last_accepted_at")
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        timetable_accepted_at = None
+    result["latest_timetable_accepted_at"] = timetable_accepted_at
+    result["current_for_latest_timetable"] = _not_older(
+        attempt.get("finished_at"), timetable_accepted_at)
     failed = (
         refresh.get("result") != "success"
         or stage.get("result") != "success"
@@ -820,8 +852,7 @@ def locality_automation_check() -> tuple[dict, list[str]]:
         or not isinstance(attempt.get("candidate_sha256"), str)
         or attempt.get("candidate_sha256")
         != attempt.get("promoted_candidate_sha256")
-        or any(not isinstance(age, (int, float))
-               or age > LOCALITY_MAX_AGE_HOURS for age in ages)
+        or not result["current_for_latest_timetable"]
         or (attempt.get("coverage") or {}).get("missing") != 0
         or (attempt.get("coverage") or {}).get("extra") != 0
     )
@@ -1127,6 +1158,17 @@ def timetable_failure_message(kind: str,
     code = str(attempt.get("failure_code") or "unknown_failure")
     context = attempt.get("context")
     context = context if isinstance(context, dict) else {}
+    if code == "candidate_operator_collapse":
+        return "\n".join((
+            ":warning: *A new timetable was rejected safely*",
+            "What happened: The new download contained only about half the "
+            "usual services for one operator, so it did not look trustworthy.",
+            "What the bot did: Kept the current working timetable. The map, "
+            "website and bot are still running.",
+            "What happens next: The Pi will try a fresh download automatically "
+            "at the next scheduled check.",
+            "*You need to do:* Nothing now.",
+        ))
     safe_parts = []
     for key in (
             "phase", "metric", "date", "operator", "current",
@@ -1140,7 +1182,7 @@ def timetable_failure_message(kind: str,
         safety = (
             "The candidate never reached production; the existing timetable "
             "remains live. The Pi will try a fresh delivery at its next due check.")
-        title = ":rotating_light: *Timetable build/delivery failed*"
+        title = ":warning: *A new timetable could not be checked*"
     elif outcome == "rolled_back" and attempt.get("recovery_healthy") is True:
         safety = (
             "The previous timetable was restored and all consumer health "
@@ -1159,10 +1201,9 @@ def timetable_failure_message(kind: str,
     return "\n".join((
         title,
         f"When: {_display_time(attempt.get('finished_at'))}",
-        f"Failure: `{code}`",
-        f"Reason: {reason[:300]}",
-        f"Safety: {safety}",
-        _run_line(attempt.get("run_id")),
+        f"What happened: {reason[:300]}",
+        f"What the bot did: {safety}",
+        "*You need to do:* Nothing unless this message says recovery failed.",
     ))
 
 
@@ -1462,8 +1503,18 @@ def main() -> int:
             ":white_check_mark: *Timetable update recovered*\n"
             "The latest automatic check completed safely. The map, website "
             "and bot are using healthy timetable data again.")
-    remaining_resolved = [issue for issue in resolved
-                          if issue != "job:timetable-automation"]
+    # Successful scheduled-job recoveries belong in the daily summary. Keep
+    # immediate recovery messages for user-visible services and endpoints.
+    daily_only_recoveries = {
+        "job:digest", "job:locality-automation", "job:audit-publish",
+        "job:audit-rollup", "job:audit-snapshot", "job:data-health",
+        "job:collector-anomaly",
+    }
+    remaining_resolved = [
+        issue for issue in resolved
+        if issue != "job:timetable-automation"
+        and issue not in daily_only_recoveries
+    ]
     if remaining_resolved:
         notify(general_recovery_message(remaining_resolved))
     atomic_json(incident_path, {
