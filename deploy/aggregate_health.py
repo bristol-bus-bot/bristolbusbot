@@ -1222,6 +1222,55 @@ def fleet_failure_message(refresh: dict[str, object]) -> str:
     ))
 
 
+def plain_issue_area(issue: str) -> str:
+    """Translate internal health keys for Slack; details stay in health.json."""
+    exact = {
+        "service:bbb-collector.service": "live bus collection",
+        "service:bbb-site.service": "the website",
+        "service:bbb-bot.service": "the Bluesky bot",
+        "service:bbb-tunnel.service": "the public website connection",
+        "endpoint:site": "the website",
+        "endpoint:bot": "the bot",
+        "publish:audit-data": "the public performance report",
+        "feed:stale": "fresh live bus information",
+        "disk:low": "Pi storage space",
+    }
+    if issue in exact:
+        return exact[issue]
+    if issue.startswith("job:"):
+        job = issue.removeprefix("job:").replace("-", " ")
+        replacements = {
+            "data health": "the nightly data check",
+            "collector anomaly": "the overnight odd-reading check",
+            "audit publish": "the public performance report",
+            "audit rollup": "the nightly performance totals",
+            "backup": "the backup",
+            "digest": "the daily Slack update",
+            "blurb generate": "the bus-description check",
+            "social curation": "the Instagram-card Slack workflow",
+        }
+        return replacements.get(job, f"the automatic {job} check")
+    return "an automatic safety check"
+
+
+def general_incident_message(issues: list[str]) -> str:
+    areas = sorted({plain_issue_area(issue) for issue in issues})
+    return "\n".join((
+        ":rotating_light: *Bristol Bus Bot needs attention*",
+        "Problem area: " + ", ".join(areas) + ".",
+        "The previous safe data is kept wherever possible. Technical details "
+        "are recorded on the Pi for diagnosis.",
+    ))
+
+
+def general_recovery_message(issues: list[str]) -> str:
+    areas = sorted({plain_issue_area(issue) for issue in issues})
+    return "\n".join((
+        ":white_check_mark: *Bristol Bus Bot recovered*",
+        "Working normally again: " + ", ".join(areas) + ".",
+    ))
+
+
 def main() -> int:
     issues: list[str] = []
     services, found = service_checks()
@@ -1349,12 +1398,11 @@ def main() -> int:
     if not isinstance(automation_attempt, dict):
         automation_attempt = {}
     accepted_run = str(automation_attempt.get("run_id") or "")
-    sent_timetable_success = False
     if automation_attempt.get("outcome") == "accepted" \
             and accepted_run.isdigit() and accepted_run != notified_run:
-        if notify(timetable_success_message(automation_attempt)):
-            notified_run = accepted_run
-            sent_timetable_success = True
+        # Routine success belongs in the one daily human summary. Keep the
+        # fingerprint here so a later health pass does not rediscover it.
+        notified_run = accepted_run
 
     editorial_attempt = editorial_refresh.get("last_attempt")
     if not isinstance(editorial_attempt, dict):
@@ -1365,8 +1413,9 @@ def main() -> int:
     if editorial_attempt.get("outcome") == "accepted" \
             and accepted_editorial_blob \
             and accepted_editorial_blob != notified_editorial_blob:
-        if notify(editorial_success_message(editorial_attempt)):
-            notified_editorial_blob = accepted_editorial_blob
+        # As above, a successful refresh is daily-summary material. Failures
+        # still alert immediately below.
+        notified_editorial_blob = accepted_editorial_blob
 
     remaining_opened = list(opened)
     notified_failures = previous.get("notified_timetable_failure_fingerprints")
@@ -1402,25 +1451,21 @@ def main() -> int:
         notify(fleet_failure_message(fleet_automation))
         remaining_opened.remove("job:fleet-automation")
     if remaining_opened:
-        notify(":rotating_light: BBB health incident: " + ", ".join(remaining_opened))
+        notify(general_incident_message(remaining_opened))
 
     timetable_resolved = "job:timetable-automation" in resolved
     recovery_pending = bool(
         previous.get("timetable_recovery_pending") or timetable_resolved)
     if recovery_pending and timetable_automation.get("status") in {
             "healthy", "idle"}:
-        if sent_timetable_success:
-            recovery_pending = False
-        else:
-            recovery_pending = not notify(
-                ":white_check_mark: *Timetable automation recovered*\n"
-                "The latest timetable check completed safely and the existing "
-                "production services are healthy.")
+        recovery_pending = not notify(
+            ":white_check_mark: *Timetable update recovered*\n"
+            "The latest automatic check completed safely. The map, website "
+            "and bot are using healthy timetable data again.")
     remaining_resolved = [issue for issue in resolved
                           if issue != "job:timetable-automation"]
     if remaining_resolved:
-        notify(":white_check_mark: BBB health recovery: "
-               + ", ".join(remaining_resolved))
+        notify(general_recovery_message(remaining_resolved))
     atomic_json(incident_path, {
         "updated_at": utcnow().isoformat(),
         "active": unique_issues,

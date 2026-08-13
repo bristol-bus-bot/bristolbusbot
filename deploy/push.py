@@ -588,7 +588,6 @@ def deploy_timetable(remote: Remote, source: Path) -> None:
                 raise RuntimeError("CRITICAL: timetable rollback did not recover all consumers")
         notify(remote, ":warning: BristolBusBot timetable rejected; previous database restored")
         raise
-    notify(remote, ":white_check_mark: BristolBusBot timetable deployed and all consumers are healthy")
     log.info("timetable deployed; collector, site and bot are healthy")
 
 
@@ -777,17 +776,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                 for component in components:
                     if component == "tunnel":
                         deploy_tunnel(
-                            remote, workspace, notify_success=not args.all)
+                            remote, workspace, notify_success=False)
                     else:
                         deploy_release(
-                            remote, built[component], notify_success=not args.all)
-                if args.all:
-                    notify(
-                        remote,
-                        ":white_check_mark: BristolBusBot full deployment "
-                        f"complete {common_release} "
-                        f"({', '.join(ALL_COMPONENTS)})",
-                    )
+                            remote, built[component], notify_success=False)
             return 0
     except (OSError, RuntimeError, LocalConfigError,
             subprocess.SubprocessError) as exc:
