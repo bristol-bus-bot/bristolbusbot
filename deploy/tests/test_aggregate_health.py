@@ -277,14 +277,15 @@ def test_incident_notifies_once_and_recovery_notifies_once(tmp_path, monkeypatch
 
     assert aggregate_health.main() == 1
     assert len(messages) == 1
-    assert "incident" in messages[0]
+    assert "needs attention" in messages[0]
+    assert "the website" in messages[0]
     assert aggregate_health.main() == 1
     assert len(messages) == 1
 
     unhealthy["value"] = False
     assert aggregate_health.main() == 0
     assert len(messages) == 2
-    assert "recovery" in messages[1]
+    assert "recovered" in messages[1]
     assert aggregate_health.main() == 0
     assert len(messages) == 2
 
@@ -392,7 +393,22 @@ def test_timetable_messages_explain_success_and_safe_rollback():
     assert "site rejected" not in failure
 
 
-def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
+def test_general_health_alerts_translate_internal_issue_keys():
+    incident = aggregate_health.general_incident_message([
+        "job:collector-anomaly", "service:bbb-site.service",
+    ])
+    recovery = aggregate_health.general_recovery_message([
+        "job:collector-anomaly",
+    ])
+
+    assert "overnight odd-reading check" in incident
+    assert "the website" in incident
+    assert "job:" not in incident
+    assert "recovered" in recovery
+    assert "job:" not in recovery
+
+
+def test_timetable_recovery_notifies_plainly_only_once(tmp_path, monkeypatch):
     state = tmp_path / "monitoring"
     state.mkdir()
     (state / "resource-samples.csv").write_text("sample\n", encoding="utf-8")
@@ -466,7 +482,8 @@ def test_new_timetable_success_notifies_slack_only_once(tmp_path, monkeypatch):
 
     assert aggregate_health.main() == 0
     assert len(messages) == 1
-    assert "Timetable updated automatically" in messages[0]
+    assert "Timetable update recovered" in messages[0]
+    assert "run_id" not in messages[0]
     incident = json.loads(
         (state / "incidents.json").read_text(encoding="utf-8"))
     assert incident["timetable_recovery_pending"] is False

@@ -1,5 +1,5 @@
 [Unit]
-Description=Bristol Bus Bot twice-daily estate digest
+Description=Bristol Bus Bot plain-English daily update
 
 [Service]
 Type=oneshot

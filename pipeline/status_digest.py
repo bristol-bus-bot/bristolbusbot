@@ -1,25 +1,10 @@
 #!/usr/bin/env python3
-"""Twice-daily estate digest sent to Slack by the systemd timer.
+"""One plain-English daily Slack update for the person running the bot.
 
-One message with these sections:
-  collector  - freshest vehicle age, active count, match rate
-  matching   - vehicles matched to a timetable trip
-               whose delay is NULL (every reading refused by the distance
-               gates) — the signature of a wrong-schedule match. Rising
-               number = the matcher is pairing buses with wrong schedules.
-  bot        - successful Bluesky posts today from durable delivery records
-  site       - production site /healthz on :5002
-  timetable  - aggregate last accepted and last attempted automation state
-  fleet      - latest guarded weekly fleet-data refresh outcome
-  blurbs     - pending human review and bounded Gemini usage
-  data       - report-only enrichment completeness findings
-  anomalies  - bounded 48-hour measurement-quality flags and drift
-  social     - Slack curation rollout mode and durable card deliveries
-  pi         - disk, memory, CPU temperature
-
-Webhook read directly from ~/.config/busbot-alerts/webhook (never assume
-helper paths). Every section is best-effort: a broken probe reports itself
-rather than killing the digest.
+Detailed metrics remain in the private health and job records. Slack answers
+four human questions instead: is everything working, what changed, what is
+still on the agreed plan, and does Tom need to do anything. Routine successes
+are folded into this message; failures still alert immediately.
 """
 from __future__ import annotations
 
@@ -29,7 +14,7 @@ import re
 import shutil
 import sqlite3
 import urllib.request
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 
 HOME = Path.home()
@@ -42,17 +27,23 @@ SITE_URL = "http://127.0.0.1:5002/healthz"
 AGGREGATE_HEALTH = Path(os.getenv(
     "BBB_AGGREGATE_HEALTH",
     "/var/lib/bristolbusbot/monitoring/health.json"))
+DAILY_STATE = Path(os.getenv(
+    "BBB_DAILY_DIGEST_STATE",
+    "/var/lib/bristolbusbot/monitoring/daily-digest-state.json"))
+CURRENT_RELEASES = Path(os.getenv(
+    "BBB_CURRENT_RELEASES", str(HOME / "bristolbusbot" / "current")))
 
 
-def _post(text: str) -> None:
+def _post(text: str) -> bool:
     if not WEBHOOK_CONF.exists():
         print("no webhook config; printing instead:\n" + text)
-        return
+        return False
     url = WEBHOOK_CONF.read_text().strip().splitlines()[0].strip()
     req = urllib.request.Request(
         url, data=json.dumps({"text": text}).encode(),
         headers={"Content-Type": "application/json"})
     urllib.request.urlopen(req, timeout=15).read()
+    return True
 
 
 def collector_lines() -> list[str]:
@@ -340,15 +331,212 @@ def pi_line() -> str:
         return f"*pi*  probe failed: {e}"
 
 
+def _dict(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _read_json(path: Path) -> dict:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} does not contain an object")
+    return value
+
+
+def _current_release_fingerprints() -> dict[str, str]:
+    releases: dict[str, str] = {}
+    for component in ("collector", "pipeline", "site", "bot", "social"):
+        path = CURRENT_RELEASES / component
+        try:
+            releases[component] = path.resolve(strict=True).name
+        except OSError:
+            continue
+    return releases
+
+
+def _progress_fingerprints(snapshot: dict) -> dict[str, object]:
+    timetable = _dict(snapshot.get("timetable_automation"))
+    accepted = _dict(timetable.get("last_accepted"))
+    fleet = _dict(snapshot.get("fleet_automation"))
+    fleet_attempt = _dict(fleet.get("last_attempt"))
+    locality = _dict(snapshot.get("locality_automation"))
+    locality_attempt = _dict(locality.get("last_attempt"))
+    blurbs = _dict(snapshot.get("blurb_generation"))
+    blurb_job = _dict(blurbs.get("job"))
+    jobs = _dict(snapshot.get("jobs"))
+    audit_publish = _dict(jobs.get("audit-publish"))
+    return {
+        "timetable": accepted.get("run_id"),
+        "fleet": fleet_attempt.get("finished_at"),
+        "localities": locality_attempt.get("finished_at"),
+        "descriptions": blurb_job.get("last_finished_at"),
+        "audit_publish": audit_publish.get("last_success_at"),
+        "releases": _current_release_fingerprints(),
+    }
+
+
+def _changed(current: dict, previous: dict, key: str) -> bool:
+    value = current.get(key)
+    return value not in (None, {}, "") and value != previous.get(key)
+
+
+def progress_lines(snapshot: dict, previous_state: dict,
+                   today: date | None = None) -> tuple[str, list[str]]:
+    """Summarise meaningful progress without exposing release or job IDs."""
+    today = today or date.today()
+    previous = _dict(previous_state.get("fingerprints"))
+    current = _progress_fingerprints(snapshot)
+    if not previous:
+        if today <= date(2026, 8, 20):
+            return "Finished over the last few days", [
+                "The core move away from the Windows PC is complete: timetable, "
+                "fleet, stop-area and description work now runs on the Pi.",
+                "Fleet details and stop areas now refresh automatically and keep "
+                "the previous safe version if a new source looks wrong.",
+                "Missing bus descriptions can be generated on the Pi, but they "
+                "stay private until you approve them.",
+                "The Instagram-card Slack workflow and the nightly checker for "
+                "odd delay or matching readings are live.",
+            ]
+        return "Since the previous update", [
+            "This is the first plain-English daily summary; no earlier summary "
+            "state was available for comparison.",
+        ]
+
+    lines: list[str] = []
+    if _changed(current, previous, "timetable"):
+        lines.append("A new timetable passed its safety checks and went live.")
+    if _changed(current, previous, "fleet"):
+        lines.append("The weekly fleet and livery source refresh completed safely.")
+    if _changed(current, previous, "localities"):
+        lines.append("The stop-area information was checked and is up to date.")
+    if _changed(current, previous, "descriptions"):
+        lines.append("The Pi checked for missing bus descriptions.")
+    if _changed(current, previous, "audit_publish"):
+        lines.append("Yesterday's public performance report published successfully.")
+    if _changed(current, previous, "releases"):
+        lines.append("A software update was installed and the live checks passed.")
+    if not lines:
+        lines.append("No software or data change was needed; the automatic checks ran normally.")
+    return "Since yesterday", lines
+
+
+def overall_line(snapshot: dict) -> str:
+    issues = snapshot.get("issues")
+    issues = issues if isinstance(issues, list) else []
+    if snapshot.get("status") == "ok" and not issues:
+        return (
+            ":white_check_mark: *Overall:* Everything important is working. "
+            "Live buses, the website, the Bluesky bot and automatic updates "
+            "are healthy."
+        )
+    return (
+        ":warning: *Overall:* An automatic check needs attention. Existing "
+        "safe data stays in place where possible, and urgent failures are sent "
+        "as a separate plain-English alert."
+    )
+
+
+def today_lines(snapshot: dict) -> list[str]:
+    lines = ["Live bus information and the public website are current."]
+    data = _dict(snapshot.get("data_health"))
+    summary = _dict(data.get("summary"))
+    gaps = any(int(summary.get(key, 0) or 0) for key in (
+        "missing_fleet", "missing_livery"))
+    blurbs = _dict(summary.get("missing_blurbs"))
+    gaps = gaps or any(int(value or 0) for value in blurbs.values())
+    if gaps:
+        lines.append(
+            "Some buses still lack trustworthy source details or optional "
+            "descriptions. Safe fallbacks are being used and the weekly Pi "
+            "checks will keep looking for improvements."
+        )
+    anomalies = _dict(snapshot.get("collector_anomaly"))
+    anomaly_status = str(anomalies.get("status") or "unavailable")
+    if anomaly_status == "attention":
+        lines.append(
+            "The overnight checker found possible odd delay or matching "
+            "readings to investigate. These are clues, not confirmed faults, "
+            "and no public figures were changed."
+        )
+    elif anomaly_status in {"unavailable", "stale"}:
+        lines.append(
+            "The overnight odd-reading check is not current and needs attention."
+        )
+    else:
+        lines.append("The overnight odd-reading check found nothing urgent.")
+    return lines
+
+
+def action_line(snapshot: dict) -> str:
+    blurbs = _dict(snapshot.get("blurb_generation"))
+    if blurbs.get("status") == "pending_review":
+        pending = _dict(blurbs.get("pending_review"))
+        buses = int(pending.get("buses", 0) or 0)
+        noun = "bus" if buses == 1 else "buses"
+        return (
+            f"*You need to do:* Review descriptions for {buses} {noun} when "
+            "convenient. Nothing will publish by itself."
+        )
+    if snapshot.get("status") != "ok":
+        return (
+            "*You need to do:* Nothing immediately unless a separate alert "
+            "asks you for a decision; the safe version remains in use."
+        )
+    return "*You need to do:* Nothing today."
+
+
+def daily_message(snapshot: dict, previous_state: dict | None = None,
+                  today: date | None = None) -> str:
+    heading, progress = progress_lines(snapshot, previous_state or {}, today)
+    lines = [
+        ":bus: *Bristol Bus Bot - daily update*",
+        "",
+        overall_line(snapshot),
+        "",
+        f"*{heading}*",
+        *(f"- {line}" for line in progress),
+        "",
+        "*Where the plan stands*",
+        "- The core automation checklist is complete; routine data updates no "
+        "longer depend on the Windows PC.",
+        "- The next real job is to save better evidence for suspicious readings "
+        "and investigate genuine examples.",
+        "- AI-written descriptions stay human-approved during the 30-day proving "
+        "period.",
+        "- Threads and new website ideas are optional and parked, not overdue "
+        "core work.",
+        "",
+        "*Today's checks*",
+        *(f"- {line}" for line in today_lines(snapshot)),
+        "",
+        action_line(snapshot),
+    ]
+    return "\n".join(lines)
+
+
+def _write_state(snapshot: dict) -> None:
+    payload = {
+        "schema_version": 1,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "fingerprints": _progress_fingerprints(snapshot),
+    }
+    DAILY_STATE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = DAILY_STATE.with_name(DAILY_STATE.name + ".tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    os.replace(temporary, DAILY_STATE)
+
+
 def main() -> None:
-    stamp = datetime.now().strftime("%a %H:%M")
-    lines = [f":bus: *estate digest* — {stamp}"]
-    lines += collector_lines()
-    lines += [bot_line(), site_line(), timetable_line(), fleet_line(),
-              data_health_line(), blurb_line(), anomaly_line(), social_line(),
-              pi_line()]
-    _post("\n".join(lines))
-    print("digest posted")
+    snapshot = _read_json(AGGREGATE_HEALTH)
+    try:
+        previous = _read_json(DAILY_STATE)
+    except (OSError, json.JSONDecodeError, ValueError):
+        previous = {}
+    message = daily_message(snapshot, previous)
+    if _post(message):
+        _write_state(snapshot)
+        print("daily update posted")
 
 
 if __name__ == "__main__":

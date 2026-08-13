@@ -264,6 +264,15 @@ def test_audit_rollup_waits_until_the_previous_service_day_is_closed():
     assert "OnCalendar=*-*-* 05:45:00" in publish
 
 
+def test_slack_update_is_plain_english_and_once_daily():
+    service = (SYSTEMD / "bbb-digest.service").read_text(encoding="utf-8")
+    timer = (SYSTEMD / "bbb-digest.timer").read_text(encoding="utf-8")
+    assert "plain-English daily update" in service
+    assert timer.count("OnCalendar=") == 1
+    assert "OnCalendar=*-*-* 08:00:00" in timer
+    assert "20:00:00" not in timer
+
+
 def test_integration_is_built_networkless_and_promoted_only_after_publish():
     runner = (SYSTEMD.parent / "run_audit_rollup.sh").read_text(encoding="utf-8")
     publish = (SYSTEMD.parent / "publish_to_github.sh").read_text(encoding="utf-8")
@@ -271,7 +280,9 @@ def test_integration_is_built_networkless_and_promoted_only_after_publish():
     assert "audit_integration.pending.json" in runner
     assert "audit_promote.py" in publish
     assert publish.index("git push origin main") < publish.index("audit_promote.py")
-    assert publish.index("audit_promote.py") < publish.index('notify ":white_check_mark:')
+    assert publish.index("git push origin main") < publish.index("audit_promote.py")
+    assert 'notify ":white_check_mark:' not in publish
+    assert "nightly publish FAILED" in publish
 
 
 def test_backup_sandbox_cache_directory_is_created_before_unit_start():

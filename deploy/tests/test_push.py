@@ -150,7 +150,7 @@ def test_failed_health_switches_back_to_previous_release(monkeypatch, tmp_path):
     assert "/srv/darkplace/bbb-site" in switches[1]
 
 
-def test_all_deploy_sends_one_summary_success_alert(monkeypatch, tmp_path):
+def test_all_deploy_folds_routine_success_into_daily_update(monkeypatch, tmp_path):
     remote = FakeRemote()
     deployments = []
     messages = []
@@ -184,10 +184,7 @@ def test_all_deploy_sends_one_summary_success_alert(monkeypatch, tmp_path):
 
     assert push.main(["--all"]) == 0
     assert deployments == [(component, False) for component in push.ALL_COMPONENTS]
-    assert messages == [
-        ":white_check_mark: BristolBusBot full deployment complete "
-        f"{release} ({', '.join(push.ALL_COMPONENTS)})"
-    ]
+    assert messages == []
 
 
 def test_root_helper_and_sudoers_are_tightly_allowlisted():

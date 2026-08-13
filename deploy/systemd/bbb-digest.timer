@@ -1,9 +1,8 @@
 [Unit]
-Description=Send the estate digest at 08:00 and 20:00
+Description=Send one plain-English daily update at 08:00
 
 [Timer]
 OnCalendar=*-*-* 08:00:00
-OnCalendar=*-*-* 20:00:00
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=60s

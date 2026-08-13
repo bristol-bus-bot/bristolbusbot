@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 import json
 import sqlite3
 import sys
@@ -183,3 +183,89 @@ def test_anomaly_line_surfaces_counts_and_match_drift(tmp_path, monkeypatch):
         "1,099 - backwards flags 564 - trip-overlap flags 26 - "
         "impossible-speed flags 0 - near GPS gate 15 - match "
         "94.2%->94.7% - GPS p95 82m - report-only")
+
+
+def plain_daily_snapshot():
+    return {
+        "status": "ok",
+        "issues": [],
+        "timetable_automation": {
+            "last_accepted": {"run_id": "31070121269"},
+        },
+        "fleet_automation": {
+            "last_attempt": {"finished_at": "2026-08-10T23:20:18Z"},
+        },
+        "locality_automation": {
+            "last_attempt": {"finished_at": "2026-08-12T04:02:26Z"},
+        },
+        "blurb_generation": {
+            "status": "healthy",
+            "job": {"last_finished_at": "2026-08-11T22:21:52Z"},
+        },
+        "jobs": {
+            "audit-publish": {"last_success_at": "2026-08-12T04:45:16Z"},
+        },
+        "data_health": {
+            "summary": {
+                "missing_fleet": 65,
+                "missing_livery": 121,
+                "missing_blurbs": {
+                    "in_service": 121,
+                    "waiting": 127,
+                    "depot": 135,
+                },
+            },
+        },
+        "collector_anomaly": {"status": "attention"},
+    }
+
+
+def test_daily_message_explains_recent_work_and_plan_in_plain_english(monkeypatch):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+
+    message = status_digest.daily_message(
+        plain_daily_snapshot(), today=date(2026, 8, 13))
+
+    assert "Everything important is working" in message
+    assert "core move away from the Windows PC is complete" in message
+    assert "next real job is to save better evidence" in message
+    assert "Nothing today" in message
+    assert "clues, not confirmed faults" in message
+    for jargon in (
+            "healthz", "matched-but-ungated", "mismatch canary", "report-only",
+            "run_id", "token", "GB free", "aggregate"):
+        assert jargon not in message
+
+
+def test_daily_message_reports_only_changes_since_previous_summary(monkeypatch):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {
+        "collector": "release-new",
+    })
+    snapshot = plain_daily_snapshot()
+    current = status_digest._progress_fingerprints(snapshot)
+    previous = dict(current)
+    previous["audit_publish"] = "2026-08-11T04:45:16Z"
+    previous["releases"] = {"collector": "release-old"}
+
+    message = status_digest.daily_message(
+        snapshot, {"fingerprints": previous}, date(2026, 8, 13))
+
+    assert "Since yesterday" in message
+    assert "public performance report published successfully" in message
+    assert "software update was installed" in message
+    assert "Finished over the last few days" not in message
+
+
+def test_daily_message_makes_pending_description_review_the_only_action(
+        monkeypatch):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = plain_daily_snapshot()
+    snapshot["blurb_generation"] = {
+        "status": "pending_review",
+        "pending_review": {"buses": 12},
+    }
+
+    message = status_digest.daily_message(snapshot, today=date(2026, 8, 13))
+
+    assert "Review descriptions for 12 buses when convenient" in message
+    assert "Nothing will publish by itself" in message

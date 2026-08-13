@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs on the Pi after the separate networkless rollup. Exports the static
 # JSON, copies it into the public repo clone and pushes. Outbound only.
-# Posts a Slack heartbeat on success and an alert on failure.
+# Routine success is folded into the daily update; failures alert immediately.
 # Usage:  ./publish_to_github.sh
 
 set -euo pipefail
@@ -58,4 +58,4 @@ fi
 cd "$AUDIT_DIR"
 "$PY" audit_promote.py \
     --input "$PENDING_INTEGRATION" --output "$PUBLISHED_INTEGRATION"
-notify ":white_check_mark: $PROJECT: $RESULT."
+echo "$PROJECT: $RESULT."
