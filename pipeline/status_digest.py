@@ -295,7 +295,8 @@ def anomaly_line() -> str:
         counts = {
             "extreme": detector_count("extreme_delays"),
             "backwards": detector_count("backwards_stop_progress"),
-            "speeds": detector_count("impossible_implied_speeds"),
+            "speeds": detector_count("timetable_stop_transition_speeds")
+            or detector_count("impossible_implied_speeds"),
             "overlaps": detector_count("overlapping_vehicle_trips"),
             "near_gate": detector_count("gps_near_match_gate"),
         }
@@ -304,7 +305,7 @@ def anomaly_line() -> str:
             f"*anomalies*  {flag} 48h/{int(coverage.get('observations', 0)):,} obs - "
             f"extreme-delay readings {counts['extreme']:,} - backwards flags "
             f"{counts['backwards']:,} - trip-overlap flags {counts['overlaps']:,} - "
-            f"impossible-speed flags {counts['speeds']:,} - near GPS gate "
+            f"stop-transition speed flags {counts['speeds']:,} - near GPS gate "
             f"{counts['near_gate']:,} - "
             f"match {percent(older.get('match_rate'))}->{percent(recent.get('match_rate'))} - "
             f"GPS p95 {int(gps.get('p95', 0))}m - report-only"

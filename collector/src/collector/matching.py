@@ -203,7 +203,11 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
                           AND added.date=? AND added.exception_type=1
                     )
                 )
-                AND st.stop_sequence = 1
+                AND st.stop_sequence = (
+                    SELECT MIN(first_stop.stop_sequence)
+                    FROM stop_times first_stop
+                    WHERE first_stop.trip_id = t.trip_id
+                )
                 AND st.departure_time BETWEEN ? AND ?
             """
             params = [line_name, operator_noc]

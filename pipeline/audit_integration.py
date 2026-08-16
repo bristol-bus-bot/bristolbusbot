@@ -100,6 +100,7 @@ def _headline(cur: sqlite3.Cursor, start_date: str,
             FROM timepoint_observations
             WHERE service_date BETWEEN ? AND ?
               AND operator IN ({ops})
+              AND COALESCE(is_origin, 0) = 0
               AND observed_delay_s IS NOT NULL
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
@@ -236,6 +237,7 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
             FROM timepoint_observations
             WHERE service_date IN ({date_ph})
               AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
               AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
               AND route IS NOT NULL AND trim(route) != ''
               AND observed_delay_s IS NOT NULL
@@ -400,6 +402,7 @@ def _group_days(cur: sqlite3.Cursor, dates: list[str], columns: str,
             FROM timepoint_observations
             WHERE service_date IN ({_placeholders(dates)})
               AND operator IN ({_placeholders(SHOW_OPERATORS)})
+              AND COALESCE(is_origin, 0) = 0
               AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
               AND route IS NOT NULL AND trim(route) != ''
               AND observed_delay_s IS NOT NULL
@@ -438,6 +441,7 @@ def _rare_workings(conn: sqlite3.Connection, completed_dates: list[str],
                    COUNT(DISTINCT stop_code) AS points
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
               AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
               AND route IS NOT NULL AND trim(route) != ''
               AND stop_code IS NOT NULL AND trim(stop_code) != ''
@@ -580,6 +584,10 @@ def build_payload(conn: sqlite3.Connection, through_date: str,
         "on_time_definition": {"minimum_delay_s": ON_TIME_LOW_S,
                                "maximum_delay_s": ON_TIME_HIGH_S},
         "distance_gate_m": DISTANCE_GATE_M,
+        "measurement_method": {
+            "version": 2,
+            "origin_timing_points": "excluded_until_departure_can_be_detected",
+        },
         "headline": _headline(conn.cursor(), _month_start(actual_through),
                               actual_through),
         "profiles": profiles,

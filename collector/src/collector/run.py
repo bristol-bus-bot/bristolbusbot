@@ -20,7 +20,7 @@ import xmltodict
 
 from . import audit_db, live_db
 from .config import Config
-from .delay import live_estimate, settled_reading
+from .delay import live_estimate_result, settled_reading_result
 from .geo import BoundaryFilter
 from .matching import match_vehicle
 from .siri import (activities_from_xmltodict, anchor_departure_local,
@@ -121,10 +121,14 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
             first_secs = gtfs_seconds(match.schedule[0][1])
             if first_secs is not None:
                 sm = service_midnight(origin_local, first_secs)
-                est = live_estimate(snap.lat, snap.lon, snap.recorded_utc,
-                                    match.schedule, sm)
-                reading = settled_reading(snap.lat, snap.lon, snap.recorded_utc,
-                                          match.schedule, sm)
+                est, estimate_reason = live_estimate_result(
+                    snap.lat, snap.lon, snap.recorded_utc, match.schedule, sm)
+                reading, reading_reason = settled_reading_result(
+                    snap.lat, snap.lon, snap.recorded_utc, match.schedule, sm)
+                if "sanity_rejected" in {estimate_reason, reading_reason}:
+                    # One matched vehicle is counted once even when both the
+                    # live and audit calculations reject the same timestamp.
+                    counters["dropped_insane"] += 1
                 if reading is not None:
                     audit_db.upsert_observation(audit_conn.cursor(), (
                         sm.strftime("%Y%m%d"), snap.operator_ref,
@@ -133,7 +137,7 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                         reading.scheduled_local.isoformat(),
                         reading.observed_delay_s, int(reading.on_time),
                         reading.gps_distance_m, snap.recorded_utc.isoformat(),
-                        snap.vehicle_ref))
+                        snap.vehicle_ref, int(reading.is_origin)))
                     counters["obs_written"] += 1
 
         decision = live_db.upsert_vehicle(live_conn, snap, est, match,

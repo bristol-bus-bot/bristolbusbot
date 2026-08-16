@@ -97,6 +97,15 @@ def migrate_overall_pk(cur):
 def init_summary_tables(conn):
     cur = conn.cursor()
     cur.execute("PRAGMA journal_mode=WAL;")
+    raw_tables = {row[0] for row in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    if "timepoint_observations" in raw_tables:
+        raw_columns = {row[1] for row in cur.execute(
+            "PRAGMA table_info(timepoint_observations)")}
+        if "is_origin" not in raw_columns:
+            cur.execute(
+                "ALTER TABLE timepoint_observations ADD COLUMN "
+                "is_origin INTEGER NOT NULL DEFAULT 0")
     cur.execute(
         """CREATE TABLE IF NOT EXISTS daily_route_summary (
                service_date        TEXT NOT NULL,
@@ -318,7 +327,8 @@ def rollup(conn, date_str, operators, label):
     cur.execute(
         f"""SELECT route, observed_delay_s, gps_distance_m, scheduled_local
            FROM timepoint_observations
-           WHERE service_date = ? AND operator IN ({op_ph})""",
+           WHERE service_date = ? AND operator IN ({op_ph})
+             AND COALESCE(is_origin, 0) = 0""",
         (date_str, *operators),
     )
     observations = cur.fetchall()
@@ -514,6 +524,7 @@ def rollup_geo(conn, date_str, operators, label, geo_index):
     cur.execute(
         f"""SELECT stop_code, observed_delay_s FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (date_str, *operators, DISTANCE_GATE_M),
     )
@@ -553,6 +564,7 @@ def geography_match_stats(conn, date_str, operators, geo_index):
     cur.execute(
         f"""SELECT stop_code FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (date_str, *operators, DISTANCE_GATE_M),
     )
@@ -575,6 +587,7 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index):
         f"""SELECT operator, route, vehicle_ref, observed_delay_s
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (date_str, *operators, DISTANCE_GATE_M),
     )

@@ -71,18 +71,18 @@ def build() -> sqlite3.Connection:
     def st(trip, dep, stop, seq, tp):
         return (trip, dep, dep, stop, seq, "", 0, 0, None, tp)
     c.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?,?,?,?,?)", [
-        st("T_OUT",  "11:15:00", "S1", 1, 1),
-        st("T_OUT",  "11:20:00", "S2", 2, 0),
-        st("T_OUT",  "11:25:00", "S3", 3, 1),
-        st("T_IN",   "11:20:00", "S3", 1, 1),
-        st("T_IN",   "11:30:00", "S1", 2, 1),
-        st("T_ABUS", "11:15:00", "S1", 1, 1),   # same number+time, other operator
-        st("T_NIGHT","25:30:00", "S1", 1, 1),   # 01:30 next wall-clock day
-        st("T_NIGHT","25:40:00", "S3", 2, 1),
-        st("T_41_CITY", "16:08:00", "S1", 1, 1),
-        st("T_41_CITY", "16:18:00", "S3", 2, 1),
-        st("T_41_FAR",  "16:05:00", "F1", 1, 1),
-        st("T_41_FAR",  "16:15:00", "F2", 2, 1),
+        st("T_OUT",  "11:15:00", "S1", 0, 1),
+        st("T_OUT",  "11:20:00", "S2", 1, 0),
+        st("T_OUT",  "11:25:00", "S3", 2, 1),
+        st("T_IN",   "11:20:00", "S3", 0, 1),
+        st("T_IN",   "11:30:00", "S1", 1, 1),
+        st("T_ABUS", "11:15:00", "S1", 0, 1),   # same number+time, other operator
+        st("T_NIGHT","25:30:00", "S1", 0, 1),   # 01:30 next wall-clock day
+        st("T_NIGHT","25:40:00", "S3", 1, 1),
+        st("T_41_CITY", "16:08:00", "S1", 0, 1),
+        st("T_41_CITY", "16:18:00", "S3", 1, 1),
+        st("T_41_FAR",  "16:05:00", "F1", 0, 1),
+        st("T_41_FAR",  "16:15:00", "F2", 1, 1),
     ])
     conn.commit()
     return conn

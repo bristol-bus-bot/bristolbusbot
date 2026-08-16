@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from collector.delay import (LOW_CONFIDENCE_DISTANCE_M, classify_event,
-                             closest_stop, live_estimate, settled_reading)
+                             closest_stop, live_estimate, live_estimate_result,
+                             settled_reading, settled_reading_result)
 from collector.timeparse import gtfs_seconds, service_midnight
 
 LDN = ZoneInfo("Europe/London")
@@ -10,9 +11,9 @@ LDN = ZoneInfo("Europe/London")
 # A tiny schedule: three stops heading south through Bristol.
 # (seq, departure_time, timepoint, stop_code, lat, lon)
 SCHEDULE = [
-    (1, "11:15:00", 1, "0100A", 51.4600, -2.5890, "Origin"),
-    (2, "11:20:00", 0, "0100B", 51.4550, -2.5890, "Middle"),
-    (3, "11:25:00", 1, "0100C", 51.4500, -2.5890, "End"),
+    (0, "11:15:00", 1, "0100A", 51.4600, -2.5890, "Origin"),
+    (1, "11:20:00", 0, "0100B", 51.4550, -2.5890, "Middle"),
+    (2, "11:25:00", 1, "0100C", 51.4500, -2.5890, "End"),
 ]
 SM = service_midnight(datetime(2026, 6, 9, 11, 15, tzinfo=LDN),
                       gtfs_seconds("11:15:00"))
@@ -26,6 +27,34 @@ def test_closest_stop_picks_nearest():
     cs = closest_stop(51.4551, -2.5890, SCHEDULE)
     assert cs.row[3] == "0100B"
     assert cs.distance_m < 20
+
+
+def test_close_loop_stops_are_disambiguated_by_schedule_time():
+    loop = [
+        (0, "10:00:00", 1, "ORIGIN", 51.4600, -2.5890, "Origin"),
+        (10, "11:00:00", 1, "TERMINUS", 51.4602, -2.5890, "Terminus"),
+    ]
+    sm = service_midnight(
+        datetime(2026, 6, 9, 10, 0, tzinfo=LDN),
+        gtfs_seconds("10:00:00"))
+    # At 11:15 local the vehicle is slightly closer to the origin coordinates,
+    # but the terminus is the only time-plausible point in this looped trip.
+    result = closest_stop(
+        51.4600, -2.5890, loop, utc(10, 15), sm)
+    assert result is not None and result.row[3] == "TERMINUS"
+
+
+def test_close_loop_stop_still_uses_origin_before_departure():
+    loop = [
+        (0, "10:00:00", 1, "ORIGIN", 51.4600, -2.5890, "Origin"),
+        (10, "11:00:00", 1, "TERMINUS", 51.4602, -2.5890, "Terminus"),
+    ]
+    sm = service_midnight(
+        datetime(2026, 6, 9, 10, 0, tzinfo=LDN),
+        gtfs_seconds("10:00:00"))
+    result = closest_stop(
+        51.4600, -2.5890, loop, utc(8, 55), sm)
+    assert result is not None and result.row[3] == "ORIGIN"
 
 
 def test_live_estimate_on_time():
@@ -63,6 +92,12 @@ def test_settled_reading_requires_timing_point():
     assert r.stop_code == "0100C"
     assert r.observed_delay_s == 120
     assert r.on_time  # +120 s is inside the DfT band
+    assert not r.is_origin
+
+
+def test_settled_reading_marks_first_schedule_row_as_origin():
+    r = settled_reading(51.4600, -2.5890, utc(10, 15), SCHEDULE, SM)
+    assert r is not None and r.is_origin
 
 
 def test_settled_reading_dft_band_edges():
@@ -80,6 +115,16 @@ def test_sanity_band_drops_impossible():
     # 2 hours "late" is outside the storage band -> dropped, not stored
     est = live_estimate(51.4550, -2.5890, utc(12, 20), SCHEDULE, SM)
     assert est is None
+
+
+def test_measurement_reason_distinguishes_sanity_from_ordinary_drop():
+    estimate, reason = live_estimate_result(
+        51.4550, -2.5890, utc(12, 20), SCHEDULE, SM)
+    assert estimate is None and reason == "sanity_rejected"
+
+    reading, reason = settled_reading_result(
+        51.4550, -2.5890, utc(10, 20), SCHEDULE, SM)
+    assert reading is None and reason == "not_timing_point"
 
 
 def test_classify_event_thresholds():
