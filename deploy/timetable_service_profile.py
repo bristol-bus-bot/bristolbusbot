@@ -77,6 +77,7 @@ class TripVolume:
     direction: int
     trips: int
     stop_times: int
+    duplicate_trips: int = 0
 
 
 @dataclass
@@ -90,6 +91,8 @@ class ServiceProfile:
     route_shapes: dict[tuple[str, str, int], set[str]]
     query_seconds: float
     peak_query_seconds: float
+    duplicate_trips_removed: int = 0
+    journey_identity: str = "database_rows"
 
     def summary(self) -> dict[str, object]:
         last_service = next((
@@ -102,10 +105,12 @@ class ServiceProfile:
             "last_service_date": last_service,
             "query_seconds": round(self.query_seconds, 3),
             "peak_query_seconds": round(self.peak_query_seconds, 3),
+            "journey_identity": self.journey_identity,
+            "duplicate_trips_removed": self.duplicate_trips_removed,
         }
 
 
-VOLUME_SQL = """
+ROW_VOLUME_SQL = """
 WITH trip_stop_counts AS (
     SELECT trip_id, COUNT(*) AS stop_times
     FROM stop_times
@@ -116,13 +121,57 @@ SELECT t.service_id,
        COALESCE(NULLIF(r.route_short_name, ''), r.route_id, 'unknown') AS route,
        COALESCE(t.direction_id, 0) AS direction_id,
        COUNT(*) AS trips,
-       SUM(COALESCE(ts.stop_times, 0)) AS stop_times
+       SUM(COALESCE(ts.stop_times, 0)) AS stop_times,
+       0 AS duplicate_trips
 FROM trips AS t
 JOIN routes AS r ON r.route_id = t.route_id
 JOIN agency AS a ON a.agency_id = r.agency_id
 LEFT JOIN trip_stop_counts AS ts ON ts.trip_id = t.trip_id
 GROUP BY t.service_id, operator, route, direction_id
 ORDER BY t.service_id, operator, route, direction_id
+"""
+
+
+CANONICAL_VOLUME_SQL = """
+WITH trip_schedules AS (
+    SELECT trip_id, COUNT(*) AS stop_times,
+           GROUP_CONCAT(
+               printf('%d:%d:%s:%d:%s:%d:%s',
+                      stop_sequence,
+                      length(COALESCE(stop_id, '')), COALESCE(stop_id, ''),
+                      length(COALESCE(arrival_time, '')), COALESCE(arrival_time, ''),
+                      length(COALESCE(departure_time, '')), COALESCE(departure_time, '')),
+               '|' ORDER BY stop_sequence, COALESCE(stop_id, ''),
+                            COALESCE(arrival_time, ''),
+                            COALESCE(departure_time, '')
+           ) AS stop_signature
+    FROM stop_times
+    GROUP BY trip_id
+), trip_details AS (
+    SELECT t.service_id,
+           COALESCE(NULLIF(a.agency_noc, ''), a.agency_id, 'unknown') AS operator,
+           COALESCE(NULLIF(r.route_short_name, ''), r.route_id, 'unknown') AS route,
+           COALESCE(t.direction_id, 0) AS direction_id,
+           COALESCE(t.trip_headsign, '') AS trip_headsign,
+           schedule.stop_signature,
+           schedule.stop_times
+    FROM trips AS t
+    JOIN routes AS r ON r.route_id = t.route_id
+    JOIN agency AS a ON a.agency_id = r.agency_id
+    JOIN trip_schedules AS schedule ON schedule.trip_id = t.trip_id
+), unique_trips AS (
+    SELECT service_id, operator, route, direction_id, trip_headsign,
+           stop_signature, stop_times, COUNT(*) AS source_rows
+    FROM trip_details
+    GROUP BY service_id, operator, route, direction_id, trip_headsign,
+             stop_signature, stop_times
+)
+SELECT service_id, operator, route, direction_id,
+       COUNT(*) AS trips, SUM(stop_times) AS stop_times,
+       SUM(source_rows - 1) AS duplicate_trips
+FROM unique_trips
+GROUP BY service_id, operator, route, direction_id
+ORDER BY service_id, operator, route, direction_id
 """
 
 CALENDAR_SQL = """
@@ -190,6 +239,31 @@ def _open_database(path: Path, deadline: float,
             "database_profile_failed", "timetable database could not be opened") from exc
 
 
+def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
+    return {
+        str(row[1])
+        for row in connection.execute(f"PRAGMA table_info({table})")
+    }
+
+
+def _volume_query(connection: sqlite3.Connection) -> tuple[str, str]:
+    """Choose exact journey identity when the production columns exist.
+
+    Old test or recovery databases can still be profiled using raw rows. The
+    production schema has enough schedule detail to collapse only journeys
+    that share the same service, operator, public route, direction, headsign,
+    and complete ordered stop/time sequence. Source trip IDs and route IDs are
+    omitted deliberately because BODS can publish the same journey twice
+    under different source identities.
+    """
+    trips = _table_columns(connection, "trips")
+    stop_times = _table_columns(connection, "stop_times")
+    if {"trip_headsign"}.issubset(trips) and {
+            "arrival_time", "departure_time"}.issubset(stop_times):
+        return CANONICAL_VOLUME_SQL, "canonical_schedule"
+    return ROW_VOLUME_SQL, "database_rows"
+
+
 def _timed_rows(connection: sqlite3.Connection, sql: str, deadline: float,
                 monotonic: Callable[[], float]) -> tuple[list[sqlite3.Row], float]:
     started = monotonic()
@@ -238,8 +312,9 @@ def build_service_profile(path: Path, *, start_date: date,
     connection = _open_database(path, deadline, monotonic)
     durations: list[float] = []
     try:
+        volume_sql, journey_identity = _volume_query(connection)
         volume_rows, elapsed = _timed_rows(
-            connection, VOLUME_SQL, deadline, monotonic)
+            connection, volume_sql, deadline, monotonic)
         durations.append(elapsed)
         calendar_rows, elapsed = _timed_rows(
             connection, CALENDAR_SQL, deadline, monotonic)
@@ -265,6 +340,7 @@ def build_service_profile(path: Path, *, start_date: date,
             direction=int(row["direction_id"]),
             trips=int(row["trips"]),
             stop_times=int(row["stop_times"]),
+            duplicate_trips=int(row["duplicate_trips"] or 0),
         ))
 
     exceptions: dict[date, dict[str, int]] = defaultdict(dict)
@@ -364,6 +440,12 @@ def build_service_profile(path: Path, *, start_date: date,
         route_shapes=dict(route_shapes),
         query_seconds=monotonic() - overall_started,
         peak_query_seconds=max(durations, default=0.0),
+        duplicate_trips_removed=sum(
+            volume.duplicate_trips
+            for service_volumes in volumes.values()
+            for volume in service_volumes
+        ),
+        journey_identity=journey_identity,
     )
 
 

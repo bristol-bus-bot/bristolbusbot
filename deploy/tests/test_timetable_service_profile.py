@@ -103,6 +103,63 @@ def compare(tmp_path: Path, current_services: list[dict],
     return compare_databases(current, candidate, start_date=START)
 
 
+def make_duplicate_journey_database(path: Path, *, duplicated: bool):
+    """Create production-shaped data with one journey repeated by its source."""
+    connection = sqlite3.connect(path)
+    connection.executescript("""
+        CREATE TABLE agency (
+            agency_id TEXT PRIMARY KEY, agency_noc TEXT);
+        CREATE TABLE routes (
+            route_id TEXT PRIMARY KEY, agency_id TEXT, route_short_name TEXT);
+        CREATE TABLE trips (
+            trip_id TEXT PRIMARY KEY, route_id TEXT, service_id TEXT,
+            trip_headsign TEXT, direction_id INTEGER);
+        CREATE TABLE stop_times (
+            trip_id TEXT, arrival_time TEXT, departure_time TEXT,
+            stop_id TEXT, stop_sequence INTEGER);
+        CREATE TABLE calendar (
+            service_id TEXT PRIMARY KEY, monday INTEGER, tuesday INTEGER,
+            wednesday INTEGER, thursday INTEGER, friday INTEGER,
+            saturday INTEGER, sunday INTEGER, start_date TEXT, end_date TEXT);
+        CREATE TABLE calendar_dates (
+            service_id TEXT, date TEXT, exception_type INTEGER);
+        CREATE TABLE route_shapes (
+            route_name TEXT, operator_noc TEXT, direction_id INTEGER,
+            variant INTEGER, points_json TEXT);
+    """)
+    connection.execute("INSERT INTO agency VALUES ('A1', 'SSWL')")
+    connection.executemany(
+        "INSERT INTO routes VALUES (?, 'A1', '505')",
+        [("R1",), ("R2",)],
+    )
+    connection.execute(
+        "INSERT INTO calendar VALUES "
+        "('S1', 1, 1, 1, 1, 1, 1, 1, '20200101', '20271231')")
+    journeys = [
+        ("T-0800-A", "R1", "08:00:00", "08:30:00"),
+        ("T-0900", "R1", "09:00:00", "09:30:00"),
+    ]
+    if duplicated:
+        journeys.append(("T-0800-B", "R2", "08:00:00", "08:30:00"))
+    for trip_id, route_id, first_time, last_time in journeys:
+        connection.execute(
+            "INSERT INTO trips VALUES (?, ?, 'S1', 'Portishead', 0)",
+            (trip_id, route_id),
+        )
+        connection.executemany(
+            "INSERT INTO stop_times VALUES (?, ?, ?, ?, ?)",
+            [
+                (trip_id, first_time, first_time, "START", 1),
+                (trip_id, last_time, last_time, "FINISH", 2),
+            ],
+        )
+    connection.execute(
+        "INSERT INTO route_shapes VALUES "
+        "('505', 'SSWL', 0, 0, '[[51.45,-2.59],[51.46,-2.58]]')")
+    connection.commit()
+    connection.close()
+
+
 def test_historical_row_shrink_does_not_hide_complete_current_service(tmp_path):
     live = [{"operator": "MAIN", "route": "1", "trips": 10, "stops": 10}]
     candidate = [{"operator": "MAIN", "route": "1", "trips": 10, "stops": 10}]
@@ -111,6 +168,24 @@ def test_historical_row_shrink_does_not_hide_complete_current_service(tmp_path):
 
     assert result["status"] == "pass"
     assert result["near_term_totals"][1]["ratio"] == 1.0
+
+
+def test_duplicate_source_journeys_do_not_create_a_false_service_collapse(
+        tmp_path):
+    current = tmp_path / "duplicated-current.db"
+    candidate = tmp_path / "deduplicated-candidate.db"
+    make_duplicate_journey_database(current, duplicated=True)
+    make_duplicate_journey_database(candidate, duplicated=False)
+
+    result = compare_databases(current, candidate, start_date=START)
+
+    assert result["status"] == "pass"
+    assert result["current_profile"]["journey_identity"] == "canonical_schedule"
+    assert result["current_profile"]["duplicate_trips_removed"] == 1
+    assert result["candidate_profile"]["duplicate_trips_removed"] == 0
+    totals = {gate["metric"]: gate for gate in result["near_term_totals"]}
+    assert totals["trips"]["ratio"] == 1.0
+    assert totals["stop_times"]["ratio"] == 1.0
 
 
 def test_missing_near_term_day_fails_with_date_and_metric(tmp_path):

@@ -1169,6 +1169,29 @@ def timetable_failure_message(kind: str,
             "at the next scheduled check.",
             "*You need to do:* Nothing now.",
         ))
+    if code == "candidate_service_collapse":
+        return "\n".join((
+            ":warning: *A new timetable was rejected safely*",
+            "What happened: One day in the proposed timetable contained "
+            "noticeably less service than the current version, so the safety "
+            "check stopped it.",
+            "What the bot did: Kept the current working timetable. The map, "
+            "website and bot are still running.",
+            "What happens next: The Pi will try a fresh download automatically "
+            "at the next scheduled check.",
+            "*You need to do:* Nothing now.",
+        ))
+    if code == "candidate_future_coverage_cliff":
+        return "\n".join((
+            ":warning: *A new timetable was rejected safely*",
+            "What happened: The proposed timetable runs out of usable future "
+            "service too soon, so the safety check stopped it.",
+            "What the bot did: Kept the current working timetable. The map, "
+            "website and bot are still running.",
+            "What happens next: The Pi will try a fresh download automatically "
+            "at the next scheduled check.",
+            "*You need to do:* Nothing now.",
+        ))
     safe_parts = []
     for key in (
             "phase", "metric", "date", "operator", "current",
@@ -1463,6 +1486,8 @@ def main() -> int:
     if not isinstance(notified_failures, list):
         notified_failures = []
     notified_failures = [str(value) for value in notified_failures][-99:]
+    pending_timetable_failure = str(
+        previous.get("pending_timetable_failure_fingerprint") or "")
     if timetable_automation.get("status") == "failed":
         phase = str(timetable_automation.get("phase") or "shadow")
         fingerprint = "|".join((
@@ -1472,11 +1497,26 @@ def main() -> int:
             str(automation_attempt.get("failure_code") or "unknown_failure"),
             str(automation_attempt.get("database_sha256") or ""),
         ))
-        if fingerprint not in notified_failures and notify(
-                timetable_failure_message(phase, automation_attempt)):
-            notified_failures.append(fingerprint)
+        incident_opened = "job:timetable-automation" in opened
+        urgent_recovery_failure = (
+            automation_attempt.get("outcome") == "rollback_failed")
+        should_notify = (
+            incident_opened or bool(pending_timetable_failure)
+            or urgent_recovery_failure)
+        if should_notify and fingerprint not in notified_failures:
+            if notify(timetable_failure_message(phase, automation_attempt)):
+                notified_failures.append(fingerprint)
+                pending_timetable_failure = ""
+            else:
+                # Retry a failed Slack send, but do not re-alert for every new
+                # safe candidate while the same incident remains open.
+                pending_timetable_failure = fingerprint
+        elif fingerprint in notified_failures:
+            pending_timetable_failure = ""
         if "job:timetable-automation" in remaining_opened:
             remaining_opened.remove("job:timetable-automation")
+    else:
+        pending_timetable_failure = ""
     editorial_issues = {
         "job:editorial-refresh",
         "job:editorial-fetch",
@@ -1522,6 +1562,7 @@ def main() -> int:
         "active": unique_issues,
         "last_timetable_success_run_id": notified_run,
         "notified_timetable_failure_fingerprints": notified_failures,
+        "pending_timetable_failure_fingerprint": pending_timetable_failure,
         "timetable_recovery_pending": recovery_pending,
         "last_editorial_success_blob_sha": notified_editorial_blob,
     })

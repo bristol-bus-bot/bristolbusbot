@@ -463,6 +463,21 @@ def test_timetable_messages_explain_success_and_safe_rollback():
     assert "SSWL" not in collapse
     assert "candidate_operator_collapse" not in collapse
 
+    daily_collapse = aggregate_health.timetable_failure_message("shadow", {
+        "outcome": "failure",
+        "failure_code": "candidate_service_collapse",
+        "context": {
+            "date": "2026-09-07", "current": 270526,
+            "candidate": 225456,
+        },
+    })
+    assert "rejected safely" in daily_collapse
+    assert "one day" in daily_collapse.lower()
+    assert "still running" in daily_collapse
+    assert "Nothing now" in daily_collapse
+    assert "candidate_service_collapse" not in daily_collapse
+    assert "270526" not in daily_collapse
+
 
 def test_general_health_alerts_translate_internal_issue_keys():
     incident = aggregate_health.general_incident_message([
@@ -837,8 +852,18 @@ def test_timetable_notification_state_advances_only_after_successful_send(
     assert aggregate_health.main() == 1
     first = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
     assert first["notified_timetable_failure_fingerprints"] == []
+    assert first["pending_timetable_failure_fingerprint"]
     assert aggregate_health.main() == 1
     second = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
     assert len(second["notified_timetable_failure_fingerprints"]) == 1
+    assert second["pending_timetable_failure_fingerprint"] == ""
+    assert aggregate_health.main() == 1
+    assert len(messages) == 2
+
+    # A fresh safe candidate can fail while the same incident remains open.
+    # That belongs in the daily summary, not another immediate alarm.
+    attempt["run_id"] = "31925628102"
+    attempt["finished_at"] = datetime.now(timezone.utc).isoformat()
+    attempt["failure_code"] = "candidate_service_collapse"
     assert aggregate_health.main() == 1
     assert len(messages) == 2
