@@ -175,6 +175,10 @@ body {
   color: #7dc4ff;
 }
 
+[data-theme="night"] .instagram-link {
+  color: #f4a3d2;
+}
+
 .theme-toggle {
   display: inline-grid;
   flex: none;
@@ -205,13 +209,19 @@ body {
   color: var(--uk-yellow);
 }
 
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 2px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
 .bsky-link {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-left: 2px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
   color: #0069c9;
   font-weight: 700;
   text-decoration: none;
@@ -223,6 +233,22 @@ body {
 
 .bsky-handle {
   font-size: var(--t-small) !important;
+}
+
+.instagram-link {
+  display: inline-grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: #b32376;
+  text-decoration: none;
+}
+
+.instagram-link:hover {
+  background: var(--surface-2);
+  color: #d62976;
 }
 
 /* Main shell and controls ------------------------------------------------ */
@@ -382,12 +408,30 @@ body {
 
 .sidebar-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 7px;
   padding: 10px 20px;
   border-top: 1px solid var(--line);
   color: var(--fg-3);
   font: 600 var(--t-label) var(--font-mono);
+}
+
+.github-link,
+.sidebar-updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.github-link {
+  color: var(--fg-2);
+  text-decoration: none;
+}
+
+.github-link:hover {
+  color: var(--fg-1);
+  text-decoration: underline;
 }
 
 .sheet-handle {
@@ -1503,7 +1547,7 @@ span.vs-stop-name {
     height: 42px;
   }
 
-  .bsky-link {
+  .social-links {
     padding-left: 5px !important;
     border-left: 0 !important;
   }

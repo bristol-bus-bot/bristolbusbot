@@ -192,9 +192,9 @@
             /* Hide toggles from header (moved to map FABs) */
             #header-toggles { display: none !important; }
 
-            /* Hide timestamp, keep Bluesky icon-only */
+            /* Hide timestamp and social handle; keep social icons. */
             .header-desktop-only { display: none !important; }
-            .bsky-link { border-left: none !important; padding-left: 0 !important; margin-left: 0 !important; }
+            .social-links { border-left: none !important; padding-left: 0 !important; margin-left: 0 !important; }
             .bsky-handle { display: none !important; }
 
             .main-layout {
