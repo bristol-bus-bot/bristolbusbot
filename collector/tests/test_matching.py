@@ -63,7 +63,7 @@ def test_fuzzy_applies_calendar_date_removals_and_additions():
         "('T_ADDED','R75F','ADDED','Hengrove','',0,'','',0,NULL)")
     connection.execute(
         "INSERT INTO stop_times VALUES "
-        "('T_ADDED','11:15:00','11:15:00','S1',1,'',0,0,NULL,1)")
+        "('T_ADDED','11:15:00','11:15:00','S1',0,'',0,0,NULL,1)")
     connection.commit()
     match = match_fuzzy(
         connection.cursor(), "FBRI", "75", "outbound", WED_1115)
@@ -103,7 +103,7 @@ def test_exact_tier_chooses_the_active_timetable_edition():
         "('T_NEW','R75F','NEW','Hengrove','',0,'','',0,'VJ_75_1115')")
     connection.execute(
         "INSERT INTO stop_times VALUES "
-        "('T_NEW','11:16:00','11:16:00','S1',1,'',0,0,NULL,1)")
+        "('T_NEW','11:16:00','11:16:00','S1',0,'',0,0,NULL,1)")
     connection.commit()
     match = match_vehicle(
         connection.cursor(), "FBRI", "75", "outbound", WED_1115,
@@ -114,6 +114,44 @@ def test_exact_tier_chooses_the_active_timetable_edition():
 def test_drop_dont_guess():
     assert match_fuzzy(cur(), "FBRI", "99", "outbound", WED_1115) is None
     assert match_fuzzy(cur(), "", "75", "outbound", WED_1115) is None
+
+
+def test_fuzzy_anchors_on_each_trips_minimum_stop_sequence():
+    connection = build()
+    connection.execute(
+        "INSERT INTO routes VALUES ('RLONG','OP1','LONG','Long first hop',3)")
+    connection.execute(
+        "INSERT INTO trips VALUES "
+        "('T_LONG','RLONG','WK','End','',0,'','',0,NULL)")
+    # The 15-minute first hop would put the old hard-coded sequence-1 anchor
+    # outside the fuzzy window even though the origin time is an exact match.
+    connection.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?,?,?,?,?)", [
+        ("T_LONG", "11:15:00", "11:15:00", "S1", 0, "", 0, 0, None, 1),
+        ("T_LONG", "11:30:00", "11:30:00", "S2", 1, "", 0, 0, None, 1),
+    ])
+    connection.commit()
+
+    match = match_fuzzy(
+        connection.cursor(), "FBRI", "LONG", "outbound", WED_1115)
+    assert match and match.trip_id == "T_LONG"
+
+
+def test_fuzzy_still_supports_a_one_based_trip():
+    connection = build()
+    connection.execute(
+        "INSERT INTO routes VALUES ('RONE','OP1','ONE','One based',3)")
+    connection.execute(
+        "INSERT INTO trips VALUES "
+        "('T_ONE','RONE','WK','End','',0,'','',0,NULL)")
+    connection.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?,?,?,?,?)", [
+        ("T_ONE", "11:15:00", "11:15:00", "S1", 1, "", 0, 0, None, 1),
+        ("T_ONE", "11:20:00", "11:20:00", "S2", 2, "", 0, 0, None, 1),
+    ])
+    connection.commit()
+
+    match = match_fuzzy(
+        connection.cursor(), "FBRI", "ONE", "outbound", WED_1115)
+    assert match and match.trip_id == "T_ONE"
 
 
 # ── two-towns matcher regression (2026-07-03): one NOC, one line number ──

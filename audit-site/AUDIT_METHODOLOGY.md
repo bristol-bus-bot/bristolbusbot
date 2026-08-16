@@ -48,6 +48,12 @@ published figure; readings further out are stored but excluded, and we report ho
 many were excluded and the median distance of those kept. There is no
 interpolation and no assumed speed: every figure is a real recorded position.
 
+The first timing point of each trip is retained as raw evidence but excluded
+from every published punctuality calculation. A vehicle waiting on its origin
+stand before departure is physically indistinguishable from one that has just
+departed when only periodic GPS positions are available. Including that parked
+reading would incorrectly describe the layover as an early departure.
+
 ## On-time definition
 
 A departure counts as on time if it is between 1 minute early and 5 minutes 59
@@ -121,6 +127,17 @@ or regulator measurement that uses different sampling.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**16 August 2026 — origin layovers excluded and trip matching corrected.**
+The audit previously retained the closest GPS reading at the first timing point
+of a trip. This could be a bus waiting on its stand before departure and could
+therefore overstate early running. First timing points are now excluded from
+all published punctuality, geography, fleet and vehicle-profile calculations
+until a departure can be identified reliably. The fuzzy journey matcher and
+scheduled-trip snapshot now anchor on each trip's actual minimum stop sequence
+rather than assuming that every timetable is numbered from one. Retained raw
+days were recalculated using the corrected method and are not directly
+comparable with figures published before this change.
 
 **13 July 2026 — collector replaced.** The process that matches live buses
 to timetabled trips was rewritten. Three behavioural changes affect the

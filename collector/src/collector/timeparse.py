@@ -6,7 +6,7 @@ clock times.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, tzinfo as _tzinfo
+from datetime import datetime, time, timedelta, timezone, tzinfo as _tzinfo
 
 from dateutil.parser import isoparse
 
@@ -52,14 +52,23 @@ def service_midnight(origin_local: datetime, first_stop_secs: int) -> datetime:
     other lands on the correct calendar day even across the date line of the
     service day.
     """
-    sm = origin_local - timedelta(seconds=first_stop_secs)
-    return sm.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_offset = first_stop_secs // 86400
+    service_date = origin_local.date() - timedelta(days=day_offset)
+    return datetime.combine(service_date, time.min, tzinfo=origin_local.tzinfo)
 
 
 def scheduled_local(service_midnight_dt: datetime, stop_secs: int) -> datetime:
-    """Absolute aware local datetime of a stop's GTFS offset on a service day."""
-    doff, rem = divmod(stop_secs, 86400)
-    return service_midnight_dt + timedelta(days=doff, seconds=rem)
+    """Absolute aware local datetime of a GTFS service-day offset.
+
+    GTFS time is elapsed time from the service-day origin. Advancing on the UTC
+    timeline makes the repeated autumn hour unambiguous and skips the missing
+    spring hour instead of silently keeping midnight's UTC offset.
+    """
+    if service_midnight_dt.tzinfo is None:
+        return service_midnight_dt + timedelta(seconds=stop_secs)
+    return (service_midnight_dt.astimezone(timezone.utc)
+            + timedelta(seconds=stop_secs)).astimezone(
+                service_midnight_dt.tzinfo)
 
 
 def parse_schedule_time(schedule_time_str: str | None,

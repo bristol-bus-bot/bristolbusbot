@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from collector.timeparse import (gtfs_seconds, parse_iso_utc, parse_schedule_time,
@@ -63,3 +63,20 @@ def test_bst_offset_is_respected():
     sched = scheduled_local(sm, gtfs_seconds("12:00:00"))
     recorded = parse_iso_utc("2026-06-09T12:00:00Z")
     assert int((recorded - sched).total_seconds()) == 3600
+
+
+def test_scheduled_local_distinguishes_the_repeated_autumn_hour():
+    sm = datetime(2026, 10, 25, 0, 0, tzinfo=LDN)
+    first_0130 = scheduled_local(sm, gtfs_seconds("01:30:00"))
+    second_0130 = scheduled_local(sm, gtfs_seconds("02:30:00"))
+
+    assert (first_0130.hour, first_0130.minute, first_0130.fold) == (1, 30, 0)
+    assert (second_0130.hour, second_0130.minute, second_0130.fold) == (1, 30, 1)
+    assert int((second_0130.astimezone(timezone.utc)
+                - first_0130.astimezone(timezone.utc)).total_seconds()) == 3600
+
+
+def test_scheduled_local_skips_the_missing_spring_hour():
+    sm = datetime(2026, 3, 29, 0, 0, tzinfo=LDN)
+    scheduled = scheduled_local(sm, gtfs_seconds("02:30:00"))
+    assert scheduled == datetime(2026, 3, 29, 3, 30, tzinfo=LDN)

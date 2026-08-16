@@ -108,7 +108,8 @@ def build_snapshot(date_str):
     sql = f"""
         SELECT t.trip_id, a.agency_noc, r.route_short_name, t.direction_id,
                (SELECT st.departure_time FROM stop_times st
-                WHERE st.trip_id = t.trip_id AND st.stop_sequence = 1 LIMIT 1)
+                WHERE st.trip_id = t.trip_id
+                ORDER BY st.stop_sequence LIMIT 1)
                    AS first_departure
         FROM trips t
         JOIN routes r ON t.route_id = r.route_id

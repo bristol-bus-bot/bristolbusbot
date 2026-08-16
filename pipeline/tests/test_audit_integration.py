@@ -31,7 +31,8 @@ def database() -> sqlite3.Connection:
                stop_code TEXT,
                observed_delay_s INTEGER,
                gps_distance_m INTEGER,
-               vehicle_ref TEXT
+               vehicle_ref TEXT,
+               is_origin INTEGER NOT NULL DEFAULT 0
            )"""
     )
     return conn
@@ -46,11 +47,13 @@ def add_completed(conn: sqlite3.Connection, dates: list[str]) -> None:
 
 def add_observation(conn: sqlite3.Connection, service_date: str, vehicle: str,
                     route: str, number: int, *, operator: str = "FBRI",
-                    delay: int = 0, stop: str | None = None) -> None:
+                    delay: int = 0, stop: str | None = None,
+                    is_origin: bool = False) -> None:
     conn.execute(
-        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?)",
         (service_date, operator, route, f"{service_date}-{vehicle}-{route}-{number}",
-         number, stop or f"STOP-{number}", delay, 25, vehicle),
+         number, stop or f"STOP-{number}", delay, 25, vehicle,
+         int(is_origin)),
     )
 
 
@@ -149,6 +152,26 @@ def test_delay_histogram_respects_signed_on_time_boundaries():
         2, 2, 0, 0, 2, 4, 4, 2, 0, 0, 2, 4, 2, 2, 2, 0, 2,
     ]
     assert sum(profile["delay_counts"]) == profile["readings"]
+
+
+def test_origin_layovers_are_excluded_from_published_headline_and_profiles():
+    conn = database()
+    completed = ["20260714", "20260715"]
+    add_completed(conn, completed)
+    for day in completed:
+        for number in range(15):
+            add_observation(conn, day, "FBRI-100", "75", number)
+        add_observation(
+            conn, day, "FBRI-100", "75", 100, delay=-900,
+            is_origin=True)
+    conn.commit()
+
+    payload = integration.build_payload(conn, completed[-1])
+
+    assert payload["headline"]["readings"] == 30
+    assert payload["headline"]["early"] == 0
+    assert payload["profiles"][0]["readings"] == 30
+    assert payload["measurement_method"]["version"] == 2
 
 
 def test_vehicle_profile_includes_only_posts_with_exact_operator_identity(tmp_path):

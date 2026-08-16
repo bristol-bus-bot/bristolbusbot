@@ -66,8 +66,10 @@ def test_vm_cycle_end_to_end():
     # inside the DfT band -> on_time
     obs = audit_conn.execute("SELECT * FROM timepoint_observations").fetchall()
     assert len(obs) == 1
-    (sdate, op, route, trip, ref, seq, stop, sched, delay, on_time, dist, rec, veh) = obs[0]
+    (sdate, op, route, trip, ref, seq, stop, sched, delay, on_time, dist,
+     rec, veh, is_origin) = obs[0]
     assert (op, route, trip, stop, delay, on_time) == ("FBRI", "75", "T_OUT", "0100C", 120, 1)
+    assert is_origin == 0
     # vehicle row in live.db with the live estimate
     v = live_conn.execute("SELECT * FROM vehicles").fetchone()
     assert v["delay_seconds"] == 120 and v["event_type"] == "punctual"
@@ -128,6 +130,9 @@ def test_stale_recorded_at_is_a_ghost_not_a_bus():
     assert r["candidates"] == 0
     row = live_conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()
     assert row[0] == 0
+    poll = audit_conn.execute(
+        "SELECT stale FROM poll_log ORDER BY poll_at DESC LIMIT 1").fetchone()
+    assert poll[0] == 1
 
 
 def test_fresh_recorded_at_still_processed():
@@ -136,3 +141,21 @@ def test_fresh_recorded_at_still_processed():
                  LDN, now_utc=NOW)
     assert r["stale"] == 0
     assert r["candidates"] == 1
+
+
+def test_sanity_rejection_is_counted_once_and_persisted():
+    recorded = "2026-06-10T12:15:00+00:00"
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", recorded)
+    now = datetime(2026, 6, 10, 12, 15, tzinfo=timezone.utc)
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+
+    result = vm_cycle(
+        lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+        LDN, now_utc=now)
+
+    assert result["matched"] == 1
+    assert result["dropped_insane"] == 1
+    assert result["obs_written"] == 0
+    poll = audit_conn.execute(
+        "SELECT dropped_insane, stale FROM poll_log").fetchone()
+    assert tuple(poll) == (1, 0)

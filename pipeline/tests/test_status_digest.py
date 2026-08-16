@@ -169,7 +169,7 @@ def test_anomaly_line_surfaces_counts_and_match_drift(tmp_path, monkeypatch):
             "detectors": {
                 "extreme_delays": {"count": 1099},
                 "backwards_stop_progress": {"count": 564},
-                "impossible_implied_speeds": {"count": 0},
+                "timetable_stop_transition_speeds": {"count": 0},
                 "overlapping_vehicle_trips": {"count": 26},
                 "gps_near_match_gate": {"count": 15},
                 "gps_distance_m": {"p95": 82},
@@ -181,7 +181,7 @@ def test_anomaly_line_surfaces_counts_and_match_drift(tmp_path, monkeypatch):
     assert status_digest.anomaly_line() == (
         "*anomalies*  :warning: 48h/65,799 obs - extreme-delay readings "
         "1,099 - backwards flags 564 - trip-overlap flags 26 - "
-        "impossible-speed flags 0 - near GPS gate 15 - match "
+        "stop-transition speed flags 0 - near GPS gate 15 - match "
         "94.2%->94.7% - GPS p95 82m - report-only")
 
 

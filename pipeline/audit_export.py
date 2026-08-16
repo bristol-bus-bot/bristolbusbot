@@ -184,6 +184,10 @@ def main():
         "current_target_pct": CURRENT_TARGET_PCT,
         "current_target_source": CURRENT_TARGET_SOURCE,
         "on_time_band": ON_TIME_BAND,
+        "measurement_method": {
+            "version": 2,
+            "origin_timing_points": "excluded_until_departure_can_be_detected",
+        },
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "days": days,
     }

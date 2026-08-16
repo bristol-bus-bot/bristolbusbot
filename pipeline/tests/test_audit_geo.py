@@ -54,7 +54,7 @@ def test_real_stop_is_rolled_up_into_area_and_ward():
                service_date TEXT, operator TEXT, route TEXT, trip_id TEXT,
                stop_sequence INTEGER, stop_code TEXT, scheduled_local TEXT,
                observed_delay_s INTEGER, gps_distance_m INTEGER,
-               vehicle_ref TEXT
+               vehicle_ref TEXT, is_origin INTEGER NOT NULL DEFAULT 0
            );
            CREATE TABLE expected_trips (
                service_date TEXT, operator TEXT, route TEXT, trip_id TEXT,
@@ -62,9 +62,14 @@ def test_real_stop_is_rolled_up_into_area_and_ward():
            );"""
     )
     conn.execute(
-        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         ("20260723", "FBRI", "1", "trip-1", 1, stop_code,
-         "2026-07-23T08:00:00", 120, 10, "FBRI-100"),
+         "2026-07-23T08:00:00", 120, 10, "FBRI-100", 0),
+    )
+    conn.execute(
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        ("20260723", "FBRI", "1", "trip-origin", 0, stop_code,
+         "2026-07-23T07:30:00", -900, 0, "FBRI-101", 1),
     )
     audit_rollup.init_summary_tables(conn)
 
@@ -89,17 +94,17 @@ def test_geography_match_preflight_reports_bad_lookup_coverage():
     conn.execute(
         """CREATE TABLE timepoint_observations (
                service_date TEXT, operator TEXT, stop_code TEXT,
-               gps_distance_m INTEGER
+               gps_distance_m INTEGER, is_origin INTEGER NOT NULL DEFAULT 0
            )"""
     )
     conn.executemany(
-        "INSERT INTO timepoint_observations VALUES (?,?,?,?)",
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?)",
         [
-            ("20260723", "FBRI", "KNOWN", 10),
-            ("20260723", "FBRI", "MISSING", 10),
-            ("20260723", "SCGL", "KNOWN", 10),
-            ("20260723", "OTHER", "MISSING", 10),
-            ("20260723", "FBRI", "MISSING", 151),
+            ("20260723", "FBRI", "KNOWN", 10, 0),
+            ("20260723", "FBRI", "MISSING", 10, 0),
+            ("20260723", "SCGL", "KNOWN", 10, 0),
+            ("20260723", "OTHER", "MISSING", 10, 0),
+            ("20260723", "FBRI", "MISSING", 151, 0),
         ],
     )
 

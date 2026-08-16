@@ -12,7 +12,7 @@ import math
 import os
 import sqlite3
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
@@ -78,12 +78,57 @@ def haversine_m(left: tuple[float, float], right: tuple[float, float]) -> float:
     return 6_371_000.0 * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
+def _evidence_time(item: dict) -> datetime | None:
+    for field in (
+        "recorded_at", "current_recorded_at", "overlap_start",
+        "from_recorded_at",
+    ):
+        parsed = parse_time(item.get(field))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _representative_evidence(items: list[dict], limit: int) -> list[dict]:
+    """Pick deterministic evidence spread across the whole time window."""
+    if len(items) <= limit:
+        return items
+    ordered = sorted(
+        items,
+        key=lambda item: (
+            _evidence_time(item) or datetime.max.replace(tzinfo=timezone.utc),
+            json.dumps(item, sort_keys=True, default=str),
+        ),
+    )
+    if limit == 1:
+        return [ordered[len(ordered) // 2]]
+    indices = [round(index * (len(ordered) - 1) / (limit - 1))
+               for index in range(limit)]
+    return [ordered[index] for index in indices]
+
+
+def _breakdowns(items: list[dict]) -> dict[str, dict[str, int]]:
+    result = {}
+    for field in ("operator", "route", "stop_sequence", "is_origin",
+                  "current_stop_sequence", "direction"):
+        counts = Counter(
+            str(item[field]) for item in items
+            if item.get(field) is not None and str(item[field]).strip()
+        )
+        if counts:
+            result[field] = dict(sorted(
+                counts.items(), key=lambda pair: (-pair[1], pair[0])))
+    return result
+
+
 def bounded(items: Iterable[dict], limit: int = EVIDENCE_LIMIT) -> dict:
     materialised = list(items)
     return {
         "count": len(materialised),
-        "evidence": materialised[:limit],
+        "breakdowns": _breakdowns(materialised),
+        "evidence": _representative_evidence(materialised, limit),
         "evidence_limit": limit,
+        "evidence_selection": "evenly_spaced_across_time",
         "evidence_truncated": len(materialised) > limit,
     }
 
@@ -96,6 +141,7 @@ def observation_detail(row: dict) -> dict:
         "trip_id": row["trip_id"],
         "vehicle_ref": row["vehicle_ref"],
         "stop_sequence": row["stop_sequence"],
+        "is_origin": bool(row.get("is_origin")),
         "stop_code": row["stop_code"],
         "scheduled_local": row["scheduled_local"],
         "recorded_at": row["recorded_at"],
@@ -107,7 +153,7 @@ def poll_metrics(rows: list[dict]) -> dict:
         field: sum(int(row.get(field) or 0) for row in rows)
         for field in (
             "vehicles_total", "candidates", "matched", "obs_written",
-            "dropped_insane")
+            "dropped_insane", "stale")
     }
     totals["polls"] = len(rows)
     totals["successful_polls"] = sum(bool(row.get("ok")) for row in rows)
@@ -148,10 +194,16 @@ def load_stop_coordinates(timetable: sqlite3.Connection) -> dict[str, tuple[floa
 def analyse_observations(rows: list[dict],
                          coordinates: dict[str, tuple[float, float]]) -> dict:
     extreme = []
+    origin_timing_points = []
     near_gate = []
     for row in rows:
         delay = row.get("observed_delay_s")
-        if delay is not None and (delay >= EXTREME_LATE_S or delay <= EXTREME_EARLY_S):
+        if row.get("is_origin"):
+            item = observation_detail(row)
+            item["observed_delay_s"] = delay
+            origin_timing_points.append(item)
+        elif delay is not None and (
+                delay >= EXTREME_LATE_S or delay <= EXTREME_EARLY_S):
             item = observation_detail(row)
             item["observed_delay_s"] = delay
             item["direction"] = "late" if delay >= EXTREME_LATE_S else "early"
@@ -182,6 +234,7 @@ def analyse_observations(rows: list[dict],
                 backwards.append({
                     "operator": operator,
                     "vehicle_ref": vehicle,
+                    "route": row["route"],
                     "service_date": row["service_date"],
                     "trip_id": row["trip_id"],
                     "previous_stop_sequence": previous["stop_sequence"],
@@ -220,6 +273,8 @@ def analyse_observations(rows: list[dict],
                 speeds.append({
                     "operator": operator,
                     "vehicle_ref": vehicle,
+                    "route": (left["route"] if left["route"] == right["route"]
+                              else f"{left['route']} -> {right['route']}"),
                     "from_trip_id": left["trip_id"],
                     "to_trip_id": right["trip_id"],
                     "from_stop_code": left["stop_code"],
@@ -238,7 +293,7 @@ def analyse_observations(rows: list[dict],
                     break
                 overlap = (min(left["end"], right["end"])
                            - max(left["start"], right["start"])).total_seconds()
-                if overlap < 0:
+                if overlap <= 0:
                     continue
                 overlaps.append({
                     "operator": operator,
@@ -249,6 +304,8 @@ def analyse_observations(rows: list[dict],
                     "right_service_date": right["service_date"],
                     "right_trip_id": right["trip_id"],
                     "right_route": right["route"],
+                    "route": (left["route"] if left["route"] == right["route"]
+                              else f"{left['route']} -> {right['route']}"),
                     "overlap_seconds": int(overlap),
                     "overlap_start": max(left["start"], right["start"]).isoformat(),
                     "overlap_end": min(left["end"], right["end"]).isoformat(),
@@ -258,8 +315,9 @@ def analyse_observations(rows: list[dict],
                  if row.get("gps_distance_m") is not None]
     return {
         "extreme_delays": bounded(extreme),
+        "excluded_origin_timing_points": bounded(origin_timing_points),
         "backwards_stop_progress": bounded(backwards),
-        "impossible_implied_speeds": bounded(speeds),
+        "timetable_stop_transition_speeds": bounded(speeds),
         "overlapping_vehicle_trips": bounded(overlaps),
         "gps_near_match_gate": bounded(near_gate),
         "gps_distance_m": {
@@ -278,31 +336,42 @@ def generate_report(audit_db: Path, timetable_db: Path, *,
     end = (now or utcnow()).astimezone(timezone.utc)
     start = end - timedelta(hours=window_hours)
     midpoint = start + (end - start) / 2
+    comparison_start = midpoint - timedelta(days=7)
+    comparison_end = end - timedelta(days=7)
     with open_read_only(audit_db) as audit, open_read_only(timetable_db) as timetable:
         require_columns(audit, "timepoint_observations", {
             "service_date", "operator", "route", "trip_id", "stop_sequence",
             "stop_code", "scheduled_local", "observed_delay_s", "gps_distance_m",
-            "recorded_at", "vehicle_ref"})
+            "recorded_at", "vehicle_ref", "is_origin"})
         require_columns(audit, "poll_log", {
             "poll_at", "ok", "vehicles_total", "candidates", "matched",
-            "obs_written", "dropped_insane"})
+            "obs_written", "dropped_insane", "stale"})
         observations = [dict(row) for row in audit.execute(
             """SELECT service_date, operator, route, trip_id, stop_sequence,
                       stop_code, scheduled_local, observed_delay_s,
-                      gps_distance_m, recorded_at, vehicle_ref
+                      gps_distance_m, recorded_at, vehicle_ref, is_origin
                  FROM timepoint_observations
                 WHERE datetime(recorded_at) >= datetime(?)
                   AND datetime(recorded_at) <= datetime(?)
                 ORDER BY recorded_at, operator, vehicle_ref""",
             (start.isoformat(), end.isoformat()))]
-        polls = [dict(row) for row in audit.execute(
+        comparison_polls = [dict(row) for row in audit.execute(
             """SELECT poll_at, ok, vehicles_total, candidates, matched,
-                      obs_written, dropped_insane
+                      obs_written, dropped_insane, stale
                  FROM poll_log
                 WHERE datetime(poll_at) >= datetime(?)
                   AND datetime(poll_at) <= datetime(?)
-                ORDER BY poll_at""", (start.isoformat(), end.isoformat()))]
+                ORDER BY poll_at""",
+            (comparison_start.isoformat(), end.isoformat()))]
         coordinates = load_stop_coordinates(timetable)
+
+    polls = [row for row in comparison_polls
+             if (parse_time(row["poll_at"]) or end) >= start]
+    same_period_previous_week = [
+        row for row in comparison_polls
+        if comparison_start <= (parse_time(row["poll_at"]) or end)
+        <= comparison_end
+    ]
 
     older_polls = [row for row in polls
                    if (parse_time(row["poll_at"]) or end) < midpoint]
@@ -313,10 +382,12 @@ def generate_report(audit_db: Path, timetable_db: Path, *,
     analysis = analyse_observations(observations, coordinates)
     anomaly_count = sum(analysis[name]["count"] for name in (
         "extreme_delays", "backwards_stop_progress",
-        "impossible_implied_speeds", "overlapping_vehicle_trips",
+        "timetable_stop_transition_speeds", "overlapping_vehicle_trips",
         "gps_near_match_gate"))
+    recent_metrics = poll_metrics(recent_polls)
+    previous_week_metrics = poll_metrics(same_period_previous_week)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": end.isoformat(),
         "mode": "read_only_report",
         "status": "attention" if anomaly_count else "clear",
@@ -329,7 +400,7 @@ def generate_report(audit_db: Path, timetable_db: Path, *,
         "thresholds": {
             "extreme_late_seconds": EXTREME_LATE_S,
             "extreme_early_seconds": EXTREME_EARLY_S,
-            "impossible_speed_kph": IMPOSSIBLE_SPEED_KPH,
+            "timetable_stop_transition_speed_kph": IMPOSSIBLE_SPEED_KPH,
             "minimum_speed_distance_m": MIN_SPEED_DISTANCE_M,
             "gps_near_match_gate_m": GPS_NEAR_GATE_M,
             "evidence_limit_per_detector": EVIDENCE_LIMIT,
@@ -342,16 +413,24 @@ def generate_report(audit_db: Path, timetable_db: Path, *,
         "poll_metrics": {
             "full_window": poll_metrics(polls),
             "older_half": older,
-            "recent_half": recent,
+            "recent_half": recent_metrics,
+            "same_period_previous_week": previous_week_metrics,
             "recent_minus_older": {
                 name: metric_change(older, recent, name)
-                for name in ("match_rate", "rejected_readings", "dropped_insane")
+                for name in (
+                    "match_rate", "rejected_readings", "dropped_insane", "stale")
+            },
+            "recent_minus_same_period_previous_week": {
+                name: metric_change(previous_week_metrics, recent_metrics, name)
+                for name in (
+                    "match_rate", "rejected_readings", "dropped_insane", "stale")
             },
         },
         "detectors": analysis,
         "notes": [
             "No collector, timetable or published punctuality data was changed.",
-            "Implied speed uses matched timetable-stop coordinates; it is a screening flag, not a raw GPS trace.",
+            "Origin timing points are retained as evidence but excluded from published punctuality and extreme-delay alerts.",
+            "Stop-transition speed uses matched timetable-stop coordinates; it screens audit progression and is not evidence about raw GPS movement.",
             "GPS near-gate flags readings at or above 900m; the collector rejects matches beyond 1000m.",
         ],
     }
