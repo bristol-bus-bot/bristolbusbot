@@ -63,6 +63,7 @@ class FakeSlack:
         self.messages = []
         self.history_oldest = []
         self.upload_details = []
+        self.thread_file_waits = []
 
     def require_private_channel(self, channel):
         self.private_checks.append(channel)
@@ -86,6 +87,9 @@ class FakeSlack:
             (channel, thread_ts, image.name, filename, alt_text))
         prepared(file_id)
         return file_id
+
+    def wait_for_thread_files(self, channel, thread_ts, filenames):
+        self.thread_file_waits.append((channel, thread_ts, list(filenames)))
 
 
 class FakeRenderer:
@@ -259,6 +263,10 @@ def test_roundup_command_delivers_six_ordered_slides_and_one_caption(
         "slide-6-operators-compared.jpg")
     assert all(detail[4].startswith("Alt text for ")
                for detail in slack.upload_details)
+    assert slack.thread_file_waits == [(
+        "C-PRIVATE", "1.000",
+        [detail[3] for detail in slack.upload_details],
+    )]
     assert slack.replies == [(
         "C-PRIVATE", "1.000", "Caption\nThe finished weekly caption.")]
 
@@ -453,6 +461,10 @@ def test_slack_client_uses_external_upload_flow_and_private_channel_gate(tmp_pat
                     "upload_url": "https://files.slack.test/upload"}
         if method == "files.completeUploadExternal":
             return {"ok": True, "files": [{"id": "F-ONE"}]}
+        if method == "conversations.replies":
+            return {"ok": True, "messages": [{
+                "files": [{"id": "F-ONE", "name": "card.jpg"}],
+            }]}
         raise AssertionError(method)
 
     client = curation.SlackClient(
@@ -478,6 +490,11 @@ def test_slack_client_uses_external_upload_flow_and_private_channel_gate(tmp_pat
     assert complete["channel_id"] == "C-PRIVATE"
     assert complete["thread_ts"] == "1.000"
     assert complete["files"] == [{"id": "F-ONE", "title": "card.jpg"}]
+    client.wait_for_thread_files("C-PRIVATE", "1.000", ["card.jpg"])
+    replies = next(kwargs for url, kwargs in calls
+                   if url.startswith(
+                       f"{curation.SLACK_API}/conversations.replies?"))
+    assert replies.get("payload") is None
 
 
 def test_slack_form_body_serializes_nested_upload_fields():
