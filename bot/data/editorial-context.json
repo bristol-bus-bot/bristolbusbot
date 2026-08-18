@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-23T00:00:00Z",
+  "updated_at": "2026-08-18T01:54:25Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -398,6 +398,34 @@
         "url": "https://www.gov.uk/government/news/cheaper-travel-for-millions-with-a-third-off-fares",
         "published_on": "2026-07-22",
         "verified_on": "2026-07-23"
+      }
+    },
+    {
+      "id": "govuk-free-bus-travel-24-7-for-disabled-people-as-prime-d105f962",
+      "label": "Free bus travel 24/7 for disabled people as Prime Minister takes further action to ease cost of living",
+      "claim": "Free bus travel 24/7 for disabled people as Prime Minister takes further action to ease cost of living. Eligible disabled people across England will get free bus travel all day, every day, after the Prime Minister announced today (Tuesday 18 August) that the government will lift time restrictions on concessionary passes.",
+      "prompt_hint": "This wording came from the approved GOV.UK title and summary. Use exact dates, make no prediction, and do not add facts from outside this claim.",
+      "requirements": [
+        {
+          "label": "approved story subject",
+          "alternatives": [
+            "Free bus travel 24/7 for disabled people as Prime Minister takes further action"
+          ]
+        }
+      ],
+      "published_at": "2026-08-17T21:30:04Z",
+      "active_from": "2026-08-18T01:54:25Z",
+      "expires_at": "2026-08-24T21:30:04Z",
+      "probability": 0.1,
+      "max_uses_total": 2,
+      "cooldown_hours": 36,
+      "append_source_link": false,
+      "source": {
+        "publisher": "UK Government",
+        "title": "Free bus travel 24/7 for disabled people as Prime Minister takes further action to ease cost of living",
+        "url": "https://www.gov.uk/government/news/free-bus-travel-247-for-disabled-people-as-prime-minister-takes-further-action-to-ease-cost-of-living",
+        "published_on": "2026-08-17",
+        "verified_on": "2026-08-18"
       }
     }
   ]
