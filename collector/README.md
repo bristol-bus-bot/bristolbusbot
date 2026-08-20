@@ -17,6 +17,22 @@ python -m collector.run
 pytest
 ```
 
+One-off cancellation-feed check (aggregate output only):
+
+```powershell
+python -m collector.check_cancellations
+```
+
+This reads the dedicated BODS journey-cancellation endpoint. It does not add a
+second poller, save the raw feed, or treat an absent record as proof that a bus
+ran. A zero for an operator means only that the operator supplied no records to
+this endpoint at the time of the check. The defaults check both First's current
+WECA operator code (`FBRI`) and its ceased historical code (`FSAV`). Because an
+operator code alone does not prove the affected journey is in WECA, the output
+also reports journeys touching WECA's four ATCO stop-reference prefixes. This
+catches a record filed under an unexpected operator code without publishing
+individual journey or stop identifiers.
+
 Production:
 
 - Current release: `~/bristolbusbot/current/collector` on the Pi
