@@ -5,7 +5,8 @@ matches vehicles against the shared timetable, computes observed delays, and
 writes:
 
 - `live.db`: current vehicles, disruptions, health and corroborated bot events
-- `audit.db`: closest-approach timing-point observations
+- `audit.db`: closest-approach timing-point observations plus bounded private
+  receipts for suspicious matching decisions
 
 Run locally from this directory:
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from collector.matching import match_exact, match_fuzzy, match_vehicle
+from collector.matching import explain_match, match_exact, match_fuzzy, match_vehicle
 from fixture_gtfs import build
 
 LDN = ZoneInfo("Europe/London")
@@ -187,3 +187,54 @@ def test_match_vehicle_passes_position_through():
     m = match_vehicle(cur(), "FBRI", "41", "inbound", JUNE_TUE_1606,
                       vehicle_pos=BRISTOL_POS)
     assert m is not None and m.trip_id == "T_41_CITY"
+
+
+def test_explain_match_records_chosen_timetable_edition():
+    connection = build()
+    connection.execute("""
+        CREATE TABLE route_service_editions (
+            route_id TEXT, edition_start TEXT, effective_end TEXT)
+    """)
+    connection.execute(
+        "INSERT INTO route_service_editions VALUES "
+        "('R75F','20260601','20260630')")
+    match = match_fuzzy(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115,
+        vehicle_pos=(51.4500, -2.5890))
+
+    explanation = explain_match(
+        connection.cursor(), match, "FBRI", "75", "outbound", WED_1115,
+        (51.4500, -2.5890), "20260610")
+
+    assert explanation["chosen"]["trip_id"] == "T_OUT"
+    assert explanation["chosen"]["route_id"] == "R75F"
+    assert explanation["chosen"]["service_id"] == "WK"
+    assert explanation["chosen"]["timetable_edition"] == "20260601"
+    assert explanation["candidate_count"] == 1
+
+
+def test_explain_match_bounds_a_hostile_candidate_set():
+    connection = build()
+    match = match_fuzzy(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115,
+        vehicle_pos=(51.4500, -2.5890))
+    connection.executemany(
+        "INSERT INTO trips VALUES (?,?,?,?,?,?,?,?,?,?)", [
+            (f"T_NOISE_{i:03d}", "R75F", "WK", "Hengrove", "", 0,
+             f"NOISE_{i}", "", 0, None)
+            for i in range(100)
+        ])
+    connection.executemany(
+        "INSERT INTO stop_times VALUES (?,?,?,?,?,?,?,?,?,?)", [
+            (f"T_NOISE_{i:03d}", "11:15:00", "11:15:00", "S1", 0,
+             "", 0, 0, None, 1)
+            for i in range(100)
+        ])
+
+    explanation = explain_match(
+        connection.cursor(), match, "FBRI", "75", "outbound", WED_1115,
+        (51.4500, -2.5890), "20260610")
+
+    assert explanation["candidates_truncated"] is True
+    assert explanation["candidate_count"] <= 51
+    assert len(explanation["alternatives"]) == 3

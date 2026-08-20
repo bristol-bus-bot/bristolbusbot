@@ -19,6 +19,8 @@ from .geo import haversine_m
 
 # A matched trip must pass near the reported vehicle position.
 MAX_MATCH_DISTANCE_M = 3000.0
+DIAGNOSTIC_CANDIDATE_SCAN_LIMIT = 50
+DIAGNOSTIC_ALTERNATIVE_LIMIT = 3
 
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -133,11 +135,18 @@ def _gtfs_secs(t: str) -> int | None:
 
 def _route_near(schedule: list, lat: float, lon: float) -> bool:
     """Does this trip pass within MAX_MATCH_DISTANCE_M of the vehicle?"""
-    return any(
-        row[4] is not None and row[5] is not None
-        and haversine_m(lat, lon, row[4], row[5]) <= MAX_MATCH_DISTANCE_M
+    distance = _nearest_route_distance(schedule, lat, lon)
+    return distance is not None and distance <= MAX_MATCH_DISTANCE_M
+
+
+def _nearest_route_distance(
+        schedule: list, lat: float, lon: float) -> float | None:
+    distances = [
+        haversine_m(lat, lon, row[4], row[5])
         for row in schedule
-    )
+        if row[4] is not None and row[5] is not None
+    ]
+    return min(distances) if distances else None
 
 
 def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | None,
@@ -247,3 +256,238 @@ def match_vehicle(cur, operator_noc: str, line_name: str, direction_ref: str | N
             return m
     return match_fuzzy(cur, operator_noc, line_name, direction_ref, origin_local,
                        vehicle_pos=vehicle_pos)
+
+
+def _diagnostic_rows(cur, operator_noc: str, line_name: str,
+                     direction_id: int | None, origin_local: datetime) -> tuple[list, bool]:
+    """Return a bounded superset of the fuzzy candidates for one anomaly.
+
+    This deliberately does not participate in choosing the live match. It is
+    only called after a reading has been identified as suspicious, keeping the
+    ordinary poll path unchanged and making the receipt observational only.
+    """
+    today_str = origin_local.strftime("%Y%m%d")
+    lo = origin_local - timedelta(minutes=10)
+    hi = origin_local + timedelta(minutes=10)
+    origin_secs = (origin_local.hour * 3600 + origin_local.minute * 60
+                   + origin_local.second)
+    search_sets = [(
+        f"{lo.hour:02d}:{lo.minute:02d}:{lo.second:02d}",
+        f"{hi.hour:02d}:{hi.minute:02d}:{hi.second:02d}",
+        DAYS[origin_local.weekday()], today_str, origin_secs)]
+    if origin_local.hour < 6:
+        prev = origin_local - timedelta(days=1)
+        search_sets.append((
+            f"{lo.hour + 24:02d}:{lo.minute:02d}:{lo.second:02d}",
+            f"{hi.hour + 24:02d}:{hi.minute:02d}:{hi.second:02d}",
+            DAYS[prev.weekday()], prev.strftime("%Y%m%d"),
+            origin_secs + 24 * 3600))
+
+    unique: dict[tuple[str, str], tuple] = {}
+    truncated = False
+    for lower, upper, day_col, date_str, target_secs in search_sets:
+        dir_clause = "AND t.direction_id = ?" if direction_id is not None else ""
+        sql = f"""
+            SELECT t.trip_id, t.route_id, t.service_id, t.direction_id,
+                   t.block_id, t.vehicle_journey_code, r.route_short_name,
+                   st.departure_time,
+                   (SELECT c.start_date FROM calendar c
+                     WHERE c.service_id=t.service_id LIMIT 1),
+                   (SELECT c.end_date FROM calendar c
+                     WHERE c.service_id=t.service_id LIMIT 1)
+            FROM trips t
+            JOIN routes r ON t.route_id = r.route_id
+            JOIN agency a ON r.agency_id = a.agency_id
+            JOIN stop_times st ON t.trip_id = st.trip_id
+            WHERE r.route_short_name = ? AND a.agency_noc = ?
+            {dir_clause}
+            AND (
+                EXISTS (
+                    SELECT 1 FROM calendar c
+                    WHERE c.service_id=t.service_id
+                      AND c.{day_col}=1
+                      AND c.start_date<=? AND c.end_date>=?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM calendar_dates removed
+                          WHERE removed.service_id=t.service_id
+                            AND removed.date=? AND removed.exception_type=2
+                      )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM calendar_dates added
+                    WHERE added.service_id=t.service_id
+                      AND added.date=? AND added.exception_type=1
+                )
+            )
+            AND st.stop_sequence = (
+                SELECT MIN(first_stop.stop_sequence)
+                FROM stop_times first_stop
+                WHERE first_stop.trip_id = t.trip_id
+            )
+            AND st.departure_time BETWEEN ? AND ?
+            ORDER BY st.departure_time, t.trip_id
+            LIMIT ?
+        """
+        params: list[object] = [line_name, operator_noc]
+        if direction_id is not None:
+            params.append(direction_id)
+        params.extend([
+            date_str, date_str, date_str, date_str, lower, upper,
+            DIAGNOSTIC_CANDIDATE_SCAN_LIMIT + 1])
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        if len(rows) > DIAGNOSTIC_CANDIDATE_SCAN_LIMIT:
+            truncated = True
+        for row in rows[:DIAGNOSTIC_CANDIDATE_SCAN_LIMIT]:
+            unique[(str(row[0]), str(row[7]))] = (*row, target_secs, date_str)
+    def diagnostic_gap(row: tuple) -> int:
+        departure_secs = _gtfs_secs(row[7])
+        return (abs(departure_secs - row[10])
+                if departure_secs is not None else 10**9)
+
+    ordered = sorted(
+        unique.values(),
+        key=lambda row: (diagnostic_gap(row), str(row[0])))
+    if len(ordered) > DIAGNOSTIC_CANDIDATE_SCAN_LIMIT:
+        truncated = True
+        ordered = ordered[:DIAGNOSTIC_CANDIDATE_SCAN_LIMIT]
+    return ordered, truncated
+
+
+def _table_exists(cur, table: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
+    return cur.fetchone() is not None
+
+
+def _edition_for(cur, route_id: str, service_date: str,
+                 has_editions: bool) -> str | None:
+    if not has_editions:
+        return None
+    cur.execute(
+        """SELECT edition_start FROM route_service_editions
+           WHERE route_id=? AND edition_start<=? AND effective_end>=?
+           ORDER BY edition_start DESC LIMIT 1""",
+        (route_id, service_date, service_date))
+    row = cur.fetchone()
+    return str(row[0]) if row else None
+
+
+def _candidate_detail(cur, row: tuple, vehicle_pos: tuple[float, float],
+                      has_editions: bool) -> dict | None:
+    schedule = _schedule_for(cur, str(row[0]))
+    if not schedule:
+        return None
+    distance = _nearest_route_distance(schedule, *vehicle_pos)
+    if distance is None or distance > MAX_MATCH_DISTANCE_M:
+        return None
+    dep_secs = _gtfs_secs(row[7])
+    target_secs = int(row[10])
+    return {
+        "trip_id": str(row[0])[:256],
+        "route_id": str(row[1])[:256],
+        "service_id": str(row[2])[:256],
+        "direction_id": row[3],
+        "block_id": str(row[4])[:256] if row[4] is not None else None,
+        "vehicle_journey_code": (
+            str(row[5])[:256] if row[5] is not None else None),
+        "route": str(row[6])[:256],
+        "origin_departure": str(row[7])[:32],
+        "calendar_start": str(row[8])[:8] if row[8] is not None else None,
+        "calendar_end": str(row[9])[:8] if row[9] is not None else None,
+        "departure_gap_s": (
+            abs(dep_secs - target_secs) if dep_secs is not None else None),
+        "gps_distance_m": int(round(distance)),
+        "timetable_edition": _edition_for(
+            cur, str(row[1]), str(row[11]), has_editions),
+    }
+
+
+def _chosen_detail(cur, match: Match, vehicle_pos: tuple[float, float],
+                   service_date: str, has_editions: bool) -> dict:
+    cur.execute(
+        """SELECT t.trip_id, t.route_id, t.service_id, t.direction_id,
+                  t.block_id, t.vehicle_journey_code, r.route_short_name,
+                  st.departure_time,
+                  (SELECT c.start_date FROM calendar c
+                    WHERE c.service_id=t.service_id LIMIT 1),
+                  (SELECT c.end_date FROM calendar c
+                    WHERE c.service_id=t.service_id LIMIT 1)
+           FROM trips t
+           JOIN routes r ON t.route_id=r.route_id
+           JOIN stop_times st ON st.trip_id=t.trip_id
+           WHERE t.trip_id=?
+             AND st.stop_sequence=(
+                 SELECT MIN(first_stop.stop_sequence) FROM stop_times first_stop
+                 WHERE first_stop.trip_id=t.trip_id)
+           LIMIT 1""",
+        (match.trip_id,))
+    row = cur.fetchone()
+    distance = _nearest_route_distance(match.schedule, *vehicle_pos)
+    if not row:
+        return {
+            "trip_id": match.trip_id[:256],
+            "route": match.route_short_name[:256],
+            "gps_distance_m": (
+                int(round(distance)) if distance is not None else None),
+            "timetable_edition": None,
+        }
+    return {
+        "trip_id": match.trip_id[:256],
+        "route_id": str(row[1])[:256],
+        "service_id": str(row[2])[:256],
+        "direction_id": row[3],
+        "block_id": str(row[4])[:256] if row[4] is not None else None,
+        "vehicle_journey_code": (
+            str(row[5])[:256] if row[5] is not None else None),
+        "route": match.route_short_name[:256],
+        "origin_departure": str(row[7])[:32],
+        "calendar_start": str(row[8])[:8] if row[8] is not None else None,
+        "calendar_end": str(row[9])[:8] if row[9] is not None else None,
+        "gps_distance_m": (
+            int(round(distance)) if distance is not None else None),
+        "timetable_edition": _edition_for(
+            cur, str(row[1]), service_date, has_editions),
+    }
+
+
+def explain_match(cur, match: Match, operator_noc: str, line_name: str,
+                  direction_ref: str | None, origin_local: datetime,
+                  vehicle_pos: tuple[float, float], service_date: str) -> dict:
+    """Describe a chosen match and a few plausible alternatives.
+
+    Receipts call this only for anomalous readings. The returned dictionary is
+    deliberately made of bounded, non-sensitive timetable and vehicle-match
+    facts suitable for the private audit database.
+    """
+    has_editions = _table_exists(cur, "route_service_editions")
+    direction_id = _direction_id(direction_ref)
+    rows, truncated = _diagnostic_rows(
+        cur, operator_noc, line_name, direction_id, origin_local)
+    details = [
+        detail for row in rows
+        if (detail := _candidate_detail(cur, row, vehicle_pos, has_editions))
+        is not None
+    ]
+    if not details and direction_id is not None:
+        rows, fallback_truncated = _diagnostic_rows(
+            cur, operator_noc, line_name, None, origin_local)
+        truncated = truncated or fallback_truncated
+        details = [
+            detail for row in rows
+            if (detail := _candidate_detail(
+                cur, row, vehicle_pos, has_editions)) is not None
+        ]
+    chosen = _chosen_detail(
+        cur, match, vehicle_pos, service_date, has_editions)
+    chosen_in_candidates = any(
+        detail["trip_id"] == match.trip_id for detail in details)
+    alternatives = [
+        detail for detail in details if detail["trip_id"] != match.trip_id
+    ][:DIAGNOSTIC_ALTERNATIVE_LIMIT]
+    return {
+        "chosen": chosen,
+        "candidate_count": len(details) + int(not chosen_in_candidates),
+        "candidates_truncated": truncated,
+        "alternatives": alternatives,
+    }
