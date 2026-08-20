@@ -38,6 +38,27 @@ operators or different parts of the region share a route number. This is a fuzzy
 match, not a guaranteed one; where a confident match cannot be made, the reading
 is dropped, not guessed.
 
+Each accepted timing-point reading records whether the timetable match came
+from the explicitly enabled exact-reference route or the normal fuzzy route.
+This extra field is diagnostic context only and does not alter which readings
+are included in the published figures.
+
+### Private matching receipts
+
+When a matched reading looks internally contradictory, the collector saves a
+small private receipt explaining the decision. A receipt is created only for
+an implausible timestamp rejected by the sanity gate, a delay of at least 45
+minutes (or at least 10 minutes early), or a chosen trip/direction that changes
+while the feed still describes the same vehicle journey. It records the chosen
+trip, match route, a maximum of three plausible alternatives, distance, delay,
+normalised SIRI identifiers and the applicable timetable edition where known.
+It never stores the raw SIRI document.
+
+These receipts are evidence for debugging the matcher, not audit observations
+and not a new source of published statistics. Ordinary readings do not run the
+extra candidate search. Admission is capped at 250 receipts per service day and
+the table is capped at 5,000 receipts in total, retaining the most recent.
+
 ## Where delay is measured
 
 Delay is recorded at timing points, the registered points the punctuality

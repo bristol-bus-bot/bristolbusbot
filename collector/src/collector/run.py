@@ -20,19 +20,57 @@ import xmltodict
 
 from . import audit_db, live_db
 from .config import Config
-from .delay import live_estimate_result, settled_reading_result
+from .delay import (classify_event, closest_stop, live_estimate_result,
+                    settled_reading_result)
 from .geo import BoundaryFilter
-from .matching import match_vehicle
+from .matching import explain_match, match_vehicle
 from .siri import (activities_from_xmltodict, anchor_departure_local,
                    clean_destination, extract_snapshot)
 from .sirisx import in_scope, parse_situations
 from .secret_filter import install_query_secret_filter, redact_query_secrets
-from .timeparse import gtfs_seconds, service_midnight
+from .timeparse import gtfs_seconds, scheduled_local, service_midnight
 
 logger = logging.getLogger("collector")
 
 SIRI_VM_URL = "https://data.bus-data.dft.gov.uk/api/v1/datafeed/"
 SIRI_SX_URL = "https://data.bus-data.dft.gov.uk/api/v1/siri-sx/"
+EVIDENCE_EXTREME_LATE_S = 45 * 60
+EVIDENCE_EXTREME_EARLY_S = -10 * 60
+
+
+def _measurement_clues(snap, match, service_midnight_dt, est, reading) -> dict:
+    """Return the useful numbers even when the normal sanity gate rejected."""
+    if est is not None:
+        return {
+            "gps_distance_m": est.distance_m,
+            "delay_s": est.delay_s,
+            "event_type": est.event_type,
+        }
+    if reading is not None:
+        delay_s = reading.observed_delay_s
+        return {
+            "gps_distance_m": reading.gps_distance_m,
+            "delay_s": delay_s,
+            "event_type": classify_event(delay_s),
+        }
+    if service_midnight_dt is None:
+        return {}
+    nearest = closest_stop(
+        snap.lat, snap.lon, match.schedule, snap.recorded_utc,
+        service_midnight_dt)
+    if nearest is None:
+        return {}
+    stop_secs = gtfs_seconds(nearest.row[1])
+    if stop_secs is None:
+        return {"gps_distance_m": int(round(nearest.distance_m))}
+    expected = scheduled_local(service_midnight_dt, stop_secs)
+    delay_s = int(round((
+        snap.recorded_utc - expected.astimezone(timezone.utc)).total_seconds()))
+    return {
+        "gps_distance_m": int(round(nearest.distance_m)),
+        "delay_s": delay_s,
+        "event_type": classify_event(delay_s),
+    }
 
 
 def make_session() -> requests.Session:
@@ -77,7 +115,8 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
     xml = fetch()
     counters = {"vehicles_total": 0, "candidates": 0, "matched": 0,
                 "obs_written": 0, "dropped_insane": 0, "events": 0,
-                "stale": 0}
+                "stale": 0, "evidence_written": 0,
+                "evidence_dropped": 0}
 
     if xml is None:
         live_db.record_poll(live_conn, "siri_vm", ok=False)
@@ -110,8 +149,14 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
         origin_local, _src = anchor_departure_local(mvj, target_tz, now_local)
         match = None
         est = None
+        reading = None
+        service_midnight_dt = None
+        estimate_reason = None
+        reading_reason = None
+        service_date = snap.recorded_utc.astimezone(target_tz).strftime("%Y%m%d")
         if origin_local is not None and \
-                (now_utc - origin_local.astimezone(timezone.utc)) <= timedelta(hours=cfg.max_journey_age_h):
+                (now_utc - origin_local.astimezone(timezone.utc)) <= timedelta(
+                    hours=cfg.max_journey_age_h):
             match = match_vehicle(tt_cur, snap.operator_ref, snap.line,
                                   snap.direction, origin_local,
                                   snap.journey_ref, cfg.enable_exact_match,
@@ -120,30 +165,92 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
             counters["matched"] += 1
             first_secs = gtfs_seconds(match.schedule[0][1])
             if first_secs is not None:
-                sm = service_midnight(origin_local, first_secs)
+                service_midnight_dt = service_midnight(origin_local, first_secs)
+                service_date = service_midnight_dt.strftime("%Y%m%d")
                 est, estimate_reason = live_estimate_result(
-                    snap.lat, snap.lon, snap.recorded_utc, match.schedule, sm)
+                    snap.lat, snap.lon, snap.recorded_utc, match.schedule,
+                    service_midnight_dt)
                 reading, reading_reason = settled_reading_result(
-                    snap.lat, snap.lon, snap.recorded_utc, match.schedule, sm)
+                    snap.lat, snap.lon, snap.recorded_utc, match.schedule,
+                    service_midnight_dt)
                 if "sanity_rejected" in {estimate_reason, reading_reason}:
                     # One matched vehicle is counted once even when both the
                     # live and audit calculations reject the same timestamp.
                     counters["dropped_insane"] += 1
                 if reading is not None:
                     audit_db.upsert_observation(audit_conn.cursor(), (
-                        sm.strftime("%Y%m%d"), snap.operator_ref,
+                        service_date, snap.operator_ref,
                         match.route_short_name, match.trip_id, snap.journey_ref,
                         reading.stop_sequence, reading.stop_code,
                         reading.scheduled_local.isoformat(),
                         reading.observed_delay_s, int(reading.on_time),
                         reading.gps_distance_m, snap.recorded_utc.isoformat(),
-                        snap.vehicle_ref, int(reading.is_origin)))
+                        snap.vehicle_ref, int(reading.is_origin), match.tier))
                     counters["obs_written"] += 1
 
         decision = live_db.upsert_vehicle(live_conn, snap, est, match,
                                           destination=clean_destination(snap.destination_raw))
         if decision.emit:
             counters["events"] += 1
+
+        evidence_reasons = set()
+        if "sanity_rejected" in {estimate_reason, reading_reason}:
+            evidence_reasons.add("sanity_rejected")
+        if est is not None and (
+                est.delay_s >= EVIDENCE_EXTREME_LATE_S
+                or est.delay_s <= EVIDENCE_EXTREME_EARLY_S):
+            evidence_reasons.add("extreme_delay")
+        if decision.same_journey_run and match is not None:
+            if decision.previous_trip_id and \
+                    decision.previous_trip_id != match.trip_id:
+                evidence_reasons.add("match_changed_within_run")
+            previous_direction = (decision.previous_direction or "").strip().lower()
+            current_direction = (snap.direction or "").strip().lower()
+            if previous_direction and current_direction \
+                    and previous_direction != current_direction:
+                evidence_reasons.add("direction_changed_within_run")
+
+        if evidence_reasons and match is not None and origin_local is not None:
+            try:
+                explanation = explain_match(
+                    tt_cur, match, snap.operator_ref, snap.line, snap.direction,
+                    origin_local, (snap.lat, snap.lon), service_date)
+                clues = _measurement_clues(
+                    snap, match, service_midnight_dt, est, reading)
+                status = audit_db.write_matching_evidence(audit_conn, {
+                    "captured_at": poll_at.isoformat(),
+                    "service_date": service_date,
+                    "reasons": evidence_reasons,
+                    "calculation_reasons": {
+                        reason for reason in (estimate_reason, reading_reason)
+                        if reason
+                    },
+                    "operator": snap.operator_ref,
+                    "route": match.route_short_name,
+                    "vehicle_ref": snap.vehicle_ref,
+                    "direction": snap.direction,
+                    "journey_ref": snap.journey_ref,
+                    "origin_aimed_departure": snap.origin_aimed_departure,
+                    "recorded_at": snap.recorded_utc.isoformat(),
+                    "lat": snap.lat,
+                    "lon": snap.lon,
+                    "bearing": snap.bearing,
+                    "block_ref": snap.block_ref,
+                    "chosen_trip_id": match.trip_id,
+                    "match_tier": match.tier,
+                    **clues,
+                    **explanation,
+                })
+                if status in {"written", "total_pruned"}:
+                    counters["evidence_written"] += 1
+                elif status == "daily_limit":
+                    counters["evidence_dropped"] += 1
+            except Exception:
+                # Debug evidence must never interrupt the live collector.
+                counters["evidence_dropped"] += 1
+                logger.exception(
+                    "could not save matching evidence for vehicle %s",
+                    snap.vehicle_ref)
 
     live_db.record_poll(live_conn, "siri_vm", ok=True)
     audit_db.log_poll(audit_conn, poll_at.isoformat(), True, counters)

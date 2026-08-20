@@ -1,4 +1,5 @@
 """End-to-end cycle tests: canned XML in, database rows out. No network."""
+import json
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -67,15 +68,19 @@ def test_vm_cycle_end_to_end():
     obs = audit_conn.execute("SELECT * FROM timepoint_observations").fetchall()
     assert len(obs) == 1
     (sdate, op, route, trip, ref, seq, stop, sched, delay, on_time, dist,
-     rec, veh, is_origin) = obs[0]
+     rec, veh, is_origin, match_tier) = obs[0]
     assert (op, route, trip, stop, delay, on_time) == ("FBRI", "75", "T_OUT", "0100C", 120, 1)
     assert is_origin == 0
+    assert match_tier == "fuzzy"
     # vehicle row in live.db with the live estimate
     v = live_conn.execute("SELECT * FROM vehicles").fetchone()
     assert v["delay_seconds"] == 120 and v["event_type"] == "punctual"
     assert v["block_ref"] == "B1" and v["trip_id"] == "T_OUT"
     # punctual -> no event, ever
     assert r["events"] == 0
+    assert r["evidence_written"] == 0
+    assert audit_conn.execute(
+        "SELECT COUNT(*) FROM matching_evidence").fetchone()[0] == 0
 
 
 def test_vm_cycle_corroborated_event():
@@ -143,6 +148,19 @@ def test_fresh_recorded_at_still_processed():
     assert r["candidates"] == 1
 
 
+def test_normal_reading_does_not_run_expensive_diagnostics(monkeypatch):
+    def should_not_run(*args, **kwargs):
+        raise AssertionError("normal polls must not enumerate alternatives")
+
+    monkeypatch.setattr("collector.run.explain_match", should_not_run)
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    result = vm_cycle(
+        lambda: VM_FEED, tt, live_conn, audit_conn, boundary, cfg,
+        LDN, now_utc=NOW)
+    assert result["matched"] == 1
+    assert result["evidence_written"] == 0
+
+
 def test_sanity_rejection_is_counted_once_and_persisted():
     recorded = "2026-06-10T12:15:00+00:00"
     feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", recorded)
@@ -156,6 +174,55 @@ def test_sanity_rejection_is_counted_once_and_persisted():
     assert result["matched"] == 1
     assert result["dropped_insane"] == 1
     assert result["obs_written"] == 0
+    assert result["evidence_written"] == 1
+    receipt = audit_conn.execute(
+        """SELECT reasons_json, chosen_trip_id, match_tier, delay_s,
+                  candidate_count, timetable_route_id, timetable_service_id
+           FROM matching_evidence""").fetchone()
+    assert json.loads(receipt[0]) == ["sanity_rejected"]
+    assert receipt[1:4] == ("T_OUT", "fuzzy", 6600)
+    assert receipt[4] >= 1
+    assert receipt[5:7] == ("R75F", "WK")
     poll = audit_conn.execute(
-        "SELECT dropped_insane, stale FROM poll_log").fetchone()
-    assert tuple(poll) == (1, 0)
+        """SELECT dropped_insane, stale, evidence_written, evidence_dropped
+           FROM poll_log""").fetchone()
+    assert tuple(poll) == (1, 0, 1, 0)
+
+
+def test_extreme_but_valid_delay_leaves_evidence_receipt():
+    recorded = "2026-06-10T11:10:00+00:00"  # 45 minutes after S3
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", recorded)
+    now = datetime(2026, 6, 10, 11, 10, tzinfo=timezone.utc)
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+
+    result = vm_cycle(
+        lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+        LDN, now_utc=now)
+
+    assert result["evidence_written"] == 1
+    receipt = audit_conn.execute(
+        "SELECT reasons_json, delay_s, event_type FROM matching_evidence"
+    ).fetchone()
+    assert json.loads(receipt[0]) == ["extreme_delay"]
+    assert receipt[1:] == (2700, "delayed")
+
+
+def test_match_and_direction_flip_within_one_run_leave_one_receipt():
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    vm_cycle(lambda: VM_FEED, tt, live_conn, audit_conn, boundary, cfg, LDN,
+             now_utc=NOW)
+    flipped = VM_FEED.replace(
+        "<DirectionRef>OUTBOUND</DirectionRef>",
+        "<DirectionRef>INBOUND</DirectionRef>").replace(
+        "2026-06-10T10:27:00+00:00", "2026-06-10T10:28:00+00:00")
+
+    result = vm_cycle(
+        lambda: flipped, tt, live_conn, audit_conn, boundary, cfg, LDN,
+        now_utc=datetime(2026, 6, 10, 10, 28, tzinfo=timezone.utc))
+
+    assert result["evidence_written"] == 1
+    receipt = audit_conn.execute(
+        "SELECT reasons_json, chosen_trip_id FROM matching_evidence").fetchone()
+    assert json.loads(receipt[0]) == [
+        "direction_changed_within_run", "match_changed_within_run"]
+    assert receipt[1] == "T_IN"

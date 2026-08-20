@@ -142,6 +142,9 @@ class EventDecision:
     emit: bool
     corroboration: int
     reason: str  # for logging/tests: 'threshold' | 'worsened' | ...
+    previous_trip_id: str | None = None
+    previous_direction: str | None = None
+    same_journey_run: bool = False
 
 
 def _is_extreme(delay_s: int) -> bool:
@@ -209,6 +212,9 @@ def upsert_vehicle(conn: sqlite3.Connection, snap, est, match, *,
     match=Match|None."""
     prev = conn.execute("SELECT * FROM vehicles WHERE vehicle_ref = ?",
                         (snap.vehicle_ref,)).fetchone()
+    current_run = _journey_run_id(
+        snap.journey_ref, snap.origin_aimed_departure,
+        snap.recorded_utc.isoformat())
 
     if est is None:
         decision = EventDecision(False, 0, "no-estimate")
@@ -218,9 +224,6 @@ def upsert_vehicle(conn: sqlite3.Connection, snap, est, match, *,
         delay_s, low_conf, ev_type, stop_code = None, None, None, None
         stop_seq = dist_m = None
     else:
-        current_run = _journey_run_id(
-            snap.journey_ref, snap.origin_aimed_departure,
-            snap.recorded_utc.isoformat())
         decision = decide_event(
             prev, est.event_type, est.delay_s, snap.journey_ref,
             snap.origin_aimed_departure, snap.recorded_utc.isoformat())
@@ -235,6 +238,16 @@ def upsert_vehicle(conn: sqlite3.Connection, snap, est, match, *,
         ev_type, stop_code = est.event_type, est.stop_code
         stop_seq = est.stop_sequence
         dist_m = est.distance_m
+
+    previous_run = (_journey_run_id(
+        prev["journey_ref"], prev["origin_aimed_departure"],
+        prev["recorded_at"])
+        if prev else None)
+    decision.previous_trip_id = prev["trip_id"] if prev else None
+    decision.previous_direction = prev["direction"] if prev else None
+    decision.same_journey_run = bool(
+        prev and (snap.journey_ref or snap.origin_aimed_departure)
+        and previous_run == current_run)
 
     conn.execute(
         """INSERT INTO vehicles (vehicle_ref, operator_ref, line, direction,
