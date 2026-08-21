@@ -35,8 +35,9 @@
           <div class="gfill" id="ot-fill"></div>
           <div class="gtgt" id="ot-tgt"></div>
         </div>
-        <div class="legend"><span>0%</span><span id="tgt-label" style="color:var(--target)">target 95%</span><span>100%</span></div>
+        <div class="legend"><span>0%</span><span id="tgt-label" style="color:var(--target)">annual target</span><span>100%</span></div>
         <p class="audit-small audit-muted" id="ot-band" style="margin-top:10px"></p>
+        <p class="audit-small audit-muted" id="headline-target-note"></p>
       </div>
       <div class="card side">
         <div class="stat"><span class="k">Typical lateness</span><span class="v" id="median-delay">–</span></div>
@@ -55,6 +56,7 @@
     <div class="sec-body" id="areas-panel"><div class="sec-body-inner">
       <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">Where the delays are</h3>
       <p class="audit-muted audit-small">On-time % by where the buses run. Which neighbourhoods get the better service, and which the worse.</p>
+      <p class="audit-muted audit-small" id="geo-target-note"></p>
       <div class="controls">
         <span class="audit-faint audit-small">Area:</span>
         <button type="button" class="gctl active" data-geo="area" aria-pressed="true">By area</button>
@@ -82,6 +84,7 @@
     </button>
     <div class="sec-body" id="routes-panel"><div class="sec-body-inner">
       <p class="audit-muted audit-small">Every route as a tile, coloured by on-time %. Faded tiles have few readings (n&lt;30), so treat those as indicative. Tap a tile for its full breakdown. Tiles marked <span class="cell-freq">freq</span> run 6+ buses an hour, where the official standard judges wait time, not timetable punctuality.</p>
+      <p class="audit-muted audit-small" id="route-target-note"></p>
       <div class="controls">
         <span class="audit-faint audit-small">Sort:</span>
         <button type="button" class="ctl active" data-sort="worst" aria-pressed="true">Worst first</button>
@@ -101,8 +104,8 @@
       <h2 class="audit-h2">What this is, and what it isn't</h2>
     </button>
     <div class="sec-body" id="about-panel" style="height:0"><div class="sec-body-inner">
-      <div class="callout">
-        <strong>The point.</strong> Bus operators across the West of England publish their live vehicle data, and WECA's Bus Service Improvement Plan sets a <strong>95% punctuality target</strong> for the area, but there is no accessible, route-level public scorecard showing whether that target is being met. This site builds one from the operators' own open data.
+      <div class="callout" id="point-callout">
+        <strong>The point.</strong> This site compares independent measurements with WECA's dated annual target and longer-term goal.
       </div>
 
       <details class="detail" open>
@@ -137,7 +140,7 @@
   </section>
 
   <footer class="audit-footer">
-    <p>An independent, non-commercial measurement of West of England bus punctuality, built only from operators' own public open data so anyone can see whether the 95% target is being met. Full method, sources and limitations are in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">methodology</a>, and all the code and data are on <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub</a>.</p>
+    <p id="footer-intro">An independent, non-commercial measurement of West of England bus punctuality, compared with WECA's published targets. Full method, sources and limitations are in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">methodology</a>, and all the code and data are on <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub</a>.</p>
     <p class="audit-faint audit-small">Contains public sector information licensed under the Open Government Licence v3.0 (DfT Bus Open Data Service). Generated <span id="genat">–</span> · service day <span id="genday">–</span>.</p>
   </footer>
 </div>

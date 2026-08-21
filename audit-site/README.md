@@ -1,8 +1,9 @@
 # WECA bus punctuality audit
 
 An independent, non-commercial measurement of bus punctuality across the West
-of England, built from operators' public open data and compared with the
-published 95% punctuality target.
+of England, built from operators' public open data and compared with the dated
+annual area-wide target in the Enhanced Partnership Scheme. The current
+2026-27 target is 87%; the separate long-term goal is 95% by 2030.
 
 **Live audit:** https://bristol-bus-bot.github.io/weca-bus-audit/
 

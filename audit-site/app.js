@@ -7,6 +7,9 @@ const state = {
   operator: null,
   rows: [],
   target: DEFAULT_TARGET_PCT,
+  targetFinancialYear: "",
+  targetSource: "",
+  targetSourceUrl: "",
   tableSortKey: "on_time_pct",
   tableSortType: "num",
   tableSortAscending: false,
@@ -37,6 +40,52 @@ function escapeHTML(value) {
 function finiteNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function safeHTTPURL(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function targetYearLabel() {
+  return state.targetFinancialYear
+    ? state.targetFinancialYear.replace("-", "–")
+    : "current year";
+}
+
+function targetLineLabel() {
+  return `${finiteNumber(state.target)}% · ${targetYearLabel()} target`;
+}
+
+function targetReferenceHTML() {
+  const source = escapeHTML(state.targetSource || "published WECA target schedule");
+  const url = safeHTTPURL(state.targetSourceUrl);
+  const sourceHTML = url
+    ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${source}</a>`
+    : source;
+  return `<strong>${finiteNumber(state.target)}%</strong> area-wide target for <strong>${escapeHTML(targetYearLabel())}</strong> (${sourceHTML})`;
+}
+
+function renderTargetContext() {
+  const reference = targetReferenceHTML();
+  const longTerm = `${finiteNumber(state.data.target_pct, 95)}% by ${finiteNumber(state.data.target_year, 2030)}`;
+  const note = `Compared with WECA's ${reference}. The separate long-term goal is ${escapeHTML(longTerm)}.`;
+  ["headline-target-note", "geo-target-note", "route-target-note"].forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) element.innerHTML = note;
+  });
+  const point = document.getElementById("point-callout");
+  if (point) {
+    point.innerHTML = `<strong>The point.</strong> Bus operators across the West of England publish their live vehicle data. WECA's current published benchmark is a ${reference}, with a longer-term goal of ${escapeHTML(longTerm)}, but there is no accessible route-level public scorecard showing whether those targets are being met. This site builds one from the operators' own open data.`;
+  }
+  const footer = document.getElementById("footer-intro");
+  if (footer) {
+    footer.innerHTML = `An independent, non-commercial measurement of West of England bus punctuality, compared with WECA's ${reference}. Full method, sources and limitations are in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">methodology</a>, and all the code and data are on <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub</a>.`;
+  }
 }
 
 function motionOK() {
@@ -210,7 +259,7 @@ function drawTargetLine(container, target) {
   line.className = "tgtline";
   line.style.left = offsetX + "px";
   const label = document.createElement("span");
-  label.textContent = `${finiteNumber(target)}% target`;
+  label.textContent = targetLineLabel();
   line.appendChild(label);
   container.appendChild(line);
 }
@@ -345,7 +394,8 @@ function renderHeadline(opData) {
   }
 
   document.getElementById("ot-tgt").style.left = state.target + "%";
-  document.getElementById("tgt-label").textContent = "target " + state.target + "%";
+  document.getElementById("tgt-label").textContent = targetLineLabel();
+  document.getElementById("tgt-label").title = state.targetSource;
   document.getElementById("ot-band").textContent = "On-time = " + (data.on_time_band || "");
   document.getElementById("median-delay").textContent = format.delaySeconds(overall.median_delay_s);
   document.getElementById("mean-delay").textContent = format.delaySeconds(overall.mean_delay_s);
@@ -375,7 +425,12 @@ async function load() {
 
   state.data = data;
   state.target = Math.min(100, Math.max(0,
-    finiteNumber(data.target_pct, DEFAULT_TARGET_PCT)));
+    finiteNumber(data.current_target_pct,
+      finiteNumber(data.target_pct, DEFAULT_TARGET_PCT))));
+  state.targetFinancialYear = String(data.current_target_financial_year || "");
+  state.targetSource = String(data.current_target_source || "");
+  state.targetSourceUrl = String(data.current_target_source_url || "");
+  renderTargetContext();
 
   const day = data.days && data.days[data.days.length - 1];
   if (!day) {

@@ -64,7 +64,16 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
         ],
         "target_pct": 95,
         "target_year": 2030,
-        "current_target_pct": 82,
+        "current_target_pct": 87,
+        "current_target_financial_year": "2026-27",
+        "current_target_source": (
+            "West of England Enhanced Partnership Scheme V7.02 (July 2025), "
+            "Appendix 5, Table 9"
+        ),
+        "current_target_source_short": "EP Scheme V7.02, Appendix 5, Table 9",
+        "current_target_source_url": "https://example.test/ep-scheme.pdf",
+        "current_target_starts_on": "2026-04-01",
+        "current_target_ends_on": "2027-03-31",
         "days": days,
     }
 
@@ -98,8 +107,11 @@ def test_pack_uses_exact_counts_and_successful_post_provenance():
             "readings": 560, "onTime": 364, "onTimePct": 65.0,
         },
     ]
-    assert pack["busWeek"]["targetPct"] == 82
-    assert pack["busWeek"]["targetGapPoints"] == 20.5
+    assert pack["busWeek"]["targetPct"] == 87
+    assert pack["busWeek"]["targetGapPoints"] == 25.5
+    assert pack["busWeek"]["targetFinancialYear"] == "2026-27"
+    assert pack["busWeek"]["targetSourceShort"] == (
+        "EP Scheme V7.02, Appendix 5, Table 9")
     assert pack["busWeek"]["longTermTargetPct"] == 95
     assert pack["busWeek"]["longTermTargetGapPoints"] == 33.5
     assert pack["busWeek"]["powertrain"]["identifiedReadings"] == 1260
@@ -236,6 +248,14 @@ def test_week_gate_rejects_gaps_and_small_samples():
         assert "1,000" in str(exc)
     else:
         raise AssertionError("small sample must fail")
+
+
+def test_week_gate_rejects_dates_crossing_target_periods():
+    audit = audit_payload()
+    audit["current_target_starts_on"] = "2026-07-23"
+
+    with pytest.raises(ValueError, match="crosses WECA punctuality target"):
+        build_pack.build_week(audit)
 
 
 def make_app_db(path: Path, *, uri: str =

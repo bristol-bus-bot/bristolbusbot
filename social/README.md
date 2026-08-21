@@ -68,8 +68,8 @@ npm run generate -- --input single-card.json --output previews `
 
 Pass `--operator ALL` for a whole-network carousel, or another published
 operator code to override the audit JSON selection. Weekly cards carry WECA's
-latest published annual area-wide target, the observed shortfall, and the
-long-term 95% by 2030 goal.
+annual area-wide target for the measured financial year, its exact Enhanced
+Partnership source, the observed shortfall, and the long-term 95% by 2030 goal.
 
 Gemini is not involved in rendering or numbers. An optional caption-writing
 step can be added later, but its output must remain a review-only suggestion.

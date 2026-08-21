@@ -81,10 +81,28 @@ A departure counts as on time if it is between 1 minute early and 5 minutes 59
 seconds late (delay between -60 and +359 seconds). This is the DfT statistical
 "on time" band, chosen because it matches the convention behind the official
 published figures. WECA's latest published Enhanced Partnership Scheme sets an
-annual area-wide target of 82% and says this will increase each year. The
-long-term Bus Service Improvement Plan goal remains 95% by 2030. Both use the
-same 1-minute-early to 5-minutes-late definition; neither is an operator-specific
+annual area-wide target schedule in Appendix 5, Table 9:
+
+| Financial year | Area-wide target |
+|---|---:|
+| 2022-23 | 81% |
+| 2023-24 | 82% |
+| 2024-25 | 83% |
+| 2025-26 | 85% |
+| 2026-27 | 87% |
+
+The audit selects the target covering the displayed service date, so the
+current 2026-27 comparison is 87%. The Passenger Charter web page still calls
+82% the target for “this year”; that undated wording matches the scheme's
+2023-24 target and is not used in preference to the dated table. The long-term
+Bus Service Improvement Plan goal remains 95% by 2030. Both use the same
+1-minute-early to 5-minutes-late definition; neither is an operator-specific
 target for First Bristol alone.
+
+The published schedule currently ends on 31 March 2027. The exporter fails
+clearly for a later service date until a newly published target is deliberately
+added. It does not silently carry 87% into a financial year for which the
+scheme provides no target.
 
 ## Geography (area and ward)
 

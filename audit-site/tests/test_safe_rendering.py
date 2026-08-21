@@ -35,6 +35,24 @@ def test_dynamic_text_is_escaped_before_inner_html_rendering():
     assert "line.innerHTML" not in source
 
 
+def test_current_target_year_and_source_drive_every_comparison():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "finiteNumber(data.current_target_pct" in source
+    assert "data.current_target_financial_year" in source
+    assert "data.current_target_source_url" in source
+    assert "safeHTTPURL(state.targetSourceUrl)" in source
+    assert "escapeHTML(state.targetSource" in source
+    for marker in (
+            'id="headline-target-note"',
+            'id="geo-target-note"',
+            'id="route-target-note"',
+            'id="point-callout"',
+            'id="footer-intro"'):
+        assert marker in html
+
+
 def test_accessibility_landmarks_and_live_regions_are_present():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     for marker in ('href="#main-content"', "<main", 'role="tablist"',
