@@ -8,7 +8,7 @@ import json
 import math
 import sqlite3
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -151,7 +151,18 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
     on_time = sum(int(item["on_time"]) for item in overall)
     if readings < 1000:
         raise ValueError("Bus Week requires at least 1,000 timing-point readings")
-    target_pct = float(audit.get("current_target_pct", 82))
+    target_pct = float(audit["current_target_pct"])
+    target_financial_year = str(audit["current_target_financial_year"])
+    target_source = str(audit["current_target_source"])
+    target_source_short = str(audit["current_target_source_short"])
+    target_source_url = str(audit["current_target_source_url"])
+    target_starts_on = date.fromisoformat(audit["current_target_starts_on"])
+    target_ends_on = date.fromisoformat(audit["current_target_ends_on"])
+    if parsed[0].date() < target_starts_on or parsed[-1].date() > target_ends_on:
+        raise ValueError(
+            "Bus Week crosses WECA punctuality target periods; choose seven "
+            "days covered by one published financial-year target"
+        )
     long_term_target_pct = float(audit.get("target_pct", 95))
     target_year = int(audit.get("target_year", 2030))
     on_time_pct = round(100 * on_time / readings, 1)
@@ -166,7 +177,13 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
         "serviceDays": 7,
         "daily": [float(item["on_time_pct"]) for item in overall],
         "targetPct": target_pct,
-        "targetLabel": "latest WECA area target",
+        "targetLabel": f"WECA {target_financial_year} area target",
+        "targetFinancialYear": target_financial_year,
+        "targetSource": target_source,
+        "targetSourceShort": target_source_short,
+        "targetSourceUrl": target_source_url,
+        "targetStartsOn": target_starts_on.isoformat(),
+        "targetEndsOn": target_ends_on.isoformat(),
         "targetGapPoints": round(target_pct - on_time_pct, 1),
         "longTermTargetPct": long_term_target_pct,
         "longTermTargetLabel": f"WECA {target_year} goal",

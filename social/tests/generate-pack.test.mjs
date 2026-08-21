@@ -13,7 +13,12 @@ const pack = {
     ],
     startDate: '2026-07-20', endDate: '2026-07-26',
     onTimePct: 67.4, onTimeReadings: 809, readings: 1200,
-    targetPct: 82, targetLabel: 'latest WECA area target', targetGapPoints: 14.6,
+    targetPct: 87, targetLabel: 'WECA 2026-27 area target', targetGapPoints: 19.6,
+    targetFinancialYear: '2026-27',
+    targetSource: 'West of England Enhanced Partnership Scheme V7.02 (July 2025), Appendix 5, Table 9',
+    targetSourceShort: 'EP Scheme V7.02, Appendix 5, Table 9',
+    targetSourceUrl: 'https://example.test/ep-scheme.pdf',
+    targetStartsOn: '2026-04-01', targetEndsOn: '2027-03-31',
     longTermTargetPct: 95, longTermTargetLabel: 'WECA 2030 goal',
     longTermTargetGapPoints: 27.6,
     powertrain: {
@@ -69,8 +74,10 @@ test('weekly card gates and manifest preserve facts', () => {
   assert.match(output.drafts[0].caption, /A bus & its timetable/);
   assert.match(busWeekSvg(pack.busWeek), /33 in every 100/);
   assert.doesNotMatch(busWeekSvg(pack.busWeek), /TARGET/);
-  assert.match(weeklyTargetSvg(pack.busWeek), /14.6 points short/);
-  assert.match(weeklyTargetSvg(pack.busWeek), /82% TARGET/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /19.6 points short/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /87% TARGET/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /WECA 2026-27 area target/);
+  assert.match(weeklyTargetSvg(pack.busWeek), /SOURCE: EP SCHEME V7.02, APPENDIX 5, TABLE 9/);
   assert.equal(output.drafts[1].slides.length, 6);
   assert.match(output.drafts[1].slides[0].altText, /100 squares/);
   assert.match(weeklyDaysSvg(pack.busWeek), /Best day: Sunday/);
@@ -86,7 +93,8 @@ test('weekly card gates and manifest preserve facts', () => {
   assert.match(weeklyOperatorsSvg(pack.busWeek), /Stagecoach West/);
   assert.match(weeklyOperatorsSvg(pack.busWeek), /THIS ROUNDUP/);
   assert.match(botSaidSvg(pack.botSaid), /FIRST BRISTOL · LIVE DATA/);
-  assert.match(output.drafts[1].caption, /14.6 points below/);
+  assert.match(output.drafts[1].caption, /19.6 points below/);
+  assert.match(output.drafts[1].caption, /2026-27 87% annual area target/);
   assert.match(output.drafts[1].caption, /40.0% of identified readings/);
 });
 

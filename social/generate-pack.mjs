@@ -231,7 +231,7 @@ export function weeklyTargetSvg(data, css = '') {
     <rect width="1080" height="12" fill="${COLORS.amber}"/>
     <text x="72" y="112" class="matrix" font-size="25" font-weight="750" letter-spacing="2.2" fill="${COLORS.amber}">OPERATOR: ${xml(scope.toUpperCase())} · WECA TARGET</text>
     <text x="72" y="228" font-size="86" font-weight="800" letter-spacing="-3" fill="${COLORS.boardInk}">${gap.toFixed(1)} points short.</text>
-    <text x="72" y="302" font-size="30" fill="${COLORS.boardMuted}">Latest published annual area target</text>
+    <text x="72" y="302" font-size="30" fill="${COLORS.boardMuted}">${xml(data.targetLabel)}</text>
     <rect x="72" y="372" width="936" height="530" rx="14" fill="#15181b" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
     <text x="100" y="438" class="mono" font-size="22" font-weight="750" fill="${COLORS.boardMuted}">0–100% ON-TIME SCALE</text>
     <rect x="${barX}" y="548" width="${barWidth}" height="72" rx="8" fill="#666c73"/>
@@ -245,12 +245,13 @@ export function weeklyTargetSvg(data, css = '') {
     <text x="100" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.liveGreen}">${actual.toFixed(1)}%</text>
     <text x="100" y="866" font-size="24" fill="${COLORS.boardMuted}">${xml(scope)} actual</text>
     <text x="430" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.amber}">${target.toFixed(0)}%</text>
-    <text x="430" y="866" font-size="24" fill="${COLORS.boardMuted}">latest WECA target</text>
+    <text x="430" y="866" font-size="24" fill="${COLORS.boardMuted}">${xml(data.targetFinancialYear)} EP target</text>
     <text x="745" y="824" class="mono" font-size="52" font-weight="850" fill="${COLORS.boardInk}">${longTarget.toFixed(0)}%</text>
     <text x="745" y="866" font-size="24" fill="${COLORS.boardMuted}">goal by 2030</text>
     <rect x="72" y="962" width="936" height="144" rx="12" fill="rgba(245,158,11,.10)" stroke="rgba(245,158,11,.42)" stroke-width="2"/>
     <text x="104" y="1024" class="matrix" font-size="23" font-weight="750" fill="${COLORS.amber}">THE LONG-TERM GAP</text>
     <text x="104" y="1080" font-size="38" font-weight="750" fill="${COLORS.boardInk}">${longGap.toFixed(1)} percentage points to the 2030 goal.</text>
+    <text x="72" y="1168" class="mono" font-size="21" font-weight="650" fill="${COLORS.boardMuted}">SOURCE: ${xml(String(data.targetSourceShort).toUpperCase())}</text>
     <line x1="72" y1="1218" x2="1008" y2="1218" stroke="rgba(255,255,255,.16)" stroke-width="2"/>
     <text x="72" y="1270" class="mono" font-size="25" font-weight="650" fill="${COLORS.boardMuted}">bristolbuses.live</text>
     <text x="1008" y="1270" text-anchor="end" class="mono" font-size="23" font-weight="650" fill="${COLORS.boardMuted}">on time: 1 min early to 5 min 59 s late</text>
@@ -518,6 +519,11 @@ export function validatePack(pack, card = 'all') {
   if (!Number.isFinite(Number(week?.targetPct)) || Number(week.targetPct) <= 0
       || Number(week.targetPct) > 100) errors.push('busWeek requires a valid targetPct');
   if (!Number.isFinite(Number(week?.targetGapPoints))) errors.push('busWeek requires targetGapPoints');
+  if (!week?.targetFinancialYear || !week?.targetSource
+      || !week?.targetSourceShort || !week?.targetSourceUrl
+      || !week?.targetStartsOn || !week?.targetEndsOn) {
+    errors.push('busWeek requires the target year and source');
+  }
   if (!Number.isFinite(Number(week?.longTermTargetPct))
       || Number(week.longTermTargetPct) < Number(week.targetPct)
       || Number(week.longTermTargetPct) > 100) errors.push('busWeek requires a valid longTermTargetPct');
@@ -576,7 +582,7 @@ export function manifest(pack, files, card = 'all') {
         },
         {
           role: 'target', file: files.weeklyTarget,
-          altText: `${week.operatorName} recorded ${Number(week.onTimePct).toFixed(1)} percent on time, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's latest published ${Number(week.targetPct).toFixed(0)} percent annual area target. WECA's longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030, a gap of ${Number(week.longTermTargetGapPoints).toFixed(1)} points.`,
+          altText: `${week.operatorName} recorded ${Number(week.onTimePct).toFixed(1)} percent on time, ${Number(week.targetGapPoints).toFixed(1)} percentage points below WECA's ${week.targetFinancialYear} ${Number(week.targetPct).toFixed(0)} percent annual area target from ${week.targetSourceShort}. WECA's longer-term goal is ${Number(week.longTermTargetPct).toFixed(0)} percent by 2030, a gap of ${Number(week.longTermTargetGapPoints).toFixed(1)} points.`,
         },
         {
           role: 'daily-detail', file: files.weeklyDays,
@@ -595,10 +601,15 @@ export function manifest(pack, files, card = 'all') {
           altText: `On-time results by operator from ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${week.operatorComparison.map(operator => `${operator.operatorName} ${Number(operator.onTimePct).toFixed(1)} percent from ${Number(operator.readings).toLocaleString('en-GB')} readings`).join('; ')}.`,
         },
       ],
-      caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's latest published ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Full figures via the link in bio.`,
+      caption: `${week.operatorName} weekly roundup, ${formatDate(week.startDate)} to ${formatDate(week.endDate)}: ${Number(week.onTimePct).toFixed(1)}% of timetable checks were on time, ${Number(week.targetGapPoints).toFixed(1)} points below WECA's ${week.targetFinancialYear} ${Number(week.targetPct).toFixed(0)}% annual area target. Electric buses accounted for ${Number(week.powertrain.electric.sharePct).toFixed(1)}% of identified readings. ${Number(week.readings).toLocaleString('en-GB')} readings over ${week.serviceDays} days. Target source: ${week.targetSourceShort}. Full figures via the link in bio.`,
       sources: {
         operatorCode: week.operatorCode, operatorName: week.operatorName,
         targetPct: week.targetPct, targetGapPoints: week.targetGapPoints,
+        targetFinancialYear: week.targetFinancialYear,
+        targetSource: week.targetSource,
+        targetSourceUrl: week.targetSourceUrl,
+        targetStartsOn: week.targetStartsOn,
+        targetEndsOn: week.targetEndsOn,
         longTermTargetPct: week.longTermTargetPct,
         longTermTargetGapPoints: week.longTermTargetGapPoints,
         startDate: week.startDate, endDate: week.endDate,
