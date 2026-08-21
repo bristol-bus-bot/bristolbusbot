@@ -20,6 +20,29 @@ AUDIT_DB = os.getenv("BBB_AUDIT_DB", os.path.join(HERE, "audit.db"))
 TARGET_TZ_STR = "Europe/London"
 TARGET_TZ = tz.gettz(TARGET_TZ_STR) or tz.tzlocal()
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+EXPECTED_TRIP_DETAIL_COLUMNS = {
+    "route_id": "TEXT",
+    "service_id": "TEXT",
+    "block_id": "TEXT",
+    "vehicle_journey_code": "TEXT",
+    "first_stop_id": "TEXT",
+    "first_stop_code": "TEXT",
+    "timetable_edition": "TEXT",
+}
+
+
+def bounded_text(value, limit=256):
+    """Keep imported identifiers useful without allowing pathological growth."""
+    if value is None:
+        return None
+    return str(value)[:limit]
+
+
+def table_exists(cur, table):
+    return cur.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone() is not None
 
 
 def hhmm_ref(departure_time):
@@ -48,9 +71,24 @@ def init_expected_table(conn):
                siri_ref        TEXT,
                direction       INTEGER,
                first_departure TEXT,
+               route_id        TEXT,
+               service_id      TEXT,
+               block_id        TEXT,
+               vehicle_journey_code TEXT,
+               first_stop_id   TEXT,
+               first_stop_code TEXT,
+               timetable_edition TEXT,
                PRIMARY KEY (service_date, trip_id)
            )"""
     )
+    # CREATE TABLE IF NOT EXISTS does not upgrade the durable audit database.
+    # Additive nullable columns preserve every existing row and let old history
+    # remain explicitly "detail not captured" rather than being guessed later.
+    existing = {row[1] for row in cur.execute("PRAGMA table_info(expected_trips)")}
+    for name, declaration in EXPECTED_TRIP_DETAIL_COLUMNS.items():
+        if name not in existing:
+            cur.execute(
+                f"ALTER TABLE expected_trips ADD COLUMN {name} {declaration}")
     cur.execute(
         """CREATE INDEX IF NOT EXISTS idx_expected_date_route
                ON expected_trips (service_date, operator, route)"""
@@ -59,7 +97,7 @@ def init_expected_table(conn):
 
 
 def active_service_ids(cur, date_str, weekday_col):
-    """Return the set of service_ids active for FBRI on date_str, applying
+    """Return the set of service_ids active on date_str, applying
     calendar weekday/range rules plus calendar_dates additions/removals."""
     # (a) regular calendar services active on this weekday & in range
     cur.execute(
@@ -101,23 +139,49 @@ def build_snapshot(date_str):
         tt_conn.close()
         return 0
 
-    # All show-operator trips on those services, with operator + route +
-    # first-stop departure.
+    # All show-operator trips on those services, with the minimum private
+    # timetable clues needed to distinguish similar duties later. The route
+    # edition uses the same route_service_editions vocabulary as the matching
+    # evidence receipts; older timetable databases without that optional table
+    # remain readable and yield a blank edition.
     svc_ph = ",".join("?" for _ in service_ids)
     op_ph = ",".join("?" for _ in SHOW_OPERATORS)
+    has_editions = table_exists(tt_cur, "route_service_editions")
+    edition_sql = "NULL"
+    if has_editions:
+        edition_sql = """(SELECT rse.edition_start
+                              FROM route_service_editions rse
+                             WHERE rse.route_id = t.route_id
+                               AND rse.edition_start <= ?
+                               AND rse.effective_end >= ?
+                             ORDER BY rse.edition_start DESC LIMIT 1)"""
     sql = f"""
         SELECT t.trip_id, a.agency_noc, r.route_short_name, t.direction_id,
                (SELECT st.departure_time FROM stop_times st
                 WHERE st.trip_id = t.trip_id
                 ORDER BY st.stop_sequence LIMIT 1)
-                   AS first_departure
+                   AS first_departure,
+               t.route_id, t.service_id, t.block_id,
+               t.vehicle_journey_code,
+               (SELECT st.stop_id FROM stop_times st
+                WHERE st.trip_id = t.trip_id
+                ORDER BY st.stop_sequence LIMIT 1)
+                   AS first_stop_id,
+               (SELECT s.stop_code FROM stop_times st
+                LEFT JOIN stops s ON s.stop_id = st.stop_id
+                WHERE st.trip_id = t.trip_id
+                ORDER BY st.stop_sequence LIMIT 1)
+                   AS first_stop_code,
+               {edition_sql} AS timetable_edition
         FROM trips t
         JOIN routes r ON t.route_id = r.route_id
         JOIN agency a ON r.agency_id = a.agency_id
         WHERE a.agency_noc IN ({op_ph})
           AND t.service_id IN ({svc_ph})
     """
-    tt_cur.execute(sql, list(SHOW_OPERATORS) + list(service_ids))
+    edition_params = [date_str, date_str] if has_editions else []
+    tt_cur.execute(
+        sql, edition_params + list(SHOW_OPERATORS) + list(service_ids))
     rows = tt_cur.fetchall()
     tt_conn.close()
 
@@ -129,14 +193,23 @@ def build_snapshot(date_str):
     audit_cur.execute("DELETE FROM expected_trips WHERE service_date = ?", (date_str,))
 
     written = 0
-    for trip_id, operator, route_short, direction_id, first_departure in rows:
+    for row in rows:
+        (trip_id, operator, route_short, direction_id, first_departure,
+         route_id, service_id, block_id, vehicle_journey_code,
+         first_stop_id, first_stop_code, timetable_edition) = row
         audit_cur.execute(
             """INSERT OR REPLACE INTO expected_trips
                    (service_date, operator, route, trip_id, siri_ref,
-                    direction, first_departure)
-               VALUES (?,?,?,?,?,?,?)""",
+                    direction, first_departure, route_id, service_id, block_id,
+                    vehicle_journey_code, first_stop_id, first_stop_code,
+                    timetable_edition)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (date_str, operator, route_short, trip_id,
-             hhmm_ref(first_departure), direction_id, first_departure),
+             hhmm_ref(first_departure), direction_id, first_departure,
+             bounded_text(route_id), bounded_text(service_id),
+             bounded_text(block_id), bounded_text(vehicle_journey_code),
+             bounded_text(first_stop_id), bounded_text(first_stop_code),
+             bounded_text(timetable_edition, 8)),
         )
         written += 1
 

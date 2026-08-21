@@ -42,6 +42,16 @@ fallback. SSH host-key verification is mandatory. Deploy scheduled job code sepa
 geography and route-shape inputs. Other scripts implement audit rollups and
 exports, fleet refresh, geocoding and boundary generation.
 
+`audit_snapshot.py` writes the private daily `expected_trips` denominator. New
+rows retain the planned block, stable route/service IDs, vehicle-journey code,
+first-stop identity and resolved route-edition date needed for later
+missing-trip research. These fields do not change coverage or punctuality
+figures. They deliberately use the same timetable vocabulary as the
+collector's matching-evidence receipts; observed timing points carry their
+separate `exact`/`fuzzy` `match_tier`. The migration is additive, so rows made
+before 22 August 2026 remain valid with the new clues blank rather than being
+retrospectively guessed.
+
 `fbribuses.json` is a generated runtime cache and is intentionally not stored
 in Git. Run `python pipeline/update_fleet_data.py`, or
 `python pipeline/refresh_enrichment.py --fix` for the complete enrichment
