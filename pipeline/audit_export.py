@@ -40,6 +40,7 @@ ROUTE_COLS = [
     "readings_in_gate", "on_time", "early", "late",
     "expected_trips", "observed_trips", "coverage_pct",
 ]
+COVERAGE_COLS = ("expected_trips", "observed_trips", "coverage_pct")
 
 # Display order: network first, then the show-list operators.
 OPERATOR_ORDER = [NETWORK_LABEL] + SHOW_OPERATORS
@@ -51,7 +52,33 @@ def operators_for_day(cur, service_date):
     return [op for op in OPERATOR_ORDER if op in present]
 
 
-def build_operator(cur, service_date, operator):
+def coverage_is_valid(cur, service_date):
+    """Fail closed once the private day-health table exists.
+
+    Older databases without the new table retain their previous behaviour for
+    a safe additive deployment.  Once migrated, a missing or explicitly
+    invalid health row means coverage must not leave the Pi.
+    """
+    table = cur.execute(
+        """SELECT 1 FROM sqlite_master
+           WHERE type = 'table' AND name = 'daily_trip_coverage_days'"""
+    ).fetchone()
+    if not table:
+        return True
+    row = cur.execute(
+        """SELECT is_valid FROM daily_trip_coverage_days
+           WHERE service_date = ?""",
+        (service_date,),
+    ).fetchone()
+    return bool(row and row[0])
+
+
+def withhold_coverage(row):
+    for column in COVERAGE_COLS:
+        row[column] = None
+
+
+def build_operator(cur, service_date, operator, *, coverage_valid=True):
     cur.execute(
         "SELECT * FROM daily_overall_summary WHERE service_date = ? AND operator = ?",
         (service_date, operator),
@@ -65,6 +92,10 @@ def build_operator(cur, service_date, operator):
         (service_date, operator),
     )
     routes = [{col: r[col] for col in ROUTE_COLS} for r in cur.fetchall()]
+    if not coverage_valid:
+        withhold_coverage(overall)
+        for route in routes:
+            withhold_coverage(route)
 
     try:
         freq = {
@@ -133,7 +164,12 @@ def build_operator(cur, service_date, operator):
 
 def build_day(cur, service_date):
     ops = operators_for_day(cur, service_date)
-    by_operator = {op: build_operator(cur, service_date, op) for op in ops}
+    coverage_valid = coverage_is_valid(cur, service_date)
+    by_operator = {
+        op: build_operator(
+            cur, service_date, op, coverage_valid=coverage_valid)
+        for op in ops
+    }
     day = {"service_date": service_date, "by_operator": by_operator}
     # Retain the top-level network keys for existing readers.
     compat = by_operator.get("FBRI") or by_operator.get(NETWORK_LABEL)
