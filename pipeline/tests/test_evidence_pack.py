@@ -6,6 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
 from pypdf import PdfReader
 
 
@@ -245,6 +246,18 @@ def test_incomplete_current_month_is_not_presented_as_complete():
     complete = evidence_pack.complete_period(
         date(2026, 8, 31), date(2026, 9, 18), 3)
     assert complete[:2] == (date(2026, 6, 1), date(2026, 8, 31))
+
+
+def test_partly_covered_headline_period_is_rejected(tmp_path):
+    connection = database(tmp_path / "audit.db")
+    connection.execute(
+        "DELETE FROM daily_geo_summary "
+        "WHERE service_date BETWEEN '20260501' AND '20260531'")
+    connection.commit()
+
+    with pytest.raises(evidence_pack.PackUnavailable, match=(
+            "choose a shorter complete window rather than publishing a partial headline")):
+        report(connection)
 
 
 def test_pack_still_renders_before_route_geography_history_exists(tmp_path):
