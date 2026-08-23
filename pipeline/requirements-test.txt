@@ -1,2 +1,2 @@
--r requirements-runtime.txt
+reportlab==5.0.0
 pypdf==6.10.0
