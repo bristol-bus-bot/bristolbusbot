@@ -86,6 +86,7 @@ done
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" "$stage/collector_anomaly_report.py" \
+    "$stage/evidence_pack.py" \
     "$stage/audit_origin_backfill.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
@@ -129,6 +130,7 @@ for destination in \
     /usr/local/libexec/bbb-sample-resources \
     /usr/local/libexec/bbb-data-health \
     /usr/local/libexec/bbb-collector-anomaly \
+    /usr/local/bin/bbb-evidence-pack \
     /usr/local/libexec/bbb-audit-origin-backfill \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/bin/bbb-blurb-review \
@@ -351,6 +353,7 @@ install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/bbb-sample-resources
 install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
 install -o root -g root -m 0755 "$stage/collector_anomaly_report.py" /usr/local/libexec/bbb-collector-anomaly
+install -o root -g root -m 0755 "$stage/evidence_pack.py" /usr/local/bin/bbb-evidence-pack
 install -o root -g root -m 0755 "$stage/audit_origin_backfill.py" /usr/local/libexec/bbb-audit-origin-backfill
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
 install -o root -g root -m 0755 "$stage/blurb_review.sh" /usr/local/bin/bbb-blurb-review
