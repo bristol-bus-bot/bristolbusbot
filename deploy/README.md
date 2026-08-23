@@ -140,7 +140,8 @@ bbb-evidence-pack --date 2026-08-23 --bus FICT-0001 \
 The command opens the production audit and timetable databases read-only. It
 reports the full number of matching receipts but includes at most 25 spread
 across the selected time range, limits observations, polls and timetable stops,
-and refuses a final file larger than 512 KiB. The output is an atomic mode-0600
+and reduces that representative sample further if needed to stay below the hard
+512 KiB final limit. The output is an atomic mode-0600
 JSON file and an existing file is not replaced unless `--force` is supplied.
 Known public website and audit-repository paths are refused. Cause labels are
 triage clues rather than proof, and missing historical observations or

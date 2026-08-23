@@ -270,3 +270,30 @@ def test_atomic_writer_enforces_hard_byte_limit(tmp_path, monkeypatch):
         evidence_pack.atomic_private_json(output, {"larger": "than ten bytes"})
 
     assert not output.exists()
+
+
+def test_sized_bundle_reduces_broad_sample_before_hitting_byte_limit(
+        tmp_path, monkeypatch):
+    audit_path, timetable_path, audit = databases(tmp_path)
+    add_receipt(audit, index=1)
+    add_receipt(audit, index=2)
+    finish(audit)
+    selectors = {"date": DAY}
+    one = evidence_pack.build_bundle(
+        audit_path, timetable_path, selectors, now=NOW, receipt_limit=1,
+        requested_receipt_limit=2)
+    two = evidence_pack.build_bundle(
+        audit_path, timetable_path, selectors, now=NOW, receipt_limit=2,
+        requested_receipt_limit=2)
+    limit = (len(evidence_pack.serialised(one))
+             + len(evidence_pack.serialised(two))) // 2
+    monkeypatch.setattr(evidence_pack, "MAX_OUTPUT_BYTES", limit)
+
+    result = evidence_pack.build_sized_bundle(
+        audit_path, timetable_path, selectors, now=NOW, receipt_limit=2)
+
+    assert result["summary"]["matching_receipts"] == 2
+    assert result["summary"]["included_receipts"] == 1
+    assert result["limits"]["requested_receipt_limit"] == 2
+    assert result["limits"]["receipt_limit"] == 1
+    assert len(evidence_pack.serialised(result)) <= limit

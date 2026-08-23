@@ -498,7 +498,8 @@ def categories_reference() -> dict:
 
 def build_bundle(audit_db: Path, timetable_db: Path, selectors: dict, *,
                  now: datetime | None = None,
-                 receipt_limit: int = MAX_RECEIPTS) -> dict:
+                 receipt_limit: int = MAX_RECEIPTS,
+                 requested_receipt_limit: int | None = None) -> dict:
     if not 1 <= receipt_limit <= MAX_RECEIPTS:
         raise EvidencePackError(
             f"receipt limit must be between 1 and {MAX_RECEIPTS}")
@@ -548,6 +549,9 @@ def build_bundle(audit_db: Path, timetable_db: Path, selectors: dict, *,
         "selectors": {key: value for key, value in selectors.items() if value},
         "limits": {
             "receipt_limit": receipt_limit,
+            "requested_receipt_limit": (
+                requested_receipt_limit
+                if requested_receipt_limit is not None else receipt_limit),
             "observation_rows_per_receipt": MAX_OBSERVATIONS_PER_RECEIPT,
             "poll_rows_per_receipt": MAX_POLLS_PER_RECEIPT,
             "timetable_stops_per_receipt": MAX_TIMETABLE_STOPS,
@@ -565,6 +569,24 @@ def build_bundle(audit_db: Path, timetable_db: Path, selectors: dict, *,
             "Nothing in this command changes either database or any public statistic.",
         ],
     }
+
+
+def build_sized_bundle(audit_db: Path, timetable_db: Path, selectors: dict, *,
+                       now: datetime | None = None,
+                       receipt_limit: int = MAX_RECEIPTS) -> dict:
+    """Reduce a broad representative sample until the private pack fits."""
+    applied_limit = receipt_limit
+    while True:
+        payload = build_bundle(
+            audit_db, timetable_db, selectors, now=now,
+            receipt_limit=applied_limit,
+            requested_receipt_limit=receipt_limit)
+        if len(serialised(payload)) <= MAX_OUTPUT_BYTES:
+            return payload
+        if applied_limit == 1:
+            raise EvidencePackError(
+                f"one evidence receipt exceeds the {MAX_OUTPUT_BYTES}-byte safety limit")
+        applied_limit = max(1, applied_limit // 2)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -600,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
         output = safe_output_path(
             args.output, audit_db=args.audit_db,
             timetable_db=args.timetable_db, force=args.force)
-        payload = build_bundle(
+        payload = build_sized_bundle(
             args.audit_db, args.timetable_db, selectors,
             receipt_limit=args.receipt_limit)
         size = atomic_private_json(output, payload, force=args.force)
