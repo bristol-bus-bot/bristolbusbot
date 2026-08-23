@@ -52,6 +52,26 @@ separate `exact`/`fuzzy` `match_tier`. The migration is additive, so rows made
 before 22 August 2026 remain valid with the new clues blank rather than being
 retrospectively guessed.
 
+`audit_rollup.py` also writes two permanent private trip-coverage tables before
+the 95-day raw-data prune. `daily_trip_coverage` splits scheduled, observed and
+unobserved trips by operator, route, timetable direction and the existing
+AM-peak/interpeak/PM-peak/evening bands. Its totals use the same scheduled-trip
+membership test as the public route coverage; an observation absent from that
+day's snapshot cannot inflate either answer. `daily_trip_coverage_days` stores
+the collector evidence needed to decide whether the detailed rows are usable:
+successful polls across the full scheduled window, poll continuity, feed match
+rate and exact/fuzzy/unknown observed-trip counts. `valid_daily_trip_coverage`
+is the safe read view and contains only days that passed those checks.
+
+A day fails closed if the collector did not cover at least 90% of the expected
+30-second poll slots, fewer than 95% of its recorded polls succeeded, either
+end of the scheduled window is missing by more than five minutes, an internal
+successful-poll gap exceeds 15 minutes, or the feed-wide match rate falls below
+80%. Invalid rows remain private evidence with explicit reasons; their coverage
+is withheld from the public route summary and must never be called a
+cancellation. `--backfill-trip-coverage` safely materialises the retained raw
+history without rewriting published punctuality summaries.
+
 `fbribuses.json` is a generated runtime cache and is intentionally not stored
 in Git. Run `python pipeline/update_fleet_data.py`, or
 `python pipeline/refresh_enrichment.py --fix` for the complete enrichment

@@ -18,7 +18,7 @@ import sys
 import json
 import sqlite3
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil import tz
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL
@@ -36,6 +36,21 @@ ON_TIME_LOW_S = -60
 ON_TIME_HIGH_S = 359
 RAW_RETENTION_DAYS = 95
 MIN_GEO_MATCH_PCT = 90.0
+
+# A coverage day is evidence only when the collector was present for the whole
+# scheduled operating window.  Production polls every 30 seconds; the margins
+# allow a bus to appear shortly before its first departure and up to an hour
+# after the final trip starts.
+COLLECTOR_POLL_INTERVAL_S = 30
+POLL_WINDOW_BEFORE_FIRST_S = 15 * 60
+POLL_WINDOW_AFTER_LAST_S = 60 * 60
+MIN_SUCCESSFUL_POLL_COVERAGE_PCT = 90.0
+MIN_SUCCESSFUL_POLL_RATE_PCT = 95.0
+MAX_POLL_BOUNDARY_GAP_S = 5 * 60
+MAX_SUCCESSFUL_POLL_GAP_S = 15 * 60
+MIN_MATCH_RATE_PCT = 80.0
+UNKNOWN_ROUTE = "(unknown)"
+UNKNOWN_DIRECTION = -1
 
 DELAY_BUCKETS = [
     "early_5plus",
@@ -106,6 +121,14 @@ def init_summary_tables(conn):
             cur.execute(
                 "ALTER TABLE timepoint_observations ADD COLUMN "
                 "is_origin INTEGER NOT NULL DEFAULT 0")
+        if "match_tier" not in raw_columns:
+            cur.execute(
+                "ALTER TABLE timepoint_observations ADD COLUMN match_tier TEXT")
+    if "expected_trips" in raw_tables:
+        expected_columns = {row[1] for row in cur.execute(
+            "PRAGMA table_info(expected_trips)")}
+        if "direction" not in expected_columns:
+            cur.execute("ALTER TABLE expected_trips ADD COLUMN direction INTEGER")
     cur.execute(
         """CREATE TABLE IF NOT EXISTS daily_route_summary (
                service_date        TEXT NOT NULL,
@@ -219,6 +242,59 @@ def init_summary_tables(conn):
                PRIMARY KEY (service_date, operator, route)
            )"""
     )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_trip_coverage_days (
+               service_date                 TEXT PRIMARY KEY,
+               is_valid                     INTEGER NOT NULL,
+               invalid_reasons_json         TEXT NOT NULL,
+               poll_window_start            TEXT,
+               poll_window_end              TEXT,
+               expected_polls               INTEGER NOT NULL,
+               recorded_polls               INTEGER NOT NULL,
+               successful_polls             INTEGER NOT NULL,
+               successful_poll_rate_pct     REAL,
+               successful_poll_coverage_pct REAL,
+               max_successful_poll_gap_s     INTEGER,
+               candidate_readings           INTEGER NOT NULL,
+               matched_readings             INTEGER NOT NULL,
+               match_rate_pct               REAL,
+               scheduled_trips              INTEGER NOT NULL,
+               observed_trips               INTEGER NOT NULL,
+               unobserved_trips             INTEGER NOT NULL,
+               exact_observed_trips         INTEGER NOT NULL,
+               fuzzy_observed_trips         INTEGER NOT NULL,
+               unknown_tier_observed_trips  INTEGER NOT NULL,
+               invalid_departure_times      INTEGER NOT NULL
+           )"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_trip_coverage (
+               service_date                TEXT NOT NULL,
+               operator                    TEXT NOT NULL,
+               route                       TEXT NOT NULL,
+               direction                   INTEGER NOT NULL,
+               time_band                   TEXT NOT NULL,
+               scheduled_trips             INTEGER NOT NULL,
+               observed_trips              INTEGER NOT NULL,
+               unobserved_trips            INTEGER NOT NULL,
+               exact_observed_trips        INTEGER NOT NULL,
+               fuzzy_observed_trips        INTEGER NOT NULL,
+               unknown_tier_observed_trips INTEGER NOT NULL,
+               PRIMARY KEY (
+                   service_date, operator, route, direction, time_band
+               ),
+               FOREIGN KEY (service_date)
+                   REFERENCES daily_trip_coverage_days(service_date)
+           )"""
+    )
+    cur.execute(
+        """CREATE VIEW IF NOT EXISTS valid_daily_trip_coverage AS
+               SELECT coverage.*
+               FROM daily_trip_coverage coverage
+               JOIN daily_trip_coverage_days day
+                 ON day.service_date = coverage.service_date
+               WHERE day.is_valid = 1"""
+    )
     conn.commit()
 
 
@@ -320,7 +396,312 @@ def peak_band_row(band_stats):
     )
 
 
-def rollup(conn, date_str, operators, label):
+def gtfs_time_seconds(value):
+    """Parse an extended GTFS time such as 29:42:00 without wrapping it."""
+    if not value:
+        return None
+    try:
+        hour, minute, second = (int(part) for part in value.split(":")[:3])
+    except (TypeError, ValueError):
+        return None
+    if hour < 0 or not 0 <= minute < 60 or not 0 <= second < 60:
+        return None
+    return hour * 3600 + minute * 60 + second
+
+
+def trip_time_band_for(first_departure):
+    seconds = gtfs_time_seconds(first_departure)
+    if seconds is None:
+        return "unknown"
+    hour = (seconds // 3600) % 24
+    if 7 <= hour <= 9:
+        return "am_peak"
+    if 10 <= hour <= 15:
+        return "interpeak"
+    if 16 <= hour <= 18:
+        return "pm_peak"
+    return "evening"
+
+
+def load_trip_coverage_rows(conn, date_str, operators):
+    """Return the scheduled trips and whether the existing audit saw them.
+
+    This is the one trip-coverage definition used by both the public route
+    summary and the new private, more detailed rollup.  An observation that is
+    not in the day's scheduled snapshot cannot inflate coverage.
+    """
+    op_ph = ",".join("?" for _ in operators)
+    rows = conn.execute(
+        f"""WITH observed AS (
+                SELECT trip_id,
+                       MAX(CASE WHEN match_tier = 'exact' THEN 1 ELSE 0 END)
+                           AS had_exact,
+                       MAX(CASE WHEN match_tier = 'fuzzy' THEN 1 ELSE 0 END)
+                           AS had_fuzzy
+                FROM timepoint_observations
+                WHERE service_date = ? AND operator IN ({op_ph})
+                GROUP BY trip_id
+            )
+            SELECT expected.operator, expected.route, expected.trip_id,
+                   COALESCE(expected.direction, ?), expected.first_departure,
+                   CASE WHEN observed.trip_id IS NULL THEN 0 ELSE 1 END,
+                   COALESCE(observed.had_exact, 0),
+                   COALESCE(observed.had_fuzzy, 0)
+            FROM expected_trips expected
+            LEFT JOIN observed ON observed.trip_id = expected.trip_id
+            WHERE expected.service_date = ?
+              AND expected.operator IN ({op_ph})""",
+        (date_str, *operators, UNKNOWN_DIRECTION, date_str, *operators),
+    ).fetchall()
+    return [
+        {
+            "operator": operator,
+            "route": route or UNKNOWN_ROUTE,
+            "trip_id": trip_id,
+            "direction": direction,
+            "first_departure": first_departure,
+            "observed": bool(observed),
+            "match_tier": (
+                "exact" if had_exact else "fuzzy" if had_fuzzy
+                else "unknown" if observed else None
+            ),
+        }
+        for (operator, route, trip_id, direction, first_departure,
+             observed, had_exact, had_fuzzy) in rows
+    ]
+
+
+def route_trip_counts(conn, date_str, operators):
+    expected = {}
+    observed = {}
+    for row in load_trip_coverage_rows(conn, date_str, operators):
+        route = None if row["route"] == UNKNOWN_ROUTE else row["route"]
+        expected[route] = expected.get(route, 0) + 1
+        if row["observed"]:
+            observed[route] = observed.get(route, 0) + 1
+    return expected, observed
+
+
+def scheduled_poll_window(date_str, rows):
+    departure_seconds = [
+        gtfs_time_seconds(row["first_departure"]) for row in rows
+    ]
+    valid_seconds = [value for value in departure_seconds if value is not None]
+    invalid_count = len(departure_seconds) - len(valid_seconds)
+    if not valid_seconds:
+        return None, None, invalid_count
+    midnight = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=TARGET_TZ)
+    start = midnight + timedelta(
+        seconds=min(valid_seconds) - POLL_WINDOW_BEFORE_FIRST_S)
+    end = midnight + timedelta(
+        seconds=max(valid_seconds) + POLL_WINDOW_AFTER_LAST_S)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc), invalid_count
+
+
+def collector_quality(conn, window_start, window_end):
+    empty = {
+        "poll_window_start": None,
+        "poll_window_end": None,
+        "expected_polls": 0,
+        "recorded_polls": 0,
+        "successful_polls": 0,
+        "successful_poll_rate_pct": None,
+        "successful_poll_coverage_pct": None,
+        "max_successful_poll_gap_s": None,
+        "candidate_readings": 0,
+        "matched_readings": 0,
+        "match_rate_pct": None,
+        "reasons": [],
+    }
+    if window_start is None or window_end is None:
+        return empty
+
+    poll_rows = conn.execute(
+        """SELECT poll_at, ok, candidates, matched
+           FROM poll_log
+           WHERE poll_at >= ? AND poll_at < ?
+           ORDER BY poll_at""",
+        (window_start.isoformat(), window_end.isoformat()),
+    ).fetchall()
+    expected_polls = max(
+        1, round((window_end - window_start).total_seconds()
+                 / COLLECTOR_POLL_INTERVAL_S))
+    successful_times = []
+    for poll_at, ok, _candidates, _matched in poll_rows:
+        if ok:
+            try:
+                parsed = datetime.fromisoformat(poll_at.replace("Z", "+00:00"))
+            except (AttributeError, ValueError):
+                continue
+            successful_times.append(parsed.astimezone(timezone.utc))
+
+    recorded = len(poll_rows)
+    successful = sum(bool(row[1]) for row in poll_rows)
+    success_rate = (
+        round(100.0 * successful / recorded, 2) if recorded else None)
+    completeness = round(
+        min(100.0, 100.0 * successful / expected_polls), 2)
+    candidates = sum(int(row[2] or 0) for row in poll_rows)
+    matched = sum(int(row[3] or 0) for row in poll_rows)
+    match_rate = (
+        round(100.0 * matched / candidates, 2) if candidates else None)
+
+    reasons = []
+    max_gap = None
+    if successful_times:
+        boundary_start = (successful_times[0] - window_start).total_seconds()
+        boundary_end = (window_end - successful_times[-1]).total_seconds()
+        internal_gaps = [
+            (right - left).total_seconds()
+            for left, right in zip(successful_times, successful_times[1:])
+        ]
+        max_gap = round(max([boundary_start, boundary_end, *internal_gaps]))
+        if boundary_start > MAX_POLL_BOUNDARY_GAP_S:
+            reasons.append("collector_started_after_schedule_window")
+        if boundary_end > MAX_POLL_BOUNDARY_GAP_S:
+            reasons.append("collector_stopped_before_schedule_window_closed")
+        if internal_gaps and max(internal_gaps) > MAX_SUCCESSFUL_POLL_GAP_S:
+            reasons.append("successful_poll_gap_over_15_minutes")
+    else:
+        reasons.append("no_successful_polls")
+
+    if completeness < MIN_SUCCESSFUL_POLL_COVERAGE_PCT:
+        reasons.append("successful_poll_coverage_below_90pct")
+    if success_rate is None or success_rate < MIN_SUCCESSFUL_POLL_RATE_PCT:
+        reasons.append("successful_poll_rate_below_95pct")
+    if not candidates:
+        reasons.append("no_in_area_match_candidates")
+    elif match_rate < MIN_MATCH_RATE_PCT:
+        reasons.append("matching_rate_below_80pct")
+
+    return {
+        "poll_window_start": window_start.isoformat(),
+        "poll_window_end": window_end.isoformat(),
+        "expected_polls": expected_polls,
+        "recorded_polls": recorded,
+        "successful_polls": successful,
+        "successful_poll_rate_pct": success_rate,
+        "successful_poll_coverage_pct": completeness,
+        "max_successful_poll_gap_s": max_gap,
+        "candidate_readings": candidates,
+        "matched_readings": matched,
+        "match_rate_pct": match_rate,
+        "reasons": reasons,
+    }
+
+
+def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
+    rows = load_trip_coverage_rows(conn, date_str, operators)
+    window_start, window_end, invalid_times = scheduled_poll_window(
+        date_str, rows)
+    quality = collector_quality(conn, window_start, window_end)
+    reasons = list(quality.pop("reasons"))
+    if not rows:
+        reasons.append("no_scheduled_trips")
+    if invalid_times:
+        reasons.append("invalid_departure_times")
+    if rows and window_start is None:
+        reasons.append("no_valid_departure_times")
+    reasons = sorted(set(reasons))
+
+    groups = {}
+    totals = {
+        "scheduled": len(rows), "observed": 0, "exact": 0,
+        "fuzzy": 0, "unknown": 0,
+    }
+    for row in rows:
+        band = trip_time_band_for(row["first_departure"])
+        for label in (row["operator"], NETWORK_LABEL):
+            key = (label, row["route"], row["direction"], band)
+            group = groups.setdefault(key, {
+                "scheduled": 0, "observed": 0, "exact": 0,
+                "fuzzy": 0, "unknown": 0,
+            })
+            group["scheduled"] += 1
+            if row["observed"]:
+                group["observed"] += 1
+                group[row["match_tier"]] += 1
+        if row["observed"]:
+            totals["observed"] += 1
+            totals[row["match_tier"]] += 1
+
+    day_values = (
+        date_str, int(not reasons), json.dumps(reasons, separators=(",", ":")),
+        quality["poll_window_start"], quality["poll_window_end"],
+        quality["expected_polls"], quality["recorded_polls"],
+        quality["successful_polls"], quality["successful_poll_rate_pct"],
+        quality["successful_poll_coverage_pct"],
+        quality["max_successful_poll_gap_s"], quality["candidate_readings"],
+        quality["matched_readings"], quality["match_rate_pct"],
+        totals["scheduled"], totals["observed"],
+        totals["scheduled"] - totals["observed"], totals["exact"],
+        totals["fuzzy"], totals["unknown"], invalid_times,
+    )
+
+    with conn:
+        conn.execute(
+            "DELETE FROM daily_trip_coverage WHERE service_date = ?",
+            (date_str,),
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO daily_trip_coverage_days VALUES
+                   (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            day_values,
+        )
+        for (operator, route, direction, band), group in sorted(groups.items()):
+            conn.execute(
+                """INSERT INTO daily_trip_coverage VALUES
+                       (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    date_str, operator, route, direction, band,
+                    group["scheduled"], group["observed"],
+                    group["scheduled"] - group["observed"], group["exact"],
+                    group["fuzzy"], group["unknown"],
+                ),
+            )
+    return {
+        "valid": not reasons,
+        "invalid_reasons": reasons,
+        **quality,
+        **totals,
+        "unobserved": totals["scheduled"] - totals["observed"],
+        "groups": len(groups),
+    }
+
+
+def trip_coverage_backfill_dates(conn):
+    cutoff = (
+        datetime.now(TARGET_TZ) - timedelta(days=RAW_RETENTION_DAYS)
+    ).strftime("%Y%m%d")
+    latest_complete = (
+        datetime.now(TARGET_TZ) - timedelta(days=1)
+    ).strftime("%Y%m%d")
+    return [
+        row[0] for row in conn.execute(
+            """SELECT DISTINCT service_date FROM expected_trips
+               WHERE service_date BETWEEN ? AND ? ORDER BY service_date""",
+            (cutoff, latest_complete),
+        )
+    ]
+
+
+def print_trip_coverage_report(result):
+    status = "valid" if result["valid"] else (
+        "INVALID: " + ", ".join(result["invalid_reasons"]))
+    print(
+        f"  private trip coverage: {result['observed']} of "
+        f"{result['scheduled']} scheduled trips observed; "
+        f"{result['unobserved']} not observed; {status}."
+    )
+    print(
+        f"    collector: {result['successful_polls']}/"
+        f"{result['recorded_polls']} successful polls; "
+        f"{result['successful_poll_coverage_pct']}% of expected poll slots; "
+        f"match rate {result['match_rate_pct']}%."
+    )
+
+
+def rollup(conn, date_str, operators, label, coverage_valid=True):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
 
@@ -356,19 +737,8 @@ def rollup(conn, date_str, operators, label):
         band_stats["delays"].append(delay_s)
         band_stats[band] += 1
 
-    cur.execute(
-        f"""SELECT route, COUNT(*) FROM expected_trips
-           WHERE service_date = ? AND operator IN ({op_ph}) GROUP BY route""",
-        (date_str, *operators),
-    )
-    expected_by_route = {route: count for route, count in cur.fetchall()}
-
-    cur.execute(
-        f"""SELECT route, COUNT(DISTINCT trip_id) FROM timepoint_observations
-           WHERE service_date = ? AND operator IN ({op_ph}) GROUP BY route""",
-        (date_str, *operators),
-    )
-    observed_by_route = {route: count for route, count in cur.fetchall()}
+    expected_by_route, observed_by_route = route_trip_counts(
+        conn, date_str, operators)
 
     all_routes = set(per_route) | set(expected_by_route) | set(observed_by_route)
     network_totals = new_accumulator()
@@ -408,9 +778,13 @@ def rollup(conn, date_str, operators, label):
     for route in sorted(all_routes, key=lambda value: (value is None, value)):
         stats = per_route.get(route, new_accumulator())
         summary = punctuality_stats(stats)
-        expected = expected_by_route.get(route, 0)
-        observed = observed_by_route.get(route, 0)
-        coverage = round(100.0 * observed / expected, 1) if expected else None
+        expected_count = expected_by_route.get(route, 0)
+        observed_count = observed_by_route.get(route, 0)
+        coverage = (
+            round(100.0 * observed_count / expected_count, 1)
+            if coverage_valid and expected_count else None)
+        expected = expected_count if coverage_valid else None
+        observed = observed_count if coverage_valid else None
 
         cur.execute(
             "INSERT INTO daily_route_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -427,9 +801,13 @@ def rollup(conn, date_str, operators, label):
         fold_into(network_totals, stats)
 
     overall = punctuality_stats(network_totals)
-    expected_total = sum(expected_by_route.values())
-    observed_total = sum(observed_by_route.values())
-    coverage_total = round(100.0 * observed_total / expected_total, 1) if expected_total else None
+    expected_count_total = sum(expected_by_route.values())
+    observed_count_total = sum(observed_by_route.values())
+    coverage_total = (
+        round(100.0 * observed_count_total / expected_count_total, 1)
+        if coverage_valid and expected_count_total else None)
+    expected_total = expected_count_total if coverage_valid else None
+    observed_total = observed_count_total if coverage_valid else None
 
     cur.execute(
         "INSERT OR REPLACE INTO daily_overall_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -455,6 +833,7 @@ def rollup(conn, date_str, operators, label):
         "expected": expected_total,
         "observed": observed_total,
         "coverage_pct": coverage_total,
+        "coverage_valid": coverage_valid,
         "hist": network_totals["hist"],
         "peak": {band: len(network_totals["peak"][band]["delays"]) for band in PEAK_BANDS},
     }
@@ -467,7 +846,11 @@ def prune_old_raw(conn, before_date_str):
         (before_date_str,),
     )
     count = cur.fetchone()[0]
-    if count:
+    poll_count = cur.execute(
+        "SELECT COUNT(*) FROM poll_log WHERE substr(poll_at,1,10) < ?",
+        (f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}",),
+    ).fetchone()[0]
+    if count or poll_count:
         cur.execute(
             "DELETE FROM timepoint_observations WHERE service_date < ?",
             (before_date_str,),
@@ -509,6 +892,12 @@ def print_report(result):
         )
         print("    distribution: " + ", ".join(f"{bucket}={result['hist'][bucket]}" for bucket in DELAY_BUCKETS))
         print("    by slot (readings): " + ", ".join(f"{band}={result['peak'][band]}" for band in PEAK_BANDS))
+    if not result.get("coverage_valid", True):
+        print(
+            "  coverage: withheld because the collector evidence for this "
+            "service day is incomplete."
+        )
+        return
     coverage = f"{result['coverage_pct']}%" if result["coverage_pct"] is not None else "n/a"
     print(
         f"  coverage: {result['observed']} of {result['expected']} scheduled trips observed "
@@ -682,16 +1071,35 @@ def main():
 
     raw_args = sys.argv[1:]
     no_prune = "--no-prune" in raw_args
+    backfill_trip_coverage = "--backfill-trip-coverage" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
-    try:
-        date_str = resolve_date(positional)
-    except ValueError:
-        print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
+    if backfill_trip_coverage and positional:
+        print("ERROR: --backfill-trip-coverage does not accept a date.")
         return 2
 
     conn = connect_audit_db()
     init_summary_tables(conn)
+    if backfill_trip_coverage:
+        dates = trip_coverage_backfill_dates(conn)
+        print(f"Backfilling private trip coverage for {len(dates)} retained days...")
+        for date_str in dates:
+            print(f"[{date_str}]")
+            print_trip_coverage_report(
+                rollup_trip_coverage(conn, date_str, SHOW_OPERATORS))
+        conn.close()
+        return 0
+
+    try:
+        date_str = resolve_date(positional)
+    except ValueError:
+        conn.close()
+        print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
+        return 2
+
+    coverage_quality = rollup_trip_coverage(
+        conn, date_str, SHOW_OPERATORS)
+    print_trip_coverage_report(coverage_quality)
     geo_index = load_geo_index()
     fleet_index = load_fleet_index()
     geo_match = geography_match_stats(
@@ -708,9 +1116,13 @@ def main():
     print(f"Rolling up WECA operators for {date_str}...")
     for op in SHOW_OPERATORS:
         print(f"[{op}]")
-        print_report(rollup(conn, date_str, [op], op))
+        print_report(rollup(
+            conn, date_str, [op], op,
+            coverage_valid=coverage_quality["valid"]))
     print(f"[{NETWORK_LABEL}] whole network")
-    print_report(rollup(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL))
+    print_report(rollup(
+        conn, date_str, SHOW_OPERATORS, NETWORK_LABEL,
+        coverage_valid=coverage_quality["valid"]))
 
     for op in SHOW_OPERATORS:
         rollup_geo(conn, date_str, [op], op, geo_index)

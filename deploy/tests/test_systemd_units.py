@@ -260,8 +260,9 @@ def test_rollup_is_networkless_and_publish_does_not_repeat_it():
 def test_audit_rollup_waits_until_the_previous_service_day_is_closed():
     rollup = (SYSTEMD / "bbb-audit-rollup.timer").read_text(encoding="utf-8")
     publish = (SYSTEMD / "bbb-audit-publish.timer").read_text(encoding="utf-8")
-    assert "OnCalendar=*-*-* 05:15:00" in rollup
-    assert "OnCalendar=*-*-* 05:45:00" in publish
+    assert "29:42 (05:42 the next" in rollup
+    assert "OnCalendar=*-*-* 07:00:00" in rollup
+    assert "OnCalendar=*-*-* 07:30:00" in publish
 
 
 def test_slack_update_is_plain_english_and_once_daily():

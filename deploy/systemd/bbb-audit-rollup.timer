@@ -2,9 +2,9 @@
 Description=Run the completed-day audit rollup daily
 
 [Timer]
-# The collector can still improve previous-service-day observations until
-# shortly before 05:00.  Wait until that service-day boundary has closed.
-OnCalendar=*-*-* 05:15:00
+# Some Friday/Saturday timetable journeys start at 29:42 (05:42 the next
+# morning).  Leave another hour for them to appear before closing the day.
+OnCalendar=*-*-* 07:00:00
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=30s
