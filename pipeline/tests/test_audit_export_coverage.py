@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -113,3 +114,25 @@ def test_broken_health_table_stops_export_instead_of_leaking_coverage():
 
     with pytest.raises(sqlite3.OperationalError, match="is_valid"):
         audit_export.build_day(connection.cursor(), DAY)
+
+
+def test_private_duty_gap_tables_never_enter_public_day_json():
+    connection = database(valid=True)
+    connection.executescript(
+        """CREATE TABLE daily_duty_gap_days (
+               service_date TEXT, operator TEXT, is_valid INTEGER,
+               strict_candidate_gaps INTEGER);
+           CREATE TABLE daily_duty_gap_candidates (
+               service_date TEXT, operator TEXT, trip_id TEXT,
+               vehicle_ref TEXT);
+           INSERT INTO daily_duty_gap_days VALUES
+               ('20260820', 'FBRI', 1, 99);
+           INSERT INTO daily_duty_gap_candidates VALUES
+               ('20260820', 'FBRI', 'PRIVATE-TRIP', 'PRIVATE-VEHICLE');"""
+    )
+
+    public_json = json.dumps(audit_export.build_day(connection.cursor(), DAY))
+
+    assert "duty_gap" not in public_json
+    assert "PRIVATE-TRIP" not in public_json
+    assert "PRIVATE-VEHICLE" not in public_json

@@ -77,15 +77,18 @@ def test_ordinary_weekday_keeps_duty_identity_and_after_midnight_trip(
     result = sqlite3.connect(audit_path).execute(
         """SELECT trip_id, first_departure, siri_ref, route_id, service_id,
                   block_id, vehicle_journey_code, first_stop_id,
-                  first_stop_code, timetable_edition
+                  first_stop_code, timetable_edition, last_departure
              FROM expected_trips ORDER BY trip_id""").fetchall()
     assert result == [
         ("NIGHT", "25:10:00", "0110", "R-STABLE", "WEEKDAY",
-         "BLOCK-75-N", "VJC-102", "STOP-A", "0100A", "20260726"),
+         "BLOCK-75-N", "VJC-102", "STOP-A", "0100A", "20260726",
+         "25:40:00"),
         ("ONE", "09:00:00", "0900", "R-STABLE", "WEEKDAY",
-         "BLOCK-75-B", "VJC-101", "STOP-B", "0100B", "20260726"),
+         "BLOCK-75-B", "VJC-101", "STOP-B", "0100B", "20260726",
+         "09:30:00"),
         ("ZERO", "08:00:00", "0800", "R-STABLE", "WEEKDAY",
-         "BLOCK-75-A", "VJC-100", "STOP-A", "0100A", "20260726"),
+         "BLOCK-75-A", "VJC-100", "STOP-A", "0100A", "20260726",
+         "08:30:00"),
     ]
     assert audit_snapshot.build_snapshot("20260814") == 3
     assert sqlite3.connect(audit_path).execute(
@@ -182,9 +185,10 @@ def test_existing_database_is_upgraded_without_changing_old_rows(tmp_path):
     assert connection.execute(
         """SELECT trip_id, route_id, service_id, block_id,
                   vehicle_journey_code, first_stop_id, first_stop_code,
-                  timetable_edition
+                  timetable_edition, last_departure
              FROM expected_trips"""
-    ).fetchone() == ("OLD-TRIP", None, None, None, None, None, None, None)
+    ).fetchone() == (
+        "OLD-TRIP", None, None, None, None, None, None, None, None)
     connection.close()
 
 
@@ -216,12 +220,12 @@ def test_added_detail_stays_within_measured_pi_storage_budget(tmp_path):
             f"R{number % 10000:04d}", f"SERVICE{number % 1000:05d}",
             f"BLOCK-{number:031d}", f"VJ{number:04d}",
             f"STOP-{number % 100000:06d}", f"{number % 1000000:06d}",
-            "20260726",
+            "20260726", "09:35:00",
         ))
     legacy.executemany(
         "INSERT INTO expected_trips VALUES (?,?,?,?,?,?,?)", legacy_rows)
     enriched.executemany(
-        "INSERT INTO expected_trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO expected_trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         enriched_rows)
     legacy.commit()
     enriched.commit()

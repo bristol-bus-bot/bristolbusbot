@@ -28,6 +28,7 @@ EXPECTED_TRIP_DETAIL_COLUMNS = {
     "first_stop_id": "TEXT",
     "first_stop_code": "TEXT",
     "timetable_edition": "TEXT",
+    "last_departure": "TEXT",
 }
 
 
@@ -78,6 +79,7 @@ def init_expected_table(conn):
                first_stop_id   TEXT,
                first_stop_code TEXT,
                timetable_edition TEXT,
+               last_departure TEXT,
                PRIMARY KEY (service_date, trip_id)
            )"""
     )
@@ -172,7 +174,11 @@ def build_snapshot(date_str):
                 WHERE st.trip_id = t.trip_id
                 ORDER BY st.stop_sequence LIMIT 1)
                    AS first_stop_code,
-               {edition_sql} AS timetable_edition
+               {edition_sql} AS timetable_edition,
+               (SELECT st.departure_time FROM stop_times st
+                WHERE st.trip_id = t.trip_id
+                ORDER BY st.stop_sequence DESC LIMIT 1)
+                   AS last_departure
         FROM trips t
         JOIN routes r ON t.route_id = r.route_id
         JOIN agency a ON r.agency_id = a.agency_id
@@ -196,20 +202,22 @@ def build_snapshot(date_str):
     for row in rows:
         (trip_id, operator, route_short, direction_id, first_departure,
          route_id, service_id, block_id, vehicle_journey_code,
-         first_stop_id, first_stop_code, timetable_edition) = row
+         first_stop_id, first_stop_code, timetable_edition,
+         last_departure) = row
         audit_cur.execute(
             """INSERT OR REPLACE INTO expected_trips
                    (service_date, operator, route, trip_id, siri_ref,
                     direction, first_departure, route_id, service_id, block_id,
                     vehicle_journey_code, first_stop_id, first_stop_code,
-                    timetable_edition)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    timetable_edition, last_departure)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (date_str, operator, route_short, trip_id,
              hhmm_ref(first_departure), direction_id, first_departure,
              bounded_text(route_id), bounded_text(service_id),
              bounded_text(block_id), bounded_text(vehicle_journey_code),
              bounded_text(first_stop_id), bounded_text(first_stop_code),
-             bounded_text(timetable_edition, 8)),
+             bounded_text(timetable_edition, 8),
+             bounded_text(last_departure, 32)),
         )
         written += 1
 
