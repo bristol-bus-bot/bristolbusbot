@@ -97,6 +97,45 @@ operated journeys or cancellations. Rows made before 22 August 2026 do not
 contain trustworthy route identity, so current 3/6/12-month results correctly
 say unavailable rather than guessing.
 
+`evidence_pack.py` makes a dated, phone-readable local briefing from complete
+calendar months. Choose one area, ward or small route group and give the date
+of the committee meeting:
+
+```sh
+BBB_AUDIT_DB=/var/lib/bristolbusbot/collector/audit.db \
+BBB_AUDIT_SITE_DIR=/var/lib/bristolbusbot/pipeline/audit_site \
+python3 evidence_pack.py \
+  --area "South Gloucestershire" \
+  --committee-date 2026-09-18
+```
+
+The command writes `index.html`, `briefing.pdf` and the same versioned summary
+as `data.json` under a dated `packs/` address. Dated packs are not overwritten
+unless `--replace` is explicitly supplied. The next normal audit publish copies
+new packs to GitHub Pages without deleting older cited packs.
+
+The default period is the last three complete calendar months supported by the
+database. Percentages are recalculated from summed readings and on-time counts,
+not averaged from daily percentages. Route figures need 200 readings to be
+treated as more than indicative. Area/ward route evidence is stored daily in
+`daily_geo_route_summary`; after first deployment, run
+`audit_rollup.py --backfill-geo-routes` once under the normal audit lock to
+materialise as much of the retained 95-day raw history as remains. The pack
+labels a partially backfilled route table instead of implying it covers the
+whole headline period. It also keeps operator identity beside each route number
+and labels a route as partial when its evidence starts or ends more than 14 days
+inside the selected period.
+
+The generator withholds the preceding-period percentage-point comparison when
+the two windows cross a recorded audit-method change. It also labels both
+official targets when a three-month window crosses a financial-year boundary,
+rather than pretending one target applied to the whole period.
+
+Registered frequency changes remain absent unless enough post-22-August route
+identity exists and the maintainer supplies a checked shared context with
+`--frequency-context`. A missing frequency section never blocks a punctuality
+pack. Every generated pack still needs a wording check before it is shared.
+
 A day fails closed if the collector did not cover at least 90% of the expected
 30-second poll slots, fewer than 95% of its recorded polls succeeded, either
 end of the scheduled window is missing by more than five minutes, an internal

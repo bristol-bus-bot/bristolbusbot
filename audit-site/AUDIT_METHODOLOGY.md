@@ -113,6 +113,47 @@ by area and by ward. This shows where service is better or worse, but a ward's
 figure only reflects the stops we observed there, so sparsely-measured wards are
 treated as indicative.
 
+## Dated local evidence packs
+
+A local evidence pack uses the same daily rollups as the audit and selects the
+last three complete calendar months by default. It sums the underlying on-time
+and total reading counts before calculating a period percentage; it never
+averages already-rounded daily percentages. The preceding equal-length period
+is calculated in the same way.
+
+For an area or ward, a small permanent private rollup also retains the route
+attached to each qualifying geographic reading. This prevents future packs
+depending on raw observations which are deleted after 95 days. The first
+backfill can only use raw days still retained, so a pack says explicitly when
+its route table covers less than 80% of the days behind the geographic headline.
+A route needs at least 200 readings in the selected period before the pack calls
+its result more than indicative. Operator identity is kept beside the route
+number so, for example, two operators using the same public route number are
+not silently combined. A route whose local evidence starts or ends more than
+14 days inside the selected window is labelled as a partial-period result and
+is not used to generate a route-level committee question.
+
+An earlier-period punctuality change is withheld when a known audit method
+change falls anywhere in the two periods being compared. In particular, packs
+whose comparison crosses 13 July 2026 do not turn the replacement collector's
+different timetable matching and stale-position handling into an apparent
+performance change. If an evidence period crosses a financial-year target
+change, the pack labels both targets and describes the headline card as the
+target at the end of the period.
+
+Registered timetable changes are a separate measure. They are included only
+when both comparison periods have complete stable route identity, repeated
+ordinary weekday patterns and a manually checked shared school-term or seasonal
+context. They describe scheduled journeys, not operated journeys or
+cancellations. If any check fails, the pack prints the reason and leaves the
+section out.
+
+The three suggested committee questions are templates tied to figures displayed
+in that exact pack. They are not findings in their own right and are reviewed by
+a person before the pack is shared. Each dated pack contains its exact period,
+generation time, sample sizes, limitations, source links and a machine-readable
+copy of the summary.
+
 ## Fleet (model and electric)
 
 Each reading carries the vehicle reference, which is matched to fleet data to get
@@ -173,6 +214,11 @@ or regulator measurement that uses different sampling.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**23 August 2026 - dated local evidence packs added.** This did not alter any
+punctuality result. It added a route-by-area/ward daily rollup for future local
+briefings and a generator which uses complete months, summed counts, explicit
+sample warnings and fail-closed timetable comparisons.
 
 **23 August 2026 — incomplete collector days excluded from coverage.** Daily
 coverage now has a separate collector-health gate using successful polls,

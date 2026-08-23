@@ -11,6 +11,7 @@ Run from the bristol-live-buses folder:
     python audit_rollup.py            roll up today
     python audit_rollup.py 20260601   roll up a specific YYYYMMDD
     python audit_rollup.py 20260601 --no-prune
+    python audit_rollup.py --backfill-geo-routes
 """
 
 import os
@@ -213,6 +214,27 @@ def init_summary_tables(conn):
                mean_delay_s      INTEGER,
                median_delay_s    INTEGER,
                PRIMARY KEY (service_date, operator, geo_type, geo_key)
+           )"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_geo_route_summary (
+               service_date      TEXT NOT NULL,
+               operator          TEXT NOT NULL,
+               source_operator   TEXT NOT NULL,
+               geo_type          TEXT NOT NULL,
+               geo_key           TEXT NOT NULL,
+               route             TEXT NOT NULL,
+               readings_in_gate  INTEGER,
+               on_time           INTEGER,
+               early             INTEGER,
+               late              INTEGER,
+               on_time_pct       REAL,
+               mean_delay_s      INTEGER,
+               median_delay_s    INTEGER,
+               PRIMARY KEY (
+                   service_date, operator, source_operator,
+                   geo_type, geo_key, route
+               )
            )"""
     )
     cur.execute(
@@ -905,28 +927,80 @@ def print_report(result):
     )
 
 
-def rollup_geo(conn, date_str, operators, label, geo_index):
-    """Aggregate in-gate readings by WECA area and ward, for the given operator
-    set, into daily_geo_summary. Additive; does not touch the route rollup."""
+def _geo_route_buckets(conn, date_str, operators, geo_index):
+    """Build route-aware geography buckets from retained, in-gate readings."""
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT stop_code, observed_delay_s FROM timepoint_observations
+        f"""SELECT operator, stop_code, route, observed_delay_s
+            FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
               AND COALESCE(is_origin, 0) = 0
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (date_str, *operators, DISTANCE_GATE_M),
     )
-    buckets = {}
-    for stop_code, delay_s in cur.fetchall():
-        g = geo_for(geo_index, stop_code)
-        if not g:
+    geography = {}
+    routes = {}
+    for source_operator, stop_code, route, delay_s in cur.fetchall():
+        place = geo_for(geo_index, stop_code)
+        if not place:
             continue
-        for geo_type, geo_key in (("area", g["area"]), ("ward", g["ward"])):
-            acc = buckets.setdefault((geo_type, geo_key), {"delays": [], "on_time": 0})
+        for geo_type, geo_key in (
+                ("area", place["area"]), ("ward", place["ward"])):
+            acc = geography.setdefault(
+                (geo_type, geo_key), {"delays": [], "on_time": 0})
             acc["delays"].append(delay_s)
             if ON_TIME_LOW_S <= delay_s <= ON_TIME_HIGH_S:
                 acc["on_time"] += 1
+            if route:
+                route_acc = routes.setdefault(
+                    (source_operator, geo_type, geo_key, route),
+                    {"delays": [], "on_time": 0, "early": 0, "late": 0},
+                )
+                route_acc["delays"].append(delay_s)
+                band = delay_band(delay_s)
+                route_acc[band] += 1
+    return geography, routes
+
+
+def _write_geo_routes(conn, date_str, label, buckets):
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM daily_geo_route_summary "
+        "WHERE service_date = ? AND operator = ?",
+        (date_str, label),
+    )
+    for (source_operator, geo_type, geo_key, route), acc in buckets.items():
+        delays = acc["delays"]
+        count = len(delays)
+        cur.execute(
+            """INSERT INTO daily_geo_route_summary
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                date_str, label, source_operator, geo_type, geo_key, route, count,
+                acc["on_time"], acc["early"], acc["late"],
+                round(100.0 * acc["on_time"] / count, 1) if count else None,
+                int(round(statistics.mean(delays))) if delays else None,
+                int(round(statistics.median(delays))) if delays else None,
+            ),
+        )
+
+
+def rollup_geo_routes(conn, date_str, operators, label, geo_index):
+    """Backfillable route-by-area/ward evidence; public figures are untouched."""
+    _, route_buckets = _geo_route_buckets(
+        conn, date_str, operators, geo_index)
+    _write_geo_routes(conn, date_str, label, route_buckets)
+    conn.commit()
+    return len(route_buckets)
+
+
+def rollup_geo(conn, date_str, operators, label, geo_index):
+    """Aggregate in-gate readings by WECA area and ward, for the given operator
+    set, into daily_geo_summary. Additive; does not touch the route rollup."""
+    cur = conn.cursor()
+    buckets, route_buckets = _geo_route_buckets(
+        conn, date_str, operators, geo_index)
 
     cur.execute(
         "DELETE FROM daily_geo_summary WHERE service_date = ? AND operator = ?",
@@ -942,6 +1016,7 @@ def rollup_geo(conn, date_str, operators, label, geo_index):
              int(round(statistics.mean(delays))) if delays else None,
              int(round(statistics.median(delays))) if delays else None),
         )
+    _write_geo_routes(conn, date_str, label, route_buckets)
     conn.commit()
     return len(buckets)
 
@@ -1072,10 +1147,14 @@ def main():
     raw_args = sys.argv[1:]
     no_prune = "--no-prune" in raw_args
     backfill_trip_coverage = "--backfill-trip-coverage" in raw_args
+    backfill_geo_routes = "--backfill-geo-routes" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
-    if backfill_trip_coverage and positional:
-        print("ERROR: --backfill-trip-coverage does not accept a date.")
+    if backfill_trip_coverage and backfill_geo_routes:
+        print("ERROR: choose one backfill mode at a time.")
+        return 2
+    if (backfill_trip_coverage or backfill_geo_routes) and positional:
+        print("ERROR: backfill modes do not accept a date.")
         return 2
 
     conn = connect_audit_db()
@@ -1087,6 +1166,26 @@ def main():
             print(f"[{date_str}]")
             print_trip_coverage_report(
                 rollup_trip_coverage(conn, date_str, SHOW_OPERATORS))
+        conn.close()
+        return 0
+    if backfill_geo_routes:
+        geo_index = load_geo_index()
+        dates = [
+            row[0] for row in conn.execute(
+                """SELECT DISTINCT service_date
+                     FROM timepoint_observations
+                    ORDER BY service_date""")
+        ]
+        print(
+            f"Backfilling private route-by-geography evidence for "
+            f"{len(dates)} retained days...")
+        for date_str in dates:
+            print(f"[{date_str}]")
+            for op in SHOW_OPERATORS:
+                rollup_geo_routes(conn, date_str, [op], op, geo_index)
+            groups = rollup_geo_routes(
+                conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index)
+            print(f"  {groups} route/place groups")
         conn.close()
         return 0
 

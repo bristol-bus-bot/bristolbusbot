@@ -332,6 +332,8 @@ def test_pipeline_setup_and_health_validate_the_durable_fleet_file():
     assert len(remote.commands) == 1
     assert f"BBB_FLEET_FILE={push.DURABLE_FLEET_FILE}" in remote.commands[0]
     assert "load_fleet_index" in remote.commands[0]
+    assert "evidence_pack.py" in remote.commands[0]
+    assert "import reportlab" in remote.commands[0]
 
 
 def test_failed_health_switches_back_to_previous_release(monkeypatch, tmp_path):
