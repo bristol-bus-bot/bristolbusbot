@@ -18,9 +18,11 @@ Environment=BBB_DESCRIPTIONS_JSON=/var/lib/bristolbusbot/enrichment/bus-descript
 Environment=BBB_WAITING_JSON=/var/lib/bristolbusbot/enrichment/waiting-descriptions.json
 Environment=BBB_DEPOT_DESCRIPTIONS_JSON=/var/lib/bristolbusbot/enrichment/depot-descriptions.json
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=@BBB_DEPLOY_BASE@/current/site/venv/bin/python -m gunicorn --workers 2 --bind 127.0.0.1:5002 --no-control-socket wsgi:app
+ExecStart=@BBB_DEPLOY_BASE@/current/site/venv/bin/python -m app.watchdog_runner --url http://127.0.0.1:5002/livez -- @BBB_DEPLOY_BASE@/current/site/venv/bin/python -m gunicorn --workers 2 --timeout 30 --bind 127.0.0.1:5002 --no-control-socket wsgi:app
 Restart=always
 RestartSec=5s
+WatchdogSec=120s
+NotifyAccess=main
 TimeoutStopSec=30s
 KillSignal=SIGTERM
 UMask=0077

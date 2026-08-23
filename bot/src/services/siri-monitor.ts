@@ -40,7 +40,8 @@ export class SIRIMonitor {
     private appState: ApplicationState;
     private xmlParser: XMLParser;
 
-    constructor(siriConfig: any, appState: ApplicationState) {
+    constructor(siriConfig: any, appState: ApplicationState,
+                private readonly onCycleComplete: () => void = () => undefined) {
         this.siriConfig = siriConfig;
         this.appState = appState;
 
@@ -467,6 +468,8 @@ export class SIRIMonitor {
 
         } catch (error: any) {
             logAlways('error', 'Error in SIRI monitoring cycle', { error: error.message });
+        } finally {
+            this.onCycleComplete();
         }
     }
 

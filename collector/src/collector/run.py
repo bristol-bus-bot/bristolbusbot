@@ -28,6 +28,7 @@ from .siri import (activities_from_xmltodict, anchor_departure_local,
                    clean_destination, extract_snapshot)
 from .sirisx import in_scope, parse_situations
 from .secret_filter import install_query_secret_filter, redact_query_secrets
+from .systemd_watchdog import notify_watchdog
 from .timeparse import gtfs_seconds, scheduled_local, service_midnight
 
 logger = logging.getLogger("collector")
@@ -353,6 +354,10 @@ def main() -> None:  # pragma: no cover - exercised by the smoke run
             rs = sx_cycle(lambda: fetch_sx(session, cfg), live_conn, boundary, nocs)
             logger.info("sx: %s", rs)
             last_sx = time.time()
+        # This runs on the collector's main loop only after the feed attempt
+        # returned and its database writes committed. A hung request, parser
+        # or SQLite operation therefore cannot falsely keep the service alive.
+        notify_watchdog()
         elapsed = time.time() - t0
         for _ in range(max(1, int(cfg.poll_interval_s - elapsed))):
             if not _running:
