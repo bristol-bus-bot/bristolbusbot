@@ -2,7 +2,7 @@
 Description=Publish audit data after the daily rollup
 
 [Timer]
-OnCalendar=*-*-* 05:45:00
+OnCalendar=*-*-* 07:30:00
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=30s

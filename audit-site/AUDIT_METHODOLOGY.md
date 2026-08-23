@@ -138,6 +138,13 @@ cancellation: it may be a vehicle that was not broadcasting, a GPS dropout, or a
 match we could not make. Coverage is reported as context, never as a count of
 cancelled services.
 
+Before coverage is published, the audit checks the collector was successfully
+polling throughout that day's full scheduled operating window and that matching
+quality did not collapse. If the collector started late, stopped early, had a
+long gap or failed those quality checks, the day's coverage is withheld rather
+than making a collector fault look like hundreds of missing buses. Punctuality
+readings that were actually observed remain measurable.
+
 ## Honest limitations
 
 - A bus missing from the feed is not the same as a bus that did not run.
@@ -166,6 +173,13 @@ or regulator measurement that uses different sampling.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**23 August 2026 — incomplete collector days excluded from coverage.** Daily
+coverage now has a separate collector-health gate using successful polls,
+continuity across the scheduled operating window and feed match rate. Failed
+days retain private diagnostic totals but publish no expected-versus-observed
+coverage. The daily rollup also moved later so journeys timetabled after 29:00
+have time to begin before the service day is closed.
 
 **16 August 2026 — origin layovers excluded and trip matching corrected.**
 The audit previously retained the closest GPS reading at the first timing point
