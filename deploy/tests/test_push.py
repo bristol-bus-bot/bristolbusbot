@@ -120,6 +120,7 @@ def test_remote_preflight_retries_a_first_login_channel_without_a_keeper(
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(push, "run_bounded_process", bounded)
+    monkeypatch.setattr(push.Remote, "_open_anchor", lambda self: None)
     remote = push.Remote(TEST_SETTINGS, preflight_timeout=0.1)
 
     with remote:
@@ -138,6 +139,7 @@ def test_remote_preflight_second_timeout_says_nothing_changed(monkeypatch):
         raise push.BoundedProcessTimeout(command, kwargs["timeout"], "", "")
 
     monkeypatch.setattr(push, "run_bounded_process", bounded)
+    monkeypatch.setattr(push.Remote, "_open_anchor", lambda self: None)
     remote = push.Remote(TEST_SETTINGS, preflight_timeout=0.1)
 
     with pytest.raises(RuntimeError, match="Nothing was uploaded") as caught:
@@ -145,6 +147,78 @@ def test_remote_preflight_second_timeout_says_nothing_changed(monkeypatch):
 
     assert "no release was switched" in str(caught.value)
     assert "only its own SSH process trees" in str(caught.value)
+
+
+def test_remote_keeps_one_session_anchor_for_preflight_command_and_upload(
+        monkeypatch, tmp_path):
+    anchor_commands = []
+    bounded_commands = []
+
+    class FakeStdin:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    class FakeAnchor:
+        pid = 12345
+        returncode = None
+        stdin = FakeStdin()
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout):
+            del timeout
+            self.returncode = 0
+            return 0
+
+        def kill(self):
+            self.returncode = 1
+
+    class FakeJob:
+        def __init__(self, _process):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    anchor = FakeAnchor()
+
+    def popen(command, **kwargs):
+        anchor_commands.append(command)
+        kwargs["stdout"].write(push.SSH_ANCHOR_READY)
+        kwargs["stdout"].flush()
+        return anchor
+
+    def bounded(command, **_kwargs):
+        bounded_commands.append(command)
+        stdout = "current-release\n" if command[-1] == "readlink current" else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(push.subprocess, "Popen", popen)
+    monkeypatch.setattr(push, "_WindowsJob", FakeJob)
+    monkeypatch.setattr(push, "run_bounded_process", bounded)
+    source = tmp_path / "release.tar.gz"
+    source.write_bytes(b"release")
+
+    remote = push.Remote(TEST_SETTINGS)
+    with remote:
+        assert remote.run("readlink current") == "current-release\n"
+        remote.upload(
+            source, TEST_SETTINGS.remote_base / "incoming/release.part")
+
+    assert len(anchor_commands) == 1
+    assert push.SSH_ANCHOR_READY in anchor_commands[0][-1]
+    assert "read -r" in anchor_commands[0][-1]
+    assert "StdinNull=yes" not in anchor_commands[0]
+    assert anchor.stdin.closed is True
+    scp_commands = [command for command in bounded_commands if command[0] == "scp"]
+    ssh_commands = [command for command in bounded_commands if command[0] == "ssh"]
+    assert len(scp_commands) == 1
+    assert any("readlink current" in command for command in bounded_commands)
+    assert "StdinNull=yes" not in scp_commands[0]
+    assert all("StdinNull=yes" in command for command in ssh_commands)
 
 
 def test_remote_command_timeout_is_fatal_even_when_return_codes_are_ignored(

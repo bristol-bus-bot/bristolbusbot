@@ -60,16 +60,22 @@ A targeted deployment sends one success alert for that component. `--all`
 sends one combined success alert after every component passes; failures still
 identify the affected component immediately.
 
-Every SSH operation is wall-clock bounded as well as using OpenSSH's connection
-and encrypted-channel keepalives. The initial safety check gets 20 seconds and
-one automatic retry. That retry handles the Raspberry Pi's first login starting
-user services without requiring a separate "keeper" SSH session. Ordinary
-remote commands get 15 minutes and uploads get 30 minutes. Captured output is
-written to temporary files rather than process pipes, so a descendant that
-inherits an output handle cannot make the Windows deploy command wait forever.
-On timeout the deployer stops only the private process tree it created and does
-not continue to the next deployment step. Strict host-key checking, batch-mode
-authentication, atomic switching, health gates and rollback remain mandatory.
+Every one-shot SSH command and upload is wall-clock bounded as well as using
+OpenSSH's connection and encrypted-channel keepalives. The deployer opens one
+private, silent SSH session anchor before the safety check and holds it until
+that deployment ends.
+This prevents the Raspberry Pi's `Linger=no` user session being torn down
+between the safety check and `scp`, and does not require a separate keeper
+terminal. Closing the deployer closes the anchor's private stdin, so it also
+exits after a normal finish or if the parent process disappears. The initial
+safety check gets 20 seconds and one automatic retry while that anchor remains
+open. Ordinary remote commands get 15 minutes and uploads get 30 minutes.
+Captured output is written to temporary files rather than process pipes, so a
+descendant that inherits an output handle cannot make the Windows deploy
+command wait forever. On timeout the deployer stops only the private process
+tree it created and does not continue to the next deployment step. Strict
+host-key checking, batch-mode authentication, atomic switching, health gates
+and rollback remain mandatory.
 
 ### If the SSH safety check times out
 

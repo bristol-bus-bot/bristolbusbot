@@ -59,6 +59,7 @@ SSH_PREFLIGHT_ATTEMPTS = 2
 REMOTE_COMMAND_TIMEOUT_SECONDS = 15 * 60
 UPLOAD_TIMEOUT_SECONDS = 30 * 60
 PROCESS_STOP_TIMEOUT_SECONDS = 5
+SSH_ANCHOR_READY = "bbb-deploy-anchor-ready"
 
 log = logging.getLogger("bbb-push")
 
@@ -438,53 +439,144 @@ class Remote:
             "-o", "StrictHostKeyChecking=yes",
             "-o", "BatchMode=yes",
             "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
-            "-o", "StdinNull=yes",
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=2",
         ]
+        self._client_options = [*self.options, "-o", "StdinNull=yes"]
+        self._anchor: subprocess.Popen[str] | None = None
+        self._anchor_job: _WindowsJob | None = None
+        self._anchor_stdout: TextIO | None = None
+        self._anchor_stderr: TextIO | None = None
+
+    def _open_anchor(self) -> None:
+        self._anchor_stdout = tempfile.TemporaryFile(
+            mode="w+", encoding="utf-8", errors="replace")
+        self._anchor_stderr = tempfile.TemporaryFile(
+            mode="w+", encoding="utf-8", errors="replace")
+        creationflags = (
+            subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        self._anchor = subprocess.Popen(
+            [
+                "ssh", *self.options, self.target,
+                f"/bin/sh -c 'printf {SSH_ANCHOR_READY}; "
+                "exec >/dev/null 2>&1; IFS= read -r _ || true'",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=self._anchor_stdout,
+            stderr=self._anchor_stderr,
+            text=True,
+            start_new_session=os.name != "nt",
+            creationflags=creationflags,
+        )
+        if os.name == "nt":
+            try:
+                self._anchor_job = _WindowsJob(self._anchor)
+            except OSError:
+                self._anchor.kill()
+                self._anchor.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+                raise
+
+        deadline = time.monotonic() + self.preflight_timeout
+        while time.monotonic() < deadline:
+            if self._anchor.poll() is not None:
+                error = _captured_text(self._anchor_stderr)
+                raise RuntimeError(
+                    "SSH refused the connection or host key. Connect once "
+                    f"with ssh {self.target}, verify the fingerprint, then "
+                    f"retry.\n{error}"
+                )
+            if SSH_ANCHOR_READY in _captured_text(self._anchor_stdout):
+                return
+            time.sleep(0.1)
+        raise RuntimeError(
+            f"SSH session setup timed out after "
+            f"{self.preflight_timeout:g} seconds. Nothing was uploaded and no "
+            "release was switched. The deployer will stop only its own SSH "
+            f"process tree.\n{_captured_text(self._anchor_stderr)}"
+        )
+
+    def _close_anchor(self) -> None:
+        anchor = self._anchor
+        try:
+            if anchor is not None and anchor.poll() is None:
+                if anchor.stdin is not None:
+                    try:
+                        anchor.stdin.close()
+                    except OSError:
+                        pass
+                try:
+                    anchor.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired:
+                    _stop_process_tree(anchor, self._anchor_job)
+        finally:
+            if self._anchor_job is not None:
+                self._anchor_job.close()
+            if self._anchor_stdout is not None:
+                self._anchor_stdout.close()
+            if self._anchor_stderr is not None:
+                self._anchor_stderr.close()
+            self._anchor = None
+            self._anchor_job = None
+            self._anchor_stdout = None
+            self._anchor_stderr = None
 
     def __enter__(self) -> "Remote":
+        try:
+            self._open_anchor()
+        except Exception:
+            self._close_anchor()
+            raise
         command = [
-            "ssh", *self.options, self.target,
+            "ssh", *self._client_options, self.target,
             "/bin/sh -c 'exec </dev/null >/dev/null 2>&1; true'",
         ]
-        for attempt in range(SSH_PREFLIGHT_ATTEMPTS):
-            try:
-                result = run_bounded_process(
-                    command, timeout=self.preflight_timeout)
-            except BoundedProcessTimeout as exc:
-                if attempt + 1 < SSH_PREFLIGHT_ATTEMPTS:
-                    log.warning(
-                        "SSH preflight did not close within %g seconds; its "
-                        "private process tree was stopped before any upload. "
-                        "Retrying once after first-login services have started.",
-                        self.preflight_timeout,
+        try:
+            for attempt in range(SSH_PREFLIGHT_ATTEMPTS):
+                try:
+                    result = run_bounded_process(
+                        command, timeout=self.preflight_timeout)
+                except BoundedProcessTimeout as exc:
+                    if attempt + 1 < SSH_PREFLIGHT_ATTEMPTS:
+                        log.warning(
+                            "SSH preflight did not close within %g seconds; "
+                            "its private process tree was stopped before any "
+                            "upload. Retrying once on the same authenticated "
+                            "connection after first-login services started.",
+                            self.preflight_timeout,
+                        )
+                        continue
+                    raise RuntimeError(
+                        f"SSH preflight timed out on both bounded attempts "
+                        f"({self.preflight_timeout:g} seconds each). Nothing "
+                        "was uploaded and no release was switched. The "
+                        "deployer stopped only its own SSH process trees. "
+                        "Check the Pi and the recovery steps in "
+                        "deploy/README.md, then retry the unchanged command."
+                    ) from exc
+                if result.returncode:
+                    raise RuntimeError(
+                        f"SSH preflight command failed ({result.returncode}). "
+                        "Nothing was uploaded and no release was switched.\n"
+                        f"{result.stderr}"
                     )
-                    continue
-                raise RuntimeError(
-                    f"SSH preflight timed out on both bounded attempts "
-                    f"({self.preflight_timeout:g} seconds each). Nothing was "
-                    "uploaded and no release was switched. The deployer "
-                    "stopped only its own SSH process trees. Check the Pi and "
-                    "the recovery steps in deploy/README.md, then retry the "
-                    "unchanged command."
-                ) from exc
-            if result.returncode:
-                raise RuntimeError(
-                    f"SSH refused the connection or host key. Connect once with ssh "
-                    f"{self.target}, verify the fingerprint, then retry.\n"
-                    f"{result.stderr}"
-                )
-            return self
-        raise AssertionError("SSH preflight attempts were not executed")
+                return self
+            raise AssertionError("SSH preflight attempts were not executed")
+        except Exception:
+            self._close_anchor()
+            raise
 
-    def __exit__(self, *_: object) -> None:
-        return None
+    def __exit__(self, exc_type: object, *_: object) -> None:
+        try:
+            self._close_anchor()
+        except Exception:
+            if exc_type is None:
+                raise
+            log.exception("could not close the private SSH session cleanly")
 
     def run(self, command: str, *, check: bool = True) -> str:
         try:
             result = run_bounded_process(
-                ["ssh", *self.options, self.target, command],
+                ["ssh", *self._client_options, self.target, command],
                 timeout=self.command_timeout,
             )
         except BoundedProcessTimeout as exc:
