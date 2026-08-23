@@ -63,6 +63,40 @@ successful polls across the full scheduled window, poll continuity, feed match
 rate and exact/fuzzy/unknown observed-trip counts. `valid_daily_trip_coverage`
 is the safe read view and contains only days that passed those checks.
 
+`frequency_changes.py` is the separate read-only timetable-change report used
+for campaign and committee preparation. By default it compares four complete
+weeks with the equivalent block 1, 3, 6 and 12 months earlier:
+
+```sh
+python3 frequency_changes.py --audit-db /var/lib/bristolbusbot/collector/audit.db
+```
+
+It will not fall back to a public route number when the durable registered
+route ID is absent. Standard England and Wales bank holidays are visibly
+excluded; a weekday needs a repeated network pattern, and route/direction rows
+which vary inside either period are withheld instead of averaged. This catches
+many timetable transitions, school-service changes and one-off exception days
+without pretending the data reliably names every local school calendar.
+
+For a specifically checked pair of periods, provide complete, equal
+Monday-Sunday blocks and record the calendar context used:
+
+```sh
+python3 frequency_changes.py \
+  --baseline-start 20260907 --baseline-end 20261004 \
+  --current-start 20261102 --current-end 20261129 \
+  --baseline-context "term time" --current-context "term time"
+```
+
+Use `--exclude-date YYYYMMDD=reason` for an exceptional local closure or
+one-off national holiday. `--format json` exposes the same checked result for
+the committee-pack generator, including exact usable/excluded dates,
+unavailable-history reasons, percentage changes and withheld unstable rows.
+The unit is scheduled journeys in one representative Monday-Friday week, not
+operated journeys or cancellations. Rows made before 22 August 2026 do not
+contain trustworthy route identity, so current 3/6/12-month results correctly
+say unavailable rather than guessing.
+
 A day fails closed if the collector did not cover at least 90% of the expected
 30-second poll slots, fewer than 95% of its recorded polls succeeded, either
 end of the scheduled window is missing by more than five minutes, an internal
