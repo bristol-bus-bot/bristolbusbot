@@ -206,10 +206,27 @@ def test_html_escapes_scope_and_pdf_is_readable(tmp_path):
         "headline"]["readings"] == 920
     pdf = output / "briefing.pdf"
     assert pdf.read_bytes().startswith(b"%PDF")
-    extracted = "\n".join(page.extract_text() or "" for page in PdfReader(pdf).pages)
+    reader = PdfReader(pdf)
+    assert len(reader.pages) == 1
+    extracted = "\n".join(page.extract_text() or "" for page in reader.pages)
     assert "INDEPENDENT LOCAL BUS EVIDENCE" in extracted
     assert "Three questions to take into the meeting" in extracted
     assert "not cancellations" in extracted
+    assert "Methodology" in extracted
+
+
+def test_pdf_stays_on_one_page_with_full_route_table(tmp_path):
+    connection = database(tmp_path / "audit.db")
+    payload = report(connection)
+    template = payload["routes"]["rows"][0]
+    payload["routes"]["rows"] = [
+        {**template, "route": str(index), "display": f"{index} (First Bristol)"}
+        for index in range(1, 9)
+    ]
+
+    output = evidence_pack.write_pack(payload, tmp_path / "packs")
+
+    assert len(PdfReader(output / "briefing.pdf").pages) == 1
 
 
 def test_dated_pack_is_immutable_without_explicit_replace(tmp_path):

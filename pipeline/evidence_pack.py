@@ -887,8 +887,31 @@ def render_pdf(report: dict, output: Path) -> None:
         canvas.setStrokeColor(line)
         canvas.line(16 * mm, 11 * mm, A4[0] - 16 * mm, 11 * mm)
         canvas.setFillColor(muted)
-        canvas.setFont("Helvetica", 7)
-        canvas.drawString(16 * mm, 7 * mm, "Independent estimates from open data")
+        canvas.setFont("Helvetica", 6.5)
+        generated = datetime.fromisoformat(report["generated_at"]).astimezone(
+            timezone.utc).strftime("%d %b %Y %H:%M UTC")
+        canvas.drawString(16 * mm, 7 * mm, f"Generated {generated}")
+        links = (
+            ("Audit", AUDIT_URL),
+            ("Methodology", METHODOLOGY_URL),
+            ("This pack", report["public_url"]),
+        )
+        widths = [canvas.stringWidth(label, "Helvetica", 6.5) for label, _ in links]
+        separator = canvas.stringWidth("  |  ", "Helvetica", 6.5)
+        total_width = sum(widths) + separator * (len(links) - 1)
+        link_x = (A4[0] - total_width) / 2
+        canvas.setFillColor(green)
+        for index, ((label, url), width) in enumerate(zip(links, widths)):
+            canvas.drawString(link_x, 7 * mm, label)
+            canvas.linkURL(
+                url, (link_x, 6 * mm, link_x + width, 10 * mm), relative=0)
+            link_x += width
+            if index < len(links) - 1:
+                canvas.setFillColor(muted)
+                canvas.drawString(link_x, 7 * mm, "  |  ")
+                link_x += separator
+                canvas.setFillColor(green)
+        canvas.setFillColor(muted)
         canvas.drawRightString(
             A4[0] - 16 * mm, 7 * mm, f"Page {document.page}")
         canvas.restoreState()
@@ -982,7 +1005,7 @@ def render_pdf(report: dict, output: Path) -> None:
             "the route table as indicative; the area headline uses the "
             "durable geography totals.", body))
     route_data = [["Service", "On time", "Readings", "Confidence"]]
-    for row in report["routes"]["rows"][:8]:
+    for row in report["routes"]["rows"][:5]:
         route_data.append([
             _pdf_safe(row["display"]), _pct(row["on_time_pct"]),
             f"{row['readings']:,}",
@@ -995,8 +1018,9 @@ def render_pdf(report: dict, output: Path) -> None:
     story.extend([
         routes,
         Paragraph(
-            f"A route needs {report['routes']['minimum_readings']:,} readings "
-            "before this pack treats its figure as more than indicative.", small),
+            "The five lowest sampled routes are shown. A route needs "
+            f"{report['routes']['minimum_readings']:,} readings before this "
+            "pack treats its figure as more than indicative.", small),
         Paragraph("Registered timetable changes", heading),
     ])
     frequency = report["frequency"]
@@ -1030,18 +1054,6 @@ def render_pdf(report: dict, output: Path) -> None:
     story.append(Paragraph("What these figures do not prove", heading))
     for item in report["limitations"]:
         story.append(Paragraph(f"- {_pdf_safe(item)}", body))
-    story.extend([
-        Spacer(1, 4),
-        Paragraph(
-            f"Full audit: <link href='{AUDIT_URL}' color='#0b6b53'>{AUDIT_URL}</link><br/>"
-            f"Methodology: <link href='{METHODOLOGY_URL}' color='#0b6b53'>{METHODOLOGY_URL}</link>",
-            small,
-        ),
-        Paragraph(
-            _pdf_safe(
-                f"Generated {report['generated_at']}. Permanent pack address: "
-                f"{report['public_url']}"), small),
-    ])
     doc.build(story, onFirstPage=page, onLaterPages=page)
 
 
