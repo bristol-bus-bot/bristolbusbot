@@ -116,7 +116,10 @@ new packs to GitHub Pages without deleting older cited packs.
 
 The default period is the last three complete calendar months supported by the
 database. Percentages are recalculated from summed readings and on-time counts,
-not averaged from daily percentages. Route figures need 200 readings to be
+not averaged from daily percentages. The command refuses a headline whose
+first or last evidence falls more than 14 days inside the selected period; use
+a shorter complete window instead of presenting partial history under a longer
+date label. Route figures need 200 readings to be
 treated as more than indicative. Area/ward route evidence is stored daily in
 `daily_geo_route_summary`; after first deployment, run
 `audit_rollup.py --backfill-geo-routes` once under the normal audit lock to

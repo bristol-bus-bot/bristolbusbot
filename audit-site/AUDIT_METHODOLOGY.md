@@ -119,7 +119,10 @@ A local evidence pack uses the same daily rollups as the audit and selects the
 last three complete calendar months by default. It sums the underlying on-time
 and total reading counts before calculating a period percentage; it never
 averages already-rounded daily percentages. The preceding equal-length period
-is calculated in the same way.
+is calculated in the same way. If the selected scope's first or last evidence
+falls more than 14 days inside that window, generation stops and asks for a
+shorter complete window rather than publishing a partial headline under a
+longer date label.
 
 For an area or ward, a small permanent private rollup also retains the route
 attached to each qualifying geographic reading. This prevents future packs

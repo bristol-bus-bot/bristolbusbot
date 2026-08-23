@@ -40,6 +40,7 @@ DEFAULT_MONTHS = 3
 MIN_ROUTE_READINGS = 200
 MIN_ROUTE_EVIDENCE_DAY_SHARE = 0.8
 ROUTE_PERIOD_TOLERANCE_DAYS = 14
+HEADLINE_PERIOD_TOLERANCE_DAYS = 14
 MEASUREMENT_BREAKS = (
     (
         date(2026, 7, 13),
@@ -263,9 +264,20 @@ def aggregate_scope(
 ) -> dict:
     rows = scope_daily_rows(connection, scope, operator, start, end)
     result = _aggregate_rows(rows)
+    first_date = iso_compact(rows[0]["service_date"]) if rows else None
+    last_date = iso_compact(rows[-1]["service_date"]) if rows else None
     result.update({
         "start": start.isoformat(),
         "end": end.isoformat(),
+        "first_date": first_date,
+        "last_date": last_date,
+        "partial_period": (
+            not rows
+            or datetime.strptime(rows[0]["service_date"], "%Y%m%d").date()
+            > start + timedelta(days=HEADLINE_PERIOD_TOLERANCE_DAYS)
+            or datetime.strptime(rows[-1]["service_date"], "%Y%m%d").date()
+            < end - timedelta(days=HEADLINE_PERIOD_TOLERANCE_DAYS)
+        ),
         "available_audit_days": available_audit_days(
             connection, operator, start, end),
     })
@@ -565,6 +577,12 @@ def build_report(
     if not headline["readings"]:
         raise PackUnavailable(
             f"no readings for {scope.display} between {start} and {end}")
+    if headline["partial_period"]:
+        raise PackUnavailable(
+            f"readings for {scope.display} cover only "
+            f"{headline['first_date']} to {headline['last_date']} inside the "
+            f"requested {start} to {end} period; choose a shorter complete "
+            "window rather than publishing a partial headline")
     previous = aggregate_scope(
         connection, scope, operator, previous_start, previous_end)
     routes = route_summaries(
@@ -589,7 +607,9 @@ def build_report(
     comparability_breaks = measurement_breaks_between(previous_start, end)
     delta = (
         round(headline["on_time_pct"] - previous["on_time_pct"], 1)
-        if previous["on_time_pct"] is not None and not comparability_breaks else None
+        if previous["on_time_pct"] is not None
+        and not previous["partial_period"]
+        and not comparability_breaks else None
     )
     limitations = [
         "These are independent estimates from open data, not official figures.",
@@ -633,10 +653,12 @@ def build_report(
         "previous": previous,
         "change_from_previous_pct_points": delta,
         "change_unavailable_reason": (
+            "no comparable earlier readings"
+            if previous["on_time_pct"] is None else
+            "withheld because the earlier period is only partially covered"
+            if previous["partial_period"] else
             "withheld because the audit method changed within the two periods"
-            if comparability_breaks else
-            "no comparable earlier readings" if previous["on_time_pct"] is None
-            else None
+            if comparability_breaks else None
         ),
         "comparability_breaks": comparability_breaks,
         "monthly": monthly_scope(connection, scope, operator, start, end),
