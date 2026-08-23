@@ -44,7 +44,7 @@ exports, fleet refresh, geocoding and boundary generation.
 
 `audit_snapshot.py` writes the private daily `expected_trips` denominator. New
 rows retain the planned block, stable route/service IDs, vehicle-journey code,
-first-stop identity and resolved route-edition date needed for later
+first-stop identity, final scheduled departure and resolved route-edition date needed for later
 missing-trip research. These fields do not change coverage or punctuality
 figures. They deliberately use the same timetable vocabulary as the
 collector's matching-evidence receipts; observed timing points carry their
@@ -62,6 +62,22 @@ the collector evidence needed to decide whether the detailed rows are usable:
 successful polls across the full scheduled window, poll continuity, feed match
 rate and exact/fuzzy/unknown observed-trip counts. `valid_daily_trip_coverage`
 is the safe read view and contains only days that passed those checks.
+
+The same completed-day job writes a separate private duty-gap investigation.
+`daily_duty_gap_days` records each rejection stage, timetable-detail coverage
+and validity by operator. `daily_duty_gap_candidates` retains only a bounded
+review receipt for a missing middle journey when the scheduled block is
+non-overlapping, both connections are at most 60 minutes, the surrounding
+journeys each have one stable and uniquely identifiable match, and the same
+single vehicle appears on both sides. The two valid-only views fail closed with
+the existing collector health gate and withhold operators whose duty detail is
+less than 95% complete. These are **candidate duty gaps, not cancellations**.
+None of these tables is read by `audit_export.py`, the audit website or the
+committee-pack generator.
+
+Use `audit_rollup.py --backfill-duty-gaps` only after snapshots genuinely carry
+the block and end-time fields. It selects only complete retained dates with raw
+observations and never reconstructs older duties from a newer timetable.
 
 `frequency_changes.py` is the separate read-only timetable-change report used
 for campaign and committee preparation. By default it compares four complete

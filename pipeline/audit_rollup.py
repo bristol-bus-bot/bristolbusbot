@@ -11,6 +11,7 @@ Run from the bristol-live-buses folder:
     python audit_rollup.py            roll up today
     python audit_rollup.py 20260601   roll up a specific YYYYMMDD
     python audit_rollup.py 20260601 --no-prune
+    python audit_rollup.py --backfill-duty-gaps
     python audit_rollup.py --backfill-geo-routes
 """
 
@@ -50,6 +51,9 @@ MIN_SUCCESSFUL_POLL_RATE_PCT = 95.0
 MAX_POLL_BOUNDARY_GAP_S = 5 * 60
 MAX_SUCCESSFUL_POLL_GAP_S = 15 * 60
 MIN_MATCH_RATE_PCT = 80.0
+MIN_DUTY_DETAIL_COVERAGE_PCT = 95.0
+MAX_DUTY_CONNECTION_S = 60 * 60
+FUZZY_MATCH_WINDOW_S = 10 * 60
 UNKNOWN_ROUTE = "(unknown)"
 UNKNOWN_DIRECTION = -1
 
@@ -315,6 +319,64 @@ def init_summary_tables(conn):
                FROM daily_trip_coverage coverage
                JOIN daily_trip_coverage_days day
                  ON day.service_date = coverage.service_date
+               WHERE day.is_valid = 1"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_duty_gap_days (
+               service_date             TEXT NOT NULL,
+               operator                 TEXT NOT NULL,
+               is_valid                 INTEGER NOT NULL,
+               invalid_reasons_json     TEXT NOT NULL,
+               scheduled_trips          INTEGER NOT NULL,
+               duty_detail_trips        INTEGER NOT NULL,
+               duty_detail_pct          REAL,
+               scheduled_blocks         INTEGER NOT NULL,
+               usable_blocks            INTEGER NOT NULL,
+               missing_middle_trips     INTEGER NOT NULL,
+               same_vehicle_gaps        INTEGER NOT NULL,
+               short_connection_gaps    INTEGER NOT NULL,
+               ambiguous_match_gaps     INTEGER NOT NULL,
+               strict_candidate_gaps    INTEGER NOT NULL,
+               PRIMARY KEY (service_date, operator)
+           )"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_duty_gap_candidates (
+               service_date             TEXT NOT NULL,
+               operator                 TEXT NOT NULL,
+               block_id                 TEXT NOT NULL,
+               trip_id                  TEXT NOT NULL,
+               route                    TEXT NOT NULL,
+               direction                INTEGER NOT NULL,
+               first_departure          TEXT NOT NULL,
+               last_departure           TEXT NOT NULL,
+               vehicle_ref              TEXT NOT NULL,
+               previous_trip_id         TEXT NOT NULL,
+               previous_route           TEXT NOT NULL,
+               previous_departure       TEXT NOT NULL,
+               previous_siri_ref        TEXT NOT NULL,
+               next_trip_id             TEXT NOT NULL,
+               next_route               TEXT NOT NULL,
+               next_departure           TEXT NOT NULL,
+               next_siri_ref            TEXT NOT NULL,
+               connection_before_s      INTEGER NOT NULL,
+               connection_after_s       INTEGER NOT NULL,
+               previous_match_window    INTEGER NOT NULL,
+               next_match_window        INTEGER NOT NULL,
+               PRIMARY KEY (service_date, operator, trip_id)
+           )"""
+    )
+    cur.execute(
+        """CREATE VIEW IF NOT EXISTS valid_daily_duty_gap_days AS
+               SELECT * FROM daily_duty_gap_days WHERE is_valid = 1"""
+    )
+    cur.execute(
+        """CREATE VIEW IF NOT EXISTS valid_daily_duty_gap_candidates AS
+               SELECT candidate.*
+               FROM daily_duty_gap_candidates candidate
+               JOIN daily_duty_gap_days day
+                 ON day.service_date = candidate.service_date
+                AND day.operator = candidate.operator
                WHERE day.is_valid = 1"""
     )
     conn.commit()
@@ -721,6 +783,371 @@ def print_trip_coverage_report(result):
         f"{result['successful_poll_coverage_pct']}% of expected poll slots; "
         f"match rate {result['match_rate_pct']}%."
     )
+
+
+def gtfs_hhmm_ref(value):
+    """Return the wrapped HHMM reference First uses for a GTFS start time."""
+    seconds = gtfs_time_seconds(value)
+    if seconds is None:
+        return None
+    hour = (seconds // 3600) % 24
+    minute = (seconds % 3600) // 60
+    return f"{hour:02d}{minute:02d}"
+
+
+def load_duty_gap_inputs(conn, date_str, operators):
+    """Load bounded schedule and observation facts for private gap checks.
+
+    Older snapshots deliberately produce blank duty details instead of having
+    their block or end times reconstructed from a newer timetable edition.
+    """
+    expected_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(expected_trips)")}
+    block_sql = "block_id" if "block_id" in expected_columns else "NULL"
+    end_sql = (
+        "last_departure" if "last_departure" in expected_columns else "NULL")
+    op_ph = ",".join("?" for _ in operators)
+    scheduled = [
+        {
+            "operator": operator,
+            "route": route or UNKNOWN_ROUTE,
+            "trip_id": trip_id,
+            "direction": direction,
+            "first_departure": first_departure,
+            "last_departure": last_departure,
+            "block_id": block_id,
+            "start_s": gtfs_time_seconds(first_departure),
+            "end_s": gtfs_time_seconds(last_departure),
+        }
+        for (operator, route, trip_id, direction, first_departure,
+             last_departure, block_id) in conn.execute(
+            f"""SELECT operator, route, trip_id,
+                       COALESCE(direction, ?), first_departure,
+                       {end_sql}, {block_sql}
+                  FROM expected_trips
+                 WHERE service_date = ? AND operator IN ({op_ph})""",
+            (UNKNOWN_DIRECTION, date_str, *operators),
+        )
+    ]
+
+    observation_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(timepoint_observations)")}
+    confidence_columns = {
+        "vehicle_ref", "siri_journey_ref", "match_tier"}
+    confidence_available = confidence_columns <= observation_columns
+    observations = {}
+    if confidence_available:
+        for row in conn.execute(
+                f"""SELECT operator, trip_id,
+                            COUNT(DISTINCT NULLIF(vehicle_ref, '')),
+                            MIN(NULLIF(vehicle_ref, '')),
+                            COUNT(DISTINCT NULLIF(siri_journey_ref, '')),
+                            MIN(NULLIF(siri_journey_ref, '')),
+                            COUNT(DISTINCT CASE
+                                WHEN match_tier IN ('exact', 'fuzzy')
+                                THEN match_tier END),
+                            MIN(CASE WHEN match_tier IN ('exact', 'fuzzy')
+                                THEN match_tier END),
+                            MAX(CASE WHEN match_tier IS NULL
+                                          OR match_tier NOT IN ('exact', 'fuzzy')
+                                     THEN 1 ELSE 0 END)
+                       FROM timepoint_observations
+                      WHERE service_date = ? AND operator IN ({op_ph})
+                      GROUP BY operator, trip_id""",
+                (date_str, *operators)):
+            (operator, trip_id, vehicle_count, vehicle_ref, ref_count,
+             siri_ref, tier_count, match_tier, had_unknown_tier) = row
+            observations[(operator, trip_id)] = {
+                "vehicle_count": vehicle_count,
+                "vehicle_ref": vehicle_ref,
+                "ref_count": ref_count,
+                "siri_ref": siri_ref,
+                "tier_count": tier_count,
+                "match_tier": match_tier,
+                "had_unknown_tier": bool(had_unknown_tier),
+            }
+    return scheduled, observations, confidence_available
+
+
+def clear_surrounding_match(trip, observation):
+    """Conservatively prove that one observed trip is suitable evidence."""
+    if not observation:
+        return False
+    if observation["vehicle_count"] != 1 or not observation["vehicle_ref"]:
+        return False
+    if observation["ref_count"] != 1 or not observation["siri_ref"]:
+        return False
+    if (observation["tier_count"] != 1
+            or observation["had_unknown_tier"]):
+        return False
+    if observation["match_tier"] == "exact":
+        return True
+    return (
+        observation["match_tier"] == "fuzzy"
+        and observation["siri_ref"] == gtfs_hhmm_ref(
+            trip["first_departure"])
+    )
+
+
+def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
+    """Preserve strict candidate duty gaps privately.
+
+    A candidate is not a cancellation.  It is one absent scheduled journey
+    between two unambiguous observed journeys on the same vehicle and a clear,
+    short, non-overlapping timetable duty.  Invalid days retain diagnostics
+    but never retain candidate receipts or enter the valid-only view.
+    """
+    scheduled, observations, confidence_available = load_duty_gap_inputs(
+        conn, date_str, operators)
+    coverage_row = conn.execute(
+        """SELECT is_valid FROM daily_trip_coverage_days
+             WHERE service_date = ?""",
+        (date_str,),
+    ).fetchone()
+    coverage_valid = bool(coverage_row and coverage_row[0])
+
+    by_operator = {operator: [] for operator in operators}
+    for trip in scheduled:
+        by_operator.setdefault(trip["operator"], []).append(trip)
+
+    results = {}
+    with conn:
+        for operator in operators:
+            trips = by_operator.get(operator, [])
+            starts_by_service = {}
+            for trip in trips:
+                if trip["start_s"] is not None:
+                    key = (trip["route"], trip["direction"])
+                    starts_by_service.setdefault(key, []).append(
+                        trip["start_s"])
+
+            scheduled_blocks = {
+                trip["block_id"] for trip in trips if trip["block_id"]}
+            detailed = [
+                trip for trip in trips
+                if trip["block_id"] and trip["start_s"] is not None
+                and trip["end_s"] is not None
+                and trip["end_s"] >= trip["start_s"]
+                and trip["route"] != UNKNOWN_ROUTE
+                and trip["direction"] != UNKNOWN_DIRECTION
+            ]
+            detail_pct = (
+                round(100.0 * len(detailed) / len(trips), 2)
+                if trips else None
+            )
+            blocks = {}
+            for trip in trips:
+                if trip["block_id"]:
+                    blocks.setdefault(trip["block_id"], []).append(trip)
+
+            usable = []
+            for block_id, block_trips in blocks.items():
+                if any(
+                        trip["start_s"] is None or trip["end_s"] is None
+                        or trip["end_s"] < trip["start_s"]
+                        or trip["route"] == UNKNOWN_ROUTE
+                        or trip["direction"] == UNKNOWN_DIRECTION
+                        for trip in block_trips):
+                    continue
+                ordered = sorted(
+                    block_trips,
+                    key=lambda trip: (trip["start_s"], trip["trip_id"]),
+                )
+                if any(
+                        left["end_s"] > right["start_s"]
+                        for left, right in zip(ordered, ordered[1:])):
+                    continue
+                usable.append((block_id, ordered))
+
+            reasons = []
+            if coverage_row is None:
+                reasons.append("trip_coverage_health_missing")
+            elif not coverage_valid:
+                reasons.append("trip_coverage_day_invalid")
+            if not trips:
+                reasons.append("no_scheduled_trips")
+            if detail_pct is None or detail_pct < MIN_DUTY_DETAIL_COVERAGE_PCT:
+                reasons.append("duty_detail_coverage_below_95pct")
+            if scheduled_blocks and len(usable) < len(scheduled_blocks):
+                reasons.append("unusable_timetable_blocks")
+            if not scheduled_blocks:
+                reasons.append("no_timetable_blocks")
+            if not confidence_available:
+                reasons.append("observation_confidence_fields_missing")
+            reasons = sorted(set(reasons))
+
+            missing_middle = 0
+            same_vehicle = 0
+            short_connections = 0
+            ambiguous = 0
+            candidates = []
+
+            def match_window(trip):
+                starts = starts_by_service.get(
+                    (trip["route"], trip["direction"]), [])
+                return sum(
+                    abs(start - trip["start_s"]) <= FUZZY_MATCH_WINDOW_S
+                    for start in starts
+                )
+
+            for block_id, block_trips in usable:
+                for index in range(1, len(block_trips) - 1):
+                    previous = block_trips[index - 1]
+                    missing = block_trips[index]
+                    following = block_trips[index + 1]
+                    missing_observation = observations.get(
+                        (operator, missing["trip_id"]))
+                    if missing_observation:
+                        continue
+                    missing_middle += 1
+
+                    previous_observation = observations.get(
+                        (operator, previous["trip_id"]))
+                    following_observation = observations.get(
+                        (operator, following["trip_id"]))
+                    if not previous_observation or not following_observation:
+                        continue
+                    previous_vehicle = (
+                        previous_observation["vehicle_ref"]
+                        if previous_observation["vehicle_count"] == 1
+                        else None
+                    )
+                    following_vehicle = (
+                        following_observation["vehicle_ref"]
+                        if following_observation["vehicle_count"] == 1
+                        else None
+                    )
+                    if (not previous_vehicle
+                            or previous_vehicle != following_vehicle):
+                        continue
+                    same_vehicle += 1
+
+                    before_s = missing["start_s"] - previous["end_s"]
+                    after_s = following["start_s"] - missing["end_s"]
+                    if not (
+                            0 <= before_s <= MAX_DUTY_CONNECTION_S
+                            and 0 <= after_s <= MAX_DUTY_CONNECTION_S):
+                        continue
+                    short_connections += 1
+
+                    previous_window = match_window(previous)
+                    following_window = match_window(following)
+                    if not (
+                            previous_window == 1 and following_window == 1
+                            and clear_surrounding_match(
+                                previous, previous_observation)
+                            and clear_surrounding_match(
+                                following, following_observation)):
+                        ambiguous += 1
+                        continue
+                    candidates.append((
+                        date_str, operator, str(block_id)[:256],
+                        str(missing["trip_id"])[:256],
+                        str(missing["route"])[:256], missing["direction"],
+                        missing["first_departure"], missing["last_departure"],
+                        str(previous_vehicle)[:256],
+                        str(previous["trip_id"])[:256],
+                        str(previous["route"])[:256],
+                        previous["first_departure"],
+                        str(previous_observation["siri_ref"])[:256],
+                        str(following["trip_id"])[:256],
+                        str(following["route"])[:256],
+                        following["first_departure"],
+                        str(following_observation["siri_ref"])[:256],
+                        before_s, after_s, previous_window, following_window,
+                    ))
+
+            is_valid = not reasons
+            retained_candidates = candidates if is_valid else []
+            conn.execute(
+                """DELETE FROM daily_duty_gap_candidates
+                     WHERE service_date = ? AND operator = ?""",
+                (date_str, operator),
+            )
+            conn.execute(
+                """INSERT OR REPLACE INTO daily_duty_gap_days (
+                       service_date, operator, is_valid, invalid_reasons_json,
+                       scheduled_trips, duty_detail_trips, duty_detail_pct,
+                       scheduled_blocks, usable_blocks, missing_middle_trips,
+                       same_vehicle_gaps, short_connection_gaps,
+                       ambiguous_match_gaps, strict_candidate_gaps)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    date_str, operator, int(is_valid),
+                    json.dumps(reasons, separators=(",", ":")), len(trips),
+                    len(detailed), detail_pct, len(scheduled_blocks),
+                    len(usable), missing_middle, same_vehicle,
+                    short_connections, ambiguous, len(retained_candidates),
+                ),
+            )
+            conn.executemany(
+                """INSERT INTO daily_duty_gap_candidates VALUES
+                       (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                retained_candidates,
+            )
+            results[operator] = {
+                "valid": is_valid,
+                "invalid_reasons": reasons,
+                "scheduled": len(trips),
+                "detail": len(detailed),
+                "detail_pct": detail_pct,
+                "blocks": len(scheduled_blocks),
+                "usable_blocks": len(usable),
+                "missing_middle": missing_middle,
+                "same_vehicle": same_vehicle,
+                "short_connections": short_connections,
+                "ambiguous": ambiguous,
+                "candidates": len(retained_candidates),
+            }
+    return results
+
+
+def duty_gap_backfill_dates(conn):
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(expected_trips)")}
+    if "last_departure" not in columns or "block_id" not in columns:
+        return []
+    cutoff = (
+        datetime.now(TARGET_TZ) - timedelta(days=RAW_RETENTION_DAYS)
+    ).strftime("%Y%m%d")
+    latest_complete = (
+        datetime.now(TARGET_TZ) - timedelta(days=1)
+    ).strftime("%Y%m%d")
+    return [
+        row[0] for row in conn.execute(
+            """SELECT DISTINCT expected.service_date
+                 FROM expected_trips expected
+                WHERE expected.service_date BETWEEN ? AND ?
+                  AND NULLIF(expected.block_id, '') IS NOT NULL
+                  AND expected.last_departure IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM timepoint_observations observed
+                       WHERE observed.service_date = expected.service_date)
+                ORDER BY expected.service_date""",
+            (cutoff, latest_complete),
+        )
+    ]
+
+
+def print_duty_gap_report(results):
+    valid = [operator for operator, row in results.items() if row["valid"]]
+    candidates = sum(row["candidates"] for row in results.values())
+    print(
+        f"  private candidate duty gaps: {candidates} retained across "
+        f"{len(valid)} valid operators [not cancellations]."
+    )
+    for operator, row in results.items():
+        if row["valid"] and row["candidates"]:
+            print(
+                f"    {operator}: {row['candidates']} strict from "
+                f"{row['same_vehicle']} same-vehicle gaps; "
+                f"{row['ambiguous']} ambiguous short gaps rejected."
+            )
+        elif not row["valid"]:
+            print(
+                f"    {operator}: invalid ({', '.join(row['invalid_reasons'])})."
+            )
 
 
 def rollup(conn, date_str, operators, label, coverage_valid=True):
@@ -1147,13 +1574,16 @@ def main():
     raw_args = sys.argv[1:]
     no_prune = "--no-prune" in raw_args
     backfill_trip_coverage = "--backfill-trip-coverage" in raw_args
+    backfill_duty_gaps = "--backfill-duty-gaps" in raw_args
     backfill_geo_routes = "--backfill-geo-routes" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
-    if backfill_trip_coverage and backfill_geo_routes:
+    backfill_modes = sum((
+        backfill_trip_coverage, backfill_duty_gaps, backfill_geo_routes))
+    if backfill_modes > 1:
         print("ERROR: choose one backfill mode at a time.")
         return 2
-    if (backfill_trip_coverage or backfill_geo_routes) and positional:
+    if backfill_modes and positional:
         print("ERROR: backfill modes do not accept a date.")
         return 2
 
@@ -1166,6 +1596,18 @@ def main():
             print(f"[{date_str}]")
             print_trip_coverage_report(
                 rollup_trip_coverage(conn, date_str, SHOW_OPERATORS))
+        conn.close()
+        return 0
+    if backfill_duty_gaps:
+        dates = duty_gap_backfill_dates(conn)
+        print(
+            f"Backfilling private candidate duty gaps for "
+            f"{len(dates)} retained days..."
+        )
+        for date_str in dates:
+            print(f"[{date_str}]")
+            print_duty_gap_report(
+                rollup_duty_gaps(conn, date_str, SHOW_OPERATORS))
         conn.close()
         return 0
     if backfill_geo_routes:
@@ -1199,6 +1641,8 @@ def main():
     coverage_quality = rollup_trip_coverage(
         conn, date_str, SHOW_OPERATORS)
     print_trip_coverage_report(coverage_quality)
+    duty_gap_result = rollup_duty_gaps(conn, date_str, SHOW_OPERATORS)
+    print_duty_gap_report(duty_gap_result)
     geo_index = load_geo_index()
     fleet_index = load_fleet_index()
     geo_match = geography_match_stats(
