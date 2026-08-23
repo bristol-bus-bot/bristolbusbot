@@ -27,6 +27,12 @@ Environment=BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_detai
 ExecStart=/usr/bin/node @BBB_DEPLOY_BASE@/current/bot/dist/index.js
 Restart=always
 RestartSec=5s
+# The Node main loop launches systemd-notify only after an ingest cycle. The
+# short-lived helper therefore needs permission to deliver that progress.
+# Five minutes also leaves room for the deliberately slower direct-SIRI
+# diagnostic mode's bounded retries; production event ingest reports every 30s.
+WatchdogSec=300s
+NotifyAccess=all
 TimeoutStopSec=90s
 KillSignal=SIGTERM
 UMask=0077

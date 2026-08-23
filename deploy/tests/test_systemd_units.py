@@ -10,6 +10,8 @@ def test_site_unit_has_required_lifecycle_and_accounting():
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
         "RestartSec=5s",
+        "WatchdogSec=120s",
+        "NotifyAccess=main",
         "WantedBy=multi-user.target",
         "Environment=BBB_FLEET_JSON=/var/lib/bristolbusbot/enrichment/"
         "fbribuses.json",
@@ -39,6 +41,9 @@ def test_site_unit_is_read_only_and_sandboxed():
         assert setting in source
     assert "ReadWritePaths=" not in source
     assert "--no-control-socket" in source
+    assert "-m app.watchdog_runner" in source
+    assert "--url http://127.0.0.1:5002/livez" in source
+    assert "--timeout 30" in source
 
 
 def test_site_uses_atomic_current_release_path():
@@ -53,6 +58,8 @@ def test_collector_unit_has_exact_writable_state_and_network_access():
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
         "RestartSec=5s",
+        "WatchdogSec=120s",
+        "NotifyAccess=main",
         "WantedBy=multi-user.target",
         "ProtectSystem=strict",
         "ProtectHome=read-only",
@@ -69,6 +76,8 @@ def test_bot_unit_allows_only_its_two_writable_databases():
     for setting in (
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
+        "WatchdogSec=300s",
+        "NotifyAccess=all",
         "ProtectSystem=strict",
         "ProtectHome=read-only",
         "ReadWritePaths=/var/lib/bristolbusbot/bot /var/lib/bristolbusbot/collector",

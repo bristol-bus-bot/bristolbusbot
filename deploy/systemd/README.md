@@ -17,6 +17,18 @@ fails.
 Each service's environment file lives at `/etc/bristolbusbot/<name>.env`,
 owned root-readable by the service user with mode `0640`.
 
+The collector, site and bot also use systemd's progress watchdog. The
+collector reports only after a feed attempt and its database commits finish;
+the bot reports only after its event-reader cycle finishes; and the site
+supervisor reports only after Gunicorn answers the existing loopback `/livez`
+request. A dependency outage can therefore be recorded normally, while a
+frozen main loop, request handler or database operation cannot keep a stuck
+service falsely green. Gunicorn's own 30-second worker timeout remains the
+first line of recovery for an individual stuck site worker. Collector and site
+freezes are bounded at two minutes. The bot uses five minutes so its explicit
+direct-SIRI diagnostic mode can finish its slower bounded retries; its normal
+event reader still proves progress every 30 seconds.
+
 The social Slack bot token is the deliberate exception: it lives alone at
 `/etc/bristolbusbot/social-slack.token`, root-owned with mode `0600`, and
 systemd presents it only to `bbb-social-curation.service` through

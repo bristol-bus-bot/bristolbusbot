@@ -22,6 +22,7 @@ import { WeatherService } from './services/weather-service.js';
 import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
+import { SystemdWatchdog } from './services/systemd-watchdog.js';
 
 /**
  * Coordinates the bot services and their lifecycle.
@@ -40,6 +41,7 @@ class BristolBusBot {
     private healthMonitor!: HealthMonitor;
     private weatherService!: WeatherService;
     private apiRoutes!: APIRoutes;
+    private systemdWatchdog: SystemdWatchdog;
     private expressApp: express.Application;
     private server: any;
     
@@ -53,6 +55,7 @@ class BristolBusBot {
         
         // Load configuration
         this.config = loadConfig();
+        this.systemdWatchdog = new SystemdWatchdog();
         logger.info('Configuration loaded', { 
             testMode: this.config.testMode,
             nodeEnv: process.env.NODE_ENV 
@@ -100,7 +103,9 @@ class BristolBusBot {
         this.healthMonitor = new HealthMonitor(this.appState);
         
         // Business logic services
-        this.siriMonitor = new SIRIMonitor(this.config.siri, this.appState);
+        this.siriMonitor = new SIRIMonitor(
+            this.config.siri, this.appState,
+            () => this.systemdWatchdog.progress());
         this.delayAnalyzer = new DelayAnalyzer(this.config.processing, this.appState);
         this.weatherService = new WeatherService(this.config.weather);
         this.aiCommentary = new AICommentary(this.config.ai, this.appState, this.weatherService);
@@ -254,7 +259,7 @@ class BristolBusBot {
                 const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
                 this.eventReader = new EventReader(
                     liveDbPath, this.appState, this.delayAnalyzer, operators,
-                    30_000, maxAgeMin);
+                    30_000, maxAgeMin, () => this.systemdWatchdog.progress());
                 this.eventReader.start();
                 logger.info('Ingest: collector events', { liveDbPath, operators });
                 if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {

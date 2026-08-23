@@ -51,7 +51,8 @@ export class EventReader {
     constructor(liveDbPath: string, appState: ApplicationState,
                 delayAnalyzer: DelayAnalyzer,
                 operators: string[] = ['FBRI'], intervalMs = 30_000,
-                maxAgeMinutes = 10) {
+                maxAgeMinutes = 10,
+                private readonly onCycleComplete: () => void = () => undefined) {
         // NOT readonly: consuming an event writes consumed_by_bot_at.
         // That column is the reader's ONLY write; everything else is the
         // collector's.
@@ -115,6 +116,7 @@ export class EventReader {
     }
 
     private cycle(): void {
+        let completed = false;
         try {
             // Apply the age gate before drafting so a restart or outage cannot
             // turn a stale backlog into current posts. Stale rows are consumed
@@ -132,7 +134,10 @@ export class EventReader {
             const rows = this.db.prepare(
                 `SELECT * FROM events WHERE consumed_by_bot_at IS NULL
                  ORDER BY id ASC LIMIT 200`).all() as EventRow[];
-            if (!rows.length) return;
+            if (!rows.length) {
+                completed = true;
+                return;
+            }
 
             const markConsumed = this.db.prepare(
                 'UPDATE events SET consumed_by_bot_at = ? WHERE id = ?');
@@ -164,8 +169,14 @@ export class EventReader {
                 this.appState.addBusEvents(reportable);
                 logSummary('info', `📋 COLLECTED (events): ${reportable.length} of ${rows.length} rows → collector total ${this.appState.busEventCollector.length}`);
             }
+            completed = true;
         } catch (err: any) {
             logAlways('error', 'EventReader cycle failed', { error: err.message });
+        } finally {
+            // This callback runs on Node's main event loop after the database
+            // cycle succeeds. A frozen loop, stopped reader or failed local
+            // database read cannot falsely keep the service alive.
+            if (completed) this.onCycleComplete();
         }
     }
 }
