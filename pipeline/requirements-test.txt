@@ -1,0 +1,2 @@
+-r requirements-runtime.txt
+pypdf==6.10.0

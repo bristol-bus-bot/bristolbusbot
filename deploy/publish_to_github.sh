@@ -42,8 +42,27 @@ install -m 0644 "$AUDIT_DIR/LICENSE" LICENSE
 install -m 0644 "$AUDIT_DIR/AUDIT_METHODOLOGY.md" AUDIT_METHODOLOGY.md
 install -m 0644 "$ASSET_DIR/README.md" README.md
 
-if [ -n "$(git status --porcelain -- LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/fonts)" ]; then
+# Dated packs are immutable by default in the generator. Copy additions and
+# checked corrections, but never delete an older public pack here.
+if [ -d "$AUDIT_SITE_DIR/packs" ]; then
+    install -d -m 0755 docs/packs
+    cp -a "$AUDIT_SITE_DIR/packs/." docs/packs/
+fi
+
+CHANGED_PATHS=(
+    LICENSE README.md AUDIT_METHODOLOGY.md
+    docs/audit_data.json docs/index.html docs/app.js docs/styles.css
+    docs/favicon.svg docs/fonts
+)
+if [ -d docs/packs ]; then
+    CHANGED_PATHS+=(docs/packs)
+fi
+
+if [ -n "$(git status --porcelain -- "${CHANGED_PATHS[@]}")" ]; then
     git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/fonts
+    if [ -d docs/packs ]; then
+        git add docs/packs
+    fi
     git commit -m "Data update $(date -u +%Y-%m-%dT%H:%MZ)"
     git push origin main
     echo "Published."

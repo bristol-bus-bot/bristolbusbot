@@ -61,3 +61,5 @@ docs/DOMAIN.md
 /.bbb-push-*/
 /.bbb-pytest-*/
 /.bbb-final-*/
+/output/
+/tmp/

@@ -87,6 +87,15 @@ def test_real_stop_is_rolled_up_into_area_and_ward():
     assert groups == 2
     assert rows[("area", geography["area"])] == 1
     assert rows[("ward", geography["ward"])] == 1
+    route_rows = conn.execute(
+        """SELECT source_operator, geo_type, geo_key, route,
+                  readings_in_gate, on_time
+             FROM daily_geo_route_summary ORDER BY geo_type"""
+    ).fetchall()
+    assert route_rows == [
+        ("FBRI", "area", geography["area"], "1", 1, 1),
+        ("FBRI", "ward", geography["ward"], "1", 1, 1),
+    ]
 
 
 def test_geography_match_preflight_reports_bad_lookup_coverage():
