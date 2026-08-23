@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import logging
 import os
 import re
+import signal
 import shlex
 import shutil
 import subprocess
@@ -15,10 +17,11 @@ import sys
 import tarfile
 import tempfile
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Iterable
+from typing import Iterable, TextIO
 
 from local_config import DeploySettings, LocalConfigError, load_deploy_settings
 
@@ -50,6 +53,12 @@ SKIP_PARTS = {
     ".git", ".pytest_cache", "__pycache__", "node_modules", "venv",
     ".venv", "tests", "_legacy",
 }
+SSH_CONNECT_TIMEOUT_SECONDS = 15
+SSH_PREFLIGHT_TIMEOUT_SECONDS = 20
+SSH_PREFLIGHT_ATTEMPTS = 2
+REMOTE_COMMAND_TIMEOUT_SECONDS = 15 * 60
+UPLOAD_TIMEOUT_SECONDS = 30 * 60
+PROCESS_STOP_TIMEOUT_SECONDS = 5
 
 log = logging.getLogger("bbb-push")
 
@@ -60,6 +69,140 @@ class BuiltRelease:
     release: str
     archive: Path
     sha256: str
+
+
+class BoundedProcessTimeout(RuntimeError):
+    """A child command exceeded its wall-clock limit and was stopped."""
+
+    def __init__(self, command: list[str], timeout: float,
+                 stdout: str, stderr: str) -> None:
+        self.command = command
+        self.timeout = timeout
+        self.stdout = stdout
+        self.stderr = stderr
+        super().__init__(f"command timed out after {timeout:g} seconds")
+
+
+def _captured_text(stream: TextIO | None) -> str:
+    if stream is None:
+        return ""
+    stream.flush()
+    stream.seek(0)
+    return stream.read()
+
+
+class _WindowsJob:
+    """An exact Windows child tree that can be terminated as one unit."""
+
+    def __init__(self, process: subprocess.Popen[str]) -> None:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+        kernel32.AssignProcessToJobObject.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p]
+        kernel32.TerminateJobObject.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.CreateJobObjectW(None, None)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self._kernel32 = kernel32
+        self._handle = handle
+        process_handle = ctypes.c_void_p(int(process._handle))  # type: ignore[attr-defined]
+        if not kernel32.AssignProcessToJobObject(handle, process_handle):
+            error = ctypes.get_last_error()
+            kernel32.CloseHandle(handle)
+            self._handle = None
+            raise ctypes.WinError(error)
+
+    def terminate(self) -> None:
+        if self._handle is not None and not self._kernel32.TerminateJobObject(
+                self._handle, 1):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def close(self) -> None:
+        if self._handle is not None:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+def _stop_process_tree(process: subprocess.Popen[str],
+                       windows_job: _WindowsJob | None = None) -> None:
+    """Stop only the private process group/tree created for one command."""
+    if os.name == "nt":
+        if windows_job is None:
+            raise RuntimeError("timed-out Windows process has no private job")
+        windows_job.terminate()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as final_exc:
+            raise RuntimeError(
+                f"could not stop timed-out child process {process.pid}"
+            ) from final_exc
+        raise RuntimeError(
+            f"timed-out child process tree {process.pid} needed fallback cleanup"
+        ) from exc
+
+
+def run_bounded_process(command: list[str], *, timeout: float,
+                        capture_output: bool = True
+                        ) -> subprocess.CompletedProcess[str]:
+    """Run without PIPEs so inherited output handles cannot block cleanup."""
+    if timeout <= 0:
+        raise ValueError("process timeout must be positive")
+    with ExitStack() as stack:
+        stdout_stream = None
+        stderr_stream = None
+        if capture_output:
+            stdout_stream = stack.enter_context(tempfile.TemporaryFile(
+                mode="w+", encoding="utf-8", errors="replace"))
+            stderr_stream = stack.enter_context(tempfile.TemporaryFile(
+                mode="w+", encoding="utf-8", errors="replace"))
+        creationflags = (
+            subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            text=True,
+            start_new_session=os.name != "nt",
+            creationflags=creationflags,
+        )
+        windows_job = None
+        if os.name == "nt":
+            try:
+                windows_job = _WindowsJob(process)
+            except OSError:
+                process.kill()
+                process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+                raise
+        try:
+            try:
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                _stop_process_tree(process, windows_job)
+                stdout = _captured_text(stdout_stream)
+                stderr = _captured_text(stderr_stream)
+                raise BoundedProcessTimeout(
+                    command, timeout, stdout, stderr) from exc
+            stdout = _captured_text(stdout_stream)
+            stderr = _captured_text(stderr_stream)
+            return subprocess.CompletedProcess(
+                command, returncode, stdout=stdout, stderr=stderr)
+        finally:
+            if windows_job is not None:
+                windows_job.close()
 
 
 def q(value: str | PurePosixPath) -> str:
@@ -276,37 +419,82 @@ def build_release(component: str, workspace: Path,
 
 
 class Remote:
-    def __init__(self, settings: DeploySettings) -> None:
+    def __init__(
+        self,
+        settings: DeploySettings,
+        *,
+        preflight_timeout: float = SSH_PREFLIGHT_TIMEOUT_SECONDS,
+        command_timeout: float = REMOTE_COMMAND_TIMEOUT_SECONDS,
+        upload_timeout: float = UPLOAD_TIMEOUT_SECONDS,
+    ) -> None:
         self.settings = settings
         self.host = settings.host
         self.user = settings.user
         self.target = f"{settings.user}@{settings.host}"
+        self.preflight_timeout = preflight_timeout
+        self.command_timeout = command_timeout
+        self.upload_timeout = upload_timeout
         self.options = [
             "-o", "StrictHostKeyChecking=yes",
             "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=30",
+            "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
+            "-o", "StdinNull=yes",
+            "-o", "ServerAliveInterval=15",
+            "-o", "ServerAliveCountMax=2",
         ]
 
     def __enter__(self) -> "Remote":
-        result = subprocess.run(
-            ["ssh", *self.options, self.target, "true"],
-            capture_output=True, text=True,
-        )
-        if result.returncode:
-            raise RuntimeError(
-                f"SSH refused the connection or host key. Connect once with ssh "
-                f"{self.target}, verify the fingerprint, then retry.\n{result.stderr}"
-            )
-        return self
+        command = [
+            "ssh", *self.options, self.target,
+            "/bin/sh -c 'exec </dev/null >/dev/null 2>&1; true'",
+        ]
+        for attempt in range(SSH_PREFLIGHT_ATTEMPTS):
+            try:
+                result = run_bounded_process(
+                    command, timeout=self.preflight_timeout)
+            except BoundedProcessTimeout as exc:
+                if attempt + 1 < SSH_PREFLIGHT_ATTEMPTS:
+                    log.warning(
+                        "SSH preflight did not close within %g seconds; its "
+                        "private process tree was stopped before any upload. "
+                        "Retrying once after first-login services have started.",
+                        self.preflight_timeout,
+                    )
+                    continue
+                raise RuntimeError(
+                    f"SSH preflight timed out on both bounded attempts "
+                    f"({self.preflight_timeout:g} seconds each). Nothing was "
+                    "uploaded and no release was switched. The deployer "
+                    "stopped only its own SSH process trees. Check the Pi and "
+                    "the recovery steps in deploy/README.md, then retry the "
+                    "unchanged command."
+                ) from exc
+            if result.returncode:
+                raise RuntimeError(
+                    f"SSH refused the connection or host key. Connect once with ssh "
+                    f"{self.target}, verify the fingerprint, then retry.\n"
+                    f"{result.stderr}"
+                )
+            return self
+        raise AssertionError("SSH preflight attempts were not executed")
 
     def __exit__(self, *_: object) -> None:
         return None
 
     def run(self, command: str, *, check: bool = True) -> str:
-        result = subprocess.run(
-            ["ssh", *self.options, self.target, command],
-            capture_output=True, text=True,
-        )
+        try:
+            result = run_bounded_process(
+                ["ssh", *self.options, self.target, command],
+                timeout=self.command_timeout,
+            )
+        except BoundedProcessTimeout as exc:
+            output = exc.stdout + exc.stderr
+            raise RuntimeError(
+                f"remote command timed out after "
+                f"{self.command_timeout:g} seconds; its private SSH process "
+                f"tree was stopped and the deployment will not continue: "
+                f"{command}\n{output}"
+            ) from exc
         if check and result.returncode:
             raise RuntimeError(
                 f"remote command failed ({result.returncode}): {command}\n"
@@ -319,12 +507,23 @@ class Remote:
         if progress:
             log.info("uploading %.1f MiB; scp will report transfer progress",
                      source.stat().st_size / 1024 / 1024)
-        result = subprocess.run(
-            ["scp", *self.options, str(source), f"{self.target}:{destination}"],
-            text=True,
-        )
+        try:
+            result = run_bounded_process(
+                ["scp", *self.options, str(source),
+                 f"{self.target}:{destination}"],
+                timeout=self.upload_timeout,
+                capture_output=not progress,
+            )
+        except BoundedProcessTimeout as exc:
+            raise RuntimeError(
+                f"upload timed out after {self.upload_timeout:g} seconds; "
+                "its private scp process tree was stopped and the deployer "
+                "did not continue to a release switch"
+            ) from exc
         if result.returncode:
-            raise RuntimeError(f"scp failed for {source.name}")
+            raise RuntimeError(
+                f"scp failed for {source.name}\n"
+                f"{result.stdout}{result.stderr}")
 
 
 def notify(remote: Remote, message: str) -> None:

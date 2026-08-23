@@ -60,6 +60,37 @@ A targeted deployment sends one success alert for that component. `--all`
 sends one combined success alert after every component passes; failures still
 identify the affected component immediately.
 
+Every SSH operation is wall-clock bounded as well as using OpenSSH's connection
+and encrypted-channel keepalives. The initial safety check gets 20 seconds and
+one automatic retry. That retry handles the Raspberry Pi's first login starting
+user services without requiring a separate "keeper" SSH session. Ordinary
+remote commands get 15 minutes and uploads get 30 minutes. Captured output is
+written to temporary files rather than process pipes, so a descendant that
+inherits an output handle cannot make the Windows deploy command wait forever.
+On timeout the deployer stops only the private process tree it created and does
+not continue to the next deployment step. Strict host-key checking, batch-mode
+authentication, atomic switching, health gates and rollback remain mandatory.
+
+### If the SSH safety check times out
+
+The deployer stops the first timed-out check and retries once. If both bounded
+attempts time out, its final error explicitly confirms that nothing was
+uploaded and no release was switched. At that point:
+
+1. Leave the deploy command stopped; do not bypass its SSH options and do not
+   open a keeper session.
+2. Check that the configured Pi hostname is reachable on the local network and
+   that a normal `ssh USER@HOST true` returns. Interrupt that diagnostic if it
+   stalls; it is not a deployment.
+3. Correct the connectivity or Pi SSH/user-session problem, then rerun the
+   original deployment command unchanged. Its clean-tree and atomic-release
+   checks make that retry safe.
+
+A later remote-command timeout may occur after files have been staged or an
+atomic switch has been attempted, so read the reported command and verify the
+current release before retrying. The timeout still stops further steps; it
+never turns off rollback or broadens the sudo allowlist.
+
 The optional social component is intentionally more conservative. Its release
 gate performs one native ARM64 demo render on the Pi, then removes that demo;
 it never starts the curation service or calls Slack. `--install-layout`

@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,133 @@ def test_real_deploy_refuses_a_dirty_tree_before_connecting(monkeypatch):
     monkeypatch.setattr(push, "Remote", lambda *_: (_ for _ in ()).throw(
         AssertionError("dirty deploy connected")))
     assert push.main(["--component", "pipeline"]) == 1
+
+
+def test_bounded_capture_does_not_wait_for_an_inherited_output_handle(tmp_path):
+    release = tmp_path / "release-child"
+    child = (
+        "import pathlib,sys,time\n"
+        "marker=pathlib.Path(sys.argv[1])\n"
+        "deadline=time.monotonic()+5\n"
+        "while not marker.exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.02)\n"
+    )
+    parent = (
+        "import subprocess,sys\n"
+        "process=subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]])\n"
+        "print(process.pid, flush=True)\n"
+    )
+    started = time.monotonic()
+    try:
+        result = push.run_bounded_process(
+            [sys.executable, "-c", parent, child, str(release)],
+            timeout=1.5,
+        )
+    finally:
+        release.write_text("release", encoding="utf-8")
+
+    assert result.returncode == 0
+    assert result.stdout.strip().isdigit()
+    assert time.monotonic() - started < 1.25
+
+
+def test_bounded_timeout_stops_only_its_spawned_process_tree(tmp_path):
+    heartbeat = tmp_path / "heartbeat"
+    child = (
+        "import pathlib,sys,time\n"
+        "path=pathlib.Path(sys.argv[1])\n"
+        "while True:\n"
+        "    with path.open('a', encoding='utf-8') as stream:\n"
+        "        stream.write('x')\n"
+        "    time.sleep(0.02)\n"
+    )
+    parent = (
+        "import pathlib,subprocess,sys,time\n"
+        "path=pathlib.Path(sys.argv[2])\n"
+        "process=subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]])\n"
+        "deadline=time.monotonic()+2\n"
+        "while not path.exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.01)\n"
+        "print(process.pid, flush=True)\n"
+        "time.sleep(30)\n"
+    )
+
+    with pytest.raises(push.BoundedProcessTimeout) as caught:
+        push.run_bounded_process(
+            [sys.executable, "-c", parent, child, str(heartbeat)],
+            timeout=0.5,
+        )
+
+    assert caught.value.stdout.strip().isdigit()
+    time.sleep(0.1)
+    size = heartbeat.stat().st_size
+    time.sleep(0.2)
+    assert heartbeat.stat().st_size == size
+
+
+def test_remote_preflight_retries_a_first_login_channel_without_a_keeper(
+        monkeypatch, caplog):
+    calls = []
+
+    def bounded(command, **kwargs):
+        calls.append((command, kwargs))
+        if len(calls) == 1:
+            raise push.BoundedProcessTimeout(command, kwargs["timeout"], "", "")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(push, "run_bounded_process", bounded)
+    remote = push.Remote(TEST_SETTINGS, preflight_timeout=0.1)
+
+    with remote:
+        pass
+
+    assert len(calls) == 2
+    assert all(call[1]["timeout"] == 0.1 for call in calls)
+    assert "StrictHostKeyChecking=yes" in calls[0][0]
+    assert "BatchMode=yes" in calls[0][0]
+    assert "StdinNull=yes" in calls[0][0]
+    assert "before any upload" in caplog.text
+
+
+def test_remote_preflight_second_timeout_says_nothing_changed(monkeypatch):
+    def bounded(command, **kwargs):
+        raise push.BoundedProcessTimeout(command, kwargs["timeout"], "", "")
+
+    monkeypatch.setattr(push, "run_bounded_process", bounded)
+    remote = push.Remote(TEST_SETTINGS, preflight_timeout=0.1)
+
+    with pytest.raises(RuntimeError, match="Nothing was uploaded") as caught:
+        remote.__enter__()
+
+    assert "no release was switched" in str(caught.value)
+    assert "only its own SSH process trees" in str(caught.value)
+
+
+def test_remote_command_timeout_is_fatal_even_when_return_codes_are_ignored(
+        monkeypatch):
+    def bounded(command, **kwargs):
+        raise push.BoundedProcessTimeout(
+            command, kwargs["timeout"], "partial output", "")
+
+    monkeypatch.setattr(push, "run_bounded_process", bounded)
+    remote = push.Remote(TEST_SETTINGS, command_timeout=0.1)
+
+    with pytest.raises(RuntimeError, match="deployment will not continue"):
+        remote.run("systemctl is-active example", check=False)
+
+
+def test_remote_upload_timeout_stops_before_a_release_switch(monkeypatch, tmp_path):
+    source = tmp_path / "release.tar.gz"
+    source.write_bytes(b"release")
+
+    def bounded(command, **kwargs):
+        raise push.BoundedProcessTimeout(command, kwargs["timeout"], "", "")
+
+    monkeypatch.setattr(push, "run_bounded_process", bounded)
+    remote = push.Remote(TEST_SETTINGS, upload_timeout=0.1)
+
+    with pytest.raises(RuntimeError, match="did not continue to a release switch"):
+        remote.upload(source, TEST_SETTINGS.remote_base / "incoming/release.part")
 
 
 def test_social_gate_installs_locked_node_dependencies_before_tests(monkeypatch):
