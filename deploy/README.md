@@ -128,6 +128,27 @@ and detects a collapsed per-operator fleet count. It writes only
 and appear in the twice-daily digest. A failed or stale job is an operational
 health problem, but a completeness warning cannot edit or promote any data.
 
+It also installs `bbb-evidence-pack`, an attended private diagnostic for an odd
+reading. Select a service date, exact bus reference, timetable/SIRI trip
+reference or saved evidence ID; selectors can be combined to narrow the result:
+
+```sh
+bbb-evidence-pack --date 2026-08-23 --bus FICT-0001 \
+  --output "$HOME/odd-reading-2026-08-23.json"
+```
+
+The command opens the production audit and timetable databases read-only. It
+reports the full number of matching receipts but includes at most 25 spread
+across the selected time range, limits observations, polls and timetable stops,
+and reduces that representative sample further if needed to stay below the hard
+512 KiB final limit. The output is an atomic mode-0600
+JSON file and an existing file is not replaced unless `--force` is supplied.
+Known public website and audit-repository paths are refused. Cause labels are
+triage clues rather than proof, and missing historical observations or
+timetable editions remain explicitly unavailable. Run `bbb-evidence-pack
+--help` for all selectors; the command cannot change either database or any
+published statistic.
+
 Database initialisation is idempotent. Any incompatible schema change must use
 an explicit migration with a documented rollback rather than running silently
 during application startup.
