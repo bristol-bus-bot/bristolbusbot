@@ -239,7 +239,18 @@ until a departure can be identified reliably. The fuzzy journey matcher and
 scheduled-trip snapshot now anchor on each trip's actual minimum stop sequence
 rather than assuming that every timetable is numbered from one. Retained raw
 days were recalculated using the corrected method and are not directly
-comparable with figures published before this change.
+comparable with figures published before this change. Comparing the 56 service
+days present in the public file immediately before and after the recalculation,
+every daily on-time figure increased: the mean change was +4.41 percentage
+points. This is a documented method restatement, not a claimed improvement in
+bus service.
+
+The collector cutover retained only a partial raw record for 1 July while
+inheriting that day's complete summary. Recalculating it from those partial rows
+replaced 20,097 readings with 1,430 and produced a misleadingly high result.
+That service day is excluded from all public results and evidence packs until
+complete raw evidence can be restored. Publication checks also reject any day
+where the pooled totals contradict the sum of the operator totals.
 
 **13 July 2026 — collector replaced.** The process that matches live buses
 to timetabled trips was rewritten. Three behavioural changes affect the

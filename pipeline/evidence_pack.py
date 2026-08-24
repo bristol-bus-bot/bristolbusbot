@@ -23,6 +23,7 @@ from xml.sax.saxutils import escape as xml_escape
 from dateutil.relativedelta import relativedelta
 
 from audit_operators import NETWORK_LABEL, SHOW_OPERATORS, operator_name
+from audit_publication import publication_exclusions
 from audit_targets import target_metadata
 import frequency_changes
 
@@ -112,13 +113,38 @@ def connect_read_only(path: Path) -> sqlite3.Connection:
 
 
 def latest_service_date(connection: sqlite3.Connection, operator: str) -> date:
-    row = connection.execute(
-        "SELECT MAX(service_date) FROM daily_overall_summary WHERE operator=?",
+    rows = connection.execute(
+        """SELECT service_date FROM daily_overall_summary
+             WHERE operator=? ORDER BY service_date DESC""",
         (operator,),
-    ).fetchone()
-    if not row or not row[0]:
+    ).fetchall()
+    dates = [row[0] for row in rows]
+    excluded = publication_exclusions(connection, dates)
+    service_date = next((value for value in dates if value not in excluded), None)
+    if not service_date:
         raise PackUnavailable(f"no daily audit summaries exist for {operator}")
-    return datetime.strptime(row[0], "%Y%m%d").date()
+    return datetime.strptime(service_date, "%Y%m%d").date()
+
+
+def excluded_dates_between(
+    connection: sqlite3.Connection, start: date, end: date,
+) -> dict[str, list[str]]:
+    rows = connection.execute(
+        """SELECT DISTINCT service_date FROM daily_overall_summary
+             WHERE service_date BETWEEN ? AND ? ORDER BY service_date""",
+        (compact(start), compact(end)),
+    ).fetchall()
+    return publication_exclusions(connection, (row[0] for row in rows))
+
+
+def exclusion_sql(
+    exclusions: dict[str, list[str]], column: str = "service_date",
+) -> tuple[str, tuple[str, ...]]:
+    dates = tuple(sorted(exclusions))
+    if not dates:
+        return "", ()
+    placeholders = ",".join("?" for _ in dates)
+    return f" AND {column} NOT IN ({placeholders})", dates
 
 
 def month_end(day: date) -> date:
@@ -224,14 +250,18 @@ def scope_daily_rows(
     start: date,
     end: date,
 ) -> list[sqlite3.Row]:
+    exclusions = excluded_dates_between(connection, start, end)
+    clause, excluded_params = exclusion_sql(exclusions)
     if scope.kind in ("area", "ward"):
         return connection.execute(
-            """SELECT service_date, readings_in_gate AS readings, on_time
+            f"""SELECT service_date, readings_in_gate AS readings, on_time
                  FROM daily_geo_summary
                 WHERE operator=? AND geo_type=? AND geo_key=?
                   AND service_date BETWEEN ? AND ?
+                  {clause}
                 ORDER BY service_date""",
-            (operator, scope.kind, scope.values[0], compact(start), compact(end)),
+            (operator, scope.kind, scope.values[0], compact(start), compact(end),
+             *excluded_params),
         ).fetchall()
     placeholders = ",".join("?" for _ in scope.values)
     return connection.execute(
@@ -240,18 +270,22 @@ def scope_daily_rows(
                FROM daily_route_summary
               WHERE operator=? AND route IN ({placeholders})
                 AND service_date BETWEEN ? AND ?
+                {clause}
               GROUP BY service_date ORDER BY service_date""",
-        (operator, *scope.values, compact(start), compact(end)),
+        (operator, *scope.values, compact(start), compact(end),
+         *excluded_params),
     ).fetchall()
 
 
 def available_audit_days(
     connection: sqlite3.Connection, operator: str, start: date, end: date,
 ) -> int:
+    exclusions = excluded_dates_between(connection, start, end)
+    clause, excluded_params = exclusion_sql(exclusions)
     return int(connection.execute(
-        """SELECT COUNT(DISTINCT service_date) FROM daily_overall_summary
-             WHERE operator=? AND service_date BETWEEN ? AND ?""",
-        (operator, compact(start), compact(end)),
+        f"""SELECT COUNT(DISTINCT service_date) FROM daily_overall_summary
+             WHERE operator=? AND service_date BETWEEN ? AND ? {clause}""",
+        (operator, compact(start), compact(end), *excluded_params),
     ).fetchone()[0])
 
 
@@ -319,6 +353,8 @@ def route_summaries(
     end: date,
     min_readings: int,
 ) -> dict:
+    exclusions = excluded_dates_between(connection, start, end)
+    clause, excluded_params = exclusion_sql(exclusions)
     if scope.kind in ("area", "ward"):
         if not table_exists(connection, "daily_geo_route_summary"):
             return {
@@ -332,15 +368,17 @@ def route_summaries(
                 "rows": [],
             }
         rows = connection.execute(
-            """SELECT source_operator, route,
+            f"""SELECT source_operator, route,
                       COUNT(DISTINCT service_date) AS service_days,
                       SUM(readings_in_gate) AS readings, SUM(on_time) AS on_time,
                       MIN(service_date) AS first_date, MAX(service_date) AS last_date
                  FROM daily_geo_route_summary
                 WHERE operator=? AND geo_type=? AND geo_key=?
                   AND service_date BETWEEN ? AND ?
+                  {clause}
                 GROUP BY source_operator, route""",
-            (operator, scope.kind, scope.values[0], compact(start), compact(end)),
+            (operator, scope.kind, scope.values[0], compact(start), compact(end),
+             *excluded_params),
         ).fetchall()
     else:
         placeholders = ",".join("?" for _ in scope.values)
@@ -355,8 +393,10 @@ def route_summaries(
                  WHERE operator IN ({operator_placeholders})
                    AND route IN ({placeholders})
                    AND service_date BETWEEN ? AND ?
+                   {clause}
                  GROUP BY operator, route""",
-            (*source_operators, *scope.values, compact(start), compact(end)),
+            (*source_operators, *scope.values, compact(start), compact(end),
+             *excluded_params),
         ).fetchall()
     headline_days = aggregate_scope(
         connection, scope, operator, start, end)["service_days"]
@@ -386,20 +426,20 @@ def route_summaries(
             ),
         })
         for day in connection.execute(
-            ("""SELECT DISTINCT service_date FROM daily_geo_route_summary
+            (f"""SELECT DISTINCT service_date FROM daily_geo_route_summary
                   WHERE operator=? AND geo_type=? AND geo_key=?
                     AND source_operator=? AND route=?
                     AND service_date BETWEEN ? AND ?"""
              if scope.kind in ("area", "ward") else
-             """SELECT DISTINCT service_date FROM daily_route_summary
+             f"""SELECT DISTINCT service_date FROM daily_route_summary
                   WHERE operator=? AND route=?
-                    AND service_date BETWEEN ? AND ?"""),
+                    AND service_date BETWEEN ? AND ?""") + clause,
             ((operator, scope.kind, scope.values[0], row["source_operator"],
               row["route"],
-              compact(start), compact(end))
+              compact(start), compact(end), *excluded_params)
              if scope.kind in ("area", "ward") else
-             (row["source_operator"], row["route"],
-              compact(start), compact(end))),
+              (row["source_operator"], row["route"],
+               compact(start), compact(end), *excluded_params)),
         ):
             evidence_days.add(day[0])
     output.sort(key=lambda item: (
@@ -573,6 +613,8 @@ def build_report(
     latest = latest_service_date(connection, operator)
     start, end, previous_start, previous_end = complete_period(
         latest, committee_date, months, as_of)
+    publication_excluded = excluded_dates_between(
+        connection, previous_start, end)
     headline = aggregate_scope(connection, scope, operator, start, end)
     if not headline["readings"]:
         raise PackUnavailable(
@@ -629,6 +671,14 @@ def build_report(
             2,
             "The official area-wide target changed during this evidence period; the headline card shows the target at the period end.",
         )
+    if publication_excluded:
+        excluded_text = ", ".join(
+            iso_compact(value) for value in sorted(publication_excluded))
+        limitations.insert(
+            1,
+            "Known incomplete audit days were excluded from every figure in "
+            f"this pack: {excluded_text}.",
+        )
     report = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -661,6 +711,13 @@ def build_report(
             if comparability_breaks else None
         ),
         "comparability_breaks": comparability_breaks,
+        "excluded_service_days": [
+            {
+                "service_date": iso_compact(service_date),
+                "reasons": publication_excluded[service_date],
+            }
+            for service_date in sorted(publication_excluded)
+        ],
         "monthly": monthly_scope(connection, scope, operator, start, end),
         "routes": routes,
         "frequency": frequency,

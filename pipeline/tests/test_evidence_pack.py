@@ -117,8 +117,8 @@ def test_default_period_uses_last_three_complete_months(tmp_path):
         "start": "2026-02-01", "end": "2026-04-30"}
     assert [row["month_key"] for row in payload["monthly"]] == [
         "2026-05", "2026-06", "2026-07"]
-    assert payload["headline"]["readings"] == 920
-    assert payload["headline"]["on_time_pct"] == 70.0
+    assert payload["headline"]["readings"] == 910
+    assert payload["headline"]["on_time_pct"] == 70.1
     assert payload["previous"]["on_time_pct"] == 80.0
     assert payload["change_from_previous_pct_points"] is None
     assert "audit method changed" in payload["change_unavailable_reason"]
@@ -128,12 +128,17 @@ def test_default_period_uses_last_three_complete_months(tmp_path):
             "the replacement collector changed timetable matching and "
             "stale-position handling"),
     }]
+    assert payload["excluded_service_days"] == [{
+        "service_date": "2026-07-01",
+        "reasons": ["partial_raw_history_after_collector_cutover"],
+    }]
+    assert "2026-07-01" in payload["limitations"][1]
     assert payload["target"]["current_target_pct"] == 87
     assert payload["frequency"]["available"] is False
     assert "calendar" in payload["frequency"]["reason"]
     assert len(payload["questions"]) == 3
-    assert "70.0%" in payload["questions"][0]
-    assert "920" in payload["questions"][0]
+    assert "70.1%" in payload["questions"][0]
+    assert "910" in payload["questions"][0]
     assert "lost-mileage" in payload["questions"][2]
 
 
@@ -144,7 +149,7 @@ def test_area_routes_are_ordered_and_small_samples_are_explicit(tmp_path):
 
     rows = payload["routes"]["rows"]
     assert [row["route"] for row in rows] == ["43", "42"]
-    assert rows[0]["readings"] == 368
+    assert rows[0]["readings"] == 364
     assert all(row["thin_sample"] is False for row in rows)
     assert payload["routes"]["complete_period"] is True
     assert rows[0]["display"] == "43 (First Bristol)"
@@ -203,7 +208,7 @@ def test_html_escapes_scope_and_pdf_is_readable(tmp_path):
     assert '<script>alert("x")</script>' not in html_text
     assert "&lt;script&gt;" in html_text
     assert json.loads((output / "data.json").read_text(encoding="utf-8"))[
-        "headline"]["readings"] == 920
+        "headline"]["readings"] == 910
     pdf = output / "briefing.pdf"
     assert pdf.read_bytes().startswith(b"%PDF")
     reader = PdfReader(pdf)
