@@ -30,6 +30,7 @@ except ImportError:  # production installs both modules side by side
 SCHEMA_VERSION = 1
 THRESHOLDS = {
     "observed_days": 56,
+    "current_vehicle_hours": 24,
     "fleet_max_age_days": 14,
     "operator_collapse_ratio": 0.65,
     "operator_collapse_min_previous": 5,
@@ -196,15 +197,51 @@ def load_observed(live_db: Path, audit_db: Path,
     return observed
 
 
-def has_livery(record: dict) -> bool:
-    livery = record.get("livery") or {}
+def load_current_observed(live_db: Path,
+                          hours: int) -> set[tuple[str, str]]:
+    """Return identities still active now, separately from retained history."""
+    observed: set[tuple[str, str]] = set()
+    cutoff_time = (utcnow() - timedelta(hours=hours)).isoformat()
+    with connect_read_only(live_db) as connection:
+        rows = connection.execute(
+            "SELECT DISTINCT operator_ref, vehicle_ref FROM vehicles "
+            "WHERE updated_at >= ? AND operator_ref IS NOT NULL "
+            "AND vehicle_ref IS NOT NULL", (cutoff_time,))
+        observed.update(
+            (str(operator).strip().upper(), str(vehicle).strip())
+            for operator, vehicle in rows
+            if str(operator or "").strip() and str(vehicle or "").strip())
+    return observed
+
+
+def livery_gap_reason(record: dict) -> str | None:
+    """Describe an honest source gap without inventing a vehicle colour."""
+    livery = record.get("livery")
     if not isinstance(livery, dict):
-        return False
-    left = str(livery.get("left") or "").strip()
-    right = str(livery.get("right") or "").strip()
-    return bool(left and right
-                and left.lower() not in _WHITE_LIVERIES
-                and right.lower() not in _WHITE_LIVERIES)
+        return "not_supplied"
+    left = str(livery.get("left") or "").strip().lower()
+    right = str(livery.get("right") or "").strip().lower()
+    if not left or not right:
+        return "incomplete"
+    if left in _WHITE_LIVERIES or right in _WHITE_LIVERIES:
+        return "white"
+    return None
+
+
+def has_livery(record: dict) -> bool:
+    return livery_gap_reason(record) is None
+
+
+def missing_fleet_reason(operator: str, *, current: bool,
+                         active_operators: set[str]) -> str:
+    replacement = FLEET_OPERATOR_TRANSITIONS.get(operator)
+    if replacement and replacement in active_operators:
+        return "known_operator_transition"
+    if operator not in active_operators:
+        return "operator_not_in_fleet_source"
+    if current:
+        return "active_source_gap"
+    return "historical_source_gap"
 
 
 def populated_keys(path: Path) -> set[str]:
@@ -277,22 +314,42 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
     index = build_fleet_index(active_records)
     observed = load_observed(
         live_db, audit_db, int(THRESHOLDS["observed_days"]))
+    current_observed = load_current_observed(
+        live_db, int(THRESHOLDS["current_vehicle_hours"]))
     description_keys = {
         name: populated_keys(path) for name, path in description_paths.items()
     }
 
+    active_by_operator = dict(sorted(Counter(
+        operator_id(record) for record in active_records
+        if operator_id(record)).items()))
+    active_operators = set(active_by_operator)
+
     matched: dict[tuple[str, str], dict] = {}
     missing_fleet: list[str] = []
+    missing_fleet_reasons: dict[str, list[str]] = defaultdict(list)
+    missing_fleet_by_operator: Counter[str] = Counter()
     for operator, vehicle in sorted(observed):
         record = match_vehicle(index, operator, vehicle)
         if record is None:
-            missing_fleet.append(f"{operator}:{vehicle}")
+            identity = f"{operator}:{vehicle}"
+            missing_fleet.append(identity)
+            missing_fleet_by_operator[operator] += 1
+            reason = missing_fleet_reason(
+                operator, current=(operator, vehicle) in current_observed,
+                active_operators=active_operators)
+            missing_fleet_reasons[reason].append(identity)
         else:
             matched[(operator, vehicle)] = record
 
+    missing_livery_reasons: dict[str, list[str]] = defaultdict(list)
+    for (operator, vehicle), record in matched.items():
+        reason = livery_gap_reason(record)
+        if reason:
+            missing_livery_reasons[reason].append(f"{operator}:{vehicle}")
     missing_livery = sorted(
-        f"{operator}:{vehicle}" for (operator, vehicle), record in matched.items()
-        if not has_livery(record))
+        identity for values in missing_livery_reasons.values()
+        for identity in values)
     missing_blurbs: dict[str, list[str]] = {}
     for name, keys in description_keys.items():
         missing_blurbs[name] = sorted(
@@ -304,9 +361,6 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
                     and len(index["owners"].get(fleet_code(record), set())) == 1)
             ))
 
-    active_by_operator = dict(sorted(Counter(
-        operator_id(record) for record in active_records
-        if operator_id(record)).items()))
     observed_by_operator = dict(sorted(Counter(
         operator for operator, _vehicle in observed).items()))
     collapse_ratio = float(THRESHOLDS["operator_collapse_ratio"])
@@ -404,7 +458,23 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
             "observed_identities": len(observed),
             "matched_fleet_identities": len(matched),
             "missing_fleet": len(missing_fleet),
+            "current_observed_identities": len(current_observed),
+            "current_matched_fleet_identities": sum(
+                identity in matched for identity in current_observed),
+            "current_missing_fleet": sum(
+                identity not in matched for identity in current_observed),
             "missing_livery": len(missing_livery),
+            "current_missing_livery": sum(
+                identity in matched and not has_livery(matched[identity])
+                for identity in current_observed),
+            "missing_fleet_by_reason": {
+                reason: len(values) for reason, values
+                in sorted(missing_fleet_reasons.items())
+            },
+            "missing_livery_by_reason": {
+                reason: len(values) for reason, values
+                in sorted(missing_livery_reasons.items())
+            },
             "missing_blurbs": {
                 name: len(values) for name, values in missing_blurbs.items()
             },
@@ -424,6 +494,22 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
         "enrichment": {
             "missing_fleet_examples": missing_fleet[:max_examples],
             "missing_livery_examples": missing_livery[:max_examples],
+            "missing_fleet_by_operator": dict(
+                sorted(missing_fleet_by_operator.items())),
+            "missing_fleet_reasons": {
+                reason: {
+                    "count": len(values),
+                    "examples": sorted(values)[:max_examples],
+                }
+                for reason, values in sorted(missing_fleet_reasons.items())
+            },
+            "missing_livery_reasons": {
+                reason: {
+                    "count": len(values),
+                    "examples": sorted(values)[:max_examples],
+                }
+                for reason, values in sorted(missing_livery_reasons.items())
+            },
             "missing_blurbs": {
                 name: {"count": len(values), "examples": values[:max_examples]}
                 for name, values in sorted(missing_blurbs.items())
