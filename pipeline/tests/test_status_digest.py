@@ -94,7 +94,9 @@ def test_data_health_line_labels_source_gaps_without_implying_bad_refresh(
             "summary": {
                 "operator_collapses": 0,
                 "missing_fleet": 65,
+                "current_missing_fleet": 2,
                 "missing_livery": 121,
+                "current_missing_livery": 3,
                 "missing_blurbs": {
                     "in_service": 121,
                     "waiting": 127,
@@ -107,8 +109,9 @@ def test_data_health_line_labels_source_gaps_without_implying_bad_refresh(
     monkeypatch.setattr(status_digest, "AGGREGATE_HEALTH", health)
 
     assert status_digest.data_health_line() == (
-        "*data*  :information_source: 65 sightings without a safe fleet match - "
-        "121 source livery gaps - blurb gaps 121/127/135 "
+        "*data*  :information_source: 65 identities unmatched across 56d "
+        "(2 in the last 24h) - 121 source livery gaps (3 current) - "
+        "blurb gaps 121/127/135 "
         "(service/wait/depot) - 0 locality gaps - report-only")
 
 

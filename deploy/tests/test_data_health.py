@@ -110,6 +110,8 @@ def test_clean_report_is_read_only_and_model_context_is_deferred(tmp_path):
     assert report["mode"] == "report_only"
     assert report["summary"]["observed_identities"] == 1
     assert report["summary"]["matched_fleet_identities"] == 1
+    assert report["summary"]["current_observed_identities"] == 1
+    assert report["summary"]["current_missing_fleet"] == 0
     assert report["findings"] == []
     assert report["model_context"]["status"] == "not_configured"
     assert not inputs["output"].exists()
@@ -127,6 +129,9 @@ def test_missing_enrichment_is_bounded_and_warns(tmp_path):
     assert "observed_vehicle_missing_livery" in codes
     assert "observed_vehicle_missing_waiting_blurb" in codes
     assert "timetable_stop_missing_locality" in codes
+    assert report["summary"]["missing_livery_by_reason"] == {
+        "not_supplied": 1}
+    assert report["summary"]["current_missing_livery"] == 1
     assert all(len(finding.get("examples", [])) <= 12
                for finding in report["findings"])
 
@@ -203,7 +208,51 @@ def test_operator_scope_prevents_cross_operator_fleet_match(tmp_path):
     report = data_health.build_report(**inputs)
 
     assert report["summary"]["missing_fleet"] == 1
+    assert report["summary"]["missing_fleet_by_reason"] == {
+        "operator_not_in_fleet_source": 1}
     assert report["enrichment"]["missing_fleet_examples"] == ["ABUS:FBRI-100"]
+
+
+def test_missing_fleet_cases_are_explained_by_recency_and_source(tmp_path):
+    inputs = paths(tmp_path, [
+        vehicle(100),
+        vehicle(300, operator="KEMT"),
+    ])
+    now = datetime.now(timezone.utc)
+    with sqlite3.connect(inputs["live_db"]) as connection:
+        connection.execute(
+            "INSERT INTO vehicles VALUES (?,?,?)",
+            ("FBRI", "FBRI-101", now.isoformat()))
+    with sqlite3.connect(inputs["audit_db"]) as connection:
+        connection.executemany(
+            "INSERT INTO timepoint_observations VALUES (?,?,?)", [
+                ("FBRI", "FBRI-999", now.date().isoformat()),
+                ("VITR", "VITR-300", now.date().isoformat()),
+                ("SCSO", "SCSO-1", now.date().isoformat()),
+            ])
+
+    report = data_health.build_report(**inputs)
+
+    assert report["summary"]["missing_fleet"] == 4
+    assert report["summary"]["current_missing_fleet"] == 1
+    assert report["summary"]["missing_fleet_by_reason"] == {
+        "active_source_gap": 1,
+        "historical_source_gap": 1,
+        "known_operator_transition": 1,
+        "operator_not_in_fleet_source": 1,
+    }
+    assert report["enrichment"]["missing_fleet_by_operator"] == {
+        "FBRI": 2, "SCSO": 1, "VITR": 1}
+
+
+def test_livery_gap_reason_preserves_blank_incomplete_and_white_source_values():
+    assert data_health.livery_gap_reason({"livery": None}) == "not_supplied"
+    assert data_health.livery_gap_reason({
+        "livery": {"left": "#123456", "right": ""}}) == "incomplete"
+    assert data_health.livery_gap_reason({
+        "livery": {"left": "white", "right": "#123456"}}) == "white"
+    assert data_health.livery_gap_reason({
+        "livery": {"left": "#123456", "right": "#654321"}}) is None
 
 
 def test_prefixed_registration_matches_within_observed_operator():

@@ -210,7 +210,15 @@ def data_health_line() -> str:
                     f"{previous}->{current} - report-only")
 
         missing_fleet = int(summary.get("missing_fleet", 0))
+        current_missing_fleet = int(
+            summary.get("current_missing_fleet", missing_fleet))
         missing_livery = int(summary.get("missing_livery", 0))
+        current_missing_livery = int(
+            summary.get("current_missing_livery", missing_livery))
+        thresholds = report.get("thresholds")
+        thresholds = thresholds if isinstance(thresholds, dict) else {}
+        observed_days = int(thresholds.get("observed_days", 56))
+        current_hours = int(thresholds.get("current_vehicle_hours", 24))
         missing_stops = int(summary.get("missing_stop_localities", 0))
         blurbs = summary.get("missing_blurbs")
         blurbs = blurbs if isinstance(blurbs, dict) else {}
@@ -218,8 +226,10 @@ def data_health_line() -> str:
         waiting = int(blurbs.get("waiting", 0))
         depot = int(blurbs.get("depot", 0))
         return (
-            f"*data*  :information_source: {missing_fleet} sightings without a "
-            f"safe fleet match - {missing_livery} source livery gaps - blurb gaps "
+            f"*data*  :information_source: {missing_fleet} identities unmatched "
+            f"across {observed_days}d ({current_missing_fleet} in the last "
+            f"{current_hours}h) - {missing_livery} source livery gaps "
+            f"({current_missing_livery} current) - blurb gaps "
             f"{in_service}/{waiting}/{depot} (service/wait/depot) - "
             f"{missing_stops} locality gaps - report-only"
         )
