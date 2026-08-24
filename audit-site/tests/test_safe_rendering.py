@@ -48,9 +48,20 @@ def test_current_target_year_and_source_drive_every_comparison():
             'id="headline-target-note"',
             'id="geo-target-note"',
             'id="route-target-note"',
+            'id="historical-data-note"',
             'id="point-callout"',
             'id="footer-intro"'):
         assert marker in html
+
+
+def test_historical_restatement_and_excluded_day_are_disclosed():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    methodology = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
+
+    assert "4.41 percentage points" in html
+    assert "1 July is excluded" in html
+    assert "20,097 readings with 1,430" in methodology
+    assert "This is a documented method restatement" in methodology
 
 
 def test_accessibility_landmarks_and_live_regions_are_present():

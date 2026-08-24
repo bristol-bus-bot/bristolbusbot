@@ -18,6 +18,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, operator_name
+from audit_publication import publication_exclusions
 from audit_targets import target_metadata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -194,9 +195,15 @@ def main():
         print("No rollup tables yet, run: python audit_rollup.py")
         return 1
 
-    dates = [row[0] for row in cur.fetchall()]
-    if not dates:
+    candidate_dates = [row[0] for row in cur.fetchall()]
+    if not candidate_dates:
         print("No rollup rows yet.")
+        return 1
+
+    exclusions = publication_exclusions(conn, candidate_dates)
+    dates = [value for value in candidate_dates if value not in exclusions]
+    if not dates:
+        print("No publication-safe rollup days remain.")
         return 1
 
     days = [build_day(cur, sd) for sd in dates]
@@ -222,6 +229,10 @@ def main():
             "version": 2,
             "origin_timing_points": "excluded_until_departure_can_be_detected",
         },
+        "excluded_service_days": [
+            {"service_date": service_date, "reasons": exclusions[service_date]}
+            for service_date in sorted(exclusions)
+        ],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "days": days,
     }
@@ -229,7 +240,11 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, indent=2)
-    print(f"Wrote {OUT_FILE}  ({len(dates)} day(s), operators: {', '.join(o['code'] for o in operators)})")
+    exclusion_text = (
+        f", excluded: {len(exclusions)}" if exclusions else "")
+    print(
+        f"Wrote {OUT_FILE}  ({len(dates)} day(s){exclusion_text}, "
+        f"operators: {', '.join(o['code'] for o in operators)})")
     return 0
 
 

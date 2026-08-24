@@ -136,3 +136,43 @@ def test_private_duty_gap_tables_never_enter_public_day_json():
     assert "duty_gap" not in public_json
     assert "PRIVATE-TRIP" not in public_json
     assert "PRIVATE-VEHICLE" not in public_json
+
+
+def test_export_omits_known_incomplete_day_and_records_why(
+        tmp_path, monkeypatch):
+    source = database(valid=True)
+    safe_overall = source.execute(
+        "SELECT * FROM daily_overall_summary WHERE service_date=?",
+        (DAY,),
+    ).fetchone()
+    source.execute(
+        "INSERT INTO daily_overall_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (DAY, "ALL", *tuple(safe_overall)[2:]),
+    )
+    source.execute(
+        "INSERT INTO daily_overall_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("20260701", "FBRI", *tuple(safe_overall)[2:]),
+    )
+    source.execute(
+        "INSERT INTO daily_overall_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("20260701", "ALL", *tuple(safe_overall)[2:]),
+    )
+    source.commit()
+
+    database_path = tmp_path / "audit.db"
+    persisted = sqlite3.connect(database_path)
+    source.backup(persisted)
+    persisted.close()
+    output_path = tmp_path / "audit-site" / "audit_data.json"
+    monkeypatch.setattr(audit_export, "AUDIT_DB", str(database_path))
+    monkeypatch.setattr(audit_export, "OUT_DIR", str(output_path.parent))
+    monkeypatch.setattr(audit_export, "OUT_FILE", str(output_path))
+
+    assert audit_export.main() == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert [day["service_date"] for day in payload["days"]] == [DAY]
+    assert payload["excluded_service_days"] == [{
+        "service_date": "20260701",
+        "reasons": ["partial_raw_history_after_collector_cutover"],
+    }]

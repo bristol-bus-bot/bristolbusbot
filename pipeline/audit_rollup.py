@@ -11,6 +11,7 @@ Run from the bristol-live-buses folder:
     python audit_rollup.py            roll up today
     python audit_rollup.py 20260601   roll up a specific YYYYMMDD
     python audit_rollup.py 20260601 --no-prune
+    python audit_rollup.py 20260601 --allow-large-restatement  attended only
     python audit_rollup.py --backfill-duty-gaps
     python audit_rollup.py --backfill-geo-routes
 """
@@ -24,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from dateutil import tz
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL
+from audit_publication import day_consistency_reasons
 from audit_geo import load_geo_index, geo_for
 from audit_fleet import load_fleet_index, fleet_for, fleet_number
 
@@ -38,6 +40,7 @@ ON_TIME_LOW_S = -60
 ON_TIME_HIGH_S = 359
 RAW_RETENTION_DAYS = 95
 MIN_GEO_MATCH_PCT = 90.0
+MAX_UNATTENDED_RESTATEMENT_LOSS_PCT = 25.0
 
 # A coverage day is evidence only when the collector was present for the whole
 # scheduled operating window.  Production polls every 30 seconds; the margins
@@ -1150,7 +1153,9 @@ def print_duty_gap_report(results):
             )
 
 
-def rollup(conn, date_str, operators, label, coverage_valid=True):
+def rollup(
+        conn, date_str, operators, label, coverage_valid=True, *,
+        commit=True, allow_large_restatement=False):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
 
@@ -1169,6 +1174,26 @@ def rollup(conn, date_str, operators, label, coverage_valid=True):
             (date_str, label),
         ).fetchone()
         return {"skipped": True, "had_summary": bool(existing)}
+
+    existing = cur.execute(
+        """SELECT readings_total FROM daily_overall_summary
+             WHERE service_date = ? AND operator = ?""",
+        (date_str, label),
+    ).fetchone()
+    if existing and existing[0]:
+        old_total = int(existing[0])
+        new_total = len(observations)
+        loss_pct = round(100.0 * (old_total - new_total) / old_total, 1)
+        if (loss_pct > MAX_UNATTENDED_RESTATEMENT_LOSS_PCT
+                and not allow_large_restatement):
+            raise RuntimeError(
+                f"refusing to replace {date_str} {label}: retained raw "
+                f"evidence would reduce readings_total from {old_total} to "
+                f"{new_total} ({loss_pct}% loss; unattended maximum is "
+                f"{MAX_UNATTENDED_RESTATEMENT_LOSS_PCT}%). Preserve or "
+                "exclude the day, or use the explicit attended override "
+                "only after the loss is explained."
+            )
 
     per_route = {}
     for route, delay_s, dist_m, scheduled_local in observations:
@@ -1270,7 +1295,8 @@ def rollup(conn, date_str, operators, label, coverage_valid=True):
     )
     write_histogram(None, network_totals)
     write_peak(None, network_totals)
-    conn.commit()
+    if commit:
+        conn.commit()
 
     return {
         "in_gate": overall["in_gate"],
@@ -1422,7 +1448,7 @@ def rollup_geo_routes(conn, date_str, operators, label, geo_index):
     return len(route_buckets)
 
 
-def rollup_geo(conn, date_str, operators, label, geo_index):
+def rollup_geo(conn, date_str, operators, label, geo_index, *, commit=True):
     """Aggregate in-gate readings by WECA area and ward, for the given operator
     set, into daily_geo_summary. Additive; does not touch the route rollup."""
     cur = conn.cursor()
@@ -1444,7 +1470,8 @@ def rollup_geo(conn, date_str, operators, label, geo_index):
              int(round(statistics.median(delays))) if delays else None),
         )
     _write_geo_routes(conn, date_str, label, route_buckets)
-    conn.commit()
+    if commit:
+        conn.commit()
     return len(buckets)
 
 
@@ -1468,7 +1495,7 @@ def geography_match_stats(conn, date_str, operators, geo_index):
     return {"eligible": eligible, "matched": matched, "pct": pct}
 
 
-def rollup_fleet(conn, date_str, operators, label, fleet_index):
+def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
     """Aggregate in-gate readings by vehicle model (with electric flag and the
     service numbers each model runs), for the given operator set, into
     daily_fleet_summary. Additive."""
@@ -1521,11 +1548,12 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index):
              int(round(statistics.median(delays))) if delays else None,
              json.dumps(top_routes)),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
     return len(models)
 
 
-def rollup_frequency(conn, date_str, operators, label):
+def rollup_frequency(conn, date_str, operators, label, *, commit=True):
     """Classify each route frequent vs non-frequent from the scheduled trips.
     Frequent = 6+ departures in its busiest daytime hour (DfT's high-frequency
     threshold), which the official standard measures by excess wait time rather
@@ -1562,8 +1590,73 @@ def rollup_frequency(conn, date_str, operators, label):
             "INSERT INTO daily_route_class VALUES (?,?,?,?,?)",
             (date_str, label, route, frequent, peak),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
     return frequent_count
+
+
+def rollup_public_day(
+        conn, date_str, coverage_valid, geo_index, fleet_index, *,
+        allow_large_restatement=False):
+    """Replace every public product for one day as one checked transaction."""
+    reports = {}
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for operator in SHOW_OPERATORS:
+            reports[operator] = rollup(
+                conn, date_str, [operator], operator,
+                coverage_valid=coverage_valid, commit=False,
+                allow_large_restatement=allow_large_restatement,
+            )
+        reports[NETWORK_LABEL] = rollup(
+            conn, date_str, SHOW_OPERATORS, NETWORK_LABEL,
+            coverage_valid=coverage_valid, commit=False,
+            allow_large_restatement=allow_large_restatement,
+        )
+        if reports[NETWORK_LABEL].get("skipped"):
+            raise RuntimeError(
+                f"refusing public rollup for {date_str}: no retained, "
+                "non-origin raw observations exist; existing public "
+                "products were left unchanged"
+            )
+
+        for operator in SHOW_OPERATORS:
+            rollup_geo(
+                conn, date_str, [operator], operator, geo_index, commit=False)
+        geo_groups = rollup_geo(
+            conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index,
+            commit=False)
+
+        for operator in SHOW_OPERATORS:
+            rollup_fleet(
+                conn, date_str, [operator], operator, fleet_index,
+                commit=False)
+        fleet_models = rollup_fleet(
+            conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, fleet_index,
+            commit=False)
+
+        for operator in SHOW_OPERATORS:
+            rollup_frequency(
+                conn, date_str, [operator], operator, commit=False)
+        frequent_routes = rollup_frequency(
+            conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, commit=False)
+
+        contradictions = day_consistency_reasons(conn, date_str)
+        if contradictions:
+            raise RuntimeError(
+                f"refusing partial public rollup for {date_str}: "
+                + ", ".join(contradictions)
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {
+        "reports": reports,
+        "geo_groups": geo_groups,
+        "fleet_models": fleet_models,
+        "frequent_routes": frequent_routes,
+    }
 
 
 def main():
@@ -1576,6 +1669,7 @@ def main():
     backfill_trip_coverage = "--backfill-trip-coverage" in raw_args
     backfill_duty_gaps = "--backfill-duty-gaps" in raw_args
     backfill_geo_routes = "--backfill-geo-routes" in raw_args
+    allow_large_restatement = "--allow-large-restatement" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
     backfill_modes = sum((
@@ -1585,6 +1679,9 @@ def main():
         return 2
     if backfill_modes and positional:
         print("ERROR: backfill modes do not accept a date.")
+        return 2
+    if backfill_modes and allow_large_restatement:
+        print("ERROR: the large-restatement override is only for one dated rollup.")
         return 2
 
     conn = connect_audit_db()
@@ -1657,33 +1754,27 @@ def main():
         )
 
     print(f"Rolling up WECA operators for {date_str}...")
+    public_result = rollup_public_day(
+        conn, date_str, coverage_quality["valid"], geo_index, fleet_index,
+        allow_large_restatement=allow_large_restatement,
+    )
     for op in SHOW_OPERATORS:
         print(f"[{op}]")
-        print_report(rollup(
-            conn, date_str, [op], op,
-            coverage_valid=coverage_quality["valid"]))
+        print_report(public_result["reports"][op])
     print(f"[{NETWORK_LABEL}] whole network")
-    print_report(rollup(
-        conn, date_str, SHOW_OPERATORS, NETWORK_LABEL,
-        coverage_valid=coverage_quality["valid"]))
+    print_report(public_result["reports"][NETWORK_LABEL])
 
-    for op in SHOW_OPERATORS:
-        rollup_geo(conn, date_str, [op], op, geo_index)
-    n = rollup_geo(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index)
+    n = public_result["geo_groups"]
     match_text = (
         f"{geo_match['matched']}/{geo_match['eligible']} readings matched"
         if geo_match["eligible"] else "no eligible readings"
     )
     print(f"  geography: {n} area/ward groups rolled up; {match_text}.")
 
-    for op in SHOW_OPERATORS:
-        rollup_fleet(conn, date_str, [op], op, fleet_index)
-    n = rollup_fleet(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, fleet_index)
+    n = public_result["fleet_models"]
     print(f"  fleet: {n} models rolled up.")
 
-    for op in SHOW_OPERATORS:
-        rollup_frequency(conn, date_str, [op], op)
-    n = rollup_frequency(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL)
+    n = public_result["frequent_routes"]
     print(f"  frequency: {n} frequent routes classified.")
 
     if not no_prune:

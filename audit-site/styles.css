@@ -184,6 +184,10 @@ a {
   color: var(--amber);
 }
 
+.data-note {
+  margin: 0 0 18px;
+}
+
 .sec {
   margin: 28px 0;
 }
