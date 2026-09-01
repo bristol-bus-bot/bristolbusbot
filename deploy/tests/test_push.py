@@ -510,6 +510,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-data-health.timer").is_file()
     assert (extract / "collector_anomaly_report.py").is_file()
     assert (extract / "evidence_pack.py").is_file()
+    assert (extract / "collector_research_export.py").is_file()
     assert (extract / "audit_origin_backfill.py").is_file()
     assert (extract / "systemd/bbb-collector-anomaly.service").is_file()
     assert (extract / "systemd/bbb-collector-anomaly.timer").is_file()
@@ -524,6 +525,9 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert "/usr/local/libexec/bbb-data-health" in installer
     assert "/usr/local/libexec/bbb-collector-anomaly" in installer
     assert "/usr/local/bin/bbb-evidence-pack" in installer
+    assert "/usr/local/bin/bbb-collector-research-export" in installer
+    assert 'install -o "$deploy_user" -g "$deploy_user" -m 0700 -d ' \
+        '"$research_export_dir"' in installer
     assert "/usr/local/libexec/bbb-audit-origin-backfill" in installer
     assert "/usr/local/libexec/bristolbusbot-enrichment/" \
         "enrichment_promote.py" in installer

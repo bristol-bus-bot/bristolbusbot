@@ -118,6 +118,32 @@ workstation, passed in a command argument or printed. A site code deployment
 requires the key to be present in `/etc/bristolbusbot/site.env` and refuses to
 proceed when it is missing.
 
+### Private collector research dataset
+
+Run this from the repository root when an expert needs a broad, machine-readable
+copy of the collector history:
+
+```powershell
+python deploy/get_collector_research_export.py
+```
+
+The command asks the Pi to build a full census of every retained closed service
+day, downloads it to `Downloads`, verifies its size, hashes, ZIP contents,
+SQLite integrity and every table row count, then removes the temporary Pi copy.
+The resulting ZIP contains `collector-research.sqlite` plus a plain-English
+`README.txt`, data dictionary, regime-change timeline and prominent caveats.
+It deliberately omits coordinates, raw nested JSON and any future database
+column that has not been explicitly reviewed for export. The production audit
+database is opened read-only and is first copied using SQLite's online backup
+API under the shared heavy-I/O lock.
+
+This is private research material, not a public download. The helper refuses
+repository and known public-site paths, never replaces an existing file, and
+normally leaves no archive on the Pi. A broken connection prints an exact
+`--resume` command; if only remote cleanup failed, it prints an exact
+`--cleanup` command. To request a shorter closed period or a different private
+destination, use `--from YYYYMMDD`, `--to YYYYMMDD` and `--output PATH`.
+
 Bot enrichment is also durable state. `--install-layout` safely seeds any
 missing `fbribuses.json`, `stop_localities.json`, `stop_enrichment.json`,
 `local_flavour.json` and `route_details.json` files from the currently verified

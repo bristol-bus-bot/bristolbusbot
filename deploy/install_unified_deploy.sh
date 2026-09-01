@@ -25,6 +25,7 @@ social_legacy_db=/var/lib/bristolbusbot/social.db
 social_state_dir=/var/lib/bristolbusbot/social
 social_db=$social_state_dir/social.db
 enrichment_dir=/var/lib/bristolbusbot/enrichment
+research_export_dir=/var/lib/bristolbusbot/private-exports
 social_db_migrated=0
 social_timer_enabled=0
 changed=0
@@ -88,7 +89,7 @@ done
     "$stage/timetable_manifest.py" "$stage/timetable_editions.py" \
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" "$stage/collector_anomaly_report.py" \
-    "$stage/evidence_pack.py" \
+    "$stage/evidence_pack.py" "$stage/collector_research_export.py" \
     "$stage/audit_origin_backfill.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
@@ -133,6 +134,7 @@ for destination in \
     /usr/local/libexec/bbb-data-health \
     /usr/local/libexec/bbb-collector-anomaly \
     /usr/local/bin/bbb-evidence-pack \
+    /usr/local/bin/bbb-collector-research-export \
     /usr/local/libexec/bbb-audit-origin-backfill \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/bin/bbb-blurb-review \
@@ -276,6 +278,12 @@ fi
 /usr/bin/systemctl stop bbb-social-curation.timer \
     bbb-social-curation.service >/dev/null 2>&1 || true
 install -o "$deploy_user" -g "$deploy_user" -m 0750 -d "$social_state_dir"
+if [ -L "$research_export_dir" ] || \
+   { [ -e "$research_export_dir" ] && [ ! -d "$research_export_dir" ]; }; then
+    echo "unsafe private research export directory" >&2
+    exit 1
+fi
+install -o "$deploy_user" -g "$deploy_user" -m 0700 -d "$research_export_dir"
 if [ -e "$social_legacy_db" ] || [ -L "$social_legacy_db" ]; then
     if [ -e "$social_db" ] || [ -L "$social_db" ]; then
         echo "both legacy and durable social databases exist" >&2
@@ -356,6 +364,7 @@ install -o root -g root -m 0755 "$stage/sample_resources.py" /usr/local/libexec/
 install -o root -g root -m 0755 "$stage/data_health.py" /usr/local/libexec/bbb-data-health
 install -o root -g root -m 0755 "$stage/collector_anomaly_report.py" /usr/local/libexec/bbb-collector-anomaly
 install -o root -g root -m 0755 "$stage/evidence_pack.py" /usr/local/bin/bbb-evidence-pack
+install -o root -g root -m 0755 "$stage/collector_research_export.py" /usr/local/bin/bbb-collector-research-export
 install -o root -g root -m 0755 "$stage/audit_origin_backfill.py" /usr/local/libexec/bbb-audit-origin-backfill
 install -o root -g root -m 0755 "$stage/enrichment_layout.py" /usr/local/libexec/bbb-enrichment-layout
 install -o root -g root -m 0755 "$stage/blurb_review.sh" /usr/local/bin/bbb-blurb-review
