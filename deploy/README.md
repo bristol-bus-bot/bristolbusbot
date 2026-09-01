@@ -110,6 +110,14 @@ Production settings remain under `/etc/bristolbusbot`; mutable databases remain
 under `/var/lib/bristolbusbot`. Current code releases are under
 `~/bristolbusbot/releases` on the Pi.
 
+The CARTO browser key is installed separately from code releases. Run
+`python deploy/configure_carto_key.py`, paste the complete CARTO tile URL from
+the project's key email into the hidden prompt, and let the guarded helper
+validate, restart and health-check the site. The value is not written to the
+workstation, passed in a command argument or printed. A site code deployment
+requires the key to be present in `/etc/bristolbusbot/site.env` and refuses to
+proceed when it is missing.
+
 Bot enrichment is also durable state. `--install-layout` safely seeds any
 missing `fbribuses.json`, `stop_localities.json`, `stop_enrichment.json`,
 `local_flavour.json` and `route_details.json` files from the currently verified

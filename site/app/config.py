@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +13,7 @@ except ImportError:
     pass
 
 SITE_DIR = Path(__file__).resolve().parent.parent
+CARTO_BASEMAP_KEY_RE = re.compile(r"[A-Za-z0-9._~-]{16,512}")
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -54,4 +56,15 @@ class Config:
         os.getenv("BBB_FEATURED_POST_MAX_AGE_MIN", "240")))
     enforce_https: bool = field(default_factory=lambda: _env_bool(
         "BBB_ENFORCE_HTTPS", False))
+    carto_basemap_key: str = field(default_factory=lambda: os.getenv(
+        "BBB_CARTO_BASEMAP_KEY", "").strip())
     public_hosts: tuple[str, ...] = ("bristolbuses.live", "www.bristolbuses.live")
+
+
+def validate_carto_basemap_config(config: Config) -> None:
+    """Reject missing production or malformed CARTO configuration safely."""
+    key = config.carto_basemap_key
+    if config.enforce_https and not key:
+        raise RuntimeError("production CARTO basemap key is not configured")
+    if key and not CARTO_BASEMAP_KEY_RE.fullmatch(key):
+        raise RuntimeError("CARTO basemap key is invalid (value hidden)")

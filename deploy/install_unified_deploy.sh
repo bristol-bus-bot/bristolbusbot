@@ -73,9 +73,11 @@ bot_migration_source=$(resolve_migration_source \
 site_migration_source=$(resolve_migration_source \
     "$current/site" site "$remote_home/bbb-site")
 
-for component in collector site bot pipeline tunnel; do
+for component in collector bot pipeline tunnel; do
     /usr/bin/python3 "$stage/validate_production_config.py" "$component"
 done
+/usr/bin/python3 "$stage/validate_production_config.py" site \
+    --allow-missing-carto-key
 
 /usr/bin/python3 "$stage/verify_release.py" --help >/dev/null
 /usr/bin/python3 "$stage/timetable_control.py" validate >/dev/null

@@ -42,6 +42,21 @@ def test_failure_never_exposes_secret_value(tmp_path, monkeypatch):
     assert "values hidden" in str(caught.value)
 
 
+def test_site_requires_valid_carto_key_without_displaying_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "validate_private_file", lambda path: None)
+    write_env(tmp_path, "site", {"BBB_CARTO_BASEMAP_KEY": "bad key value"})
+    with pytest.raises(RuntimeError) as caught:
+        config.validate("site", tmp_path)
+    assert "bad key value" not in str(caught.value)
+    assert "invalid format" in str(caught.value)
+
+    write_env(tmp_path, "site", {"BBB_CARTO_BASEMAP_KEY": ""})
+    with pytest.raises(RuntimeError):
+        config.validate("site", tmp_path)
+    assert config.validate(
+        "site", tmp_path, allow_missing_carto_key=True) is None
+
+
 def test_can_validate_a_root_owned_candidate_file(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "validate_private_file", lambda path: None)
     write_env(tmp_path, "bot")

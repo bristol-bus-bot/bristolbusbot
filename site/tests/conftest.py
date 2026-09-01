@@ -135,7 +135,8 @@ def app(tmp_path):
                  fleet_json=str(fleet_path),
                  descriptions_json=str(tmp_path / "desc.json"),
                  waiting_json=str(tmp_path / "waiting.json"),
-                 depot_descriptions_json=str(tmp_path / "depot.json"))
+                 depot_descriptions_json=str(tmp_path / "depot.json"),
+                 carto_basemap_key="test-carto-project-key-123456")
     application = create_app(cfg)
     application.testing = True
     return application
