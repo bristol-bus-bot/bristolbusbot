@@ -53,6 +53,12 @@ def audit_fixture(tmp_path: Path) -> Path:
             timetable_service_id TEXT, timetable_direction_id INTEGER,
             timetable_edition TEXT, alternatives_json TEXT
         );
+        CREATE TABLE daily_fleet_summary (
+            service_date TEXT, operator TEXT, model TEXT, electric INTEGER,
+            fuel TEXT, vehicles INTEGER, readings_in_gate INTEGER,
+            on_time INTEGER, on_time_pct REAL, mean_delay_s INTEGER,
+            median_delay_s INTEGER, routes_json TEXT
+        );
         """
     )
     observations = [
@@ -100,6 +106,10 @@ def audit_fixture(tmp_path: Path) -> Path:
          "2026-08-30T09:12:00Z", 51.45, -2.58, 180.0, "block-a",
          "trip-a", "exact", 2, 0, 12, 120, "update", "route-a",
          "service-a", 0, "20260801", json.dumps(alternatives)))
+    connection.execute(
+        "INSERT INTO daily_fleet_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("20260830", "ALL", "ADL Enviro100EV", 1, "Electric", 4,
+         120, 90, 75.0, 30, 10, json.dumps([["24", 80], ["42", 40]])))
     connection.commit()
     connection.close()
     return path
@@ -145,10 +155,12 @@ def test_full_census_is_private_typed_documented_and_verifiable(
         "poll_log": 2,
         "expected_trips": 2,
         "matching_evidence": 1,
+        "daily_fleet_summary": 1,
     }
     assert result["derived_row_counts"] == {
         "matching_evidence_reasons": 2,
         "matching_evidence_alternatives": 1,
+        "daily_fleet_routes": 2,
     }
     if os.name != "nt":
         assert stat.S_IMODE(archive.stat().st_mode) & 0o077 == 0
@@ -175,6 +187,9 @@ def test_full_census_is_private_typed_documented_and_verifiable(
         row[1] for row in connection.execute(
             "PRAGMA table_info(matching_evidence_alternatives)")}
     assert "unexpected_nested_secret" not in alternative_columns
+    assert connection.execute(
+        "SELECT route,readings FROM daily_fleet_routes ORDER BY route").fetchall() == [
+            ("24", 80), ("42", 40)]
     caveats = dict(connection.execute(
         "SELECT code,plain_english FROM research_caveats"))
     assert "damaged_july_first" in caveats
@@ -201,6 +216,24 @@ def test_malformed_nested_evidence_fails_closed_and_cleans_temp_files(
     root.mkdir()
     monkeypatch.setattr(exporter, "MIN_FREE_BYTES", 0)
     with pytest.raises(exporter.ResearchExportError, match="invalid reasons_json"):
+        exporter.create_export(
+            audit_db=source, export_root=root,
+            lock_path=tmp_path / "heavy.lock", request_id="0123456789ab",
+            from_value="20260830", to_value="20260831")
+    assert list(root.iterdir()) == []
+
+
+def test_fleet_route_pairs_are_strict_and_cannot_carry_nested_data(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = audit_fixture(tmp_path)
+    with sqlite3.connect(source) as connection:
+        connection.execute(
+            "UPDATE daily_fleet_summary SET routes_json=?",
+            (json.dumps([["24", {"unexpected": "nested"}]]),))
+    root = tmp_path / "private"
+    root.mkdir()
+    monkeypatch.setattr(exporter, "MIN_FREE_BYTES", 0)
+    with pytest.raises(exporter.ResearchExportError, match="unsafe routes_json"):
         exporter.create_export(
             audit_db=source, export_root=root,
             lock_path=tmp_path / "heavy.lock", request_id="0123456789ab",

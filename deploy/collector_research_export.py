@@ -786,6 +786,43 @@ def copy_json_string_children(source: sqlite3.Connection,
     return len(rows)
 
 
+def copy_fleet_routes(source: sqlite3.Connection,
+                      destination: sqlite3.Connection,
+                      date_from: str, date_to: str) -> int:
+    """Normalise the rollup's JSON ``[[route, reading_count], ...]`` pairs."""
+    child_columns = columns(
+        "service_date:TEXT operator:TEXT model:TEXT route:TEXT readings:INTEGER")
+    create_table(destination, "daily_fleet_routes", child_columns)
+    rows = []
+    for row in source.execute(
+            "SELECT service_date,operator,model,routes_json "
+            "FROM daily_fleet_summary WHERE service_date BETWEEN ? AND ? "
+            "ORDER BY service_date,operator,model", (date_from, date_to)):
+        row_id = "/".join(str(value) for value in row[:-1])
+        try:
+            parsed = json.loads(str(row[-1] or "[]"))
+        except (TypeError, ValueError) as exc:
+            raise ResearchExportError(
+                f"daily_fleet_summary {row_id} has invalid routes_json") from exc
+        if not isinstance(parsed, list) or len(parsed) > 8:
+            raise ResearchExportError(
+                f"daily_fleet_summary {row_id} has unsafe routes_json")
+        for item in parsed:
+            if not isinstance(item, list) or len(item) != 2:
+                raise ResearchExportError(
+                    f"daily_fleet_summary {row_id} has unsafe routes_json")
+            route, readings = item
+            if not isinstance(route, str) or not route or len(route) > 256 \
+                    or isinstance(readings, bool) or not isinstance(readings, int) \
+                    or readings < 1:
+                raise ResearchExportError(
+                    f"daily_fleet_summary {row_id} has unsafe routes_json")
+            rows.append((*row[:-1], route, readings))
+    destination.executemany(
+        "INSERT INTO daily_fleet_routes VALUES (?,?,?,?,?)", rows)
+    return len(rows)
+
+
 def dictionary_entry(spec: TableSpec, column: Column) -> tuple:
     unit, description = TABLE_OVERRIDES.get(
         (spec.name, column.name), COMMON_DOCS.get(column.name, (None, None)))
@@ -867,7 +904,7 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
     derived_descriptions = {
         "matching_evidence_reasons": "Fixed parsed reason strings from rule-selected receipts.",
         "matching_evidence_alternatives": "Fixed known fields for alternative timetable candidates.",
-        "daily_fleet_routes": "Route labels parsed from the fleet rollup's bounded route list.",
+        "daily_fleet_routes": "Route labels and reading counts parsed from the fleet rollup's bounded route list.",
         "daily_trip_coverage_invalid_reasons": "Fixed validity reasons parsed from daily trip-coverage health.",
         "daily_duty_gap_invalid_reasons": "Fixed validity reasons parsed from daily duty-gap health.",
     }
@@ -876,7 +913,8 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
         "matching_evidence_alternatives": (
             Column("evidence_id", "TEXT"), Column("alternative_rank", "INTEGER"),
             *ALTERNATIVE_KEYS),
-        "daily_fleet_routes": columns("service_date:TEXT operator:TEXT model:TEXT route:TEXT"),
+        "daily_fleet_routes": columns(
+            "service_date:TEXT operator:TEXT model:TEXT route:TEXT readings:INTEGER"),
         "daily_trip_coverage_invalid_reasons": columns("service_date:TEXT reason:TEXT"),
         "daily_duty_gap_invalid_reasons": columns("service_date:TEXT operator:TEXT reason:TEXT"),
     }
@@ -888,6 +926,7 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
         "origin_departure": ("HH:MM:SS", "Alternative candidate origin departure."),
         "calendar_start": ("YYYYMMDD", "Alternative candidate calendar start."),
         "calendar_end": ("YYYYMMDD", "Alternative candidate calendar end."),
+        "readings": ("count", "Readings for this vehicle model on this route."),
     }
     for name, count in derived_counts.items():
         table_rows.append((name, "normalised_from_bounded_json", 0, count, count,
@@ -1054,12 +1093,8 @@ def build_database(snapshot: Path, database: Path, *, date_from: str,
             derived_counts = copy_matching_children(
                 source, destination, date_from, date_to)
             if table_exists(source, "daily_fleet_summary"):
-                derived_counts["daily_fleet_routes"] = copy_json_string_children(
-                    source, destination,
-                    source_table="daily_fleet_summary",
-                    source_id_columns=("service_date", "operator", "model"),
-                    json_column="routes_json", destination_table="daily_fleet_routes",
-                    child_column="route", date_from=date_from, date_to=date_to)
+                derived_counts["daily_fleet_routes"] = copy_fleet_routes(
+                    source, destination, date_from, date_to)
             if table_exists(source, "daily_trip_coverage_days"):
                 derived_counts["daily_trip_coverage_invalid_reasons"] = copy_json_string_children(
                     source, destination,
