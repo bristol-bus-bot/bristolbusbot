@@ -19,6 +19,9 @@ def livez():
 def healthz():
     checks: dict = {}
     overall = "ok"
+    checks["carto_basemap_key"] = (
+        "configured" if current_app.config["BBB"].carto_basemap_key
+        else "not configured")
     fleet = current_app.extensions["bbb_fleet"].status
     checks["fleet"] = fleet
     if not fleet.get("loaded") or not fleet.get("records"):

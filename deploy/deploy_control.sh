@@ -201,6 +201,75 @@ case "$action:$component" in
         trap - EXIT INT TERM
         exit 0
         ;;
+    carto-key-promote:)
+        source=@BBB_DEPLOY_BASE@/incoming/site.env.carto-new
+        target=/etc/bristolbusbot/site.env
+        candidate=/etc/bristolbusbot/site.env.carto-new
+        previous=/etc/bristolbusbot/site.env.carto-previous
+        test -f "$source"
+        test ! -L "$source"
+        test "$(stat -c %U "$source")" = @BBB_DEPLOY_USER@
+        test "$(stat -c %a "$source")" = 600
+        test -f "$target"
+        test ! -L "$target"
+        test ! -e "$previous"
+        test "$(grep -c '^BBB_CARTO_BASEMAP_KEY=' "$source")" -eq 1
+        key=$(/usr/bin/sed -n 's/^BBB_CARTO_BASEMAP_KEY=//p' "$source")
+        test "${#key}" -ge 16
+        test "${#key}" -le 512
+        case "$key" in
+            *[!A-Za-z0-9._~-]*)
+                echo "candidate CARTO key has an invalid format" >&2
+                exit 65
+                ;;
+        esac
+
+        rm -f "$candidate"
+        install -o root -g @BBB_DEPLOY_USER@ -m 0640 "$source" "$candidate"
+        if ! /usr/local/libexec/bbb-validate-config site \
+                --file "$candidate" >/dev/null; then
+            rm -f "$candidate" "$source"
+            exit 65
+        fi
+
+        changed=0
+        rollback_carto_key() {
+            result=$?
+            trap - EXIT INT TERM
+            if [ "$changed" -eq 1 ] && [ -f "$previous" ]; then
+                install -o root -g @BBB_DEPLOY_USER@ -m 0640 \
+                    "$previous" "$target.new"
+                mv -f "$target.new" "$target"
+                /usr/bin/systemctl restart bbb-site.service >/dev/null 2>&1 || true
+            fi
+            rm -f "$candidate" "$source" "$previous"
+            exit "$result"
+        }
+        trap rollback_carto_key EXIT INT TERM
+
+        cp -p "$target" "$previous"
+        changed=1
+        mv -f "$candidate" "$target"
+        rm -f "$source"
+        /usr/bin/systemctl restart bbb-site.service
+
+        healthy=0
+        tries=0
+        while [ "$tries" -lt 30 ]; do
+            if /usr/bin/python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:5002/healthz", timeout=5)); assert d.get("status") in ("ok", "warn")' >/dev/null 2>&1; then
+                healthy=1
+                break
+            fi
+            tries=$((tries + 1))
+            sleep 2
+        done
+        test "$healthy" -eq 1
+
+        changed=0
+        rm -f "$previous"
+        trap - EXIT INT TERM
+        exit 0
+        ;;
     social-live-enable:)
         target=/etc/bristolbusbot/social-live-enabled
         candidate=/etc/bristolbusbot/.social-live-enabled.new

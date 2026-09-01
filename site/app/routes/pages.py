@@ -84,7 +84,12 @@ def _delay_plot(profile: dict, *, compact: bool = False) -> dict | None:
 @bp.route("/")
 def index():
     audit = current_app.extensions["bbb_audit_integration"]
-    return render_template("index.html", audit_headline=audit.headline())
+    cfg = current_app.config["BBB"]
+    return render_template(
+        "index.html",
+        audit_headline=audit.headline(),
+        carto_basemap_key=cfg.carto_basemap_key,
+    )
 
 
 @bp.route("/vehicles/<slug>")

@@ -42,8 +42,10 @@ EXPECTED = {
 }
 SECRET_MINIMUMS = {
     "collector": {"BODS_API_KEY": 16},
+    "site": {"BBB_CARTO_BASEMAP_KEY": 16},
     "bot": {"API_AUTH_TOKEN": 32, "BSKY_APP_PASSWORD": 8},
 }
+CARTO_BASEMAP_KEY_RE = re.compile(r"[A-Za-z0-9._~-]{16,512}")
 SOCIAL_IDS = {
     "BBB_SOCIAL_CHANNEL_ID": re.compile(r"C[A-Z0-9]{8,20}"),
     "BBB_SOCIAL_ALLOWED_USER_ID": re.compile(r"U[A-Z0-9]{8,20}"),
@@ -75,7 +77,8 @@ def validate_private_file(path: Path) -> None:
 
 
 def validate(component: str, root: Path = CONFIG_ROOT,
-             path_override: Path | None = None) -> None:
+             path_override: Path | None = None, *,
+             allow_missing_carto_key: bool = False) -> None:
     if component == "pipeline":
         component = "collector"
     if component == "tunnel":
@@ -99,7 +102,14 @@ def validate(component: str, root: Path = CONFIG_ROOT,
     errors.extend(
         f"{key} is missing or implausibly short"
         for key, minimum in SECRET_MINIMUMS.get(component, {}).items()
-        if len(values.get(key, "")) < minimum)
+        if len(values.get(key, "")) < minimum
+        and not (component == "site" and key == "BBB_CARTO_BASEMAP_KEY"
+                 and allow_missing_carto_key
+                 and not values.get(key, "")))
+    if (component == "site" and values.get("BBB_CARTO_BASEMAP_KEY")
+            and not CARTO_BASEMAP_KEY_RE.fullmatch(
+                values["BBB_CARTO_BASEMAP_KEY"])):
+        errors.append("BBB_CARTO_BASEMAP_KEY has an invalid format")
     if component == "social":
         errors.extend(
             f"{key} is not a canonical Slack ID"
@@ -127,8 +137,17 @@ def main() -> int:
                         help=argparse.SUPPRESS)
     parser.add_argument("--file", type=Path, dest="path_override",
                         help=argparse.SUPPRESS)
+    parser.add_argument("--allow-missing-carto-key", action="store_true",
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
-    validate(args.component, args.root, args.path_override)
+    if args.allow_missing_carto_key and args.component != "site":
+        parser.error("--allow-missing-carto-key is valid only for site")
+    validate(
+        args.component,
+        args.root,
+        args.path_override,
+        allow_missing_carto_key=args.allow_missing_carto_key,
+    )
     print(f"{args.component}: production configuration valid; values hidden")
     return 0
 

@@ -22,6 +22,12 @@
             night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         };
 
+        function tileUrl(theme) {
+            const key = document.getElementById('map')?.dataset.cartoBasemapKey;
+            if (!key) throw new Error('Map configuration is unavailable');
+            return `${TILE_URLS[theme]}?key=${encodeURIComponent(key)}`;
+        }
+
         function featuredPostFor(bus) {
             return window.BBB.featuredPostForBus(busbotPosts, bus);
         }
@@ -32,8 +38,8 @@
 
         function initMap() {
             map = L.map('map', { zoomControl: true }).setView([51.4545, -2.5879], 13);
-            tileLayer = L.tileLayer(TILE_URLS[currentTheme()], {
-                attribution: '&copy; OpenStreetMap &copy; CARTO',
+            tileLayer = L.tileLayer(tileUrl(currentTheme()), {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 subdomains: 'abcd',
                 maxZoom: 20
             }).addTo(map);
@@ -1822,7 +1828,7 @@
             });
             document.addEventListener('bbb:themechange', event => {
                 const theme = event.detail?.theme === 'night' ? 'night' : 'day';
-                if (tileLayer) tileLayer.setUrl(TILE_URLS[theme]);
+                if (tileLayer) tileLayer.setUrl(tileUrl(theme));
                 syncAllMarkerAppearances(true);
             });
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, abort, redirect, request, send_from_directory, url_for
 
-from .config import Config
+from .config import Config, validate_carto_basemap_config
 from . import db
 
 
@@ -31,6 +31,7 @@ def create_app(config: Config | None = None) -> Flask:
     app = Flask(__name__, template_folder="../templates",
                 static_folder="../static")
     app.config["BBB"] = config or Config()
+    validate_carto_basemap_config(app.config["BBB"])
     app.teardown_appcontext(db.close_all)
     asset_version = _static_asset_version(app.static_folder)
     app.extensions["bbb_asset_version"] = asset_version

@@ -14,6 +14,7 @@ python wsgi.py
 
 Open `http://127.0.0.1:5000`. Production HTTPS enforcement is enabled only by
 `BBB_ENFORCE_HTTPS=true`; direct localhost readiness checks remain available.
+Local map rendering also needs the project-only `BBB_CARTO_BASEMAP_KEY`.
 
 Production:
 
@@ -49,11 +50,31 @@ operator-scoped key such as `FBRI:36801` exists.
 
 Fonts and Leaflet JavaScript/CSS are served by bristolbuses.live itself.
 The live basemap is the one intentional browser-side third-party dependency:
-map image tiles are fetched from Carto at `*.basemaps.cartocdn.com`. As with
-any remote image host, Carto receives the visitor's IP address, user agent and
-the tile coordinates requested by their browser. Carto supplies map imagery
-only; no Carto JavaScript, fonts or tracking code is loaded. The Content
-Security Policy therefore permits Carto only in `img-src`.
+map image tiles are fetched from CARTO at `*.basemaps.cartocdn.com`. As with
+any remote image host, CARTO receives the visitor's IP address, user agent and
+the tile coordinates requested by their browser. CARTO supplies map imagery
+only; no CARTO JavaScript, fonts or tracking code is loaded. The Content
+Security Policy therefore permits CARTO only in `img-src`.
+
+The free CARTO key is deliberately supplied by the protected production
+environment and rendered as a `data-` attribute on the map. It is not a true
+secret: every visitor's browser must send it directly to CARTO. It must still
+stay out of Git, issues and normal logs so it is not casually reused.
+
+To install or rotate it, run `python deploy/configure_carto_key.py` from the
+repository root and paste the complete CARTO tile URL from the key email into
+the hidden prompt. The command validates the URL, stores nothing locally,
+stages a mode-0600 candidate on the Pi and invokes one allowlisted promotion.
+The Pi validates the whole site environment, restarts the site, checks health
+and restores the previous file automatically on failure. To revoke a key,
+contact `support-basemaps@carto.com`, request a replacement, then run the same
+command with the replacement URL.
+
+Review CARTO's monthly usage information for this project once a month. At
+2.5 million tile requests in a calendar month, reopen the basemap-provider
+decision rather than waiting for the five-million fair-use limit. Direct
+browser tile traffic does not pass through the Pi, so the Pi access log is not
+an authoritative CARTO usage counter.
 
 Font licences are retained in `static/fonts/`; Leaflet's BSD licence is
 retained in `static/vendor/leaflet-1.9.4/`.

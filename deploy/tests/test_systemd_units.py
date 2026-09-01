@@ -237,6 +237,16 @@ def test_layout_migrates_social_sqlite_into_its_writable_directory():
         < installer.index('mv "$social_legacy_db" "$social_db"')
 
 
+def test_layout_allows_only_the_initial_carto_key_bootstrap_gap():
+    installer = (SYSTEMD.parent / "install_unified_deploy.sh").read_text(
+        encoding="utf-8")
+    assert (
+        'validate_production_config.py" site \\\n'
+        '    --allow-missing-carto-key'
+    ) in installer
+    assert installer.count("--allow-missing-carto-key") == 1
+
+
 def test_rollup_is_networkless_and_publish_does_not_repeat_it():
     rollup = (SYSTEMD / "bbb-audit-rollup.service").read_text(encoding="utf-8")
     runner = (SYSTEMD.parent / "run_audit_rollup.sh").read_text(encoding="utf-8")

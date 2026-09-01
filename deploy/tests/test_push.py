@@ -428,6 +428,9 @@ def test_root_helper_and_sudoers_are_tightly_allowlisted():
     assert "bot-token-promote:)" in helper
     assert "@BBB_DEPLOY_BASE@/incoming/bot.env.token-new" in helper
     assert "bbb-deploy-control bot-token-promote" in sudoers
+    assert "carto-key-promote:)" in helper
+    assert "@BBB_DEPLOY_BASE@/incoming/site.env.carto-new" in helper
+    assert "bbb-deploy-control carto-key-promote" in sudoers
     assert "social-live-enable:)" in helper
     assert "social-live-disable:)" in helper
     assert "bbb-deploy-control social-live-enable" in sudoers
