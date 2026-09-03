@@ -5,8 +5,6 @@ import hashlib
 import hmac
 import logging
 from pathlib import Path
-from urllib.parse import urlsplit
-
 from flask import Flask, abort, redirect, request, send_from_directory, url_for
 
 from .config import Config, validate_carto_basemap_config
@@ -73,8 +71,8 @@ def create_app(config: Config | None = None) -> Flask:
         if not cfg.enforce_https or not forwarded:
             return None
         requested_host = request.host.lower()
-        canonical_hosts = {
-            candidate: candidate
+        allowed_hosts = {
+            candidate
             for configured in cfg.public_hosts
             for candidate in (
                 configured.lower(),
@@ -82,24 +80,13 @@ def create_app(config: Config | None = None) -> Flask:
                 f"{configured.lower()}:443",
             )
         }
-        canonical_host = canonical_hosts.get(requested_host)
-        if canonical_host is None:
+        if requested_host not in allowed_hosts:
             abort(400)
         if forwarded.split(",", 1)[0].strip().lower() != "https":
-            target = request.full_path.rstrip("?").replace("\\", "")
-            parsed_target = urlsplit(target)
-            if (
-                parsed_target.scheme
-                or parsed_target.netloc
-                or not target.startswith("/")
-                or target.startswith("//")
-            ):
-                target = "/"
-            return redirect(
-                f"https://{canonical_host.split(':', 1)[0]}"
-                f"{target}",
-                code=308,
-            )
+            # Do not include request-derived text in the destination. Cloudflare
+            # normally upgrades public traffic before it reaches this process;
+            # this is a fixed fail-safe for an unexpected insecure forwarded hop.
+            return redirect(f"https://{cfg.public_hosts[0]}/", code=308)
         return None
 
     @app.after_request

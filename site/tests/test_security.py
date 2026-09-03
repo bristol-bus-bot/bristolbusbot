@@ -2,8 +2,6 @@ import re
 import runpy
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlsplit
-
 import pytest
 
 
@@ -118,7 +116,7 @@ def test_forwarded_http_redirects_to_https(app, client):
     finally:
         app.config["BBB"].enforce_https = False
     assert response.status_code == 308
-    assert response.headers["Location"] == "https://bristolbuses.live/api/buses?test=1"
+    assert response.headers["Location"] == "https://bristolbuses.live/"
 
 
 def test_https_enforcement_rejects_untrusted_forwarded_host(app, client):
@@ -152,7 +150,7 @@ def test_https_redirect_uses_configured_host(app, client, host):
     response = client.get(
         "/api/buses?test=1", headers={"Host": host, "X-Forwarded-Proto": "http"})
     assert response.status_code == 308
-    assert response.headers["Location"] == "https://bristolbuses.live/api/buses?test=1"
+    assert response.headers["Location"] == "https://bristolbuses.live/"
 
 
 @pytest.mark.parametrize("path", [
@@ -166,9 +164,7 @@ def test_https_redirect_cannot_turn_path_into_remote_host(app, client, path):
         headers={"Host": "bristolbuses.live", "X-Forwarded-Proto": "http"},
     )
     assert response.status_code == 308
-    target = urlsplit(response.headers["Location"])
-    assert target.scheme == "https"
-    assert target.hostname == "bristolbuses.live"
+    assert response.headers["Location"] == "https://bristolbuses.live/"
 
 
 @pytest.mark.parametrize("database,check", [("gtfs", "gtfs_db"), ("live", "siri")])
