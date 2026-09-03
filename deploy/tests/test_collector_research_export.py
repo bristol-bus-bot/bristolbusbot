@@ -206,6 +206,57 @@ def test_full_census_is_private_typed_documented_and_verifiable(
     assert "expected_trips is unstable" in readme
 
 
+@pytest.mark.parametrize("date_from", ["20260714", "20260830"])
+def test_comparison_guidance_does_not_certify_a_date_cutoff(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, date_from: str):
+    source = audit_fixture(tmp_path)
+    if date_from == "20260714":
+        with sqlite3.connect(source) as connection:
+            connection.execute(
+                "UPDATE timepoint_observations SET service_date=? WHERE is_origin=1",
+                (date_from,))
+    source_hash = downloader.sha256_file(source)
+    root = tmp_path / "private"
+    root.mkdir()
+    monkeypatch.setattr(exporter, "MIN_FREE_BYTES", 0)
+    result = exporter.create_export(
+        audit_db=source, export_root=root, lock_path=tmp_path / "heavy.lock",
+        request_id="0123456789ab", from_value=date_from, to_value="20260831",
+        now=datetime(2026, 9, 1, 12, tzinfo=timezone.utc))
+    archive = root / result["remote_filename"]
+    downloader.validate_archive(archive, expected=result)
+    database = tmp_path / "research.sqlite"
+    extract_database(archive, database)
+    with sqlite3.connect(database) as connection:
+        manifest = dict(connection.execute("SELECT key,value FROM research_manifest"))
+        assert manifest["recommended_general_comparison_from"] == "none"
+        assert manifest["comparison_guidance_version"] == "2"
+        assert manifest["comparison_status"] == "requires_investigation"
+        days = connection.execute(
+            "SELECT service_date,recommended_general_comparison,warning_codes "
+            "FROM research_day_counts ORDER BY service_date").fetchall()
+        assert days
+        assert all(recommended == 0 for _, recommended, _ in days)
+        assert all("comparison_requires_investigation" in warnings.split(",")
+                   for _, _, warnings in days)
+        by_date = {date: warnings.split(",") for date, _, warnings in days}
+        if date_from == "20260714":
+            assert "historical_stop_assignment_unresolved" in by_date["20260815"]
+            assert "collector_method_transition" in by_date["20260816"]
+            assert "historical_stop_assignment_unresolved" not in by_date["20260817"]
+        caveats = dict(connection.execute("SELECT code,plain_english FROM research_caveats"))
+        assert "comparison_requires_investigation" in caveats
+        assert "historical_stop_assignment_unresolved" in caveats
+        assert "did not replay" in caveats["origin_method_restatement"]
+        assert connection.execute("SELECT COUNT(*) FROM timepoint_observations").fetchone()[0] == 3
+    with zipfile.ZipFile(archive) as zipped:
+        readme = zipped.read(exporter.README_MEMBER).decode()
+    assert "No date cutoff certifies" in readme
+    assert "WHERE service_date BETWEEN '20260715'" not in readme
+    assert "not a validated comparison cohort" in readme
+    assert source_hash == downloader.sha256_file(source)
+
+
 def test_malformed_nested_evidence_fails_closed_and_cleans_temp_files(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     source = audit_fixture(tmp_path)

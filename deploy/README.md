@@ -144,6 +144,18 @@ normally leaves no archive on the Pi. A broken connection prints an exact
 `--cleanup` command. To request a shorter closed period or a different private
 destination, use `--from YYYYMMDD`, `--to YYYYMMDD` and `--output PATH`.
 
+Comparison guidance version 2 withdraws the earlier blanket recommendation to
+compare dates from 15 July. No date cutoff certifies a safe comparison period.
+The schema-version-1 table layout remains compatible, but the manifest's
+`recommended_general_comparison_from` is now the literal `none`,
+`comparison_status` is `requires_investigation`, and every day's
+`recommended_general_comparison` flag is `0`. These are warnings to investigate,
+not instructions to discard all observations. Validate route/operator samples,
+timetable editions and method changes before making claims. Rebuilding rollups
+did not replay old raw SIRI through the new matcher or repair old assignments.
+Already-delivered archives are not rewritten; provide their recipient with a
+dated correction note linked to the original filename and SHA-256.
+
 Bot enrichment is also durable state. `--install-layout` safely seeds any
 missing `fbribuses.json`, `stop_localities.json`, `stop_enrichment.json`,
 `local_flavour.json` and `route_details.json` files from the currently verified
