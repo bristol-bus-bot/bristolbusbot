@@ -123,6 +123,7 @@ backup_file() {
 
 for destination in \
     /usr/local/sbin/bbb-deploy-control \
+    /usr/local/sbin/bbb-backup \
     /usr/local/sbin/bbb-timetable-control \
     /usr/local/libexec/bbb-validate-config \
     /usr/local/libexec/bbb-verify-release \
@@ -353,6 +354,7 @@ PY
     /usr/bin/python3 "$stage/validate_production_config.py" social
 fi
 install -o root -g root -m 0755 "$stage/deploy_control.sh" /usr/local/sbin/bbb-deploy-control
+install -o root -g root -m 0755 "$stage/backup.py" /usr/local/sbin/bbb-backup
 install -o root -g root -m 0755 "$stage/timetable_control.py" /usr/local/sbin/bbb-timetable-control
 install -o root -g root -m 0755 "$stage/validate_production_config.py" /usr/local/libexec/bbb-validate-config
 install -o root -g root -m 0755 "$stage/verify_release.py" /usr/local/libexec/bbb-verify-release

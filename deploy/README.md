@@ -354,9 +354,11 @@ layout. This keeps both the old and new unit valid throughout the transition.
 
 ## Other deployment tooling
 
-Backup and credential-configuration tools remain separate
-because they are destructive or interactive operational procedures, not code
-deployments. This README is the public production contract. Real secrets must never be
+Running backups and changing backup credentials remain separate operational
+procedures. The reviewed, non-secret `bbb-backup` executable is updated by
+`--install-layout` with the same file backup and rollback as the other root-owned
+helpers; installing it does not run a backup, alter its configuration or enable a
+timer. This README is the public production contract. Real secrets must never be
 printed, copied into this repository or passed on a command line.
 
 To rotate the bot control token after the unified layout has been installed:
