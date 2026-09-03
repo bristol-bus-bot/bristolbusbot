@@ -393,6 +393,8 @@ TABLE_OVERRIDES = {
 CAVEATS = (
     ("normalised_not_raw_siri", "high", None, None, "all",
      "This is normalised collector output. The original raw SIRI messages and discarded stale snapshots were deliberately never retained."),
+    ("comparison_requires_investigation", "critical", None, None, "all",
+     "No date cutoff certifies a safe comparison period. Validate the relevant routes, operators, timetable editions, measurement methods and samples before comparing results; later dates are not automatically reliable."),
     ("incomplete_start_day", "high", "20260602", "20260602", "timepoint_observations",
      "2 June is a partial starting day and must not be treated as a complete service day."),
     ("poll_history_starts_july", "high", None, "20260630", "poll_log",
@@ -403,9 +405,13 @@ CAVEATS = (
      "expected_trips,daily_trip_coverage,daily_overall_summary,daily_route_summary",
      "The scheduled-trip denominator changes implausibly across the window. Coverage and non-appearance values are research clues, not trustworthy findings."),
     ("early_running_anomaly_unresolved", "high", None, None, "timepoint_observations",
-     "U1, U4, 13, 19 and 171 show implausible early-running patterns which may be timetable-variant matching errors."),
+     "U1, U4, 13, 19 and 171 have unresolved early-running patterns. Trip matching, stop-visit assignment and timetable variants are hypotheses to test, not established causes for every route."),
+    ("historical_stop_assignment_unresolved", "high", None, "20260815", "timepoint_observations",
+     "Some retained trips place recorded stop visits in inconsistent time order before the 16 August collector change. Rebuilding summaries does not repair the underlying assignments; the inconsistent row is not necessarily the earlier stop."),
+    ("collector_method_transition", "high", "20260816", "20260816", "punctuality",
+     "Treat 16 August as a collector-method transition day, not a clean boundary within the day. Subsequent dates still require route-level validation."),
     ("origin_method_restatement", "high", None, "20260815", "punctuality",
-     "On 16 August retained history was recalculated to exclude origin layovers and correct matching; figures published before and after are not directly comparable."),
+     "On 16 August rollups were recalculated to exclude origin layovers, alongside a collector stop-selection change. This did not replay old raw SIRI through the new matcher or repair historical trip/stop assignments; figures across the change are not automatically comparable."),
     ("frequent_service_standard", "medium", None, None, "punctuality",
      "High-frequency services are normally assessed through excess waiting time, not the same timetable-punctuality percentage."),
     ("operator_coverage_imbalanced", "medium", None, None, "punctuality",
@@ -429,7 +435,7 @@ REGIME_CHANGES = (
     ("20260730", "abus_rows_begin",
      "Abus first appears in the retained pooled series, changing operator composition.", "published rollup observation"),
     ("20260816", "origin_exclusion_and_historical_restatement",
-     "Origin layovers were excluded and retained history was recalculated under corrected matching rules.", "published methodology"),
+     "Origin layovers were excluded from rebuilt rollups and collector stop selection changed. Rebuilding used retained normalised observations, not a replay of old raw SIRI through the new matcher.", "published methodology and collector implementation"),
     ("20260823", "coverage_health_gate_added",
      "Trip coverage gained explicit poll-continuity and match-rate validity controls.", "published methodology"),
     ("20260831", "summer_bank_holiday",
@@ -885,7 +891,11 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
         "source_connection_total_changes": "0",
         "source_snapshot_sha256": source_fingerprint["snapshot_sha256"],
         "source_snapshot_bytes": str(source_fingerprint["snapshot_bytes"]),
-        "recommended_general_comparison_from": "20260715",
+        "comparison_guidance_version": "2",
+        "comparison_status": "requires_investigation",
+        # Retain the v1 key, but do not silently recommend every date after an
+        # empty string. Readers must treat the explicit sentinel as no endorsement.
+        "recommended_general_comparison_from": "none",
         "expected_trip_denominator_trusted": "false",
         "july_first_complete": "false",
     }
@@ -971,7 +981,8 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
     current = first
     while current <= last:
         value = current.strftime("%Y%m%d")
-        warnings = ["expected_trip_denominator_untrusted"]
+        warnings = ["comparison_requires_investigation",
+                    "expected_trip_denominator_untrusted"]
         if value == "20260602":
             warnings.append("incomplete_start_day")
         if value < "20260701":
@@ -980,14 +991,17 @@ def create_metadata(destination: sqlite3.Connection, *, date_from: str,
             warnings.extend(("damaged_july_first", "partial_poll_day"))
         if value == "20260831":
             warnings.append("summer_bank_holiday")
-        recommended = int(value >= "20260715" and value != "20260701")
+        if value < "20260816":
+            warnings.append("historical_stop_assignment_unresolved")
+        if value == "20260816":
+            warnings.append("collector_method_transition")
         day_rows.append((
             value,
             int(counts["timepoint_observations"].get(value, 0)),
             int(counts["poll_log"].get(value, 0)),
             int(counts["expected_trips"].get(value, 0)),
             int(counts["matching_evidence"].get(value, 0)),
-            recommended,
+            0,  # No whole day is certified for general comparisons by this export.
             ",".join(sorted(set(warnings))),
         ))
         current += timedelta(days=1)
@@ -1024,13 +1038,32 @@ Important: read these before analysis
 * expected_trips is unstable across this period. Coverage and non-appearance
   figures are clues for investigation, not trustworthy findings.
 * U1, U4, 13, 19 and 171 have unresolved implausible early-running patterns
-  which may be timetable-variant matching errors.
+  with trip matching, stop-visit assignment and timetable variants among the
+  hypotheses to test; a single cause has not been established for all routes.
 * The collector changed on 13 July; TransXChange timing points were restored
-  on 14 July; retained history was restated under corrected origin/matching
-  rules on 16 August. School holidays, the bank holiday and operator additions
-  are also confounders.
+  on 14 July. On 16 August rollups were rebuilt to exclude origin layovers,
+  alongside a collector stop-selection change. That rebuild did not replay
+  old raw SIRI through the new matcher or repair historical assignments.
+* Some pre-16-August trips have inconsistent recorded stop order. Treat
+  16 August as a transition day, not a within-day cutoff. Later observations
+  still need validation; do not just move a "safe from" date to 17 August.
+* School holidays, the bank holiday and operator additions are also confounders.
 * A machine-generated outlier is a question, not proof of a cancellation,
   operator failure or software bug.
+
+Comparison guidance (version 2)
+-------------------------------
+No date cutoff certifies a safe comparison period. Check the relevant routes,
+operators, timetable editions, measurement methods and sample sizes before
+making before/after or cross-route claims. Exploration of the full export is
+still useful: a warning is not proof that every reading is wrong.
+
+For compatibility, research_manifest retains recommended_general_comparison_from
+with the literal value "none" (not a date). comparison_status is
+"requires_investigation" and comparison_guidance_version is "2".
+research_day_counts.recommended_general_comparison is 0 for every day: no blanket
+endorsement, not an instruction to discard the evidence. The warning codes and
+research_caveats explain why. The table layout remains export schema version 1.
 
 The database repeats these points in research_caveats and records dated changes
 in research_regime_changes. research_day_counts flags unsafe or incomplete
@@ -1048,14 +1081,14 @@ Quick start in Python
     import sqlite3
     import pandas as pd
 
-    db = sqlite3.connect("{DATABASE_MEMBER}")
+    db = sqlite3.connect("file:{DATABASE_MEMBER}?mode=ro", uri=True)
+    manifest = pd.read_sql_query("SELECT * FROM research_manifest", db)
     caveats = pd.read_sql_query("SELECT * FROM research_caveats", db)
     days = pd.read_sql_query("SELECT * FROM research_day_counts", db)
+    # Exploratory rows only: not a validated comparison cohort.
     observations = pd.read_sql_query('''
         SELECT * FROM timepoint_observations
-        WHERE service_date BETWEEN '20260715' AND '{date_to}'
-          AND is_origin = 0
-          AND gps_distance_m <= 150
+        WHERE service_date BETWEEN '{date_from}' AND '{date_to}'
     ''', db)
 
 Useful first commands
