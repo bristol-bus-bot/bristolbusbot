@@ -3,6 +3,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { exec, execFile } from 'child_process';
 import { timingSafeEqual } from 'crypto';
 import { logger, PerformanceTimer } from '../utils/logging.js';
@@ -10,6 +11,30 @@ import { ApplicationState } from '../services/application-state.js';
 import { HealthMonitor } from '../services/health-monitor.js';
 import { DatabaseManager } from '../services/database-manager.js';
 import { resolveFleetVehicle } from '../services/vehicle-identity.js';
+
+export const SYSTEM_COMMAND_RATE_LIMIT = 12;
+export const SYSTEM_COMMAND_RATE_WINDOW_MS = 60_000;
+
+/**
+ * Bound process-spawning control requests. Production is loopback-only and
+ * bearer-authenticated, so the limiter is deliberately per process rather
+ * than pretending forwarded client addresses are a trusted identity.
+ */
+export function createSystemCommandRateLimiter() {
+    return rateLimit({
+        windowMs: SYSTEM_COMMAND_RATE_WINDOW_MS,
+        limit: SYSTEM_COMMAND_RATE_LIMIT,
+        legacyHeaders: false,
+        standardHeaders: 'draft-7',
+        keyGenerator: () => 'authenticated-control',
+        handler: (_req, res) => {
+            res.status(429).json({
+                success: false,
+                error: 'Control command rate limit exceeded. Try again shortly.'
+            });
+        }
+    });
+}
 
 /**
  * Express API routes service: health, logs, runtime control and
@@ -83,11 +108,17 @@ export class APIRoutes {
      * Initialize all API routes
      */
     private initializeRoutes(): void {
+        // Each command gets its own small process-wide budget. Authentication
+        // runs first, so unauthorised requests cannot consume that budget.
+        const logsCommandLimit = createSystemCommandRateLimiter();
+        const systemCommandLimit = createSystemCommandRateLimiter();
+
         // Health endpoint - unauthenticated so external monitors can poll it
         this.router.get('/api/health', this.handleHealthCheck.bind(this));
 
         // Logs endpoint — protected by auth token
-        this.router.get('/api/logs', this.requireAuth.bind(this), this.handleLogs.bind(this));
+        this.router.get('/api/logs', this.requireAuth.bind(this), logsCommandLimit,
+            this.handleLogs.bind(this));
         
         // Runtime control endpoint.
         this.router.post('/api/restart', this.requireAuth.bind(this), this.handleRestart.bind(this));
@@ -103,7 +134,8 @@ export class APIRoutes {
         this.router.get('/api/dashboard/collector', this.requireAuth.bind(this), this.handleDashboardCollector.bind(this));
         this.router.get('/api/dashboard/locations', this.requireAuth.bind(this), this.handleDashboardLocations.bind(this));
         this.router.get('/api/dashboard/metrics', this.requireAuth.bind(this), this.handleDashboardMetrics.bind(this));
-        this.router.get('/api/dashboard/system', this.requireAuth.bind(this), this.handleDashboardSystem.bind(this));
+        this.router.get('/api/dashboard/system', this.requireAuth.bind(this), systemCommandLimit,
+            this.handleDashboardSystem.bind(this));
 
         // Recent posts - for live-buses integration
         this.router.get('/api/recent-posts', this.handleRecentPosts.bind(this));
