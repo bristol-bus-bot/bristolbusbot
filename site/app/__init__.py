@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import Flask, abort, redirect, request, send_from_directory, url_for
 
@@ -85,9 +86,18 @@ def create_app(config: Config | None = None) -> Flask:
         if canonical_host is None:
             abort(400)
         if forwarded.split(",", 1)[0].strip().lower() != "https":
+            target = request.full_path.rstrip("?").replace("\\", "")
+            parsed_target = urlsplit(target)
+            if (
+                parsed_target.scheme
+                or parsed_target.netloc
+                or not target.startswith("/")
+                or target.startswith("//")
+            ):
+                target = "/"
             return redirect(
                 f"https://{canonical_host.split(':', 1)[0]}"
-                f"{request.full_path.rstrip('?')}",
+                f"{target}",
                 code=308,
             )
         return None
