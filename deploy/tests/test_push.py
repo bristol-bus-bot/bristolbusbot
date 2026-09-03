@@ -465,6 +465,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     with tarfile.open(archive) as payload:
         payload.extractall(extract, filter="data")
     assert (extract / "timetable_delivery.py").is_file()
+    assert (extract / "backup.py").is_file()
     assert (extract / "timetable_promote.py").is_file()
     assert (extract / "timetable_service_profile.py").is_file()
     assert (extract / "timetable_manifest.py").is_file()
@@ -481,6 +482,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "systemd/bbb-editorial-refresh.timer").is_file()
     assert "enable --now bbb-editorial-refresh.timer" in installer
     assert "enable --now bbb-data-health.timer" in installer
+    assert '"$stage/backup.py" /usr/local/sbin/bbb-backup' in installer
     assert (extract / "configure_social_curation.py").is_file()
     assert (extract / "configure_blurb_generation.py").is_file()
     assert (extract / "blurb_automation.py").is_file()

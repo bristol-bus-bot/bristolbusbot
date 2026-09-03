@@ -888,7 +888,8 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
     root = workspace / "unified-layout"
     root.mkdir()
     for name in (
-        "install_unified_deploy.sh", "deploy_control.sh", "timetable_control.py",
+        "install_unified_deploy.sh", "deploy_control.sh", "backup.py",
+        "timetable_control.py",
         "timetable_delivery.py", "timetable_promote.py",
         "timetable_service_profile.py",
         "validate_production_config.py", "verify_release.py",
