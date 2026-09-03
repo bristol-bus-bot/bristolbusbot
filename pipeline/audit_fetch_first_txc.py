@@ -47,6 +47,25 @@ def safe_error(exc):
     return f"{type(exc).__name__}: {message}"
 
 
+def safe_output(value):
+    """Remove credentials and control characters from remote display text."""
+    message = str(value)
+    if API_KEY:
+        message = message.replace(API_KEY, "[REDACTED]")
+    message = re.sub(
+        r"([?&]api_key=)[^&\s'\"]+", r"\1[REDACTED]", message,
+        flags=re.IGNORECASE)
+    return re.sub(r"[\x00-\x1f\x7f]", " ", message)
+
+
+def safe_dataset_id(value):
+    """Accept the numeric identifiers used by the BODS dataset API."""
+    dataset_id = str(value)
+    if not re.fullmatch(r"[0-9]{1,20}", dataset_id):
+        raise ValueError("BODS returned an invalid dataset identifier")
+    return dataset_id
+
+
 def discard_directory(path):
     if path.exists():
         shutil.rmtree(path)
@@ -166,8 +185,13 @@ def main():
     saved = 0
     all_found = set()
     for ds in datasets:
-        ds_id = ds.get("id")
-        name = (ds.get("name") or "").strip()
+        try:
+            ds_id = safe_dataset_id(ds.get("id"))
+        except ValueError as exc:
+            discard_directory(staging)
+            print(f"ERROR: {exc}")
+            return 1
+        name = safe_output(ds.get("name") or "").strip()
         dl = ds.get("url") or f"https://data.bus-data.dft.gov.uk/timetable/dataset/{ds_id}/download/"
         separator = "&" if "?" in dl else "?"
         out = staging / f"fbri_{ds_id}.zip"

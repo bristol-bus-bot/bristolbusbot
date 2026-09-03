@@ -102,6 +102,14 @@ def test_adversarial_generated_text_is_rejected(value, reason):
         blurbs.validate_text(value)
 
 
+def test_emoji_ranges_have_the_intended_boundaries():
+    for codepoint in (0x1F1E6, 0x1F1FF, 0x1F300, 0x1FAFF,
+                      0x2600, 0x27BF, 0xFE0F):
+        assert blurbs._EMOJI.search(chr(codepoint))
+    for codepoint in (0x1F1E5, 0x1F200, 0x1FB00, 0x25FF, 0x27C0, 0xFE0E):
+        assert blurbs._EMOJI.search(chr(codepoint)) is None
+
+
 def test_output_keys_must_exactly_match_requested_scope():
     with pytest.raises(blurbs.BlurbError, match="unexpected keys"):
         blurbs.validate_output(

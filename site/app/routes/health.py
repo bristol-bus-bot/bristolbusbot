@@ -42,7 +42,9 @@ def healthz():
         db.gtfs().execute("SELECT 1 FROM stops LIMIT 1").fetchone()
         checks["gtfs_db"] = "ok"
     except Exception as e:  # noqa: BLE001
-        checks["gtfs_db"] = f"fail: {e}"
+        current_app.logger.error(
+            "GTFS health check failed (%s)", type(e).__name__)
+        checks["gtfs_db"] = "fail"
         overall = "fail"
     try:
         row = db.live().execute(
@@ -64,7 +66,9 @@ def healthz():
             checks["siri"] = "no successful poll yet"
             overall = "fail"
     except Exception as e:  # noqa: BLE001
-        checks["siri"] = f"fail: {e}"
+        current_app.logger.error(
+            "live-data health check failed (%s)", type(e).__name__)
+        checks["siri"] = "fail"
         overall = "fail"
     return (jsonify({"status": overall, "checks": checks}),
             200 if overall != "fail" else 503, {"Cache-Control": "no-store"})
