@@ -71,12 +71,23 @@ def create_app(config: Config | None = None) -> Flask:
         forwarded = request.headers.get("X-Forwarded-Proto")
         if not cfg.enforce_https or not forwarded:
             return None
-        host = request.host.split(":", 1)[0].lower()
-        if host not in cfg.public_hosts:
+        requested_host = request.host.lower()
+        canonical_hosts = {
+            candidate: candidate
+            for configured in cfg.public_hosts
+            for candidate in (
+                configured.lower(),
+                f"{configured.lower()}:80",
+                f"{configured.lower()}:443",
+            )
+        }
+        canonical_host = canonical_hosts.get(requested_host)
+        if canonical_host is None:
             abort(400)
         if forwarded.split(",", 1)[0].strip().lower() != "https":
             return redirect(
-                f"https://{request.host}{request.full_path.rstrip('?')}",
+                f"https://{canonical_host.split(':', 1)[0]}"
+                f"{request.full_path.rstrip('?')}",
                 code=308,
             )
         return None

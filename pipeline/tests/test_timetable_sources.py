@@ -29,6 +29,22 @@ def test_source_errors_redact_credentials(monkeypatch):
     assert "api_key=[REDACTED]" in bods_message
 
 
+def test_first_txc_remote_display_text_cannot_echo_credentials(monkeypatch):
+    bods_key = "bods-secret-value"
+    monkeypatch.setattr(first_txc, "API_KEY", bods_key)
+    display = first_txc.safe_output(
+        f"remote name\nhttps://example.invalid/?api_key={bods_key}")
+    assert bods_key not in display
+    assert "\n" not in display
+    assert "api_key=[REDACTED]" in display
+
+
+@pytest.mark.parametrize("value", [None, "", "../outside", "12/34", "123x"])
+def test_first_txc_rejects_unsafe_remote_dataset_ids(value):
+    with pytest.raises(ValueError, match="invalid dataset identifier"):
+        first_txc.safe_dataset_id(value)
+
+
 def test_tnds_errors_redact_username_and_password(monkeypatch):
     monkeypatch.setattr(tnds, "USER", "download-user")
     monkeypatch.setattr(tnds, "PASS", "download-password")

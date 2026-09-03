@@ -419,7 +419,9 @@ class Healthcheck:
                 return
             except (OSError, urllib.error.URLError) as exc:
                 if attempt == 2:
-                    LOG.warning("healthcheck %s ping failed: %s", state, exc)
+                    LOG.warning(
+                        "healthcheck %s ping failed (%s)",
+                        state, type(exc).__name__)
                 else:
                     self.sleeper(0.5 * (attempt + 1))
 
@@ -435,18 +437,26 @@ class Restic:
 
     def _run(self, arguments: Sequence[str]) -> None:
         command = [self.config.restic_binary, *arguments]
-        action = next(
-            (item for item in arguments
-             if item in {"init", "backup", "copy", "forget", "check", "restore"}),
-            "command",
-        )
-        LOG.info("running restic %s", action)
+        if "backup" in arguments:
+            LOG.info("running restic backup")
+        elif "copy" in arguments:
+            LOG.info("running restic copy")
+        elif "forget" in arguments:
+            LOG.info("running restic forget")
+        elif "check" in arguments:
+            LOG.info("running restic check")
+        elif "restore" in arguments:
+            LOG.info("running restic restore")
+        elif "init" in arguments:
+            LOG.info("running restic init")
+        else:
+            LOG.info("running restic operation")
         try:
             self.runner(
                 command, check=True, env=os.environ.copy(),
                 timeout=self.config.restic_timeout_seconds)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            raise BackupError(f"restic command failed: {arguments[0]}") from exc
+            raise BackupError("restic command failed") from exc
 
     def init_local(self) -> None:
         self._run([

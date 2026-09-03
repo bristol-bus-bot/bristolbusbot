@@ -451,6 +451,23 @@ def test_healthcheck_uses_paired_start_success_and_failure_urls():
     assert all(urllib_query(url)["source"] == "pi" for url in urls)
 
 
+def test_healthcheck_failure_does_not_log_token_url(caplog):
+    from urllib.error import URLError
+
+    token = "not-a-real-healthcheck-token"
+
+    def unavailable(request, **_kwargs):
+        raise URLError(f"could not fetch {request.full_url}")
+
+    health = backup.Healthcheck(
+        f"https://example.invalid/{token}", opener=unavailable,
+        sleeper=lambda _seconds: None)
+    health.ping("fail")
+    assert "healthcheck fail ping failed" in caplog.text
+    assert token not in caplog.text
+    assert "example.invalid" not in caplog.text
+
+
 def urllib_path(url: str) -> str:
     from urllib.parse import urlsplit
     return urlsplit(url).path

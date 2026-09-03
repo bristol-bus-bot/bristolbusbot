@@ -60,7 +60,6 @@ export class WeatherService {
         this.weatherConfig = weatherConfig;
         logger.info('Weather Service initialized', {
             hasApiKey: !!weatherConfig.apiKey,
-            apiKeyLength: weatherConfig.apiKey ? weatherConfig.apiKey.length : 0,
             baseUrl: weatherConfig.baseUrl
         });
     }
@@ -153,7 +152,9 @@ export class WeatherService {
             return formattedWeather;
 
         } catch (error: any) {
-            logger.error('Failed to fetch weather data', { error: error.message });
+            logger.error('Failed to fetch weather data', {
+                errorType: error instanceof Error ? error.name : 'unknown'
+            });
             return null;
         }
     }
@@ -221,7 +222,9 @@ export class WeatherService {
             return null;
 
         } catch (error: any) {
-            logger.error('Failed to fetch air quality data', { error: error.message });
+            logger.error('Failed to fetch air quality data', {
+                errorType: error instanceof Error ? error.name : 'unknown'
+            });
             return null;
         }
     }

@@ -1,5 +1,9 @@
 import re
+import runpy
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 
 SITE_ROOT = Path(__file__).resolve().parent.parent
@@ -124,3 +128,58 @@ def test_https_enforcement_rejects_untrusted_forwarded_host(app, client):
     finally:
         app.config["BBB"].enforce_https = False
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("host", [
+    "bristolbuses.live:443@evil.example",
+    "bristolbuses.live:80.evil.example",
+    "bristolbuses.live:443\\@evil.example",
+])
+def test_https_redirect_rejects_deceptive_host_suffix(app, client, host):
+    app.config["BBB"].enforce_https = True
+    response = client.get(
+        "/api/buses?test=1", headers={"Host": host, "X-Forwarded-Proto": "http"})
+    assert response.status_code == 400
+    assert "Location" not in response.headers
+
+
+@pytest.mark.parametrize("host", [
+    "bristolbuses.live", "BRISTOLBUSES.LIVE:80", "bristolbuses.live:443",
+])
+def test_https_redirect_uses_configured_host(app, client, host):
+    app.config["BBB"].enforce_https = True
+    response = client.get(
+        "/api/buses?test=1", headers={"Host": host, "X-Forwarded-Proto": "http"})
+    assert response.status_code == 308
+    assert response.headers["Location"] == "https://bristolbuses.live/api/buses?test=1"
+
+
+@pytest.mark.parametrize("database,check", [("gtfs", "gtfs_db"), ("live", "siri")])
+def test_health_errors_do_not_expose_exception_text(app, client, monkeypatch, caplog,
+                                                   database, check):
+    from app import db
+
+    secret = "private-path-and-query-credential"
+
+    def unavailable():
+        raise RuntimeError(f"/private/database.db?api_key={secret}")
+
+    monkeypatch.setattr(db, database, unavailable)
+    response = client.get("/healthz")
+    assert response.status_code == 503
+    assert response.get_json()["checks"][check] == "fail"
+    assert secret not in response.get_data(as_text=True)
+    assert secret not in caplog.text
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_direct_run_does_not_enable_debugger(monkeypatch):
+    import app as app_module
+
+    arguments = {}
+    monkeypatch.setattr(app_module, "create_app", lambda: SimpleNamespace(
+        run=lambda **kwargs: arguments.update(kwargs)))
+    monkeypatch.setenv("BBB_DEV_HOST", "0.0.0.0")
+    runpy.run_path(str(SITE_ROOT / "wsgi.py"), run_name="__main__")
+    assert arguments["debug"] is False
+    assert arguments["use_reloader"] is False
