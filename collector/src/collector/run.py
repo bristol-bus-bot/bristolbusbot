@@ -117,7 +117,9 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
     counters = {"vehicles_total": 0, "candidates": 0, "matched": 0,
                 "obs_written": 0, "dropped_insane": 0, "events": 0,
                 "stale": 0, "evidence_written": 0,
-                "evidence_dropped": 0}
+                "evidence_dropped": 0, "evidence_deduplicated": 0,
+                "evidence_scope_dropped": 0,
+                "evidence_quota_dropped": 0, "evidence_errors": 0}
 
     if xml is None:
         live_db.record_poll(live_conn, "siri_vm", ok=False)
@@ -213,6 +215,10 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
 
         if evidence_reasons and match is not None and origin_local is not None:
             try:
+                if snap.operator_ref not in audit_db.MATCHING_EVIDENCE_OPERATORS:
+                    counters["evidence_dropped"] += 1
+                    counters["evidence_scope_dropped"] += 1
+                    continue
                 explanation = explain_match(
                     tt_cur, match, snap.operator_ref, snap.line, snap.direction,
                     origin_local, (snap.lat, snap.lon), service_date)
@@ -232,6 +238,8 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                     "direction": snap.direction,
                     "journey_ref": snap.journey_ref,
                     "origin_aimed_departure": snap.origin_aimed_departure,
+                    "origin_ref": snap.origin_stop_ref,
+                    "destination_ref": snap.destination_stop_ref,
                     "recorded_at": snap.recorded_utc.isoformat(),
                     "lat": snap.lat,
                     "lon": snap.lon,
@@ -244,11 +252,22 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                 })
                 if status in {"written", "total_pruned"}:
                     counters["evidence_written"] += 1
-                elif status == "daily_limit":
+                elif status in {"duplicate", "journey_duplicate"}:
+                    counters["evidence_deduplicated"] += 1
+                elif status == "operator_out_of_scope":
                     counters["evidence_dropped"] += 1
+                    counters["evidence_scope_dropped"] += 1
+                elif status in {"daily_limit", "cell_limit", "reserved_slot",
+                                "operator_cell_limit"}:
+                    counters["evidence_dropped"] += 1
+                    counters["evidence_quota_dropped"] += 1
+                else:
+                    counters["evidence_dropped"] += 1
+                    counters["evidence_errors"] += 1
             except Exception:
                 # Debug evidence must never interrupt the live collector.
                 counters["evidence_dropped"] += 1
+                counters["evidence_errors"] += 1
                 logger.exception(
                     "could not save matching evidence for vehicle %s",
                     snap.vehicle_ref)
