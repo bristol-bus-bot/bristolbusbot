@@ -108,6 +108,8 @@ def configure_shadow_paths(tmp_path, monkeypatch):
         "superseded_route_editions": 0,
         "trips_rewindowed": 0,
     })
+    monkeypatch.setattr(builder, "reconcile_calendar_sources", lambda *_: {
+        "trips_corrected": 0, "exclusions_corrected": 0})
     return scratch
 
 
@@ -143,6 +145,22 @@ def test_complete_primary_sources_skip_tnds_fallback(tmp_path, monkeypatch):
     assert status["tnds"] == {
         "status": "not_needed", "missing_before_fallback": []}
     assert not (scratch / "busaudit_tnds").exists()
+
+
+def test_calendar_evidence_failure_refuses_build_before_publication(tmp_path, monkeypatch):
+    configure_shadow_paths(tmp_path, monkeypatch)
+    def fake_run(command):
+        if any('build_timetable_weca.py' in str(part) for part in command):
+            builder.WECA_DB.write_bytes(b'candidate')
+        return True
+    def fail(*_):
+        raise RuntimeError('source evidence unavailable')
+    monkeypatch.setattr(builder, 'run', fake_run)
+    monkeypatch.setattr(builder, 'validate', lambda _: {'missing': []})
+    monkeypatch.setattr(builder, 'reconcile_calendar_sources', fail)
+    monkeypatch.setattr(sys, 'argv', ['build_timetable.py', '--skip-deploy', '--no-download'])
+    assert builder.main() == 2
+    assert not builder.TIMETABLE_DB.exists()
 
 
 def test_missing_primary_route_requires_tnds_fallback(tmp_path, monkeypatch):
