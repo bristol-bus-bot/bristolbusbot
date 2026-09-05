@@ -47,12 +47,12 @@ status-digest jobs are systemd timers.
 
 ## Journey checks
 
-Journey age normally expires after the configured two-hour limit. A matched
-timetable lasting longer than that remains eligible until its scheduled end
-plus the existing 90-minute late-reading allowance. Invalid or backwards stop
-times cannot extend the limit. Recorded-position freshness, geography,
-endpoint checks and individual delay sanity checks still apply. Short trips
-retain the configured age limit; old vehicle positions never gain extra life.
+Journey age expires at the later of the configured two-hour limit or a valid
+matched timetable's scheduled end plus the existing 90-minute late-reading
+allowance. This covers both long services and shorter services delayed beyond
+two hours since departure. Invalid or backwards stop times cannot extend the
+limit. Recorded-position freshness, geography, endpoint checks and individual
+delay sanity checks still apply; old vehicle positions never gain extra life.
 
 When both feed endpoints exactly identify the timetable's opposite endpoints,
 the collector rejects that candidate in both matching tiers. It accepts stop

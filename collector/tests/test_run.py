@@ -192,6 +192,19 @@ def test_short_journey_still_expires_after_configured_age():
     assert result["matched"] == 0
 
 
+def test_delayed_115_minute_journey_gets_its_late_allowance():
+    # Y6 evidence: a journey just under two hours must not lose timing as
+    # soon as a legitimate delay carries it over two hours since departure.
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    tt.execute("UPDATE stop_times SET departure_time='13:10:00' WHERE trip_id='T_OUT' AND stop_sequence=2")
+    now = datetime(2026, 6, 10, 12, 41, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", now.isoformat())
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == 1
+    assert live_conn.execute("SELECT delay_seconds FROM vehicles").fetchone()[0] == 1860
+
+
 @pytest.mark.parametrize("end", ["invalid", "10:00:00"])
 def test_invalid_schedule_cannot_extend_age_limit(end):
     tt, live_conn, audit_conn, boundary, cfg = setup()

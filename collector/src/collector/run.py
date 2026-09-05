@@ -40,7 +40,7 @@ EVIDENCE_EXTREME_EARLY_S = -10 * 60
 
 
 def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
-    """Extend the age limit only for a valid, genuinely long timetable.
+    """Let a valid timetable's finish and late allowance extend the age limit.
 
     The existing late-reading ceiling bounds the extension after its end.
     This does not replace the independent recorded-position freshness gate.
@@ -51,8 +51,6 @@ def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
     times = [gtfs_seconds(row[1]) for row in match.schedule]
     if (len(times) < 2 or any(value is None for value in times)
             or any(b < a for a, b in zip(times, times[1:]))):
-        return False
-    if times[-1] - times[0] <= max_age.total_seconds():
         return False
     midnight = service_midnight(origin_local, times[0])
     end = scheduled_local(midnight, times[-1]).astimezone(timezone.utc)
