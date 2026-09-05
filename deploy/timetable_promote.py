@@ -32,8 +32,11 @@ EXPECTED_OWNER = "@BBB_DEPLOY_USER@"
 MINIMUM_SERVICE_DAYS = 14
 COPY_CHUNK = 1024 * 1024
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
-COLLECTOR_VERIFY_TIMEOUT_SECONDS = 45
-COLLECTOR_VERIFY_ATTEMPTS = 6
+# The Pi's audit database integrity scan takes about 75 seconds. Give each
+# complete check room to finish while keeping the total retry budget below
+# the former six attempts of 45 seconds plus five-second delays (300 seconds).
+COLLECTOR_VERIFY_TIMEOUT_SECONDS = 140
+COLLECTOR_VERIFY_ATTEMPTS = 2
 HEALTH_USER_AGENT = "bristolbusbot-timetable-promoter/1"
 MINIMUM_SEARCH_STOPS = 1000
 SITE_FUNCTIONAL_TIMEOUT_SECONDS = 20

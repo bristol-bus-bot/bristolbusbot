@@ -55,6 +55,8 @@ def test_collector_health_allows_the_pi_integrity_check_to_finish(monkeypatch):
 
     def completed(command, **kwargs):
         calls.append((command, kwargs))
+        if kwargs["timeout"] < 75:
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(subprocess, "run", completed)
@@ -62,7 +64,23 @@ def test_collector_health_allows_the_pi_integrity_check_to_finish(monkeypatch):
     assert SystemServices().wait_component("collector") is True
     assert calls[0][0] == [
         "/usr/local/libexec/bbb-verify-collector-state", "--max-poll-age", "180"]
-    assert calls[0][1]["timeout"] == 45
+    assert len(calls) == 1
+
+
+def test_collector_integrity_timeout_remains_fail_closed_and_bounded(monkeypatch):
+    timeouts = []
+    delays = []
+
+    def timed_out(command, **kwargs):
+        timeouts.append(kwargs["timeout"])
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+    monkeypatch.setattr("timetable_promote.time.sleep", delays.append)
+
+    assert SystemServices().wait_component("collector") is False
+    assert len(timeouts) == 2
+    assert sum(timeouts) + sum(delays) <= 300
 
 
 def test_health_request_has_an_explicit_identity(monkeypatch):
