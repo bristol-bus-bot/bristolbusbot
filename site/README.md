@@ -38,7 +38,12 @@ is the vehicle livery and the outside nose points in its reported direction of
 travel. A yellow corner tag means the bot posted about that journey. Route and
 status filters redraw non-matches as outlines while retaining their status
 colour and shape. The visible moving-bus mark is 32 px inside a 44 px pointer
-target for mobile use.
+target for mobile use. A grey centre inside the livery ring means timing is
+unavailable; it is distinct from the small depot dot. These buses remain
+visible and have their own count/filter instead of being counted as on time.
+The API preserves a missing delay as `delayMinutes: null` with
+`eventType: "unknown"`, including when a timetable match exists but no reliable
+delay was calculated. Genuine zero-minute delays remain on time.
 
 Fleet identity is registration-first and otherwise scoped by
 `(operator, fleet code)`. Shared numbers never fall through to another

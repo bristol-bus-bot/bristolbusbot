@@ -97,6 +97,7 @@
 .vp-live-route strong { color: var(--fg-1); }
 .vp-at { font-size: 11px; color: var(--fg-2); }
 .vp-punctual { background: var(--tint-ontime); color: var(--ev-ontime); }
+.vp-unknown { background: var(--tint-depot); color: var(--fg-2); }
 .vp-punctual-bg { background: var(--tint-ontime); border-color: rgba(0,112,60,.25); }
 .vp-early { background: var(--tint-early); color: var(--ev-early); }
 .vp-early-bg { background: var(--tint-early); border-color: rgba(180,136,0,.25); }

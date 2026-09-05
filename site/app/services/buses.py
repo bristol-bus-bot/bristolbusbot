@@ -10,9 +10,11 @@ LATE_THRESHOLD_MIN = 4
 EARLY_THRESHOLD_MIN = -3
 
 
-def _event_type(delay_minutes: int, waiting: bool) -> str:
+def _event_type(delay_minutes: int | None, waiting: bool) -> str:
     if waiting:
         return "waiting"
+    if delay_minutes is None:
+        return "unknown"
     if delay_minutes >= LATE_THRESHOLD_MIN:
         return "delayed"
     if delay_minutes <= EARLY_THRESHOLD_MIN:
@@ -52,7 +54,7 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
             continue
         delay_s = r["delay_seconds"]
         has_schedule = r["trip_id"] is not None
-        delay_min = round(delay_s / 60) if delay_s is not None else 0
+        delay_min = round(delay_s / 60) if delay_s is not None and has_schedule else None
         # 'waiting at origin': at the first stop before its departure time
         waiting = bool(has_schedule and r["stop_code"] is not None
                        and r["delay_seconds"] is not None and delay_s < 0

@@ -455,6 +455,7 @@
             document.getElementById('count-delayed').textContent = counts.delayed;
             document.getElementById('count-waiting').textContent = counts.waiting;
             document.getElementById('count-depot').textContent = counts.depot;
+            document.getElementById('count-unknown').textContent = counts.unknown;
         }
 
         function updateStopMarkers(stops) {

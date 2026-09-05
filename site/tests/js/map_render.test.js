@@ -5,6 +5,15 @@ globalThis.window = { BBB: {} };
 const { busIcon, depotIcon, featuredPostBadge } = await import(
     "../../static/js/map_render.js");
 
+test("missing timing uses a neutral marker and accessible explanation", () => {
+    globalThis.L = { divIcon: options => options };
+    const icon = busIcon({ eventType: "unknown", delayMinutes: null }, false);
+    assert.match(icon.html, /Timing unavailable/);
+    assert.match(icon.html, /data-marker-core="unknown"/);
+    assert.doesNotMatch(icon.html, /marker-status-ontime|on time/);
+    delete globalThis.L;
+});
+
 test("featured journey marker has an explicit bot-post speech bubble", () => {
     assert.equal(featuredPostBadge(false), "");
     const badge = featuredPostBadge(true);

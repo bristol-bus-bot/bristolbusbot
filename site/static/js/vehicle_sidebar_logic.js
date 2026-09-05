@@ -1,3 +1,5 @@
+import { timingUnavailable } from "./status_filter.js";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -23,6 +25,10 @@ export function statusPresentation(bus) {
             text: "at depot", longText: "at depot",
             cls: "vs-status-off", shape: "vs-shape-off",
         };
+    if (timingUnavailable(bus)) return {
+        text: "Timing unavailable", longText: "Timing unavailable",
+        cls: "vs-status-off", shape: "vs-shape-off",
+    };
     if (bus.waitingAtOrigin || bus.eventType === "waiting")
         return {
             text: "waiting to depart", longText: "waiting to depart",
