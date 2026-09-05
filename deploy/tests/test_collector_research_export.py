@@ -32,7 +32,9 @@ def audit_fixture(tmp_path: Path) -> Path:
         CREATE TABLE poll_log (
             poll_at TEXT, ok INTEGER, vehicles_total INTEGER, candidates INTEGER,
             matched INTEGER, obs_written INTEGER, dropped_insane INTEGER,
-            stale INTEGER, evidence_written INTEGER, evidence_dropped INTEGER
+            stale INTEGER, evidence_written INTEGER, evidence_dropped INTEGER,
+            evidence_deduplicated INTEGER, evidence_scope_dropped INTEGER,
+            evidence_quota_dropped INTEGER, evidence_errors INTEGER
         );
         CREATE TABLE expected_trips (
             service_date TEXT, operator TEXT, route TEXT, trip_id TEXT,
@@ -43,9 +45,11 @@ def audit_fixture(tmp_path: Path) -> Path:
         );
         CREATE TABLE matching_evidence (
             evidence_id TEXT, captured_at TEXT, service_date TEXT,
+            sampling_date TEXT, sampling_band TEXT, sampling_reason TEXT,
             reasons_json TEXT, calculation_reasons_json TEXT,
             operator TEXT, route TEXT, vehicle_ref TEXT, direction TEXT,
-            journey_ref TEXT, origin_aimed_departure TEXT, recorded_at TEXT,
+            journey_ref TEXT, origin_aimed_departure TEXT, origin_ref TEXT,
+            destination_ref TEXT, recorded_at TEXT,
             lat REAL, lon REAL, bearing REAL, block_ref TEXT,
             chosen_trip_id TEXT, match_tier TEXT, candidate_count INTEGER,
             candidates_truncated INTEGER, gps_distance_m INTEGER,
@@ -76,9 +80,11 @@ def audit_fixture(tmp_path: Path) -> Path:
         "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         observations)
     connection.executemany(
-        "INSERT INTO poll_log VALUES (?,?,?,?,?,?,?,?,?,?)", [
-            ("2026-08-30T09:00:00Z", 1, 100, 90, 80, 20, 0, 2, 1, 0),
-            ("2026-08-31T11:00:00Z", 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        "INSERT INTO poll_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+            ("2026-08-30T09:00:00Z", 1, 100, 90, 80, 20, 0, 2, 1, 0,
+             3, 4, 5, 0),
+            ("2026-08-31T11:00:00Z", 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1),
         ])
     connection.executemany(
         "INSERT INTO expected_trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
@@ -99,11 +105,13 @@ def audit_fixture(tmp_path: Path) -> Path:
         "unexpected_nested_secret": {"must": "not escape"},
     }]
     connection.execute(
-        "INSERT INTO matching_evidence VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO matching_evidence VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ("evidence-a", "2026-08-30T09:12:00Z", "20260830",
+         "20260830", "08-11", "extreme_delay",
          json.dumps(["extreme_delay"]), json.dumps(["accepted"]),
          "FBRI", "1", "vehicle-a", "outbound", "journey-a", "10:00:00",
-         "2026-08-30T09:12:00Z", 51.45, -2.58, 180.0, "block-a",
+         "0100A", "0100C", "2026-08-30T09:12:00Z", 51.45, -2.58,
+         180.0, "block-a",
          "trip-a", "exact", 2, 0, 12, 120, "update", "route-a",
          "service-a", 0, "20260801", json.dumps(alternatives)))
     connection.execute(
@@ -179,6 +187,14 @@ def test_full_census_is_private_typed_documented_and_verifiable(
     assert "secret_future_column" not in exported_columns
     assert {"lat", "lon", "reasons_json", "calculation_reasons_json",
             "alternatives_json"}.isdisjoint(evidence_columns)
+    assert connection.execute(
+        "SELECT sampling_date,sampling_band,sampling_reason,origin_ref,"
+        "destination_ref FROM matching_evidence").fetchone() == (
+            "20260830", "08-11", "extreme_delay", "0100A", "0100C")
+    assert connection.execute(
+        "SELECT evidence_deduplicated,evidence_scope_dropped,"
+        "evidence_quota_dropped,evidence_errors FROM poll_log "
+        "ORDER BY poll_at").fetchall() == [(3, 4, 5, 0), (0, 0, 0, 1)]
     assert connection.execute(
         "SELECT reason_kind,reason FROM matching_evidence_reasons "
         "ORDER BY reason_kind").fetchall() == [

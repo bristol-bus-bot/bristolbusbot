@@ -95,7 +95,9 @@ TABLE_SPECS = (
         "poll_log",
         columns("poll_at:TEXT ok:INTEGER vehicles_total:INTEGER candidates:INTEGER "
                 "matched:INTEGER obs_written:INTEGER dropped_insane:INTEGER "
-                "stale:INTEGER evidence_written:INTEGER evidence_dropped:INTEGER"),
+                "stale:INTEGER evidence_written:INTEGER evidence_dropped:INTEGER "
+                "evidence_deduplicated:INTEGER evidence_scope_dropped:INTEGER "
+                "evidence_quota_dropped:INTEGER evidence_errors:INTEGER"),
         "substr(poll_at,1,10)", ("poll_at",), "collection_context",
         "One collector-poll health row, normally about every 30 seconds.",
         required=True, hyphenated_date=True,
@@ -114,8 +116,10 @@ TABLE_SPECS = (
     TableSpec(
         "matching_evidence",
         columns("evidence_id:TEXT captured_at:TEXT service_date:TEXT operator:TEXT "
+                "sampling_date:TEXT sampling_band:TEXT sampling_reason:TEXT "
                 "route:TEXT vehicle_ref:TEXT direction:TEXT journey_ref:TEXT "
-                "origin_aimed_departure:TEXT recorded_at:TEXT bearing:REAL "
+                "origin_aimed_departure:TEXT origin_ref:TEXT destination_ref:TEXT "
+                "recorded_at:TEXT bearing:REAL "
                 "block_ref:TEXT chosen_trip_id:TEXT match_tier:TEXT "
                 "candidate_count:INTEGER candidates_truncated:INTEGER "
                 "gps_distance_m:INTEGER delay_s:INTEGER event_type:TEXT "
@@ -278,7 +282,11 @@ COMMON_DOCS = {
     "dropped_insane": ("count", "Matched readings rejected by the accepted delay sanity range."),
     "stale": ("count", "Old repeated source positions rejected as stale."),
     "evidence_written": ("count", "Anomaly receipts admitted by the bounded evidence store."),
-    "evidence_dropped": ("count", "Anomaly receipts refused by the daily evidence cap."),
+    "evidence_dropped": ("count", "Anomaly receipts refused by scope, quota, timestamp or error controls."),
+    "evidence_deduplicated": ("count", "Repeated anomaly receipts intentionally represented by an existing bounded sample."),
+    "evidence_scope_dropped": ("count", "Anomaly receipts excluded because the operator is outside the published audit."),
+    "evidence_quota_dropped": ("count", "Anomaly receipts refused by a daily, time-band, operator or reserved-slot quota."),
+    "evidence_errors": ("count", "Anomaly receipts not saved because their timestamp was invalid or diagnostics failed safely."),
     "siri_ref": ("identifier", "Timetable journey reference used to join SIRI-VM."),
     "direction": ("category", "Feed direction text or timetable direction number, depending on table."),
     "first_departure": ("HH:MM:SS", "First scheduled departure, allowing GTFS times after 24:00."),
@@ -335,8 +343,13 @@ COMMON_DOCS = {
     "invalid_departure_times": ("count", "Scheduled trips whose first-departure time could not be parsed."),
     "evidence_id": ("identifier", "Bounded anomaly-receipt identifier."),
     "captured_at": ("ISO UTC datetime", "Time the anomaly receipt was saved."),
+    "sampling_date": ("local YYYYMMDD date", "Local date used for bounded diagnostic sampling."),
+    "sampling_band": ("category", "Four-hour local-time band used for bounded diagnostic sampling."),
+    "sampling_reason": ("category", "Primary anomaly reason used for bounded diagnostic sampling."),
     "journey_ref": ("identifier", "Journey reference supplied by SIRI-VM for the receipt."),
     "origin_aimed_departure": ("text", "Origin departure value supplied by SIRI-VM."),
+    "origin_ref": ("identifier", "Origin stop reference supplied by SIRI-VM."),
+    "destination_ref": ("identifier", "Destination stop reference supplied by SIRI-VM."),
     "bearing": ("degrees", "Vehicle bearing supplied by SIRI-VM; coordinates are deliberately omitted."),
     "block_ref": ("identifier", "Vehicle-duty or block reference supplied by SIRI-VM."),
     "chosen_trip_id": ("identifier", "Timetable trip selected by the matcher."),

@@ -26,7 +26,9 @@ VM_FEED = """<?xml version="1.0" encoding="UTF-8"?>
     <FramedVehicleJourneyRef><DatedVehicleJourneyRef>1115</DatedVehicleJourneyRef></FramedVehicleJourneyRef>
     <PublishedLineName>75</PublishedLineName>
     <OperatorRef>FBRI</OperatorRef>
-    <OriginAimedDepartureTime>2026-06-10T11:15:00+01:00</OriginAimedDepartureTime>
+     <OriginAimedDepartureTime>2026-06-10T11:15:00+01:00</OriginAimedDepartureTime>
+     <OriginRef>0100A</OriginRef>
+     <DestinationRef>0100C</DestinationRef>
     <DestinationName>End</DestinationName>
     <VehicleLocation><Longitude>-2.5890</Longitude><Latitude>51.4500</Latitude></VehicleLocation>
     <BlockRef>B1</BlockRef>
@@ -201,10 +203,67 @@ def test_extreme_but_valid_delay_leaves_evidence_receipt():
 
     assert result["evidence_written"] == 1
     receipt = audit_conn.execute(
-        "SELECT reasons_json, delay_s, event_type FROM matching_evidence"
-    ).fetchone()
+        """SELECT reasons_json, delay_s, event_type, sampling_date,
+                  sampling_band, sampling_reason, origin_ref, destination_ref
+           FROM matching_evidence""").fetchone()
     assert json.loads(receipt[0]) == ["extreme_delay"]
-    assert receipt[1:] == (2700, "delayed")
+    assert receipt[1:] == (
+        2700, "delayed", "20260610", "12-15", "extreme_delay",
+        "0100A", "0100C")
+
+
+def test_repeated_receipt_is_counted_as_deduplicated_not_dropped():
+    recorded = "2026-06-10T11:10:00+00:00"
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", recorded)
+    now = datetime(2026, 6, 10, 11, 10, tzinfo=timezone.utc)
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+
+    first = vm_cycle(
+        lambda: feed, tt, live_conn, audit_conn, boundary, cfg, LDN,
+        now_utc=now)
+    second = vm_cycle(
+        lambda: feed, tt, live_conn, audit_conn, boundary, cfg, LDN,
+        now_utc=now)
+
+    assert first["evidence_written"] == 1
+    assert second["evidence_deduplicated"] == 1
+    assert second["evidence_dropped"] == 0
+    poll = audit_conn.execute(
+        """SELECT evidence_written,evidence_dropped,evidence_deduplicated,
+                  evidence_scope_dropped,evidence_quota_dropped,evidence_errors
+           FROM poll_log ORDER BY poll_at DESC LIMIT 1""").fetchone()
+    assert poll == (0, 0, 1, 0, 0, 0)
+
+
+def test_out_of_scope_diagnostics_do_not_suppress_live_collection(monkeypatch):
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    # Keep a real, matched and very late bus; only its diagnostic membership
+    # is outside this test's shortlist.
+    monkeypatch.setattr(audit_db, "MATCHING_EVIDENCE_OPERATORS", frozenset({"ABUS"}))
+    now = datetime(2026, 6, 10, 11, 15, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("10:27:00+00:00", "11:15:00+00:00")
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == result["obs_written"] == 1
+    assert result["evidence_scope_dropped"] == result["evidence_dropped"] == 1
+    assert result["evidence_written"] == result["evidence_errors"] == 0
+    assert live_conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0] == 1
+
+
+def test_diagnostic_storage_failure_keeps_normal_observation(monkeypatch):
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    def fail(*args, **kwargs):
+        raise RuntimeError("test diagnostic failure")
+    monkeypatch.setattr(audit_db, "write_matching_evidence", fail)
+    now = datetime(2026, 6, 10, 11, 15, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("10:27:00+00:00", "11:15:00+00:00")
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["ok"]
+    assert result["obs_written"] == result["evidence_errors"] == 1
+    assert audit_conn.execute(
+        "SELECT COUNT(*) FROM timepoint_observations").fetchone()[0] == 1
+
 
 
 def test_match_and_direction_flip_within_one_run_leave_one_receipt():
