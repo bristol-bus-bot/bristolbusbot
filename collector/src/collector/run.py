@@ -21,7 +21,7 @@ import xmltodict
 from . import audit_db, live_db
 from .config import Config
 from .delay import (classify_event, closest_stop, live_estimate_result,
-                    settled_reading_result)
+                    settled_reading_result, SANITY_MAX_S)
 from .geo import BoundaryFilter
 from .matching import explain_match, match_vehicle
 from .siri import (activities_from_xmltodict, anchor_departure_local,
@@ -37,6 +37,26 @@ SIRI_VM_URL = "https://data.bus-data.dft.gov.uk/api/v1/datafeed/"
 SIRI_SX_URL = "https://data.bus-data.dft.gov.uk/api/v1/siri-sx/"
 EVIDENCE_EXTREME_LATE_S = 45 * 60
 EVIDENCE_EXTREME_EARLY_S = -10 * 60
+
+
+def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
+    """Extend the age limit only for a valid, genuinely long timetable.
+
+    The existing late-reading ceiling bounds the extension after its end.
+    This does not replace the independent recorded-position freshness gate.
+    """
+    max_age = timedelta(hours=max_age_h)
+    if now_utc - origin_local.astimezone(timezone.utc) <= max_age:
+        return True
+    times = [gtfs_seconds(row[1]) for row in match.schedule]
+    if (len(times) < 2 or any(value is None for value in times)
+            or any(b < a for a, b in zip(times, times[1:]))):
+        return False
+    if times[-1] - times[0] <= max_age.total_seconds():
+        return False
+    midnight = service_midnight(origin_local, times[0])
+    end = scheduled_local(midnight, times[-1]).astimezone(timezone.utc)
+    return now_utc <= end + timedelta(seconds=SANITY_MAX_S)
 
 
 def _measurement_clues(snap, match, service_midnight_dt, est, reading) -> dict:
@@ -157,15 +177,16 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
         estimate_reason = None
         reading_reason = None
         service_date = snap.recorded_utc.astimezone(target_tz).strftime("%Y%m%d")
-        if origin_local is not None and \
-                (now_utc - origin_local.astimezone(timezone.utc)) <= timedelta(
-                    hours=cfg.max_journey_age_h):
+        if origin_local is not None:
             match = match_vehicle(tt_cur, snap.operator_ref, snap.line,
                                   snap.direction, origin_local,
                                   snap.journey_ref, cfg.enable_exact_match,
                                   vehicle_pos=(snap.lat, snap.lon),
                                   origin_ref=snap.origin_stop_ref,
                                   destination_ref=snap.destination_stop_ref)
+            if match and not _journey_within_age_limit(
+                    match, origin_local, now_utc, cfg.max_journey_age_h):
+                match = None
         if match:
             counters["matched"] += 1
             first_secs = gtfs_seconds(match.schedule[0][1])

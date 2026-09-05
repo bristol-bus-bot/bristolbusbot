@@ -1,5 +1,6 @@
 """End-to-end cycle tests: canned XML in, database rows out. No network."""
 import json
+import pytest
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -161,6 +162,65 @@ def test_fresh_recorded_at_still_processed():
                  LDN, now_utc=NOW)
     assert r["stale"] == 0
     assert r["candidates"] == 1
+
+
+@pytest.mark.parametrize("hour,minute,matched,delay", [
+    (12, 57, 1, 60),       # 13:57 BST: a 161-minute journey, one minute late
+    (13, 56, 1, 3600),     # genuinely late long journey remains measurable
+    (14, 27, 0, None),     # beyond the existing 90-minute late allowance
+])
+def test_long_scheduled_journey_outlives_two_hour_limit(hour, minute, matched, delay):
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    tt.execute("UPDATE stop_times SET departure_time='12:00:00' WHERE trip_id='T_OUT' AND stop_sequence=1")
+    tt.execute("UPDATE stop_times SET departure_time='13:56:00' WHERE trip_id='T_OUT' AND stop_sequence=2")
+    now = datetime(2026, 6, 10, hour, minute, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", now.isoformat())
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == matched
+    vehicle = live_conn.execute("SELECT * FROM vehicles").fetchone()
+    assert vehicle["delay_seconds"] == delay
+    assert audit_conn.execute("SELECT COUNT(*) FROM timepoint_observations").fetchone()[0] == matched
+
+
+def test_short_journey_still_expires_after_configured_age():
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    now = datetime(2026, 6, 10, 12, 16, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", now.isoformat())
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == 0
+
+
+@pytest.mark.parametrize("end", ["invalid", "10:00:00"])
+def test_invalid_schedule_cannot_extend_age_limit(end):
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    tt.execute("UPDATE stop_times SET departure_time=? WHERE trip_id='T_OUT' AND stop_sequence=2", (end,))
+    now = datetime(2026, 6, 10, 12, 16, tzinfo=timezone.utc)
+    feed = VM_FEED.replace("2026-06-10T10:27:00+00:00", now.isoformat())
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == 0
+
+
+def test_long_overnight_journey_uses_previous_service_day():
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    tt.execute("UPDATE stop_times SET departure_time='28:11:00' WHERE trip_id='T_NIGHT' AND stop_sequence=1")
+    now = datetime(2026, 6, 11, 3, 12, tzinfo=timezone.utc)
+    feed = VM_FEED.replace(
+        "2026-06-10T10:27:00+00:00", now.isoformat()).replace(
+        "2026-06-10T11:15:00+01:00", "2026-06-11T01:30:00+01:00").replace(
+        ">75<", ">N75<")
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["matched"] == 1
+    row = live_conn.execute("SELECT trip_id,delay_seconds FROM vehicles").fetchone()
+    assert tuple(row) == ("T_NIGHT", 60)
+    # The same long timetable must not revive a stale GPS report.
+    stale = feed.replace(now.isoformat(), "2026-06-11T02:12:00+00:00")
+    result = vm_cycle(lambda: stale, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=now)
+    assert result["stale"] == 1 and result["matched"] == 0
 
 
 def test_normal_reading_does_not_run_expensive_diagnostics(monkeypatch):
