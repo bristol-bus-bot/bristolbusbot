@@ -867,3 +867,24 @@ def test_timetable_notification_state_advances_only_after_successful_send(
     attempt["failure_code"] = "candidate_service_collapse"
     assert aggregate_health.main() == 1
     assert len(messages) == 2
+def test_provisional_holiday_deadline_surfaces_without_a_new_build(tmp_path, monkeypatch):
+    jobs = tmp_path/'jobs'
+    jobs.mkdir()
+    marker = SimpleNamespace(
+        exists=lambda: True, is_symlink=lambda: False, is_file=lambda: True,
+        lstat=lambda: SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o644))
+    state = tmp_path/'timetable-promotion.json'
+    state.write_text(json.dumps({'last_attempt':{'outcome':'accepted'},
+        'last_accepted':{'provisional_coverage':[{'date':'2026-12-24','review_by':'2026-10-29'}]}}))
+    (jobs/'timetable-promote.json').write_text(json.dumps({'last_result':'success'}))
+    monkeypatch.setattr(aggregate_health,'STATE',tmp_path)
+    monkeypatch.setattr(aggregate_health,'TIMETABLE_PROMOTION_STATE',state)
+    monkeypatch.setattr(aggregate_health,'TIMETABLE_PROMOTION_MARKER',marker)
+    monkeypatch.setattr(aggregate_health,'utcnow',lambda: datetime(2026,10,28,tzinfo=timezone.utc))
+    result, issues = aggregate_health.timetable_promotion_check()
+    assert result['provisional_coverage'][0]['date'] == '2026-12-24'
+    assert 'timetable:provisional-holiday-due' not in issues
+    monkeypatch.setattr(aggregate_health,'utcnow',lambda: datetime(2026,10,29,tzinfo=timezone.utc))
+    assert 'timetable:provisional-holiday-due' in aggregate_health.timetable_promotion_check()[1]
+    monkeypatch.setattr(aggregate_health,'timetable_delivery_check',lambda: ({'status':'disabled'},[]))
+    assert 'timetable:provisional-holiday-due' in aggregate_health.timetable_automation_check()[1]

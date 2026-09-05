@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import date
 
 from timetable_editions import normalize_database as normalize_route_editions
+from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
 
 HERE = Path(__file__).parent
 PY = sys.executable
@@ -238,6 +239,14 @@ def main():
             "required First route; TNDS fallback is not needed.")
         write_source_status(
             tnds_status="not_needed", missing_before_tnds=[])
+
+    logger.info("Checking removal exceptions against exact First source journeys...")
+    try:
+        calendar_result = reconcile_calendar_sources(WECA_DB, txc_dir)
+    except Exception:
+        logger.exception("Calendar source verification failed - refusing the candidate")
+        return 2
+    logger.info("Calendar source corrections: %s", calendar_result)
 
     # BODS can publish current and future revisions of the same registered
     # route with overlapping calendar ranges. Preserve every revision, but

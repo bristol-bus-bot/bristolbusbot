@@ -20,6 +20,7 @@ from typing import Callable
 
 from timetable_control import paths, promote, rollback, validate
 from timetable_delivery import BRISTOL_TZ, compare_with_current, sha256_file
+from timetable_service_profile import pending_holiday_coverage
 from timetable_manifest import verify_manifest
 
 
@@ -304,6 +305,9 @@ class TimetablePromoter:
                 "accepted_at": attempt.get("finished_at"),
                 "database_sha256": attempt.get("database_sha256"),
                 "commit": attempt.get("commit"),
+                "provisional_coverage": [w for w in
+                    (attempt.get('comparison') or {}).get('service', {}).get('warnings', [])
+                    if w.get('code') == 'provisional_holiday_coverage'],
             }
         elif attempt.get("outcome") == "no_change" and accepted is None:
             accepted = {
@@ -414,6 +418,7 @@ class TimetablePromoter:
                 database,
                 validation,
                 start_date=self.now().astimezone(BRISTOL_TZ).date(),
+                provisional_requirements=pending_holiday_coverage(self.state_document()),
             )
         except Exception as exc:
             code = exc.code if hasattr(exc, "code") else "candidate_validation_failed"
