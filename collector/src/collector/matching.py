@@ -59,9 +59,33 @@ def _schedule_for(cur, trip_id: str) -> list:
     return cur.fetchall()
 
 
+def _reversed_endpoints(cur, trip_id: str, origin_ref: str | None,
+                        destination_ref: str | None) -> bool:
+    """Reject only a proven reverse pair, not unknown refs or short workings.
+
+    SIRI may identify a stop by its ATCO id or public stop code. Distinct
+    endpoints are required: circular trips cannot establish a reversal.
+    """
+    if not origin_ref or not destination_ref:
+        return False
+    endpoints = []
+    for order in ("ASC", "DESC"):
+        cur.execute(f"""
+            SELECT s.stop_id, s.stop_code FROM stop_times st
+            JOIN stops s ON s.stop_id=st.stop_id
+            WHERE st.trip_id=? ORDER BY st.stop_sequence {order} LIMIT 1
+        """, (trip_id,))
+        row = cur.fetchone()
+        endpoints.append({str(value) for value in row if value} if row else set())
+    first, last = endpoints
+    return (first.isdisjoint(last) and origin_ref in last
+            and destination_ref in first)
+
+
 def match_exact(cur, operator_noc: str, journey_ref: str,
                 origin_local: datetime | None = None,
-                line_name: str = "") -> Match | None:
+                line_name: str = "", origin_ref: str | None = None,
+                destination_ref: str | None = None) -> Match | None:
     """Tier 0: trips.vehicle_journey_code. Only meaningful for operators whose
     SIRI DatedVehicleJourneyRef is a real journey code (not the HHMM start).
     An HHMM-shaped ref ('1115') is refused outright: it would collide with
@@ -119,6 +143,8 @@ def match_exact(cur, operator_noc: str, journey_ref: str,
             break
     if not row:
         return None
+    if _reversed_endpoints(cur, row[0], origin_ref, destination_ref):
+        return None
     schedule = _schedule_for(cur, row[0])
     if not schedule:
         return None
@@ -151,7 +177,9 @@ def _nearest_route_distance(
 
 def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | None,
                 origin_local: datetime,
-                vehicle_pos: tuple[float, float] | None = None) -> Match | None:
+                vehicle_pos: tuple[float, float] | None = None,
+                origin_ref: str | None = None,
+                destination_ref: str | None = None) -> Match | None:
     """Tier 1: fuzzy matching, with deterministic
     candidate selection (nearest departure-time gap) and, when vehicle_pos
     is given, a route-proximity gate (see module docstring)."""
@@ -239,6 +267,8 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
                 if vehicle_pos is not None and \
                         not _route_near(schedule, *vehicle_pos):
                     continue  # same line number, different town
+                if _reversed_endpoints(cur, row[0], origin_ref, destination_ref):
+                    continue
                 return Match(trip_id=row[0], route_short_name=row[1],
                              schedule=schedule, tier="fuzzy")
     return None
@@ -247,15 +277,19 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
 def match_vehicle(cur, operator_noc: str, line_name: str, direction_ref: str | None,
                   origin_local: datetime, journey_ref: str = "",
                   enable_exact: bool = False,
-                  vehicle_pos: tuple[float, float] | None = None) -> Match | None:
+                  vehicle_pos: tuple[float, float] | None = None,
+                  origin_ref: str | None = None,
+                  destination_ref: str | None = None) -> Match | None:
     """The one entry point. Exact tier only when explicitly enabled."""
     if enable_exact:
         m = match_exact(
-            cur, operator_noc, journey_ref, origin_local, line_name)
+            cur, operator_noc, journey_ref, origin_local, line_name,
+            origin_ref=origin_ref, destination_ref=destination_ref)
         if m:
             return m
     return match_fuzzy(cur, operator_noc, line_name, direction_ref, origin_local,
-                       vehicle_pos=vehicle_pos)
+                       vehicle_pos=vehicle_pos, origin_ref=origin_ref,
+                       destination_ref=destination_ref)
 
 
 def _diagnostic_rows(cur, operator_noc: str, line_name: str,

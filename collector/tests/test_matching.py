@@ -1,5 +1,6 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import pytest
 
 from collector.matching import explain_match, match_exact, match_fuzzy, match_vehicle
 from fixture_gtfs import build
@@ -10,6 +11,39 @@ WED_1115 = datetime(2026, 6, 10, 11, 15, tzinfo=LDN)  # Wednesday
 
 def cur():
     return build().cursor()
+
+
+@pytest.mark.parametrize("origin,destination", [("S1", "S3"), ("0100A", "0100C")])
+@pytest.mark.parametrize("exact", [False, True])
+def test_reversed_endpoints_cannot_win_direction_fallback(origin, destination, exact):
+    # Like the route 7 receipt: the reported direction has no departure in
+    # range, while the reverse journey does. Time alone must not select it.
+    connection = build()
+    connection.execute("UPDATE trips SET vehicle_journey_code='RETURN' WHERE trip_id='T_IN'")
+    match = match_vehicle(
+        connection.cursor(), "FBRI", "75", "outbound", WED_1115.replace(minute=26),
+        "RETURN", enable_exact=exact, origin_ref=origin, destination_ref=destination)
+    assert match is None
+
+
+@pytest.mark.parametrize("origin,destination", [
+    (None, None), ("S1", None), ("unknown", "S3"), ("S2", "S3"),
+    ("S3", "S1"),
+])
+def test_endpoint_guard_preserves_unproven_and_correct_fallbacks(origin, destination):
+    match = match_vehicle(
+        cur(), "FBRI", "75", "outbound", WED_1115.replace(minute=26),
+        origin_ref=origin, destination_ref=destination)
+    assert match and match.trip_id == "T_IN"
+
+
+def test_endpoint_guard_does_not_reject_circular_trip():
+    connection = build()
+    connection.execute("UPDATE stop_times SET stop_id='S3' WHERE trip_id='T_IN'")
+    match = match_vehicle(
+        connection.cursor(), "FBRI", "75", "inbound", WED_1115,
+        origin_ref="S3", destination_ref="0100C")
+    assert match and match.trip_id == "T_IN"
 
 
 def test_fuzzy_matches_right_operator():
