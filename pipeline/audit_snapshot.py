@@ -143,9 +143,9 @@ def build_snapshot(date_str):
 
     # All show-operator trips on those services, with the minimum private
     # timetable clues needed to distinguish similar duties later. The route
-    # edition uses the same route_service_editions vocabulary as the matching
-    # evidence receipts; older timetable databases without that optional table
-    # remain readable and yield a blank edition.
+    # edition identifies this trip's calendar cohort, as in matching receipts.
+    # Overlapping editions on a route must not all acquire the newest label.
+    # Missing calendar/edition metadata stays explicitly unavailable.
     svc_ph = ",".join("?" for _ in service_ids)
     op_ph = ",".join("?" for _ in SHOW_OPERATORS)
     has_editions = table_exists(tt_cur, "route_service_editions")
@@ -153,10 +153,11 @@ def build_snapshot(date_str):
     if has_editions:
         edition_sql = """(SELECT rse.edition_start
                               FROM route_service_editions rse
+                              JOIN calendar c
+                                ON c.start_date = rse.edition_start
                              WHERE rse.route_id = t.route_id
-                               AND rse.edition_start <= ?
-                               AND rse.effective_end >= ?
-                             ORDER BY rse.edition_start DESC LIMIT 1)"""
+                               AND c.service_id = t.service_id
+                             LIMIT 1)"""
     sql = f"""
         SELECT t.trip_id, a.agency_noc, r.route_short_name, t.direction_id,
                (SELECT st.departure_time FROM stop_times st
@@ -185,9 +186,8 @@ def build_snapshot(date_str):
         WHERE a.agency_noc IN ({op_ph})
           AND t.service_id IN ({svc_ph})
     """
-    edition_params = [date_str, date_str] if has_editions else []
     tt_cur.execute(
-        sql, edition_params + list(SHOW_OPERATORS) + list(service_ids))
+        sql, list(SHOW_OPERATORS) + list(service_ids))
     rows = tt_cur.fetchall()
     tt_conn.close()
 

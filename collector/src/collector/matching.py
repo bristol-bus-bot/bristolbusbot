@@ -360,15 +360,16 @@ def _table_exists(cur, table: str) -> bool:
     return cur.fetchone() is not None
 
 
-def _edition_for(cur, route_id: str, service_date: str,
+def _edition_for(cur, route_id: str, calendar_start: str | None,
                  has_editions: bool) -> str | None:
-    if not has_editions:
+    # A route can legitimately retain several overlapping calendar cohorts.
+    # Label this trip's cohort, not the newest cohort active on the date.
+    if not has_editions or not calendar_start:
         return None
     cur.execute(
         """SELECT edition_start FROM route_service_editions
-           WHERE route_id=? AND edition_start<=? AND effective_end>=?
-           ORDER BY edition_start DESC LIMIT 1""",
-        (route_id, service_date, service_date))
+           WHERE route_id=? AND edition_start=? LIMIT 1""",
+        (route_id, calendar_start))
     row = cur.fetchone()
     return str(row[0]) if row else None
 
@@ -399,7 +400,7 @@ def _candidate_detail(cur, row: tuple, vehicle_pos: tuple[float, float],
             abs(dep_secs - target_secs) if dep_secs is not None else None),
         "gps_distance_m": int(round(distance)),
         "timetable_edition": _edition_for(
-            cur, str(row[1]), str(row[11]), has_editions),
+            cur, str(row[1]), row[8], has_editions),
     }
 
 
@@ -447,7 +448,7 @@ def _chosen_detail(cur, match: Match, vehicle_pos: tuple[float, float],
         "gps_distance_m": (
             int(round(distance)) if distance is not None else None),
         "timetable_edition": _edition_for(
-            cur, str(row[1]), service_date, has_editions),
+            cur, str(row[1]), row[8], has_editions),
     }
 
 

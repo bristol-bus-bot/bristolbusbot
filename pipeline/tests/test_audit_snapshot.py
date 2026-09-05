@@ -155,6 +155,40 @@ def test_imported_identifiers_are_bounded():
     assert audit_snapshot.bounded_text(None) is None
 
 
+def test_overlapping_editions_follow_each_trips_calendar(monkeypatch, tmp_path):
+    timetable_path = tmp_path / "timetable.db"
+    audit_path = tmp_path / "audit.db"
+    connection = timetable(timetable_path)
+    connection.executescript("""
+        DELETE FROM route_service_editions;
+        INSERT INTO route_service_editions VALUES
+            ('R-STABLE','20260816','20270516'),
+            ('R-STABLE','20260830','20270530');
+        INSERT INTO calendar VALUES
+            ('OLDER',1,1,1,1,1,0,0,'20260816','20270516'),
+            ('NEWER',0,0,0,0,1,0,0,'20260830','20270530');
+        INSERT INTO calendar_dates VALUES ('EXCEPTION-ONLY','20260904',1);
+        INSERT INTO trips VALUES
+            ('OLD','R-STABLE','OLDER',0,'BLOCK-A','VJ-A'),
+            ('NEW','R-STABLE','NEWER',0,'BLOCK-B','VJ-B'),
+            ('EXTRA','R-STABLE','EXCEPTION-ONLY',0,'BLOCK-C','VJ-C');
+        INSERT INTO stop_times VALUES
+            ('OLD','14:10:00','STOP-A',0),
+            ('NEW','14:10:00','STOP-A',0),
+            ('EXTRA','15:10:00','STOP-A',0);
+    """)
+    connection.commit()
+    connection.close()
+    use_databases(monkeypatch, timetable_path, audit_path)
+    # Same-time journeys are evidence to investigate, not rows to discard.
+    assert audit_snapshot.build_snapshot("20260904") == 3
+    with sqlite3.connect(audit_path) as audit:
+        assert audit.execute(
+            "SELECT trip_id,timetable_edition FROM expected_trips "
+            "ORDER BY trip_id").fetchall() == [
+                ("EXTRA", None), ("NEW", "20260830"), ("OLD", "20260816")]
+
+
 def create_legacy_expected_trips(connection: sqlite3.Connection) -> None:
     connection.executescript("""
         CREATE TABLE expected_trips (

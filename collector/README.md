@@ -79,3 +79,9 @@ remain bounded and useful daytime cases must survive before considering the
 sampling change verified in production. Older receipts have null sampling
 fields; newly added poll counters are zero for older polls and do not recreate
 historical admission outcomes.
+
+The receipt's `timetable_edition` identifies the chosen trip's calendar-start
+cohort for its route, not simply the newest edition active on that day. The
+same rule applies to each alternative candidate. Missing calendar/edition
+metadata remains null. This label is not a source-file hash and does not by
+itself establish that overlapping journeys are duplicates.
