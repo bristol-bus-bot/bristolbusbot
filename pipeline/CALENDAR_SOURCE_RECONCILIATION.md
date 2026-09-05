@@ -27,9 +27,24 @@ service edition and profile hash. The parcel's database hash also covers these
 records. The build's existing source manifest retains the downloaded archives'
 provenance. Historical databases and observations are never modified.
 
-Parsing or transaction failures abort the build. No acceptance threshold or
-promotion rule changes. A candidate with unresolved coverage loss still fails
-the full comparison, even if this reconciliation fixes another date.
+Parsing or transaction failures abort the build. Ordinary-date coverage losses
+still fail the full comparison, even if reconciliation fixes another date.
+
+## Distant holiday coverage
+
+The separately recorded `service-window-v2` acceptance policy permits a failed
+forward comparison only on a recognised recurring England/Wales holiday or
+Christmas/New Year's Eve more than 56 days away. No timetable journeys are
+added by this policy. Numeric inventory, near-term and ordinary-date thresholds
+are unchanged; a run of missing normal days still fails.
+
+Every provisional date and metric is recorded with its original acceptance
+floor and an eight-week review deadline. The last accepted promotion retains
+these obligations across failed attempts and subsequent timetable updates.
+Re-comparison uses the original floor even if the live timetable is already
+sparse on that date. Recovered coverage clears the obligation; unresolved
+coverage within 56 days blocks acceptance. The existing estate monitor also
+raises an incident at the deadline even if no new build runs.
 
 ## Observed validation
 
@@ -40,5 +55,7 @@ continue to match the correct direction and endpoints.
 
 The full comparison against the 16 August accepted timetable then exposed four
 remaining failures: 24 and 26 December 2026, and 29 March and 3 May 2027. These
-are not repaired by this module and are not grounds for bypassing validation.
-This change alone does not make that artifact suitable for promotion.
+are not repaired by the source reconciliation module. Under the explicitly
+approved distant-holiday policy they are recorded as provisional, and the full
+comparison passes. The first review deadline is 29 October 2026. All dates
+remain subject to later source updates and the approaching-date checks.

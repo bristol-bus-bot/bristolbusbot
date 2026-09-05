@@ -1,6 +1,7 @@
 import sqlite3
 import sys
 from datetime import date, datetime, timezone
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -274,6 +275,62 @@ def test_future_coverage_cliff_fails_after_the_near_term_window(tmp_path):
         compare(tmp_path, current, candidate)
 
     assert failure.value.code == "candidate_future_coverage_cliff"
+
+
+@pytest.mark.parametrize('day', [date(2026,12,24), date(2026,12,26),
+                               date(2027,3,29), date(2027,5,3)])
+def test_distant_special_date_is_visible_and_has_a_review_deadline(tmp_path, day):
+    services = [{'operator': 'MAIN', 'route': '1'}]
+    result = compare(tmp_path, services, services,
+                     candidate_exceptions=[('S0', day.strftime('%Y%m%d'), 2)])
+    warnings = result['warnings']
+    assert len(warnings) == 2
+    assert {w['metric'] for w in warnings} == {'trips', 'stop_times'}
+    assert all(w['code'] == 'provisional_holiday_coverage' for w in warnings)
+    assert all(w['review_by'] == (day-timedelta(days=56)).isoformat() for w in warnings)
+
+
+@pytest.mark.parametrize('days_ahead', [0, 28, 55, 56])
+def test_approaching_holiday_stays_strict(tmp_path, days_ahead):
+    day = date(2026,12,24)
+    services = [{'operator': 'MAIN', 'route': '1'}]
+    current, candidate = tmp_path/'current.db', tmp_path/'candidate.db'
+    make_service_database(current, services)
+    make_service_database(candidate, services, exceptions=[('S0','20261224',2)])
+    with pytest.raises(ServiceProfileError):
+        compare_databases(current, candidate, start_date=day-timedelta(days=days_ahead))
+
+
+def test_ordinary_future_day_cannot_be_deferred(tmp_path):
+    services = [{'operator': 'MAIN', 'route': '1'}]
+    with pytest.raises(ServiceProfileError):
+        compare(tmp_path, services, services, candidate_exceptions=[('S0','20261201',2)])
+
+
+def test_original_floor_survives_updates_and_resolves_only_when_filled(tmp_path):
+    services = [{'operator': 'MAIN', 'route': '1'}]
+    current, sparse = tmp_path/'current.db', tmp_path/'sparse.db'
+    make_service_database(current, services)
+    make_service_database(sparse, services, exceptions=[('S0','20261224',2)])
+    first = compare_databases(current, sparse, start_date=START)
+    requirements = first['warnings']
+    repeated = compare_databases(sparse, sparse, start_date=START,
+                                 provisional_requirements=requirements)
+    assert [w['minimum'] for w in repeated['warnings']] == [w['minimum'] for w in requirements]
+    with pytest.raises(ServiceProfileError):
+        compare_databases(sparse, sparse, start_date=date(2026,10,29),
+                          provisional_requirements=requirements)
+    resolved = compare_databases(sparse, current, start_date=date(2026,10,29),
+                                 provisional_requirements=requirements)
+    assert resolved['warnings'] == []
+
+
+def test_recurring_holiday_dates_include_substitutes_without_extra_days():
+    for text in ('2026-12-28','2027-03-26','2027-03-29','2027-05-03',
+                 '2027-12-27','2027-12-28','2028-01-03'):
+        assert service_profile.special_service_date(date.fromisoformat(text))
+    for text in ('2026-12-01','2026-12-29','2027-03-30','2027-05-04'):
+        assert not service_profile.special_service_date(date.fromisoformat(text))
 
 
 def test_calendar_date_addition_and_removal_are_applied(tmp_path):

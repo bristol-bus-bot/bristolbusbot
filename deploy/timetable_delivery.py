@@ -34,6 +34,7 @@ from timetable_service_profile import (
     ServiceProfileError,
     bristol_today,
     compare_databases,
+    pending_holiday_coverage,
 )
 
 
@@ -324,6 +325,7 @@ class DeliveryConfig:
     minimum_refresh_interval: timedelta = MINIMUM_REFRESH_INTERVAL
     poll_timeout_seconds: int = 45 * 60
     discovery_timeout_seconds: int = 2 * 60
+    promotion_state: Path = Path('/var/lib/bristolbusbot/monitoring/timetable-promotion.json')
 
     @property
     def state_path(self) -> Path:
@@ -528,7 +530,8 @@ def validate_manifest_identity(manifest: dict, run: dict, artifact: dict,
 
 def compare_with_current(current: Path, candidate: Path,
                          candidate_result: dict[str, object], *,
-                         start_date: date | None = None) -> dict[str, object]:
+                         start_date: date | None = None,
+                         provisional_requirements: list[dict] | None = None) -> dict[str, object]:
     try:
         current_result = validate(current, today=date(1970, 1, 1))
     except (OSError, sqlite3.Error, RuntimeError) as exc:
@@ -570,7 +573,8 @@ def compare_with_current(current: Path, candidate: Path,
                  "minimum": minimum})
     try:
         semantic = compare_databases(
-            current, candidate, start_date=start_date or bristol_today())
+            current, candidate, start_date=start_date or bristol_today(),
+            provisional_requirements=provisional_requirements or [])
     except ServiceProfileError as exc:
         raise DeliveryError(exc.code, str(exc), exc.context) from exc
     return {
@@ -777,6 +781,9 @@ class TimetableDelivery:
                 payload / "timetable.db",
                 validation,
                 start_date=self.now().astimezone(BRISTOL_TZ).date(),
+                provisional_requirements=pending_holiday_coverage(json.loads(
+                    self.config.promotion_state.read_text(encoding='utf-8')))
+                if self.config.promotion_state.exists() else [],
             )
 
             archive.unlink()

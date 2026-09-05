@@ -29,7 +29,7 @@ MAX_RECORDED_FAILURES = 100
 class AcceptancePolicy:
     """All acceptance thresholds live in one recorded policy."""
 
-    version: str = "service-window-v1"
+    version: str = "service-window-v2"
     near_term_days: int = 28
     minimum_forward_days: int = 180
     maximum_forward_days: int = 400
@@ -40,6 +40,7 @@ class AcceptancePolicy:
     substantial_operator_share: float = 0.01
     forward_coverage_ratio: float = 0.75
     raw_catastrophic_ratio: float = 0.25
+    provisional_holiday_lead_days: int = 56
 
     def record(self) -> dict[str, object]:
         return {
@@ -54,10 +55,62 @@ class AcceptancePolicy:
             "substantial_operator_share": self.substantial_operator_share,
             "forward_coverage_ratio": self.forward_coverage_ratio,
             "raw_catastrophic_ratio": self.raw_catastrophic_ratio,
+            "provisional_holiday_lead_days": self.provisional_holiday_lead_days,
         }
 
 
 DEFAULT_POLICY = AcceptancePolicy()
+
+
+def special_service_date(day: date) -> bool:
+    """Recurring England/Wales holidays plus Christmas/New Year eves.
+
+    Gregorian Easter calculation matches pipeline/frequency_changes.py.
+    Unknown one-off dates deliberately do not qualify for deferral.
+    """
+    year = day.year
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    h = (19*a + b - d - (b-(b+8)//25+1)//3 + 15) % 30
+    i, k = divmod(c, 4)
+    ell = (32 + 2*e + 2*i - h - k) % 7
+    m = (a + 11*h + 22*ell) // 451
+    easter = date(year, (h+ell-7*m+114)//31, (h+ell-7*m+114)%31+1)
+    first_may = date(year, 5, 1)
+    last_may = date(year, 5, 31)
+    last_august = date(year, 8, 31)
+    dates = {easter-timedelta(days=2), easter+timedelta(days=1),
+             first_may+timedelta(days=(-first_may.weekday())%7),
+             last_may-timedelta(days=last_may.weekday()),
+             last_august-timedelta(days=last_august.weekday()),
+             date(year, 12, 24), date(year, 12, 31)}
+    for month, number in ((1, 1), (12, 25), (12, 26)):
+        actual = date(year, month, number)
+        dates.add(actual)
+        if actual.weekday() >= 5:
+            substitute = actual + timedelta(days=7-actual.weekday())
+            if month == 12 and substitute.day == 26:
+                substitute += timedelta(days=1)
+            if number == 26 and actual.weekday() == 6:
+                substitute += timedelta(days=1)
+            dates.add(substitute)
+    return day in dates
+
+
+def pending_holiday_coverage(document: dict) -> list[dict]:
+    """Read obligations from the last accepted release, even after failures."""
+    accepted = document.get('last_accepted') or {}
+    values = accepted.get('provisional_coverage', [])
+    if not isinstance(values, list):
+        raise ValueError('invalid provisional timetable coverage')
+    for value in values:
+        if (not isinstance(value, dict) or value.get('metric') not in {'trips', 'stop_times'}
+                or not isinstance(value.get('minimum'), int) or value['minimum'] < 1
+                or not isinstance(value.get('current'), int) or value['current'] < 1
+                or not special_service_date(date.fromisoformat(value['date']))):
+            raise ValueError('invalid provisional timetable requirement')
+    return values
 
 
 class ServiceProfileError(RuntimeError):
@@ -513,7 +566,8 @@ def _compatible_transfers(current: ServiceProfile, candidate: ServiceProfile,
 
 
 def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
-                             *, policy: AcceptancePolicy = DEFAULT_POLICY) -> dict[str, object]:
+                             *, policy: AcceptancePolicy = DEFAULT_POLICY,
+                             provisional_requirements: Iterable[dict] = ()) -> dict[str, object]:
     if current.start_date != candidate.start_date:
         raise ServiceProfileError(
             "profile_identity_mismatch", "service profiles use different start dates")
@@ -623,6 +677,21 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         failures.append(route_gate)
 
     forward: list[dict[str, object]] = []
+    pending = {(item['date'], item['metric']): item for item in provisional_requirements}
+    provisional = {}
+    def record_forward(gate):
+        if gate['passed']:
+            return
+        day = date.fromisoformat(str(gate['date']))
+        if ((day - candidate.start_date).days > policy.provisional_holiday_lead_days
+                and special_service_date(day)):
+            warning = dict(gate, code='provisional_holiday_coverage',
+                           review_by=(day-timedelta(days=policy.provisional_holiday_lead_days)).isoformat())
+            key = (gate['date'], gate['metric'])
+            if int(warning['minimum']) >= int(provisional.get(key, {}).get('minimum', 0)):
+                provisional[key] = warning
+        elif len(failures) < MAX_RECORDED_FAILURES:
+            failures.append(gate)
     forward_days = min(len(current.daily), len(candidate.daily))
     for offset in range(policy.near_term_days, forward_days):
         live_day = current.daily[offset]
@@ -634,9 +703,26 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
                 metric, int(live_day[metric]), int(new_day[metric]),
                 policy.forward_coverage_ratio, kind="forward_coverage",
                 date=live_day["date"])
-            if not gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
-                failures.append(gate)
+            previous = pending.get((gate['date'], metric))
+            if previous and int(previous['minimum']) > int(gate['minimum']):
+                gate.update(minimum=previous['minimum'], current=previous['current'],
+                            ratio=round(int(new_day[metric])/int(previous['current']), 6),
+                            passed=int(new_day[metric]) >= int(previous['minimum']))
+            record_forward(gate)
             forward.append(gate)
+
+    # Carry the original floor across updates: a sparse accepted holiday must
+    # not become its own evidence of adequate coverage on the next comparison.
+    by_date = {day['date']: day for day in candidate.daily}
+    for (day, metric), previous in pending.items():
+        if date.fromisoformat(day) < candidate.start_date:
+            continue
+        count = int(by_date.get(day, {}).get(metric, 0))
+        gate = dict(previous, candidate=count,
+                    ratio=round(count/int(previous['current']), 6),
+                    passed=count >= int(previous['minimum']))
+        record_forward(gate)
+    warnings.extend(provisional.values())
 
     if failures:
         first = failures[0]
@@ -681,6 +767,7 @@ def compare_databases(current_path: Path, candidate_path: Path, *,
                       start_date: date | None = None,
                       policy: AcceptancePolicy = DEFAULT_POLICY,
                       deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
+                      provisional_requirements: Iterable[dict] = (),
                       monotonic: Callable[[], float] = time.monotonic) -> dict[str, object]:
     """Build both profiles under one deadline and apply the recorded policy."""
     effective_start = start_date or bristol_today()
@@ -703,6 +790,7 @@ def compare_databases(current_path: Path, candidate_path: Path, *,
         deadline_seconds=remaining,
         monotonic=monotonic,
     )
-    result = compare_service_profiles(current, candidate, policy=policy)
+    result = compare_service_profiles(current, candidate, policy=policy,
+                                      provisional_requirements=provisional_requirements)
     result["duration_seconds"] = round(monotonic() - started, 3)
     return result

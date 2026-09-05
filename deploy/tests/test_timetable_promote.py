@@ -200,6 +200,18 @@ def promotion_case(tmp_path: Path, *, services=None, fault=None):
     return promoter, fake, database, live, marker
 
 
+def test_provisional_coverage_survives_later_failed_attempt(tmp_path):
+    from timetable_service_profile import pending_holiday_coverage
+    promoter, *_ = promotion_case(tmp_path)
+    warning = {'code': 'provisional_holiday_coverage', 'date': '20261224',
+               'metric': 'trips', 'minimum': 75, 'current': 100}
+    warning['date'] = '2026-12-24'
+    promoter.write_state({'outcome':'accepted','run_id':'1',
+                          'comparison':{'service':{'warnings':[warning]}}})
+    promoter.write_state({'outcome':'rejected','run_id':'2'})
+    assert pending_holiday_coverage(promoter.state_document()) == [warning]
+
+
 def attended(candidate: Path) -> str:
     return f"{RUN_ID}-{hashlib.sha256(candidate.read_bytes()).hexdigest()}"
 

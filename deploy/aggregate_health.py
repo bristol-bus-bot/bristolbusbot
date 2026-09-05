@@ -277,6 +277,11 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
         accepted = document.get("last_accepted")
         if isinstance(accepted, dict):
             result["last_accepted"] = accepted
+            provisional = accepted.get('provisional_coverage', [])
+            result['provisional_coverage'] = provisional
+            today = utcnow().astimezone(ZoneInfo('Europe/London')).date().isoformat()
+            if any(item.get('review_by', '0000') <= today for item in provisional):
+                issues.append('timetable:provisional-holiday-due')
         elif document.get("last_accepted_run_id"):
             result["last_accepted"] = {
                 "run_id": document.get("last_accepted_run_id"),
@@ -320,7 +325,9 @@ def _not_older(left: object, right: object) -> bool:
 def timetable_automation_check() -> tuple[dict, list[str]]:
     """Correlate shadow and promotion as one causal transaction."""
     delivery, delivery_issues = timetable_delivery_check()
-    promotion, _ = timetable_promotion_check()
+    promotion, promotion_issues = timetable_promotion_check()
+    provisional_issues = [item for item in promotion_issues
+                          if item == 'timetable:provisional-holiday-due']
     result: dict[str, object] = {
         "status": "idle",
         "delivery": delivery,
@@ -330,12 +337,13 @@ def timetable_automation_check() -> tuple[dict, list[str]]:
     if delivery.get("status") == "disabled":
         result["status"] = "disabled"
         result["next_action"] = "timer disabled"
-        return result, []
+        return result, provisional_issues
 
     issues: list[str] = [
         issue for issue in delivery_issues
         if issue.startswith("credential:")
     ]
+    issues.extend(provisional_issues)
     delivery_job = delivery.get("job")
     delivery_job = delivery_job if isinstance(delivery_job, dict) else {}
     delivery_attempt = delivery.get("last_attempt")
@@ -1298,6 +1306,7 @@ def plain_issue_area(issue: str) -> str:
         "publish:audit-data": "the public performance report",
         "feed:stale": "fresh live bus information",
         "disk:low": "Pi storage space",
+        "timetable:provisional-holiday-due": "holiday timetables still incomplete within eight weeks",
     }
     if issue in exact:
         return exact[issue]
