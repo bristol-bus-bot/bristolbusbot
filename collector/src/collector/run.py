@@ -163,7 +163,9 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
             match = match_vehicle(tt_cur, snap.operator_ref, snap.line,
                                   snap.direction, origin_local,
                                   snap.journey_ref, cfg.enable_exact_match,
-                                  vehicle_pos=(snap.lat, snap.lon))
+                                  vehicle_pos=(snap.lat, snap.lon),
+                                  origin_ref=snap.origin_stop_ref,
+                                  destination_ref=snap.destination_stop_ref)
         if match:
             counters["matched"] += 1
             first_secs = gtfs_seconds(match.schedule[0][1])

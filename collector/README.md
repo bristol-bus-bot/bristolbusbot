@@ -45,6 +45,19 @@ release manifest, atomically switches code, restarts only the collector and
 requires database checks plus a fresh successful SIRI poll. The staleness and
 status-digest jobs are systemd timers.
 
+## Journey endpoint checks
+
+When both feed endpoints exactly identify the timetable's opposite endpoints,
+the collector rejects that candidate in both matching tiers. It accepts stop
+IDs or public stop codes. Missing or unfamiliar references, short workings and
+circular trips do not establish a reversal, so they retain the existing
+matching behaviour. Direction remains a preference when endpoints do not
+contradict the candidate.
+
+A vehicle with no remaining match stays on the live map without a calculated
+delay or a timing-point audit observation. This check does not correct source
+metadata or rewrite historical readings.
+
 ## Private matching diagnostics
 
 Diagnostic receipts are a selected investigation sample, not a count of bad

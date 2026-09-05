@@ -85,6 +85,19 @@ def test_vm_cycle_end_to_end():
         "SELECT COUNT(*) FROM matching_evidence").fetchone()[0] == 0
 
 
+def test_reversed_timetable_keeps_vehicle_without_delay_or_audit_reading():
+    tt, live_conn, audit_conn, boundary, cfg = setup()
+    feed = VM_FEED.replace("11:15:00+01:00", "11:26:00+01:00")
+    result = vm_cycle(lambda: feed, tt, live_conn, audit_conn, boundary, cfg,
+                      LDN, now_utc=NOW)
+    assert result["ok"] and result["candidates"] == 1
+    assert result["matched"] == 0 and result["events"] == 0
+    vehicle = live_conn.execute("SELECT * FROM vehicles").fetchone()
+    assert vehicle is not None
+    assert vehicle["trip_id"] is None and vehicle["delay_seconds"] is None
+    assert audit_conn.execute("SELECT COUNT(*) FROM timepoint_observations").fetchone()[0] == 0
+
+
 def test_vm_cycle_corroborated_event():
     tt, live_conn, audit_conn, boundary, cfg = setup()
     late = VM_FEED.replace("10:27:00+00:00", "10:32:00+00:00")  # 420 s late
@@ -273,7 +286,9 @@ def test_match_and_direction_flip_within_one_run_leave_one_receipt():
     flipped = VM_FEED.replace(
         "<DirectionRef>OUTBOUND</DirectionRef>",
         "<DirectionRef>INBOUND</DirectionRef>").replace(
-        "2026-06-10T10:27:00+00:00", "2026-06-10T10:28:00+00:00")
+        "2026-06-10T10:27:00+00:00", "2026-06-10T10:28:00+00:00").replace(
+        "<OriginRef>0100A</OriginRef>", "<OriginRef>0100C</OriginRef>").replace(
+        "<DestinationRef>0100C</DestinationRef>", "<DestinationRef>0100A</DestinationRef>")
 
     result = vm_cycle(
         lambda: flipped, tt, live_conn, audit_conn, boundary, cfg, LDN,
