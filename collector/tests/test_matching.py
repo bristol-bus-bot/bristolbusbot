@@ -238,3 +238,33 @@ def test_explain_match_bounds_a_hostile_candidate_set():
     assert explanation["candidates_truncated"] is True
     assert explanation["candidate_count"] <= 51
     assert len(explanation["alternatives"]) == 3
+
+
+def test_diagnostics_keep_distinct_overlapping_trip_editions():
+    connection = build()
+    connection.executescript("""
+        CREATE TABLE route_service_editions (
+            route_id TEXT,edition_start TEXT,effective_end TEXT);
+        INSERT INTO route_service_editions VALUES
+            ('R75F','20260601','20260630'),
+            ('R75F','20260608','20260731');
+        INSERT INTO calendar
+            SELECT 'NEWER',monday,tuesday,wednesday,thursday,friday,
+                saturday,sunday,'20260608','20260731'
+            FROM calendar WHERE service_id='WK';
+        INSERT INTO trips
+            SELECT 'T_NEW',route_id,'NEWER',trip_headsign,trip_short_name,
+                direction_id,block_id,shape_id,wheelchair_accessible,
+                vehicle_journey_code FROM trips WHERE trip_id='T_OUT';
+        INSERT INTO stop_times
+            SELECT 'T_NEW',arrival_time,departure_time,stop_id,stop_sequence,
+                stop_headsign,pickup_type,drop_off_type,shape_dist_traveled,
+                timepoint FROM stop_times WHERE trip_id='T_OUT';
+    """)
+    match = match_fuzzy(connection.cursor(), "FBRI", "75", "outbound",
+                        WED_1115, vehicle_pos=(51.4500, -2.5890))
+    details = explain_match(connection.cursor(), match, "FBRI", "75",
+                            "outbound", WED_1115, (51.4500, -2.5890), "20260610")
+    entries = [details["chosen"], *details["alternatives"]]
+    assert {row["trip_id"]: row["timetable_edition"] for row in entries} == {
+        "T_OUT": "20260601", "T_NEW": "20260608"}

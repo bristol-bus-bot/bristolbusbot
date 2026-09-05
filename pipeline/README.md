@@ -196,3 +196,15 @@ collisions, so the old generators cannot silently create cross-operator text.
 Collector matching behaviour is covered by its tests and package README; audit
 definitions and limitations are published with the audit site in
 `audit-site/AUDIT_METHODOLOGY.md`.
+## Snapshot edition provenance
+
+Daily `expected_trips.timetable_edition` labels follow each trip's own
+calendar-start cohort in `route_service_editions`. Multiple cohorts may be
+active on one route; they must not all be labelled as the newest edition.
+Exception-only calendars or timetables without edition metadata produce a
+null label rather than an inferred edition.
+
+This corrects future snapshot metadata only. Existing snapshot rows and
+published figures are not automatically rewritten. The label is a calendar
+cohort, not a source-file identity or proof that same-time journeys should be
+deduplicated.
