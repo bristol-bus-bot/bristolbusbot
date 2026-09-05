@@ -1,17 +1,23 @@
 /** Pure status classification and filter helpers shared by counts and markers. */
 
 export const BUS_STATUSES = [
-    "punctual", "early", "delayed", "waiting", "depot",
+    "punctual", "early", "delayed", "waiting", "depot", "unknown",
 ];
+
+export function timingUnavailable(bus) {
+    return bus?.eventType === "unknown" || bus?.hasSchedule === false
+        || bus?.delayMinutes === null;
+}
 
 /** Return one and only one display status for a live vehicle. */
 export function busStatus(bus) {
     if (bus?.eventType === "depot") return "depot";
+    if (timingUnavailable(bus)) return "unknown";
     if (bus?.waitingAtOrigin || bus?.eventType === "waiting") return "waiting";
     if (bus?.eventType === "delayed" || bus?.eventType === "delay")
         return "delayed";
     if (bus?.eventType === "early") return "early";
-    return "punctual";
+    return bus?.eventType === "punctual" ? "punctual" : "unknown";
 }
 
 export function countBusStatuses(buses) {
@@ -44,12 +50,14 @@ export function syncStatusFilterButtons(buttons, activeStatus) {
     }
 }
 
-window.BBB = window.BBB || {};
-Object.assign(window.BBB, {
-    BUS_STATUSES,
-    busStatus,
-    countBusStatuses,
-    nextStatusFilter,
-    statusFilterVisual,
-    syncStatusFilterButtons,
-});
+if (typeof window !== "undefined") {
+    window.BBB = window.BBB || {};
+    Object.assign(window.BBB, {
+        BUS_STATUSES,
+        busStatus,
+        countBusStatuses,
+        nextStatusFilter,
+        statusFilterVisual,
+        syncStatusFilterButtons,
+    });
+}

@@ -23,10 +23,14 @@ const STATUS = {
     punctual: { text: () => "on time",           cls: "vp-punctual" },
     early:    { text: d => `${Math.abs(d)}m early`, cls: "vp-early" },
     delayed:  { text: d => `${d}m late`,         cls: "vp-delayed" },
+    depot:    { text: () => "at depot",         cls: "vp-depot" },
+    unknown:  { text: () => "Timing unavailable", cls: "vp-unknown" },
 };
 
 function statusPill(eventType, waiting, delayMinutes) {
-    const s = waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.punctual);
+    const s = eventType === "depot" ? STATUS.depot
+        : eventType === "unknown" || delayMinutes === null ? STATUS.unknown
+        : waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.unknown);
     return el("span", { class: `rv-pill ${s.cls}` },
               [s.text(parseInt(delayMinutes) || 0)]);
 }

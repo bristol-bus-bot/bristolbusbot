@@ -41,6 +41,33 @@ def test_waiting_at_origin(client):
     assert bus["waitingAtOrigin"] is True and bus["eventType"] == "waiting"
 
 
+def test_missing_delay_is_unknown_even_with_a_matched_schedule(app, client):
+    import sqlite3
+    with sqlite3.connect(app.config["BBB"].live_db) as conn:
+        conn.execute("UPDATE vehicles SET delay_seconds=NULL WHERE vehicle_ref='FBRI-36205'")
+    bus = next(b for b in get_buses(client)["buses"] if b["vehicleRef"] == "FBRI-36205")
+    assert bus["hasSchedule"] is True
+    assert bus["delayMinutes"] is None and bus["eventType"] == "unknown"
+    assert bus["waitingAtOrigin"] is False
+
+
+def test_unmatched_vehicle_has_no_punctuality_and_stays_visible(app, client):
+    import sqlite3
+    with sqlite3.connect(app.config["BBB"].live_db) as conn:
+        conn.execute("UPDATE vehicles SET trip_id=NULL,delay_seconds=NULL WHERE vehicle_ref='FBRI-36205'")
+    bus = next(b for b in get_buses(client)["buses"] if b["vehicleRef"] == "FBRI-36205")
+    assert bus["hasSchedule"] is False
+    assert bus["delayMinutes"] is None and bus["eventType"] == "unknown"
+
+
+def test_genuine_zero_delay_still_counts_as_on_time(app, client):
+    import sqlite3
+    with sqlite3.connect(app.config["BBB"].live_db) as conn:
+        conn.execute("UPDATE vehicles SET delay_seconds=0 WHERE vehicle_ref='FBRI-36205'")
+    bus = next(b for b in get_buses(client)["buses"] if b["vehicleRef"] == "FBRI-36205")
+    assert bus["delayMinutes"] == 0 and bus["eventType"] == "punctual"
+
+
 def test_depot_detection(client):
     bus = next(b for b in get_buses(client)["buses"]
                if b["vehicleRef"] == "FBRI-DEPOT")

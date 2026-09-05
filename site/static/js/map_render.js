@@ -1,11 +1,14 @@
 /** Render map icons and popups for vehicles and depots. */
 import { el } from "./util.js";
+import { busStatus } from "./status_filter.js";
+import { statusPresentation } from "./vehicle_sidebar_logic.js";
 
 const EV_COLORS = {
     delayed: "var(--marker-status-late, #D4351C)",
     early: "var(--marker-status-early, #F59E0B)",
     waiting: "var(--marker-status-waiting, #1D70B8)",
     punctual: "var(--marker-status-ontime, #00703C)",
+    unknown: "var(--marker-muted-ring, #8B93A0)",
 };
 const MARKER_INK = "var(--marker-ink, #14181D)";
 const MARKER_GAP = "var(--marker-gap, #FFFFFF)";
@@ -24,7 +27,7 @@ export function liveryColor(livery) {
 }
 
 function corePath(eventType, c, r, hollow = false) {
-    const type = eventType in EV_COLORS ? eventType : "punctual";
+    const type = eventType in EV_COLORS ? eventType : "unknown";
     const color = EV_COLORS[type];
     const edge = MARKER_INK;
     if (hollow) {
@@ -35,7 +38,7 @@ function corePath(eventType, c, r, hollow = false) {
             return `<path data-marker-core="early" d="M ${c} ${c - r - 1} L ${c + r + 1} ${c + r} L ${c - r - 1} ${c + r} Z" ${common} stroke-linejoin="round"/>`;
         if (type === "waiting")
             return `<circle data-marker-core="waiting" cx="${c}" cy="${c}" r="${r}" fill="${MARKER_GAP}" stroke="${color}" stroke-width="3.5"/>`;
-        return `<circle data-marker-core="punctual" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
+        return `<circle data-marker-core="${type}" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
     }
     const common = `fill="${color}" stroke="${edge}" stroke-width="1.3"`;
     if (type === "delayed")
@@ -44,7 +47,7 @@ function corePath(eventType, c, r, hollow = false) {
         return `<path data-marker-core="early" d="M ${c} ${c - r - 1} L ${c + r + 1} ${c + r} L ${c - r - 1} ${c + r} Z" ${common} stroke-linejoin="round"/>`;
     if (type === "waiting")
         return `<circle data-marker-core="waiting" cx="${c}" cy="${c}" r="${r}" fill="${MARKER_GAP}" stroke="${color}" stroke-width="3.5"/>`;
-    return `<circle data-marker-core="punctual" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
+    return `<circle data-marker-core="${type}" cx="${c}" cy="${c}" r="${r}" ${common}/>`;
 }
 
 /** Small corner tag showing that the bot posted about this journey. */
@@ -75,7 +78,7 @@ function escapeAttribute(value) {
 }
 
 export function busIcon(bus, isFeatured, options = {}) {
-    const eventType = String(bus.waitingAtOrigin ? "waiting" : bus.eventType);
+    const eventType = busStatus(bus);
     const hollow = Boolean(options.hollow);
     const emphasized = Boolean(options.emphasized);
     const size = emphasized ? 48 : 44;
@@ -133,14 +136,7 @@ export function depotIcon(livery, options = {}) {
 }
 
 function tooltipStatus(bus) {
-    if (bus.eventType === "depot")
-        return { text: "at depot", cls: "vs-status-off" };
-    if (bus.waitingAtOrigin || bus.eventType === "waiting")
-        return { text: "waiting to depart", cls: "vs-status-waiting" };
-    const delay = Number.parseInt(bus.delayMinutes, 10) || 0;
-    if (delay >= 4) return { text: `${delay}m late`, cls: "vs-status-late" };
-    if (delay <= -3) return { text: `${Math.abs(delay)}m early`, cls: "vs-status-early" };
-    return { text: "on time", cls: "vs-status-ontime" };
+    return statusPresentation(bus);
 }
 
 export function busPopup(bus, featuredPost = null) {

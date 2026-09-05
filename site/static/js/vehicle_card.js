@@ -7,10 +7,13 @@ const STATUS = {
     early:    { label: d => `${Math.abs(d)}m early`, cls: "st-early" },
     delayed:  { label: d => `${d}m late`,        cls: "st-delayed" },
     depot:    { label: d => "at depot",          cls: "st-depot" },
+    unknown:  { label: () => "Timing unavailable", cls: "st-off" },
 };
 
 export function statusChip(eventType, waiting, delayMinutes) {
-    const s = waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.punctual);
+    const s = eventType === "depot" ? STATUS.depot
+        : eventType === "unknown" || delayMinutes === null
+        ? STATUS.unknown : waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.unknown);
     return el("span", { class: `vc-status ${s.cls}` },
               [s.label(parseInt(delayMinutes) || 0)]);
 }

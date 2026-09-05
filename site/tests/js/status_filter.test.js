@@ -30,17 +30,28 @@ test("header counts cannot double-count waiting vehicles", () => {
     ];
     const counts = countBusStatuses(buses);
     assert.deepEqual(counts, {
-        punctual: 1, early: 1, delayed: 1, waiting: 1, depot: 1,
+        punctual: 1, early: 1, delayed: 1, waiting: 1, depot: 1, unknown: 0,
     });
     assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0),
                  buses.length);
+});
+
+test("unavailable timing never enters the on-time count or filter", () => {
+    const bus = { eventType: "unknown", delayMinutes: null };
+    assert.equal(countBusStatuses([bus]).punctual, 0);
+    assert.equal(countBusStatuses([bus]).unknown, 1);
+    assert.equal(statusFilterVisual(bus, "punctual").matches, false);
+    assert.equal(statusFilterVisual(bus, "unknown").matches, true);
+    assert.equal(busStatus({ eventType: "punctual", delayMinutes: null }), "unknown");
+    assert.equal(busStatus({ eventType: "depot", delayMinutes: null }), "depot");
 });
 
 test("single-select toggles and marker modes are deterministic", () => {
     assert.equal(nextStatusFilter(null, "early"), "early");
     assert.equal(nextStatusFilter("early", "early"), null);
     assert.equal(nextStatusFilter("early", "depot"), "depot");
-    assert.equal(nextStatusFilter("early", "unknown"), null);
+    assert.equal(nextStatusFilter("early", "unknown"), "unknown");
+    assert.equal(nextStatusFilter("early", "invalid"), null);
 
     const matching = statusFilterVisual({ eventType: "early" }, "early");
     const other = statusFilterVisual({ eventType: "punctual" }, "early");
