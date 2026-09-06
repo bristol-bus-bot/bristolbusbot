@@ -14,6 +14,9 @@ test("audit service dates are formatted for people and malformed values fail clo
 });
 
 test("live status wording uses the public punctuality thresholds", () => {
+    assert.equal(statusPresentation({ eventType: "waiting", delayMinutes: null }).text, "waiting to depart");
+    assert.equal(statusPresentation({ eventType: "delayed", delayMinutes: 5,
+        timingSource: "route_estimate" }).text, "5m late (estimated)");
     assert.equal(statusPresentation({ delayMinutes: null }).text, "Timing unavailable");
     assert.equal(statusPresentation({ eventType: "unknown", delayMinutes: 0 }).text, "Timing unavailable");
     assert.deepEqual(statusPresentation(null), {

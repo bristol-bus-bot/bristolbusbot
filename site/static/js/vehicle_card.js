@@ -10,12 +10,13 @@ const STATUS = {
     unknown:  { label: () => "Timing unavailable", cls: "st-off" },
 };
 
-export function statusChip(eventType, waiting, delayMinutes) {
+export function statusChip(eventType, waiting, delayMinutes, timingSource) {
     const s = eventType === "depot" ? STATUS.depot
+        : eventType === "waiting" || waiting ? STATUS.waiting
         : eventType === "unknown" || delayMinutes === null
-        ? STATUS.unknown : waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.unknown);
+        ? STATUS.unknown : (STATUS[eventType] || STATUS.unknown);
     return el("span", { class: `vc-status ${s.cls}` },
-              [s.label(parseInt(delayMinutes) || 0)]);
+              [s.label(parseInt(delayMinutes) || 0) + (timingSource === "route_estimate" ? " (estimated)" : "")]);
 }
 
 export function plate(reg, size) {
@@ -74,7 +75,7 @@ export function vehicleCard(data, mode) {
     // 3. status row
     if (data.status && !data.isDepot) {
         const kids = [statusChip(data.status.eventType, data.status.waiting,
-                                 data.status.delayMinutes)];
+                                 data.status.delayMinutes, data.status.timingSource)];
         if (data.status.lastStopName)
             kids.push(el("span", { class: "vc-at" },
                          [`at ${data.status.lastStopName}`]));
