@@ -8,10 +8,8 @@ changes, jumps over two kilometres and reduced-motion preferences use direct
 placement rather than inventing a drive between unrelated positions.
 
 Movement uses a 12-second glide at constant speed along the transition path.
-The short 0.6–3-second catch-up trial was withdrawn after real-use feedback:
-it made buses rush forward and then sit still. The glide stops at
-the exact reported GPS coordinate and never extrapolates beyond it. The former
-fixed 12-second transition and nearest-route-vertex destination are removed.
+The glide stops at the exact reported GPS coordinate and never extrapolates
+beyond it.
 
 Only shapes with the exact operator, route and direction can guide the path.
 Both ends must project unambiguously within 35 metres of the road segments.
@@ -29,11 +27,4 @@ separate measurement of upstream publication cadence and request constraints.
 
 Validation includes deterministic frame cancellation, duplicate/out-of-order
 reports, reduced motion, journey changes, ambiguous geometry, sparse vertices,
-and real-browser Leaflet movement. A bounded 50-second live sample on 6 September
-contained 60 records across ten route 42/43 vehicles. The old nearest-vertex rule
-would displace those points by a median 41 metres and maximum 113 metres.
-Repeated samples are included; this is a geometry check, not a population error
-rate or proof of the cause of the reported previous-night incident.
-
-The exact Two Mile Hill westbound stop still needs confirmation: the timetable
-uses nearby labels including Two Mile Court. No stop coordinates were changed.
+and real-browser Leaflet movement.

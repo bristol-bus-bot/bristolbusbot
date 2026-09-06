@@ -246,16 +246,6 @@ automatic rollback could not prove recovery. Alerts are recorded as delivered
 only after Slack returns success. Daily no-change checks stay quiet, and the
 twice-daily digest reads the same aggregate transaction state.
 
-Production status (29 July 2026): the timer and automatic-promotion marker are
-enabled. GitHub run `29944744744` completed the full production `auto` path and
-was accepted after database, consumer, stop-search and public-health gates. The
-first timer-triggered due build, run `30421182234`, was safely rejected before
-promotion by the total `stop_times` collapse gate even though its next 28 days
-of service were complete. The live database was not changed. The correction is
-implemented in repository source but is not live until it passes the attended
-shadow and exact-hash promotion gates. Do not use a broad force or lower the old
-floor on the installed service.
-
 `--install-layout` installs this service but leaves its daily timer disabled
 until its root-only credential files exist. On the Pi, configure them without
 putting the token in shell history:

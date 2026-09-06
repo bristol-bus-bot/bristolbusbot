@@ -67,18 +67,9 @@ has no promotion chain. After reviewing the shadow state, the live swap must use
 The automatic promoter also rejects a latest shadow whose recorded mode is
 attended, closing the gap between the two units.
 
-Production status (29 July 2026): the credential, timer and root promotion
-marker are installed; a complete production `auto` delivery and promotion was
-accepted successfully after being manually initiated during commissioning.
-The first timer-triggered due build was safely rejected before promotion by an
-over-broad raw-row gate. Remediation is documented in the timetable execution
-plan.
-
-The corrected source templates keep exact-run and automatic topology separate.
+The service templates keep exact-run and automatic topology separate.
 They use exit 73 for `flock` timeout, which the job wrapper records as
-`lock_timeout`; exit 75 is reserved for a benign application skip. These source
-templates are not production evidence until the reviewed layout is installed
-and the promotion-disabled shadow/attended rollout passes.
+`lock_timeout`; exit 75 is reserved for a benign application skip.
 
 `bbb-enrichment-promote@.service` is an attended-only, dormant data promoter.
 It has no timer and its Python entrypoint accepts only the fixed names `fleet`

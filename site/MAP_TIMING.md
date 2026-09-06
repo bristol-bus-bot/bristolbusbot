@@ -32,9 +32,3 @@ timetable replacement cannot leave stale global geometry or schedules behind.
 Map status, filtering, route results and vehicle profiles share the resulting
 presentation. Departure boards, collector matching, bot events and audit
 timing-point measurements retain their existing calculations.
-
-Acceptance on the captured 6 September examples: 75, 6a and coach 040 show
-waiting at origin; 502 shows a scheduled stopover; A1, m4 and 9 receive route
-estimates. These are saved-observation replays, not current duties or a claim
-that every unknown vehicle can be resolved. Other timetable/feed discrepancies
-remain separate work.
