@@ -218,6 +218,8 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
             counters["events"] += 1
 
         evidence_reasons = set()
+        if reading_reason == "ambiguous_stop_visit":
+            evidence_reasons.add("ambiguous_stop_visit")
         if "sanity_rejected" in {estimate_reason, reading_reason}:
             evidence_reasons.add("sanity_rejected")
         if est is not None and (
