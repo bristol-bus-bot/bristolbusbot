@@ -1,9 +1,8 @@
 # Calendar removal exceptions
 
-The regional GTFS calendar used in the 5 September 2026 build contains a
-1 December removal exception that contradicts ordinary weekday operation in
-First's original TransXChange. This prevented a newer timetable from passing
-the existing forward coverage check.
+Regional GTFS removal exceptions can contradict ordinary weekday operation
+in the original operator TransXChange. Source reconciliation repairs only
+exclusions for which the original timetable supplies positive evidence.
 
 `timetable_calendar_evidence.py` runs on a disposable candidate before edition
 normalization. It can remove a GTFS exclusion only when all applicable source
@@ -45,17 +44,3 @@ Re-comparison uses the original floor even if the live timetable is already
 sparse on that date. Recovered coverage clears the obligation; unresolved
 coverage within 56 days blocks acceptance. The existing estate monitor also
 raises an incident at the deadline even if no new build runs.
-
-## Observed validation
-
-An offline copy of build 33943451670 gained 5,750 source-proven calendar
-corrections, all on 1 December 2026. Its original schedules, route inventory and
-stop times did not change. The X4 10:17, U2 10:55 and 126 11:00 saved examples
-continue to match the correct direction and endpoints.
-
-The full comparison against the 16 August accepted timetable then exposed four
-remaining failures: 24 and 26 December 2026, and 29 March and 3 May 2027. These
-are not repaired by the source reconciliation module. Under the explicitly
-approved distant-holiday policy they are recorded as provisional, and the full
-comparison passes. The first review deadline is 29 October 2026. All dates
-remain subject to later source updates and the approaching-date checks.
