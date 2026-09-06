@@ -5,6 +5,7 @@ export const BUS_STATUSES = [
 ];
 
 export function timingUnavailable(bus) {
+    if (bus?.eventType === "waiting") return false;
     return bus?.eventType === "unknown" || bus?.hasSchedule === false
         || bus?.delayMinutes === null;
 }

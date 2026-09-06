@@ -375,7 +375,7 @@
                 zOffset = selected ? 1800 : 400;
             }
             const key = [
-                bus.eventType, bus.waitingAtOrigin, bus.bearing,
+                bus.eventType, bus.waitingAtOrigin, bus.bearing, bus.delayMinutes, bus.timingSource,
                 bus.livery?.left || '', featured, mode,
             ].join('|');
             return {
@@ -845,7 +845,7 @@
             const from = pool => window.BBB.vehicleDescription(
                 pool, operator, code, ambiguousDescriptionCodes);
             if (activeBus) {
-                if (activeBus.waitingAtOrigin) {
+                if (activeBus.eventType === 'waiting') {
                     const waiting = from(busDescriptions.waiting);
                     if (waiting) return waiting;
                 }

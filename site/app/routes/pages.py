@@ -102,7 +102,7 @@ def vehicle_profile(slug: str):
     details = fleet.details(profile["vehicle_ref"], profile["operator"])
     cfg = current_app.config["BBB"]
     active = next((bus for bus in buses_svc.active_buses(
-        db.live(), fleet, stale_seconds=cfg.stale_vehicle_seconds)
+        db.live(), fleet, stale_seconds=cfg.stale_vehicle_seconds, gtfs_conn=db.gtfs())
         if bus["vehicleRef"] == profile["vehicle_ref"]
         and bus["operatorRef"] == profile["operator"]), None)
     public_code = details.get("fleetNumber") or profile["vehicle_ref"].split("-")[-1]

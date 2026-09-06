@@ -14,6 +14,7 @@ test("status classifier is exclusive and gives depot then waiting precedence", (
     assert.equal(busStatus({ eventType: "depot", waitingAtOrigin: true }), "depot");
     assert.equal(busStatus({ eventType: "punctual", waitingAtOrigin: true }), "waiting");
     assert.equal(busStatus({ eventType: "waiting" }), "waiting");
+    assert.equal(busStatus({ eventType: "waiting", delayMinutes: null }), "waiting");
     assert.equal(busStatus({ eventType: "delay" }), "delayed");
     assert.equal(busStatus({ eventType: "delayed" }), "delayed");
     assert.equal(busStatus({ eventType: "early" }), "early");

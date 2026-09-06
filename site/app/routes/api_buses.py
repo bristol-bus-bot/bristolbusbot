@@ -14,7 +14,8 @@ def api_buses():
     cfg = current_app.config["BBB"]
     fleet = current_app.extensions["bbb_fleet"]
     payload = buses_svc.active_buses(db.live(), fleet,
-                                     stale_seconds=cfg.stale_vehicle_seconds)
+                                     stale_seconds=cfg.stale_vehicle_seconds,
+                                     gtfs_conn=db.gtfs())
     audit = current_app.extensions["bbb_audit_integration"]
     for bus in payload:
         slug = audit.slug_for_vehicle(bus.get("operatorRef"),

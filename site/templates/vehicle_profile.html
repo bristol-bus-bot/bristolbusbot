@@ -35,8 +35,11 @@
         <section class="profile-live" aria-label="Current live state">
             <strong>Live now:</strong>
             route {{ active.line or 'unknown' }} to {{ active.destination }}
-            {% if active.hasSchedule %}· {{ active.delayMinutes|abs }} min
+            {% if active.eventType == 'waiting' %}· waiting to depart
+            {% elif active.delayMinutes is not none %}· {{ active.delayMinutes|abs }} min
                 {% if active.eventType == 'delayed' %}late{% elif active.eventType == 'early' %}early{% else %}from schedule{% endif %}
+                {% if active.timingSource == 'route_estimate' %}(estimated){% endif %}
+            {% else %}· Timing unavailable
             {% endif %}
             <a href="/">View on map</a>
         </section>

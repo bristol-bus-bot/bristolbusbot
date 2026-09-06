@@ -13,7 +13,7 @@ export function formatServiceDate(value) {
 }
 
 /** Turn a live vehicle into the wording and colour class shared by the sidebar. */
-export function statusPresentation(bus) {
+function baseStatusPresentation(bus) {
     if (!bus) return {
         text: "not currently running",
         longText: "not currently running",
@@ -48,6 +48,15 @@ export function statusPresentation(bus) {
         text: "on time", longText: "on time",
         cls: "vs-status-ontime", shape: "vs-shape-ontime",
     };
+}
+
+export function statusPresentation(bus) {
+    const result = baseStatusPresentation(bus);
+    if (bus?.timingSource === "route_estimate") {
+        result.text += " (estimated)";
+        result.longText += " (estimated between stops)";
+    }
+    return result;
 }
 
 /** Build a bounded dot-strip model from the aggregate audit histogram. */

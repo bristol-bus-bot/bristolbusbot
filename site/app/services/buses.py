@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from .depots import check_depot
 from .fleet import Fleet
+from .map_timing import MapTiming
 
 LATE_THRESHOLD_MIN = 4
 EARLY_THRESHOLD_MIN = -3
@@ -40,12 +41,13 @@ def _is_ghost(recorded_at: str | None, updated_at: str | None,
 
 
 def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
-                 now_utc: datetime | None = None) -> list[dict]:
+                 now_utc: datetime | None = None, gtfs_conn=None) -> list[dict]:
     now = now_utc or datetime.now(timezone.utc)
     cutoff = (now - timedelta(seconds=stale_seconds)).isoformat()
     rows = live_conn.execute(
         "SELECT * FROM vehicles WHERE updated_at > ?", (cutoff,)).fetchall()
 
+    timing = MapTiming(gtfs_conn) if gtfs_conn is not None else None
     buses = []
     for r in rows:
         # Reject rows whose poll timestamp is fresh but vehicle timestamp is
@@ -55,10 +57,8 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
         delay_s = r["delay_seconds"]
         has_schedule = r["trip_id"] is not None
         delay_min = round(delay_s / 60) if delay_s is not None and has_schedule else None
-        # 'waiting at origin': at the first stop before its departure time
-        waiting = bool(has_schedule and r["stop_code"] is not None
-                       and r["delay_seconds"] is not None and delay_s < 0
-                       and _is_first_stop(r))
+        presentation = timing.for_vehicle(r, now) if timing else {}
+        waiting = presentation.get("eventType") == "waiting"
         depot = check_depot(r["lat"], r["lon"]) if r["lat"] else None
         state = "depot" if depot else ("waiting" if waiting else "in_service")
         d = fleet.details(r["vehicle_ref"] or "", r["operator_ref"] or "")
@@ -82,6 +82,7 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
             "directionRef": direction,
             "originAimedDep": r["origin_aimed_departure"] or "",
             "hasSchedule": has_schedule,
+            "timingSource": "collector" if delay_min is not None else "unavailable",
             # bearing straight from the feed (better than deriving it)
             "bearing": r["bearing"],
             "lastStopName": r["stop_code"] or "unknown",  # name filled by caller
@@ -93,17 +94,10 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
             "reg": d["reg"],
             **d["extras"],
         }
+        bus.update(presentation)
         if depot:
             bus["atDepot"] = True
             bus["depotName"] = depot
             bus["eventType"] = "depot"   # frontend greys these + depot icon
         buses.append(bus)
     return buses
-
-
-def _is_first_stop(row) -> bool:
-    # collector stores the matched stop's sequence; GTFS sequences start at 1
-    try:
-        return int(row["stop_sequence"] or 0) == 1
-    except (KeyError, TypeError, ValueError):
-        return False

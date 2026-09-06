@@ -51,7 +51,7 @@ def app(tmp_path):
     conn = live_db.connect(str(live_path))
     _vehicle(conn)                                             # punctual, mid-route
     _vehicle(conn, ref="FBRI-30052", delay_s=-120, stop_seq=1,
-             stop_code="0100A", trip="T_OUT2")                 # waiting at origin
+             stop_code="0100A", trip="T_OUT2", lat=51.4600)  # waiting at origin
     _vehicle(conn, ref="FBRI-OLD", updated=NOW - timedelta(seconds=600))  # stale
     _vehicle(conn, ref="FBRI-DEPOT", delay_s=None, trip=None,
              lat=51.4205, lon=-2.5868, stop_code=None, stop_seq=None)     # Hengrove depot
@@ -78,7 +78,7 @@ def app(tmp_path):
         ("T_OUT", "22:00:00", "22:00:00", "S1", 1, 1),
         ("T_OUT", "22:05:00", "22:05:00", "S2", 2, 0),
         ("T_OUT", "22:10:00", "22:10:00", "S3", 3, 1),
-        ("T_OUT2", "22:00:00", "22:00:00", "S1", 1, 1),
+        ("T_OUT2", "22:02:00", "22:02:00", "S1", 1, 1),
         ("T_OUT2", "22:12:00", "22:12:00", "S3", 2, 1),
     ])
     g.execute("CREATE TABLE routes (route_id TEXT, agency_id TEXT,"

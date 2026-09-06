@@ -27,12 +27,13 @@ const STATUS = {
     unknown:  { text: () => "Timing unavailable", cls: "vp-unknown" },
 };
 
-function statusPill(eventType, waiting, delayMinutes) {
+function statusPill(eventType, waiting, delayMinutes, timingSource) {
     const s = eventType === "depot" ? STATUS.depot
+        : eventType === "waiting" || waiting ? STATUS.waiting
         : eventType === "unknown" || delayMinutes === null ? STATUS.unknown
-        : waiting ? STATUS.waiting : (STATUS[eventType] || STATUS.unknown);
+        : (STATUS[eventType] || STATUS.unknown);
     return el("span", { class: `rv-pill ${s.cls}` },
-              [s.text(parseInt(delayMinutes) || 0)]);
+              [s.text(parseInt(delayMinutes) || 0) + (timingSource === "route_estimate" ? " (estimated)" : "")]);
 }
 
 function closeButton(onClose) {
@@ -96,7 +97,7 @@ export function routeSearchView(host, ctx) {
                 }, [
                     el("div", { class: "rv-bus-main" }, main),
                     statusPill(b.eventType, b.waitingAtOrigin || b.eventType === "waiting",
-                               b.delayMinutes),
+                               b.delayMinutes, b.timingSource),
                 ]));
             }
             out.push(el("div", { class: "rv-group" }, rows));
