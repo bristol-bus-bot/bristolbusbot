@@ -13,6 +13,7 @@ const pack = {
     ],
     startDate: '2026-07-20', endDate: '2026-07-26',
     onTimePct: 67.4, onTimeReadings: 809, readings: 1200,
+    qualification: {status:'indicative',journeys:1000,service_days:7,range_pct:[62,72]},
     targetPct: 87, targetLabel: 'WECA 2026-27 area target', targetGapPoints: 19.6,
     targetFinancialYear: '2026-27',
     targetSource: 'West of England Enhanced Partnership Scheme V7.02 (July 2025), Appendix 5, Table 9',
@@ -59,7 +60,7 @@ test('both cards use the required Instagram portrait dimensions', () => {
 
 test('weekly card gates and manifest preserve facts', () => {
   validatePack(pack);
-  assert.throws(() => validatePack({ ...pack, busWeek: { ...pack.busWeek, readings: 999 } }), /1,000/);
+  assert.throws(() => validatePack({ ...pack, busWeek: { ...pack.busWeek, qualification: {status:'unavailable'} } }), /qualification/);
   assert.throws(() => validatePack({
     ...pack,
     busWeek: { ...pack.busWeek, onTimeReadings: 808 },

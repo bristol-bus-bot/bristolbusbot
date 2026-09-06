@@ -8,8 +8,29 @@ import json
 import math
 import sqlite3
 import statistics
+import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+
+try:
+    from sample_rules import qualification
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pipeline'))
+    from sample_rules import qualification
+
+
+def weekly_qualification(overall, service_days=None):
+    supports = [item.get('sample_support') for item in overall]
+    if any(not item for item in supports):
+        return qualification(None)
+    combined = {key: sum(item.get(key,0) for item in supports)
+                for key in set().union(*(item.keys() for item in supports))}
+    combined['service_days'] = len(overall) if service_days is None else service_days
+    combined['rollup_mismatch'] = any(
+        item['readings'] != row['readings_in_gate'] or item['on_time'] != row['on_time']
+        for item,row in zip(supports,overall))
+    return qualification(combined, coverage_verified=all(
+        item.get('coverage_pct') is not None for item in overall))
 
 
 DELAY_BIN_EDGES_S = (
@@ -64,12 +85,14 @@ def _operator_comparison(audit: dict, days: list[dict]) -> list[dict]:
         if not operator or operator == "ALL":
             continue
         readings = on_time = 0
+        qualified_days = []
         for day in days:
             overall = (((day.get("by_operator") or {}).get(operator) or {})
                        .get("overall") or {})
             readings += int(overall.get("readings_in_gate") or 0)
             on_time += int(overall.get("on_time") or 0)
-        if readings:
+            qualified_days.append(overall)
+        if readings and weekly_qualification(qualified_days)['status'] != 'unavailable':
             comparison.append({
                 "operatorCode": operator,
                 "operatorName": str(item.get("name") or operator),
@@ -86,6 +109,7 @@ def _powertrain_summary(days: list[dict], operator: str,
         "electric": {"readings": 0, "onTime": 0},
         "dieselOther": {"readings": 0, "onTime": 0},
     }
+    support_rows = {key:[] for key in groups}
     for day in days:
         fleet = ((day.get("by_operator") or {}).get(operator) or {}).get(
             "fleet") or []
@@ -93,8 +117,9 @@ def _powertrain_summary(days: list[dict], operator: str,
             readings = int(row.get("readings_in_gate") or 0)
             if readings <= 0:
                 continue
-            group = groups["electric" if row.get("electric") else
-                           "dieselOther"]
+            group_key = "electric" if row.get("electric") else "dieselOther"
+            group = groups[group_key]
+            support_rows[group_key].append(row)
             on_time = row.get("on_time")
             if on_time is None:
                 on_time = round(
@@ -109,8 +134,11 @@ def _powertrain_summary(days: list[dict], operator: str,
         raise ValueError(
             "Bus Week fleet readings exceed the operator total: "
             f"{identified} > {total_readings}")
-    for group in groups.values():
+    for key,group in groups.items():
         readings = group["readings"]
+        group['qualification'] = weekly_qualification(support_rows[key],len(days))
+        if readings and group['qualification']['status']=='unavailable':
+            raise ValueError('Bus Week powertrain sample is unavailable: '+key)
         group["sharePct"] = round(100 * readings / identified, 1)
         group["onTimePct"] = round(
             100 * group["onTime"] / readings, 1) if readings else None
@@ -149,8 +177,9 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
 
     readings = sum(int(item["readings_in_gate"]) for item in overall)
     on_time = sum(int(item["on_time"]) for item in overall)
-    if readings < 1000:
-        raise ValueError("Bus Week requires at least 1,000 timing-point readings")
+    sample = weekly_qualification(overall)
+    if sample['status'] == 'unavailable':
+        raise ValueError('Bus Week sample is unavailable: ' + ', '.join(sample['reasons']))
     target_pct = float(audit["current_target_pct"])
     target_financial_year = str(audit["current_target_financial_year"])
     target_source = str(audit["current_target_source"])
@@ -175,6 +204,7 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
         "onTimeReadings": on_time,
         "readings": readings,
         "serviceDays": 7,
+        "qualification": sample,
         "daily": [float(item["on_time_pct"]) for item in overall],
         "targetPct": target_pct,
         "targetLabel": f"WECA {target_financial_year} area target",

@@ -104,8 +104,9 @@ class AuditIntegration:
         headline = payload.get("headline") or {}
         if not headline.get("eligible"):
             return None
-        minimum = int(headline.get("minimum_readings") or 30)
-        if int(headline.get("readings") or 0) < minimum:
+        if (headline.get('qualification') or {}).get('status') not in {'supported','indicative'}:
+            return None
+        if headline.get('on_time_pct') is None:
             return None
         return headline
 

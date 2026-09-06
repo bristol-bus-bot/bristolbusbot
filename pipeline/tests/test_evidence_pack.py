@@ -14,11 +14,13 @@ PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import evidence_pack  # noqa: E402
+from sample_quality import init_schema
 
 
 def database(path: Path, area: str = "South Gloucestershire") -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
+    init_schema(connection)
     connection.executescript(
         """CREATE TABLE daily_overall_summary (
                service_date TEXT, operator TEXT
@@ -62,6 +64,9 @@ def database(path: Path, area: str = "South Gloucestershire") -> sqlite3.Connect
             (key, "ALL", "area", area, 10, on_time, on_time * 10.0,
              100, 90),
         )
+        connection.execute('INSERT INTO daily_sample_support VALUES (?,?,?,?,?)',
+          (key,'ALL','area',area,json.dumps(dict(readings=10,on_time=on_time,
+          journeys=10,squared_weights=10,service_days=1))))
         for route, readings, route_on_time in (
                 ("42", 6, min(on_time, 5)), ("43", 4, max(0, on_time - 5))):
             connection.execute(
@@ -74,6 +79,12 @@ def database(path: Path, area: str = "South Gloucestershire") -> sqlite3.Connect
                 "INSERT INTO daily_route_summary VALUES (?,?,?,?,?)",
                 (key, "ALL", route, readings, route_on_time),
             )
+            connection.execute('INSERT INTO daily_sample_support VALUES (?,?,?,?,?)',
+              (key,'ALL','route',route,json.dumps(dict(readings=readings,on_time=route_on_time,
+              journeys=readings,squared_weights=readings,service_days=1))))
+            connection.execute('INSERT INTO daily_sample_support VALUES (?,?,?,?,?)',
+              (key,'FBRI','area_route',json.dumps([area,route]),json.dumps(dict(readings=readings,on_time=route_on_time,
+              journeys=readings,squared_weights=readings,service_days=1))))
         day += timedelta(days=1)
     connection.execute(
         "INSERT INTO daily_overall_summary VALUES (?,?)", ("20260820", "ALL"))
@@ -125,8 +136,7 @@ def test_default_period_uses_last_three_complete_months(tmp_path):
     assert payload["comparability_breaks"] == [{
         "date": "2026-07-13",
         "reason": (
-            "the replacement collector changed timetable matching and "
-            "stale-position handling"),
+            "the early-July collector transition has incomplete deployment chronology"),
     }]
     assert payload["excluded_service_days"] == [{
         "service_date": "2026-07-01",

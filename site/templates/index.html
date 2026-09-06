@@ -43,7 +43,7 @@
             <a id="audit-headline-link"
                class="audit-headline-link"
                href="https://bristol-bus-bot.github.io/weca-bus-audit/"
-               title="Independent audit: {{ audit_headline.readings }} timing-point measurements, {{ audit_headline.measurement_start }} through {{ audit_headline.through_date }}"
+               title="{{ audit_headline.qualification.status|capitalize }} observed sample: {{ audit_headline.qualification.journeys }} journeys, {{ audit_headline.readings }} timing-point measurements, {{ audit_headline.measurement_start }} through {{ audit_headline.through_date }}. View the audit for sampling and coverage limitations."
                aria-label="Independent bus punctuality audit: {{ audit_headline.on_time_pct }} percent on time; view method and results">
                 <span class="audit-headline-full">Audit: {{ audit_headline.on_time_pct }}% on time &#8599;</span>
                 <span class="audit-headline-compact" aria-hidden="true">Audit {{ audit_headline.on_time_pct }}% &#8599;</span>

@@ -356,6 +356,7 @@ def populate_release(component: str, root: Path) -> None:
         for name in ("package.json", "package-lock.json"):
             copy_file(REPO / "bot" / name, root / name)
     elif component == "social":
+        copy_file(REPO / "pipeline/sample_rules.py", root / "sample_rules.py")
         for name in ("package.json", "package-lock.json"):
             copy_file(REPO / "social" / name, root / name)
         for pattern in ("*.py", "*.mjs"):

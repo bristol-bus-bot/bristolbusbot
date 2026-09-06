@@ -82,16 +82,23 @@ def test_headline_is_count_weighted_and_profile_gate_is_enforced():
         now=datetime(2026, 7, 17, tzinfo=timezone.utc),
     )
 
-    assert payload["headline"] == {
+    # Legacy archives without journey support keep counts, but cannot certify
+    # the percentage merely because there are many stop readings.
+    headline = dict(payload["headline"])
+    assert headline.pop('sample_support') is None
+    qualification = headline.pop("qualification")
+    assert qualification["status"] == "unavailable"
+    assert qualification["reasons"] == ["sample_support_unavailable"]
+    assert headline == {
         "measurement_start": "20260714",
         "through_date": "20260716",
         "readings": 85,
         "on_time": 70,
         "early": 0,
         "late": 15,
-        "on_time_pct": 82.4,
-        "minimum_readings": 30,
-        "eligible": True,
+        "on_time_pct": None,
+        "minimum_readings": 0,
+        "eligible": False,
     }
     assert [profile["vehicle_ref"] for profile in payload["profiles"]] == [
         "FBRI-100"

@@ -502,9 +502,9 @@ export function validatePack(pack, card = 'all') {
     return;
   }
   const week = pack?.busWeek;
-  if (!week || !Number.isFinite(Number(week.onTimePct))) errors.push('busWeek requires onTimePct');
+  if (!week || !Number.isFinite(week.onTimePct)) errors.push('busWeek requires onTimePct');
   if (!week || Number(week.serviceDays) !== 7) errors.push('busWeek requires exactly 7 service days');
-  if (!week || Number(week.readings) < 1000) errors.push('busWeek requires at least 1,000 readings');
+  if (!['supported','indicative'].includes(week?.qualification?.status)) errors.push('busWeek requires available journey sample qualification');
   if (!week || !Number.isFinite(Number(week.onTimeReadings))) errors.push('busWeek requires onTimeReadings');
   if (!week || !Array.isArray(week.daily) || week.daily.length !== 7) errors.push('busWeek requires seven daily percentages');
   if (!week?.operatorCode || !week?.operatorName) errors.push('busWeek requires operator identity');
@@ -648,6 +648,12 @@ async function main() {
   await fs.mkdir(output, { recursive: true });
   const { default: sharp } = await import('sharp');
   const css = fontCss();
+  const qualify = svg => {
+    const q = pack.busWeek.qualification;
+    const band = q.range_pct ? `${q.range_pct[0]}-${q.range_pct[1]}% sensitivity` : 'range unavailable';
+    const note = `${q.status} observed sample | ${Number(q.journeys).toLocaleString('en-GB')} journeys | ${band}`;
+    return svg.replace('</svg>', `<text x="540" y="1325" text-anchor="middle" font-size="17" fill="${COLORS.boardMuted}">${xml(note)}</text></svg>`);
+  };
   const render = svg => new Resvg(svg, {
     font: {
       fontFiles: [
@@ -684,12 +690,12 @@ async function main() {
     sharp(render(botSaidSvg(pack.botSaid, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.botSaid)),
   );
   if (card !== 'bot-said') renders.push(
-    sharp(render(busWeekSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyHeadline)),
-    sharp(render(weeklyTargetSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyTarget)),
-    sharp(render(weeklyDaysSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
-    sharp(render(weeklyDistributionSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDistribution)),
-    sharp(render(weeklyPowertrainSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyPowertrain)),
-    sharp(render(weeklyOperatorsSvg(pack.busWeek, css))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyOperators)),
+    sharp(render(qualify(busWeekSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyHeadline)),
+    sharp(render(qualify(weeklyTargetSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyTarget)),
+    sharp(render(qualify(weeklyDaysSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDays)),
+    sharp(render(qualify(weeklyDistributionSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyDistribution)),
+    sharp(render(qualify(weeklyPowertrainSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyPowertrain)),
+    sharp(render(qualify(weeklyOperatorsSvg(pack.busWeek, css)))).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toFile(path.join(output, names.weeklyOperators)),
   );
   await Promise.all(renders);
   await fs.writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest(pack, names, card), null, 2)}\n`);

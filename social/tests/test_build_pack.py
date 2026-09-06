@@ -26,17 +26,21 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
             "early": 20,
             "late": readings - on_time - 20,
             "on_time_pct": round(100 * on_time / readings, 1),
+            "sample_support": dict(readings=readings,on_time=on_time,journeys=readings,
+                                   squared_weights=readings,service_days=1),
         }
         fleet = [
             {
                 "model": "Electric model", "electric": True,
                 "fuel": "electric", "readings_in_gate": 80,
                 "on_time": 50, "on_time_pct": 62.5,
+                "sample_support": dict(readings=80,on_time=50,journeys=80,squared_weights=80,service_days=1),
             },
             {
                 "model": "Diesel model", "electric": False,
                 "fuel": "diesel", "readings_in_gate": 100,
                 "on_time": 70, "on_time_pct": 70.0,
+                "sample_support": dict(readings=100,on_time=70,journeys=100,squared_weights=100,service_days=1),
             },
         ]
         days.append({
@@ -49,6 +53,8 @@ def audit_payload(*, gap: bool = False, readings: int = 200):
                         "readings_in_gate": 80,
                         "on_time": 52,
                         "on_time_pct": 65.0,
+                        "sample_support": dict(readings=80,on_time=52,journeys=80,
+                                               squared_weights=80,service_days=1),
                     },
                     "fleet": fleet,
                 },
@@ -245,7 +251,7 @@ def test_week_gate_rejects_gaps_and_small_samples():
     try:
         build_pack.build_week(audit_payload(readings=100))
     except ValueError as exc:
-        assert "1,000" in str(exc)
+        assert "invalid_sample_counts" in str(exc)
     else:
         raise AssertionError("small sample must fail")
 

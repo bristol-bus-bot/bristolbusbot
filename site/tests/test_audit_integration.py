@@ -24,7 +24,7 @@ def test_server_delay_plot_keeps_zero_inside_the_on_time_band():
     assert _delay_plot({**profile, "readings": 7}) is None
 
 
-def install_snapshot(app, tmp_path, *, published_at=None, readings=45):
+def install_snapshot(app, tmp_path, *, published_at=None, readings=45, qualification_status='supported'):
     path = tmp_path / "audit_integration.json"
     path.write_text(json.dumps({
         "schema": 1,
@@ -36,7 +36,8 @@ def install_snapshot(app, tmp_path, *, published_at=None, readings=45):
             "readings": readings,
             "on_time_pct": 55.0,
             "minimum_readings": 30,
-            "eligible": readings >= 30,
+            "eligible": True,
+            "qualification": {'status':qualification_status,'journeys':15,'service_days':3},
         },
         "profiles": [{
             "slug": SLUG,
@@ -144,7 +145,7 @@ def test_stale_or_small_snapshot_hides_every_public_surface(
     assert client.get(f"/vehicles/{SLUG}").status_code == 404
     assert client.get(f"/api/vehicle-profiles/{SLUG}").status_code == 404
 
-    install_snapshot(app, tmp_path, readings=29)
+    install_snapshot(app, tmp_path, readings=10000, qualification_status='unavailable')
     assert b"Audit: 55.0% on time" not in client.get("/").data
     # Headline and profile samples are independent; an eligible profile remains.
     assert client.get(f"/vehicles/{SLUG}").status_code == 200
