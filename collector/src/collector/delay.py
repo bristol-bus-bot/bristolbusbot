@@ -115,6 +115,34 @@ def classify_event(delay_s: int) -> str:
     return "punctual"
 
 
+def ambiguous_visit(cs: ClosestStop, lat: float, lon: float, recorded_utc: datetime,
+                    schedule_rows: list, service_midnight_dt: datetime) -> bool:
+    """Do not certify one of two plausible passes through the same place.
+
+    A closer scheduled time cannot distinguish an on-time return from a late
+    outbound bus. Adjacent calls are not separate passes around a route.
+    """
+    plausible = []
+    for index, row in enumerate(schedule_rows):
+        if row[4] is None or row[5] is None:
+            continue
+        try:
+            distance = haversine_m(lat, lon, float(row[4]), float(row[5]))
+            separation = haversine_m(float(cs.row[4]), float(cs.row[5]),
+                                     float(row[4]), float(row[5]))
+        except (TypeError, ValueError):
+            continue
+        seconds = gtfs_seconds(row[1])
+        if seconds is None or distance > cs.distance_m + STOP_POSITION_TIE_M \
+                or separation > STOP_POSITION_TIE_M:
+            continue
+        delay = (recorded_utc - scheduled_local(
+            service_midnight_dt, seconds).astimezone(timezone.utc)).total_seconds()
+        if SANITY_MIN_S <= delay <= SANITY_MAX_S:
+            plausible.append(index)
+    return any(abs(left-right)>1 for left in plausible for right in plausible)
+
+
 def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
                          schedule_rows: list, service_midnight_dt: datetime
                          ) -> tuple[LiveEstimate | None, str | None]:
@@ -174,6 +202,8 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
         return None, "no_stop_with_coordinates"
     if cs.distance_m > MAX_GPS_DISTANCE_M:
         return None, "outside_measurement_gate"
+    if ambiguous_visit(cs, lat, lon, recorded_utc, schedule_rows, service_midnight_dt):
+        return None, "ambiguous_stop_visit"
     seq, dep_time, timepoint, stop_code = cs.row[0], cs.row[1], cs.row[2], cs.row[3]
     if int(timepoint or 0) != 1:
         return None, "not_timing_point"

@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 MATCHING_EVIDENCE_DAILY_LIMIT = 250
 MATCHING_EVIDENCE_TOTAL_LIMIT = 5000
 MATCHING_EVIDENCE_ALTERNATIVES_LIMIT = 3
-MATCHING_EVIDENCE_CELL_LIMIT = 10
+# Five reasons across six time bands must fit below the 250/day cap, so
+# sustained daytime noise cannot consume the evening's sampling allowance.
+MATCHING_EVIDENCE_CELL_LIMIT = 8
 MATCHING_EVIDENCE_PER_JOURNEY_LIMIT = 2
 MATCHING_EVIDENCE_PER_OPERATOR_CELL_LIMIT = 4
 MATCHING_EVIDENCE_OPERATORS = frozenset({
@@ -25,6 +27,7 @@ MATCHING_EVIDENCE_REASON_PRIORITY = (
     "direction_changed_within_run",
     "match_changed_within_run",
     "sanity_rejected",
+    "ambiguous_stop_visit",
     "extreme_delay",
 )
 
