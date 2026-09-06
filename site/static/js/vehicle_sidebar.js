@@ -2,6 +2,7 @@
 import { el, replaceContent } from "./util.js";
 import { liveryColor } from "./map_render.js";
 import { plate } from "./vehicle_card.js";
+import { positionAge } from "./marker_motion.js";
 import {
     delayDotColumns,
     formatServiceDate,
@@ -484,7 +485,8 @@ function liveBand(ctx, routeColor) {
                 "aria-hidden": "true",
             }),
             el("strong", {}, [status.longText]),
-            el("span", { class: "vs-live-source" }, ["live feed"]),
+            el("span", { class: "vs-live-source", title: bus.recordedAt || "",
+                "data-position-recorded": bus.recordedAt || "" }, [positionAge(bus)]),
         ]),
         el("div", { class: "vs-live-route" }, [
             el("span", { class: "vs-live-route-number" }, [bus.line || "–"]),

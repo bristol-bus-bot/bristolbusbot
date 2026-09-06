@@ -91,9 +91,8 @@
             });
         }
 
-        // --- Route-snapped bus position system ---
-        // Each bus tracks its last known shape index so we can detect forward/reverse
-        const busShapeState = new Map(); // vehicleRef -> { shapeKey, idx }
+        // Timestamped observed positions; route lines only guide short transitions.
+        let markerMotion = null;
 
         // Find nearest point index on a shape polyline
         function findNearestShapeIndex(lat, lon, points) {
@@ -192,136 +191,6 @@
             return variants[0];
         }
 
-        // Smoothly animate a marker along route shape points (always forward)
-        function animateAlongRoute(marker, path, duration) {
-            if (path.length < 2) {
-                marker.setLatLng([path[0][0], path[0][1]]);
-                return;
-            }
-            const startTime = performance.now();
-
-            // Calculate cumulative distances along the path segment
-            const dists = [0];
-            for (let i = 1; i < path.length; i++) {
-                const dl = path[i][0] - path[i-1][0];
-                const dn = path[i][1] - path[i-1][1];
-                dists.push(dists[i-1] + Math.sqrt(dl*dl + dn*dn));
-            }
-            const totalDist = dists[dists.length - 1];
-            if (totalDist < 0.00001) {
-                marker.setLatLng([path[path.length-1][0], path[path.length-1][1]]);
-                return;
-            }
-
-            function step(now) {
-                const t = Math.min((now - startTime) / duration, 1);
-                const targetDist = t * totalDist;
-
-                let segIdx = 0;
-                for (let i = 1; i < dists.length; i++) {
-                    if (dists[i] >= targetDist) { segIdx = i - 1; break; }
-                    segIdx = i - 1;
-                }
-
-                const segLen = dists[segIdx + 1] - dists[segIdx];
-                const segT = segLen > 0 ? (targetDist - dists[segIdx]) / segLen : 0;
-                const lat = path[segIdx][0] + (path[segIdx+1][0] - path[segIdx][0]) * segT;
-                const lng = path[segIdx][1] + (path[segIdx+1][1] - path[segIdx][1]) * segT;
-
-                marker.setLatLng([lat, lng]);
-                if (t < 1) requestAnimationFrame(step);
-            }
-            requestAnimationFrame(step);
-        }
-
-        // Smooth straight-line animation fallback (the classic hypnotic glide)
-        function animateStraightLine(marker, targetLat, targetLng, duration) {
-            const start = marker.getLatLng();
-            const startTime = performance.now();
-            function step(now) {
-                const t = Math.min((now - startTime) / duration, 1);
-                const eased = t * (2 - t); // ease-out for smooth deceleration
-                const lat = start.lat + (targetLat - start.lat) * eased;
-                const lng = start.lng + (targetLng - start.lng) * eased;
-                marker.setLatLng([lat, lng]);
-                if (t < 1) requestAnimationFrame(step);
-            }
-            requestAnimationFrame(step);
-        }
-
-        // Core animation: snap bus to its route when possible, smooth glide otherwise
-        function animateMarker(marker, targetLat, targetLng, duration, line, directionId, vehicleRef, operatorRef) {
-            const start = marker.getLatLng();
-            const dlat = targetLat - start.lat;
-            const dlng = targetLng - start.lng;
-            const dist = Math.sqrt(dlat * dlat + dlng * dlng);
-
-            // No movement
-            if (dist < 0.00001) return;
-
-            // Cap wild jumps — if GPS jumped more than ~2km, just teleport (data glitch)
-            const distMetres = dist * 111000;
-            if (distMetres > 2000) {
-                marker.setLatLng([targetLat, targetLng]);
-                return;
-            }
-
-            // Try to snap to route shape
-            const shapeInfo = getShapeForBus(line, directionId, operatorRef, targetLat, targetLng);
-            if (shapeInfo) {
-                const { key: shapeKey, points } = shapeInfo;
-                const nearest = findNearestShapeIndex(targetLat, targetLng, points);
-                const snapDistM = nearest.dist * 111000;
-
-                // Only use shape if GPS is within ~500m of route
-                if (snapDistM < 500) {
-                    const newIdx = nearest.idx;
-                    const prev = busShapeState.get(vehicleRef);
-
-                    // If bus was on same shape before, check direction
-                    if (prev && prev.shapeKey === shapeKey) {
-                        const prevIdx = prev.idx;
-
-                        if (newIdx === prevIdx) {
-                            // Bus hasn't moved along shape — smooth glide to exact snap point
-                            busShapeState.set(vehicleRef, { shapeKey, idx: newIdx });
-                            animateStraightLine(marker, points[newIdx][0], points[newIdx][1], duration);
-                            return;
-                        }
-
-                        if (newIdx < prevIdx) {
-                            // REVERSE — smooth glide to new position (not jarring teleport)
-                            busShapeState.set(vehicleRef, { shapeKey, idx: newIdx });
-                            animateStraightLine(marker, points[newIdx][0], points[newIdx][1], duration);
-                            return;
-                        }
-
-                        // FORWARD — animate along the route shape points
-                        const hops = newIdx - prevIdx;
-                        if (hops <= 80) {
-                            const path = points.slice(prevIdx, newIdx + 1);
-                            busShapeState.set(vehicleRef, { shapeKey, idx: newIdx });
-                            animateAlongRoute(marker, path, duration);
-                            return;
-                        } else {
-                            // Big jump forward — smooth glide rather than teleport
-                            busShapeState.set(vehicleRef, { shapeKey, idx: newIdx });
-                            animateStraightLine(marker, points[newIdx][0], points[newIdx][1], duration);
-                            return;
-                        }
-                    } else {
-                        // First time on this shape — smooth glide to snap point
-                        busShapeState.set(vehicleRef, { shapeKey, idx: newIdx });
-                        animateStraightLine(marker, points[newIdx][0], points[newIdx][1], duration);
-                        return;
-                    }
-                }
-            }
-
-            // No shape data or too far from route — smooth straight-line glide
-            animateStraightLine(marker, targetLat, targetLng, duration);
-        }
-
         function markerVisual(bus) {
             const filterVisual = window.BBB.statusFilterVisual(
                 bus, activeStatusFilter);
@@ -418,11 +287,13 @@
         }
 
         function updateBusMarkers(buses) {
+            markerMotion ||= new window.BBB.MarkerMotion();
             busByRef = new Map(buses.map(bus => [bus.vehicleRef, bus]));
             const current = new Set(busByRef.keys());
 
             busMarkers.forEach((marker, ref) => {
                 if (!current.has(ref)) {
+                    markerMotion.remove(ref);
                     map.removeLayer(marker);
                     busMarkers.delete(ref);
                 }
@@ -433,8 +304,8 @@
 
                 if (busMarkers.has(bus.vehicleRef)) {
                     const m = busMarkers.get(bus.vehicleRef);
-                    animateMarker(m, bus.latitude, bus.longitude, 12000, bus.line,
-                                  bus.directionId, bus.vehicleRef, bus.operatorRef);
+                    markerMotion.update(m, bus, getShapeVariants(
+                        bus.line, bus.directionId, bus.operatorRef).map(shape => shape.points));
                     syncMarkerAppearance(m, bus);
                     m.setPopupContent(popup);
                 } else {
@@ -445,6 +316,7 @@
                     }).addTo(map).bindPopup(popup);
                     m._bbbIconKey = visual.key;
                     busMarkers.set(bus.vehicleRef, m);
+                    markerMotion.update(m, bus);
                 }
             });
 
@@ -639,9 +511,14 @@
         }
 
         let _lastBusCount = 0;
+        let busesRequestPending = false;
         async function fetchBuses() {
+            if (busesRequestPending) return;
+            busesRequestPending = true;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
             try {
-                const res = await fetch('/api/buses');
+                const res = await fetch('/api/buses', { signal: controller.signal });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 latestBusData = data.buses || [];
@@ -673,11 +550,13 @@
                 }
             } catch (e) {
                 console.error('fetchBuses failed:', e);
+            } finally {
+                clearTimeout(timeout);
+                busesRequestPending = false;
             }
         }
 
-        // Debug: type busShapeState in console to see all tracked bus positions on shapes
-        window._busShapeState = busShapeState;
+
 
         // Locality emoji mapping
         const LOCALITY_EMOJIS = {
@@ -1883,6 +1762,7 @@
         fetchBusbotPosts();
         map.on('zoomend moveend', () => updateStopMarkers(allStops));
         refreshInterval = setInterval(fetchBuses, 15000);
+        setInterval(() => window.BBB.refreshPositionAges(), 1000);
         setInterval(fetchBusbotPosts, 120000);  // Refresh busbot posts every 2 minutes
         initSheetDrag();
         console.log(`Init dispatched in ${(performance.now() - _initStart).toFixed(0)}ms (data loading async)`);
