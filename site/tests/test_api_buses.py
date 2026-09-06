@@ -32,6 +32,7 @@ def test_frontend_fields(client):
     assert bus["delayMinutes"] == 2 and bus["eventType"] == "punctual"
     assert bus["model"] == "Yutong E12" and bus["isElectric"] is True
     assert bus["lastStopName"] == "Middle Stop"     # code swapped for GTFS name
+    assert bus["recordedAt"] == "2026-07-01T21:00:00+00:00"
     assert bus["livery"]["left"] == "#e63946"
 
 

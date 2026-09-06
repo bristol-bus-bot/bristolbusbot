@@ -2,6 +2,7 @@
 import { el } from "./util.js";
 import { busStatus } from "./status_filter.js";
 import { statusPresentation } from "./vehicle_sidebar_logic.js";
+import { positionAge } from "./marker_motion.js";
 
 const EV_COLORS = {
     delayed: "var(--marker-status-late, #D4351C)",
@@ -166,6 +167,8 @@ export function busPopup(bus, featuredPost = null) {
                 target: "_blank",
                 rel: "noopener",
             }, ["Bot post about this journey ↗"]) : null,
+            el("div", { class: "bt-place", title: bus.recordedAt || "",
+                "data-position-recorded": bus.recordedAt || "" }, [positionAge(bus)]),
             el("button", {
                 class: "bt-details",
                 onClick: () => window.openVehicleSidebar(
