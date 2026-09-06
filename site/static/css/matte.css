@@ -921,8 +921,11 @@ body {
 }
 
 .vc-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   font: 800 var(--t-body) var(--font-sans);
