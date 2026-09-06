@@ -7,7 +7,9 @@ currently displayed position. Removed markers cancel their frames. Journey
 changes, jumps over two kilometres and reduced-motion preferences use direct
 placement rather than inventing a drive between unrelated positions.
 
-Catch-up takes 0.6–3 seconds, based on the interval between reports. It stops at
+Movement uses a 12-second glide at constant speed along the transition path.
+The short 0.6–3-second catch-up trial was withdrawn after real-use feedback:
+it made buses rush forward and then sit still. The glide stops at
 the exact reported GPS coordinate and never extrapolates beyond it. The former
 fixed 12-second transition and nearest-route-vertex destination are removed.
 

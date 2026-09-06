@@ -91,13 +91,14 @@ export class MarkerMotion {
             return;
         }
         const path = observationPath(from, end, shapes);
-        // Short catch-up, no twelve-second artificial lag or extrapolation.
-        const duration = Math.min(3000, Math.max(600, (stamp - previous.stamp) * .15));
+        // Preserve the relaxed glide. A short catch-up makes sparse reports
+        // look like a burst of fast travel followed by a long pause.
+        const duration = 12000;
         const started = this.clock();
         const step = now => {
             if (this.states.get(ref) !== state) return;
             const t = Math.min(1, Math.max(0, (now - started) / duration));
-            marker.setLatLng(positionOnPath(path, t * t * (3 - 2 * t)));
+            marker.setLatLng(positionOnPath(path, t));
             state.frame = t < 1 ? this.requestFrame(step) : null;
         };
         state.frame = this.requestFrame(step);

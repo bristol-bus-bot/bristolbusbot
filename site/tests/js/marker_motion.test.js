@@ -30,10 +30,11 @@ test('duplicates and older observations never restart; interrupted frames cannot
     const newer = { ...bus, longitude: -2.525, recordedAt: '2026-09-06T14:00:30Z' };
     motion.update(marker, newer);const first = frames.get(next);const count = next;
     motion.update(marker, newer);motion.update(marker, bus);assert.equal(next, count);
-    now = 1000;first(now);const intermediate = [...point];
+    now = 3000;first(now);const intermediate = [...point];
+    assert(Math.abs(point[1] - (-2.52875)) < 0.000001); // quarter of a relaxed 12-second glide
     motion.update(marker, { ...newer, longitude: -2.52, recordedAt: '2026-09-06T14:01:00Z' });
     first(3000);assert.deepEqual(point, intermediate);assert(cancelled.length > 0);
-    frames.get(next)(4000);assert.deepEqual(point, [51.46, -2.52]);
+    frames.get(next)(15000);assert.deepEqual(point, [51.46, -2.52]);
     motion.remove('bus');assert.equal(motion.states.size, 0);
 });
 
