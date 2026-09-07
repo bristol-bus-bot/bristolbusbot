@@ -1,4 +1,29 @@
-const LOW_SAMPLE_THRESHOLD = 30;
+function limitedEvidence(row) {
+  return !row.qualification || row.qualification.status === "unavailable"
+    || row.qualification.reasons?.includes("wide_sampling_range") || false;
+}
+
+function evidenceText(overall, composition, operator) {
+  const q = overall.qualification;
+  const parts = [];
+  if (!q) parts.push("Historical result: journey-level sample checks are unavailable.");
+  else {
+    parts.push(q.status === "unavailable" ? "Punctuality unavailable: the retained evidence cannot support this result."
+      : q.status === "indicative" ? "Indicative punctuality from the buses observed."
+      : "Punctuality from the buses observed.");
+    if (q.journeys != null) parts.push(`${q.journeys.toLocaleString()} observed journeys across ${q.service_days} service day(s).`);
+    if (q.reasons?.includes("coverage_unverified")) parts.push("The share of scheduled journeys captured is unverified.");
+    if (q.reasons?.includes("inconsistent_journey_order")) parts.push("Some retained stop readings have an inconsistent journey order.");
+    if (q.status !== "unavailable" && q.range_pct) parts.push(`Sampling and known journey-order sensitivity: ${q.range_pct[0]}–${q.range_pct[1]}%. This assumes independent journeys and does not cover missing-feed bias or other assignment errors.`);
+  }
+  if (operator === "ALL" && composition) {
+    const shares = composition.operators.filter(x => x.readings > 0)
+      .map(x => `${x.name}: ${x.share_pct}%`).join("; ");
+    parts.push(shares ? `Share of this day's readings: ${shares}.` : "No eligible operator readings.");
+  }
+  parts.push("Places and operators without observations are not represented. This is timetable adherence, not excess waiting time or a passenger survey.");
+  return parts.join(" ");
+}
 const DEFAULT_TARGET_PCT = 95;
 
 const state = {
@@ -93,6 +118,7 @@ function motionOK() {
 }
 
 const format = {
+  count(value) { return value == null ? "Unavailable" : finiteNumber(value).toLocaleString(); },
   delaySeconds(seconds) {
     if (seconds === null || seconds === undefined) return "–";
     seconds = finiteNumber(seconds);
@@ -152,7 +178,7 @@ function operatorName(code) {
 function gridRows() {
   let rows = [...state.rows];
   if (state.hideLowSample) {
-    rows = rows.filter((row) => (row.readings_in_gate || 0) >= LOW_SAMPLE_THRESHOLD);
+    rows = rows.filter((row) => !limitedEvidence(row));
   }
   const key = state.chartSort;
   if (key === "route") {
@@ -180,7 +206,7 @@ function renderRouteGrid() {
   grid.innerHTML = rows
     .map((row) => {
       const colour = verdict(row.on_time_pct, target);
-      const low = (row.readings_in_gate || 0) < LOW_SAMPLE_THRESHOLD;
+      const low = limitedEvidence(row);
       const pct = hasReadings(row) ? finiteNumber(row.on_time_pct).toFixed(0) + "%" : "–";
       const sel = state.selectedRoute !== null && String(row.route) === String(state.selectedRoute) ? " selected" : "";
       const freq = row.frequent ? '<span class="cell-freq">freq</span>' : "";
@@ -225,7 +251,7 @@ function renderRouteDetail() {
     return;
   }
   const colour = verdict(row.on_time_pct, state.target);
-  const low = (row.readings_in_gate || 0) < LOW_SAMPLE_THRESHOLD;
+  const low = limitedEvidence(row);
   const freqNote = row.frequent
     ? '<span class="freq-tag" title="High-frequency service: officially judged by wait time, not timetable punctuality">frequent</span>'
     : "";
@@ -400,7 +426,26 @@ function renderHeadline(opData) {
   document.getElementById("median-delay").textContent = format.delaySeconds(overall.median_delay_s);
   document.getElementById("mean-delay").textContent = format.delaySeconds(overall.mean_delay_s);
   document.getElementById("readings").textContent = (overall.readings_in_gate || 0).toLocaleString();
-  document.getElementById("trips").textContent = (overall.observed_trips || 0).toLocaleString();
+  document.getElementById("trips").textContent = format.count(overall.observed_trips);
+  let evidence = document.getElementById("evidence-context");
+  if (!evidence) {
+    evidence = document.createElement("details");
+    evidence.id = "evidence-context";
+    evidence.className = "faint";
+    evidence.append(document.createElement('summary'),document.createElement('p'));
+    document.getElementById("period-line").after(evidence);
+  }
+  const status = overall.qualification?.status || 'Historical';
+  evidence.querySelector('summary').textContent = `${status[0].toUpperCase()+status.slice(1)} observed sample · evidence and coverage`;
+  const explanation = evidence.querySelector('p');
+  explanation.textContent = evidenceText(overall, day.operator_composition, state.operator);
+  const excluded = data.excluded_service_days || [];
+  if (excluded.length) explanation.textContent += ` Excluded historical days: ${excluded.map(x=>format.serviceDate(x.service_date)).join('; ')}.`;
+  const groups = opData.frequency_adherence?.groups;
+  if (groups) explanation.textContent += " " + [
+    ["frequent", "Frequent services"], ["non_frequent", "Non-frequent services"],
+    ["unclassified", "Frequency unverified"],
+  ].map(([key,label]) => `${label}: ${format.percent(groups[key].on_time_pct)} from ${groups[key].readings.toLocaleString()} readings`).join("; ") + ".";
 
   document.getElementById("genat").textContent = data.generated_at
     ? new Date(data.generated_at).toLocaleString("en-GB")

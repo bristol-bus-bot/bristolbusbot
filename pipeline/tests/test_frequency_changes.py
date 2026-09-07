@@ -11,6 +11,7 @@ PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import frequency_changes as frequency  # noqa: E402
+from snapshot_quality import record_quality
 
 
 BASELINE = frequency.Period(date(2026, 5, 11), date(2026, 6, 7), "term time")
@@ -42,6 +43,9 @@ def add_journeys(
         direction: int | None,
         count: int,
 ) -> None:
+    record_quality(connection, frequency.compact(day), 'a'*64,
+                   dict(snapshot_sha256='b'*64, trip_count=count,
+                        collision_groups=0, reasons=[]))
     existing = connection.execute(
         "SELECT COUNT(*) FROM expected_trips WHERE service_date=? "
         "AND operator=? AND route_id IS ? AND direction IS ?",

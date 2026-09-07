@@ -26,10 +26,9 @@
   </div>
 
   <div class="callout data-note" id="historical-data-note" role="note">
-    <strong>Historical data note.</strong> The corrected method introduced on
-    16 August raised every one of the 56 shared daily figures by an average of
-    4.41 percentage points. 1 July is excluded because the collector change
-    left incomplete raw evidence for that day.
+    <strong>Historical data note.</strong> Some days have incomplete or
+    contradictory evidence and are excluded. Method and timetable changes
+    also limit comparisons across periods.
     <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md#changes-to-the-measurement">See the dated change record.</a>
   </div>
 
@@ -91,14 +90,14 @@
       <h2 class="audit-h2">By route</h2>
     </button>
     <div class="sec-body" id="routes-panel"><div class="sec-body-inner">
-      <p class="audit-muted audit-small">Every route as a tile, coloured by on-time %. Faded tiles have few readings (n&lt;30), so treat those as indicative. Tap a tile for its full breakdown. Tiles marked <span class="cell-freq">freq</span> run 6+ buses an hour, where the official standard judges wait time, not timetable punctuality.</p>
+      <p class="audit-muted audit-small">Tiles show observed on-time percentages. Faded tiles have limited precision or unavailable evidence. Tap a tile for its breakdown. A <span class="cell-freq">freq</span> label is a verified schedule proxy checked separately by direction, not an excess-waiting-time result.</p>
       <p class="audit-muted audit-small" id="route-target-note"></p>
       <div class="controls">
         <span class="audit-faint audit-small">Sort:</span>
         <button type="button" class="ctl active" data-sort="worst" aria-pressed="true">Worst first</button>
         <button type="button" class="ctl" data-sort="best" aria-pressed="false">Best first</button>
         <button type="button" class="ctl" data-sort="route" aria-pressed="false">By route</button>
-        <label class="chk"><input type="checkbox" id="hideLowN"> Hide low-sample routes</label>
+        <label class="chk"><input type="checkbox" id="hideLowN"> Hide small or unavailable samples</label>
       </div>
       <div class="route-grid" id="route-grid" aria-label="Route punctuality"></div>
       <div class="route-detail" id="route-detail" aria-live="polite"></div>

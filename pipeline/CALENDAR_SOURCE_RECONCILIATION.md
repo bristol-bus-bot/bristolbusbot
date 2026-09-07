@@ -44,3 +44,19 @@ Re-comparison uses the original floor even if the live timetable is already
 sparse on that date. Recovered coverage clears the obligation; unresolved
 coverage within 56 days blocks acceptance. The existing estate monitor also
 raises an incident at the deadline even if no new build runs.
+# Identical journey replacements
+
+The disposable build also checks overlapping identities with identical complete
+stop calls, arrival/departure times, pickup/drop-off permissions, registered
+route and direction. It retires the earlier identity on a date only when the
+latest First source edition supplies the replacement and omits the earlier
+identity. All trip and stop-time rows remain intact; dated calendar exclusions
+and source-file hashes record the correction.
+
+For simple profiles the replacement must positively operate on that date.
+Identical complete profiles, including appended organisation definitions, can
+also prove that two already-active GTFS identities impose identical conditions.
+This second case does not add operating dates or interpret school calendars:
+the identical replacement must remain active. Different or conflicting profiles
+remain unresolved. Raw inventory, source validation and promotion gates still
+apply.

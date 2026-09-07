@@ -88,6 +88,8 @@ def test_direct_entry_refuses_before_starting_a_build(monkeypatch):
 
 
 def configure_shadow_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, 'reconcile_duplicate_sources', lambda *_: {
+        'trips_corrected':0,'dates_excluded':0})
     scratch = tmp_path / "scratch"
     gtfs = scratch / "busaudit_gtfs"
     first = scratch / "busaudit_first_txc"

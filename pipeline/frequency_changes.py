@@ -294,6 +294,14 @@ def prepare_period(
             excluded[day] = reason
 
     required = [day for day in weekdays if day not in excluded]
+    from snapshot_quality import denominator_reasons
+    untrusted = {compact(day): denominator_reasons(connection, compact(day))
+                 for day in required}
+    untrusted = {day: reasons for day, reasons in untrusted.items() if reasons}
+    if untrusted:
+        raise ComparisonUnavailable('untrusted scheduled-trip denominators: ' +
+                                    '; '.join(day + ' (' + ', '.join(reasons) + ')'
+                                              for day, reasons in untrusted.items()))
     quality = _date_quality(connection, required)
     missing = [compact(day) for day in required if day not in quality]
     legacy = [

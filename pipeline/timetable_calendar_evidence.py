@@ -16,6 +16,7 @@ from pathlib import Path
 import sqlite3
 import xml.etree.ElementTree as ET
 import zipfile
+from functools import lru_cache
 
 from frequency_changes import england_wales_bank_holidays
 import txc_parser as txc
@@ -29,10 +30,18 @@ HOLIDAYS = {
 }
 
 
+@lru_cache(maxsize=1024)
 def ordinary_operating_day(profile_xml: bytes, day: date) -> bool:
     """Prove a simple regular day; decline all holidays and complex profiles."""
     try:
-        root = ET.fromstring(profile_xml)
+        # The parser's provenance hash appends organisation definitions even
+        # when this journey's simple Sunday profile never refers to them.
+        # Keep those definitions in evidence, but inspect the actual profile.
+        document = ET.fromstring(b'<Evidence>' + profile_xml + b'</Evidence>')
+        if not len(document) or document[0].tag != 'OperatingProfile' or any(
+                item.tag != 'ServicedOrganisation' for item in list(document)[1:]):
+            return False
+        root = document[0]
         if root.tag != 'OperatingProfile' or any(
                 e.tag not in {'RegularDayType', 'BankHolidayOperation'} for e in root):
             return False

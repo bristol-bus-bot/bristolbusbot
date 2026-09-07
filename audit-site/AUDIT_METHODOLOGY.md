@@ -168,8 +168,11 @@ to do, not a verdict on the vehicle itself.
 
 ## Frequent services
 
-A route is flagged frequent if it runs 6 or more buses in its busiest daytime
-hour, the DfT high-frequency threshold. For frequent services the official
+A route's frequency label is a schedule proxy: at least six departures in its
+busiest daytime hour, checked separately for each registered route, operator
+and direction. Opposite directions and different operators are not added
+together. Mixed classifications or unverifiable historical schedules remain
+unclassified. This proxy is not an official service classification. For frequent services the official
 standard measures excess waiting time rather than timetable punctuality, so the
 on-time figure shown for a frequent route is informative but not the basis on
 which such services are formally judged.
@@ -252,17 +255,29 @@ That service day is excluded from all public results and evidence packs until
 complete raw evidence can be restored. Publication checks also reject any day
 where the pooled totals contradict the sum of the operator totals.
 
-**13 July 2026 — collector replaced.** The process that matches live buses
-to timetabled trips was rewritten. Three behavioural changes affect the
-figures: a match is now rejected unless the candidate schedule has a stop
-within 3 km of the vehicle's reported position; where several schedules
-share a route number, the one with the closest departure time is chosen
-rather than an arbitrary pick; and stale re-broadcast vehicle positions,
-which BODS emits for parked vehicles, are discarded rather than recorded.
-Together these raised measured on-time performance by roughly 1 to 1.5
-percentage points on weekdays and increased the number of matched trips by
-around 15%. Figures before this date came from the old process and are not
-directly comparable.
+**Early July 2026 — collector transition; exact deployment chronology is
+incomplete.** An earlier account assigned the matching and stale-position
+changes to 13 July. Code commit `65899b8`, dated 5 July, already introduces
+stale `RecordedAtTime` filtering. A commit date does not establish its production
+deployment time, and a step in observed match rates does not establish its
+cause. The previously stated numerical effects have therefore been withdrawn.
+Treat comparisons spanning the early-July transition as method-sensitive;
+13 July remains a documented historical marker, not a verified deployment
+timestamp for all these changes.
+
+**16 August 2026 — timetable population changed.** Trip identities and
+scheduled departures differ across the timetable editions. A route-level
+comparison spanning this boundary is not automatically a like-for-like
+performance trend. Historical snapshots without a retained timetable file
+identity cannot be repaired by substituting today's timetable. Coverage and
+frequency claims from such snapshots are unavailable.
+
+Small differences between retained observations and August rollups cannot
+be assigned to a particular late message without the original write history.
+The collector can replace a timing-point reading with a closer GPS reading,
+and rollups can be recomputed; neither table is inherently write-once.
+Where retained sample support contradicts the published counts, derived
+results are withheld rather than silently rewritten.
 
 **14 July 2026 — timing points restored on TransXChange-sourced routes.**
 Routes that enter the timetable via TransXChange rather than GTFS (42, 43,
@@ -273,6 +288,30 @@ use. As delay is only recorded at timing points, these routes never
 produced a published reading despite being tracked live. Fixed on 14 July;
 they accumulate data from that date, which is why their history starts
 there.
+
+## Journey sample qualification (export method 3)
+
+Stop readings from one journey are not independent bus journeys. The audit,
+site headline and evidence-pack code use the same journey support rules;
+weekly cards compose the retained daily support instead of applying a separate
+1,000-reading rule. Missing support, impossible counts and contradictions with
+the durable rollup cannot support a published result. Known contradictory days
+are listed as excluded; neither the old observations nor summaries are rewritten.
+
+The displayed percentage remains descriptive timing-point adherence. Sample
+precision uses journey clusters weighted by their number of readings: the
+effective sample is `N² / sum(n_j²)`. The illustrative 95% sampling radius is
+`sqrt(log(40) / (2 * effective_sample))`. It assumes independent journeys,
+which shared disruption may violate. Known out-of-order journeys widen the
+range by allowing their readings to be either on time or not on time. Other
+assignment errors, feed bias and missing services are outside this range.
+
+Results are indicative when the sampling radius exceeds ten percentage points,
+only one service day is represented, journey-order ambiguity remains, or
+scheduled-service coverage is unverified. The ten-point threshold is a display
+precision policy, not proof of representativeness. All-ambiguous samples and
+samples below two journeys are unavailable. Operator shares describe the
+selected period's eligible readings, not passengers or an even network survey.
 
 ## Sources
 

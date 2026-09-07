@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 import sqlite3
+import json
 
 from audit_operators import NETWORK_LABEL, SHOW_OPERATORS
 
@@ -78,12 +79,21 @@ def publication_exclusions(
 ) -> dict[str, list[str]]:
     """Return known and detected reasons a day must not be published."""
     result: dict[str, list[str]] = {}
+    has_support = connection.execute("SELECT 1 FROM sqlite_master WHERE name='daily_sample_support' AND type='table'").fetchone()
+    columns = {row[1] for row in connection.execute('PRAGMA table_info(daily_overall_summary)')}
     for service_date in sorted(set(service_dates)):
         reasons = []
         manual = MANUAL_EXCLUSIONS.get(service_date)
         if manual:
             reasons.append(manual)
         reasons.extend(day_consistency_reasons(connection, service_date))
+        if has_support and {'readings_in_gate','on_time'}.issubset(columns):
+            support = connection.execute("SELECT support_json FROM daily_sample_support WHERE service_date=? AND operator='ALL' AND scope='overall' AND scope_key=''",(service_date,)).fetchone()
+            summary = connection.execute("SELECT readings_in_gate,on_time FROM daily_overall_summary WHERE service_date=? AND operator='ALL'",(service_date,)).fetchone()
+            if support and summary:
+                counts = json.loads(support[0])
+                if (counts['readings'],counts['on_time']) != tuple(summary):
+                    reasons.append('retained_sample_support_differs_from_rollup')
         if reasons:
             result[service_date] = sorted(set(reasons))
     return result

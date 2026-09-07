@@ -19,6 +19,9 @@ from datetime import datetime, timezone
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, operator_name
 from audit_publication import publication_exclusions
+from snapshot_quality import denominator_reasons
+from sample_quality import qualify_row
+from audit_scope import operator_composition, frequency_adherence
 from audit_targets import target_metadata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,18 +57,15 @@ def operators_for_day(cur, service_date):
 
 
 def coverage_is_valid(cur, service_date):
-    """Fail closed once the private day-health table exists.
-
-    Older databases without the new table retain their previous behaviour for
-    a safe additive deployment.  Once migrated, a missing or explicitly
-    invalid health row means coverage must not leave the Pi.
-    """
+    """Publish coverage only with source provenance and a valid health row."""
+    if denominator_reasons(cur.connection, service_date):
+        return False
     table = cur.execute(
         """SELECT 1 FROM sqlite_master
            WHERE type = 'table' AND name = 'daily_trip_coverage_days'"""
     ).fetchone()
     if not table:
-        return True
+        return False
     row = cur.execute(
         """SELECT is_valid FROM daily_trip_coverage_days
            WHERE service_date = ?""",
@@ -100,14 +100,14 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
 
     try:
         freq = {
-            row["route"]: bool(row["frequent"])
+            row["route"]: (bool(row["frequent"]) if row['frequent'] is not None else None)
             for row in cur.execute(
                 "SELECT route, frequent FROM daily_route_class WHERE service_date = ? AND operator = ?",
                 (service_date, operator),
             )
         }
         for r in routes:
-            r["frequent"] = freq.get(r["route"], False)
+            r["frequent"] = freq.get(r["route"]) if coverage_valid else None
     except sqlite3.OperationalError:
         pass
 
@@ -160,7 +160,20 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
     except sqlite3.OperationalError:
         pass
 
-    return {"overall": overall, "routes": routes, "geography": geography, "fleet": fleet}
+    qualify_row(cur.connection,[service_date],operator,overall,
+                coverage_verified=coverage_valid)
+    for item in routes:
+        qualify_row(cur.connection,[service_date],operator,item,'route',item['route'],
+                    coverage_verified=coverage_valid)
+    for scope,items in geography.items():
+        for item in items:
+            qualify_row(cur.connection,[service_date],operator,item,scope,item['key'],
+                        coverage_verified=coverage_valid)
+    for item in fleet:
+        qualify_row(cur.connection,[service_date],operator,item,'fleet',item['model'],
+                    coverage_verified=coverage_valid)
+    return {"overall": overall, "routes": routes, "geography": geography, "fleet": fleet,
+            "frequency_adherence": frequency_adherence(routes)}
 
 
 def build_day(cur, service_date):
@@ -171,7 +184,15 @@ def build_day(cur, service_date):
             cur, service_date, op, coverage_valid=coverage_valid)
         for op in ops
     }
-    day = {"service_date": service_date, "by_operator": by_operator}
+    if NETWORK_LABEL in by_operator:
+        by_operator[NETWORK_LABEL]['frequency_adherence'] = frequency_adherence(
+            [row for op,values in by_operator.items() if op != NETWORK_LABEL
+             for row in values['routes']])
+    day = {"service_date": service_date, "by_operator": by_operator,
+           "denominator_reasons": denominator_reasons(cur.connection, service_date)}
+    day['operator_composition'] = operator_composition({
+        op: values['overall']['readings_in_gate'] for op, values in by_operator.items()
+        if op != NETWORK_LABEL})
     # Retain the top-level network keys for existing readers.
     compat = by_operator.get("FBRI") or by_operator.get(NETWORK_LABEL)
     if compat:
@@ -226,8 +247,12 @@ def main():
         **target_metadata(dates[-1]),
         "on_time_band": ON_TIME_BAND,
         "measurement_method": {
-            "version": 2,
+            "version": 3,
             "origin_timing_points": "excluded_until_departure_can_be_detected",
+            "sample_qualification": "journey_clusters_with_known_order_sensitivity",
+            "historical_snapshot_provenance": "unavailable_unless_retained_at_capture",
+            "exact_match_runtime_state": "not_retained_in_this_export",
+            "frequency_classification": "registered_route_direction_peak_hour_proxy_v2",
         },
         "excluded_service_days": [
             {"service_date": service_date, "reasons": exclusions[service_date]}
@@ -239,7 +264,7 @@ def main():
 
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(OUT_FILE, "w", encoding="utf-8") as out:
-        json.dump(payload, out, indent=2)
+        json.dump(payload, out, separators=(',', ':'))
     exclusion_text = (
         f", excluded: {len(exclusions)}" if exclusions else "")
     print(

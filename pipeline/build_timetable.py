@@ -14,6 +14,7 @@ from datetime import date
 
 from timetable_editions import normalize_database as normalize_route_editions
 from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
+from timetable_duplicate_evidence import reconcile_database as reconcile_duplicate_sources
 
 HERE = Path(__file__).parent
 PY = sys.executable
@@ -264,6 +265,12 @@ def main():
         edition_result["superseded_route_editions"],
         edition_result["trips_rewindowed"],
     )
+    try:
+        duplicate_result = reconcile_duplicate_sources(WECA_DB, txc_dir)
+    except Exception:
+        logger.exception('Duplicate source verification failed - refusing the candidate')
+        return 2
+    logger.info('Exact source-backed duplicate corrections: %s', duplicate_result)
 
     validation = validate(WECA_DB)
     logger.info(

@@ -10,6 +10,7 @@ PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import audit_rollup  # noqa: E402
+from snapshot_quality import record_quality
 
 
 DAY = "20260820"
@@ -39,6 +40,8 @@ def database() -> sqlite3.Connection:
            );"""
     )
     audit_rollup.init_summary_tables(connection)
+    record_quality(connection, DAY, 'a'*64, dict(snapshot_sha256='b'*64,
+                   trip_count=4, collision_groups=0, reasons=[]))
     return connection
 
 

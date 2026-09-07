@@ -8,10 +8,12 @@ service date. It reads timetable.db and writes expected trips to audit.db.
 import os
 import sys
 import sqlite3
+import hashlib
 from datetime import datetime
 from dateutil import tz
 
 from audit_operators import SHOW_OPERATORS
+from snapshot_quality import inspect_snapshot, record_quality
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TIMETABLE_DB = os.getenv("BBB_TIMETABLE_DB", os.path.join(HERE, "timetable.db"))
@@ -131,15 +133,20 @@ def active_service_ids(cur, date_str, weekday_col):
 def build_snapshot(date_str):
     weekday_col = DAYS[datetime.strptime(date_str, "%Y%m%d").weekday()]
 
+    before = os.stat(TIMETABLE_DB)
+    with open(TIMETABLE_DB, 'rb') as source:
+        timetable_sha256 = hashlib.file_digest(source, 'sha256').hexdigest()
     tt_conn = sqlite3.connect(f"file:{TIMETABLE_DB}?mode=ro", uri=True)
+    if tt_conn.execute('PRAGMA journal_mode').fetchone()[0].lower() != 'delete':
+        tt_conn.close()
+        raise RuntimeError('snapshot requires a standalone DELETE-journal timetable')
+    tt_conn.execute('BEGIN')
     tt_cur = tt_conn.cursor()
 
     service_ids = active_service_ids(tt_cur, date_str, weekday_col)
     if not service_ids:
         print(f"No active service_ids for {date_str} ({weekday_col}). "
-              f"Check timetable.db is current.")
-        tt_conn.close()
-        return 0
+              f"Recording an empty, unavailable snapshot.")
 
     # All show-operator trips on those services, with the minimum private
     # timetable clues needed to distinguish similar duties later. The route
@@ -189,11 +196,28 @@ def build_snapshot(date_str):
     tt_cur.execute(
         sql, list(SHOW_OPERATORS) + list(service_ids))
     rows = tt_cur.fetchall()
+    quality = inspect_snapshot(tt_conn, rows)
     tt_conn.close()
+    after = os.stat(TIMETABLE_DB)
+    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
+        raise RuntimeError('timetable changed during snapshot; no audit rows replaced')
 
     audit_conn = sqlite3.connect(AUDIT_DB)
     init_expected_table(audit_conn)
     audit_cur = audit_conn.cursor()
+
+    # A current timetable cannot retrospectively certify what was scheduled
+    # on a historical day, even if trip IDs happen to be unchanged.
+    if date_str < datetime.now(TARGET_TZ).strftime('%Y%m%d'):
+        quality['reasons'].append('historical_snapshot_rebuilt')
+    has_quality = table_exists(audit_cur, 'expected_snapshot_quality')
+    known = has_quality and audit_cur.execute(
+        'SELECT 1 FROM expected_snapshot_quality WHERE service_date=?',
+        (date_str,)).fetchone()
+    if not known and audit_cur.execute(
+            'SELECT 1 FROM expected_trips WHERE service_date=? LIMIT 1',
+            (date_str,)).fetchone():
+        quality['reasons'].append('legacy_snapshot_replaced')
 
     # Replace any existing snapshot for this date (idempotent re-runs).
     audit_cur.execute("DELETE FROM expected_trips WHERE service_date = ?", (date_str,))
@@ -221,6 +245,7 @@ def build_snapshot(date_str):
         )
         written += 1
 
+    record_quality(audit_conn, date_str, timetable_sha256, quality)
     audit_conn.commit()
     audit_conn.close()
     return written

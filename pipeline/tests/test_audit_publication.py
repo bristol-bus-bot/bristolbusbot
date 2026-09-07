@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 import sys
 from pathlib import Path
 
@@ -9,6 +10,19 @@ PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import audit_publication  # noqa: E402
+from sample_quality import init_schema
+
+
+def test_retained_raw_mismatch_is_listed_and_neither_source_is_rewritten():
+    c=database()
+    add_row(c,'20260816','ALL',(10,10,8,0,2,0))
+    add_row(c,'20260816','FBRI',(10,10,8,0,2,0))
+    init_schema(c)
+    c.execute('INSERT INTO daily_sample_support VALUES (?,?,?,?,?)',
+              ('20260816','ALL','overall','',json.dumps(dict(readings=11,on_time=9))))
+    assert audit_publication.publication_exclusions(c,['20260816'])=={
+      '20260816':['retained_sample_support_differs_from_rollup']}
+    assert c.execute("SELECT readings_in_gate FROM daily_overall_summary WHERE operator='ALL'").fetchone()[0]==10
 
 
 def database() -> sqlite3.Connection:

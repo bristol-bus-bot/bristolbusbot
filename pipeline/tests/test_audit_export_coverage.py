@@ -12,6 +12,7 @@ PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
 import audit_export  # noqa: E402
+from snapshot_quality import record_quality
 
 
 DAY = "20260820"
@@ -60,6 +61,8 @@ def database(*, health_table: bool = True,
                 "INSERT INTO daily_trip_coverage_days VALUES (?,?)",
                 (DAY, int(valid)),
             )
+    record_quality(connection, DAY, 'a'*64, dict(snapshot_sha256='b'*64,
+                   trip_count=200, collision_groups=0, reasons=[]))
     connection.commit()
     return connection
 
@@ -98,12 +101,12 @@ def test_migrated_day_without_health_row_fails_closed():
     assert coverage_values(day) == ((None, None, None),) * 4
 
 
-def test_legacy_database_without_health_table_remains_exportable():
+def test_legacy_database_without_health_table_withholds_coverage():
     connection = database(health_table=False)
 
     day = audit_export.build_day(connection.cursor(), DAY)
 
-    assert coverage_values(day) == ((200, 150, 75.0),) * 4
+    assert coverage_values(day) == ((None, None, None),) * 4
 
 
 def test_broken_health_table_stops_export_instead_of_leaking_coverage():

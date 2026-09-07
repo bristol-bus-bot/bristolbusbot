@@ -26,6 +26,8 @@ from audit_operators import NETWORK_LABEL, SHOW_OPERATORS, operator_name
 from audit_publication import publication_exclusions
 from audit_targets import target_metadata
 import frequency_changes
+from sample_quality import qualify_row
+from audit_scope import operator_composition
 
 
 HERE = Path(__file__).resolve().parent
@@ -45,8 +47,9 @@ HEADLINE_PERIOD_TOLERANCE_DAYS = 14
 MEASUREMENT_BREAKS = (
     (
         date(2026, 7, 13),
-        "the replacement collector changed timetable matching and stale-position handling",
+        "the early-July collector transition has incomplete deployment chronology",
     ),
+    (date(2026, 8, 16), "the scheduled timetable population changed; this is not a like-for-like route performance comparison"),
 )
 
 
@@ -154,7 +157,10 @@ def month_end(day: date) -> date:
 def measurement_breaks_between(start: date, end: date) -> list[dict]:
     return [
         {"date": day.isoformat(), "reason": reason}
-        for day, reason in MEASUREMENT_BREAKS if start < day <= end
+        for day, reason in MEASUREMENT_BREAKS
+        if (start < day <= end or
+            (day == date(2026,7,13) and start <= date(2026,7,14)
+             and end >= date(2026,7,1)))
     ]
 
 
@@ -319,6 +325,9 @@ def aggregate_scope(
         round(100.0 * result["service_days"] / result["available_audit_days"], 1)
         if result["available_audit_days"] else None
     )
+    qualify_row(connection, sorted({row['service_date'] for row in rows}), operator,
+                result, 'route' if scope.kind == 'routes' else scope.kind,
+                list(scope.values) if scope.kind == 'routes' else scope.values[0])
     return result
 
 
@@ -425,6 +434,7 @@ def route_summaries(
                 < end - timedelta(days=ROUTE_PERIOD_TOLERANCE_DAYS)
             ),
         })
+        route_days = []
         for day in connection.execute(
             (f"""SELECT DISTINCT service_date FROM daily_geo_route_summary
                   WHERE operator=? AND geo_type=? AND geo_key=?
@@ -442,6 +452,12 @@ def route_summaries(
                compact(start), compact(end), *excluded_params)),
         ):
             evidence_days.add(day[0])
+            route_days.append(day[0])
+        q=qualify_row(connection,route_days,row['source_operator'],output[-1],
+                      scope.kind+'_route' if scope.kind in ('area','ward') else 'route',
+                      json.dumps([scope.values[0],row['route']]) if scope.kind in ('area','ward') else row['route'])
+        output[-1]['thin_sample'] = (q['status']=='unavailable' or
+                                    'wide_sampling_range' in q['reasons'])
     output.sort(key=lambda item: (
         item["on_time_pct"] is None,
         item["on_time_pct"] if item["on_time_pct"] is not None else 999,
@@ -563,10 +579,9 @@ def suggested_questions(report: dict) -> list[str]:
         )
     else:
         questions.append(
-            f"The route table contains no route with at least "
-            f"{report['routes']['minimum_readings']:,} readings for the full "
-            "period. What route-level evidence does WECA use when local public "
-            "samples are this thin?"
+            "The route table has no sufficiently supported full-period result. "
+            "What route-level evidence does WECA use where local public "
+            "evidence is limited?"
         )
     changes = report["frequency"]["changes"]
     if report["frequency"]["available"] and changes:
@@ -619,6 +634,9 @@ def build_report(
     if not headline["readings"]:
         raise PackUnavailable(
             f"no readings for {scope.display} between {start} and {end}")
+    if headline['qualification']['status'] == 'unavailable':
+        raise PackUnavailable('journey-level evidence cannot support this headline: ' +
+                              ', '.join(headline['qualification']['reasons']))
     if headline["partial_period"]:
         raise PackUnavailable(
             f"readings for {scope.display} cover only "
@@ -700,6 +718,10 @@ def build_report(
         },
         "target": target,
         "headline": headline,
+        "operator_composition": operator_composition({
+            op: sum(int(row['readings'] or 0) for row in
+                    scope_daily_rows(connection, scope, op, start, end))
+            for op in SHOW_OPERATORS if operator in (NETWORK_LABEL, op)}),
         "previous": previous,
         "change_from_previous_pct_points": delta,
         "change_unavailable_reason": (
@@ -729,6 +751,16 @@ def build_report(
             "target": target["current_target_source_url"],
         },
     }
+    q = headline['qualification']
+    limitations.append(f"{q['status'].capitalize()}: {q['journeys']:,} journeys, {q['service_days']} days. "
+                       f"Sampling/order sensitivity: {q['range_pct'][0]}-{q['range_pct'][1]}%. "
+                       'Assumes independent journeys; excludes feed bias and other assignment errors.')
+    composition = report['operator_composition']
+    if composition['readings'] == headline['readings']:
+        limitations.append('Operator shares of this scope and period: ' + ', '.join(
+            f"{item['name']} {item['share_pct']}%" for item in composition['operators'] if item['readings']) + '. ' + composition['caveat'])
+    else:
+        limitations.append('Historical operator shares unavailable; this is not an even network survey.')
     report["questions"] = suggested_questions(report)
     return report
 
@@ -760,7 +792,7 @@ def _change_summary(report: dict) -> str:
 def _route_confidence(row: dict) -> str:
     if row["partial_period"]:
         return "Partial period"
-    if row["thin_sample"]:
+    if row["thin_sample"] or row.get('qualification',{}).get('status') != 'supported':
         return "Indicative"
     return "Usable sample"
 
@@ -871,7 +903,7 @@ ol.questions{{padding-left:1.35rem}} ol.questions li{{margin:0 0 1rem;padding-le
 {comparison_warning}
 <h2>Month by month</h2><table><thead><tr><th>Month</th><th>On time</th><th>Readings</th><th>Days</th></tr></thead><tbody>{monthly_rows}</tbody></table>
 <h2>Routes seen in this area</h2>{route_warning}<table><thead><tr><th>Service</th><th>On time</th><th>Readings</th><th>Confidence</th></tr></thead><tbody>{route_table}</tbody></table>
-<p class="note">Routes are ordered from lowest on-time percentage. A route needs {report['routes']['minimum_readings']:,} readings before this pack treats its figure as more than indicative.</p>
+<p class="note">Routes are ordered by observed on-time percentage. Sample qualification counts journeys, precision, period coverage and unresolved evidence limitations.</p>
 <h2>Registered timetable changes</h2>{frequency_html}
 <h2>Three questions to take into the meeting</h2><ol class="questions">{questions}</ol>
 <h2>What these figures do not prove</h2><ul>{limitations}</ul>
@@ -1075,9 +1107,8 @@ def render_pdf(report: dict, output: Path) -> None:
     story.extend([
         routes,
         Paragraph(
-            "The five lowest sampled routes are shown. A route needs "
-            f"{report['routes']['minimum_readings']:,} readings before this "
-            "pack treats its figure as more than indicative.", small),
+            "Five lowest observed results shown. Qualification accounts for "
+            "journeys, sampling precision and unresolved evidence limitations.", small),
         Paragraph("Registered timetable changes", heading),
     ])
     frequency = report["frequency"]
@@ -1109,8 +1140,9 @@ def render_pdf(report: dict, output: Path) -> None:
         story.append(Paragraph(
             f"{index}. {_pdf_safe(item)}", question))
     story.append(Paragraph("What these figures do not prove", heading))
-    for item in report["limitations"]:
-        story.append(Paragraph(f"- {_pdf_safe(item)}", body))
+    # Continuous prose avoids a separate spacer for every short limitation,
+    # preserving the full wording and readable type in the one-page briefing.
+    story.append(Paragraph(_pdf_safe(' '.join(report['limitations'])), body))
     doc.build(story, onFirstPage=page, onLaterPages=page)
 
 

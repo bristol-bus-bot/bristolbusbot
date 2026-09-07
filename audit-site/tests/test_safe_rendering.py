@@ -58,10 +58,10 @@ def test_historical_restatement_and_excluded_day_are_disclosed():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     methodology = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
 
-    assert "4.41 percentage points" in html
-    assert "1 July is excluded" in html
-    assert "20,097 readings with 1,430" in methodology
-    assert "This is a documented method restatement" in methodology
+    assert "contradictory evidence and are excluded" in html
+    assert "Method and timetable changes" in html
+    assert "That service day is excluded from all public results" in methodology
+    assert "not a verified deployment" in methodology
 
 
 def test_accessibility_landmarks_and_live_regions_are_present():

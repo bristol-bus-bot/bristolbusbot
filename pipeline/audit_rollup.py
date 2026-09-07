@@ -17,6 +17,8 @@ Run from the bristol-live-buses folder:
 """
 
 import os
+from snapshot_quality import denominator_reasons
+from sample_quality import write_day as write_sample_support
 import sys
 import json
 import sqlite3
@@ -683,6 +685,7 @@ def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
         date_str, rows)
     quality = collector_quality(conn, window_start, window_end)
     reasons = list(quality.pop("reasons"))
+    reasons.extend(denominator_reasons(conn, date_str))
     if not rows:
         reasons.append("no_scheduled_trips")
     if invalid_times:
@@ -1555,18 +1558,21 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
 
 def rollup_frequency(conn, date_str, operators, label, *, commit=True):
     """Classify each route frequent vs non-frequent from the scheduled trips.
-    Frequent = 6+ departures in its busiest daytime hour (DfT's high-frequency
-    threshold), which the official standard measures by excess wait time rather
-    than timetable punctuality. Additive; writes daily_route_class."""
+    This is a schedule proxy: 6+ departures in the busiest daytime hour,
+    separately by registered route, operator and direction. Mixed classifications
+    stay unknown; this is not official excess waiting time measurement."""
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT route, first_departure FROM expected_trips
+        f"""SELECT route, first_departure, operator, route_id, direction FROM expected_trips
             WHERE service_date = ? AND operator IN ({op_ph})""",
         (date_str, *operators),
     )
     hourly = {}
-    for route, first_departure in cur.fetchall():
+    unknown_routes = set()
+    for route, first_departure, operator, route_id, direction in cur.fetchall():
+        if not route_id or direction is None:
+            unknown_routes.add(route)
         if not first_departure:
             continue
         try:
@@ -1574,7 +1580,7 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
         except (ValueError, TypeError):
             continue
         if 6 <= hour <= 19:
-            hours = hourly.setdefault(route, {})
+            hours = hourly.setdefault((route,operator,route_id,direction), {})
             hours[hour] = hours.get(hour, 0) + 1
 
     cur.execute(
@@ -1582,10 +1588,15 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
         (date_str, label),
     )
     frequent_count = 0
-    for route, hours in hourly.items():
-        peak = max(hours.values()) if hours else 0
-        frequent = 1 if peak >= 6 else 0
-        frequent_count += frequent
+    by_route = {}
+    for (route,_,_,_), hours in hourly.items():
+        by_route.setdefault(route,[]).append(max(hours.values()))
+    for route, peaks in by_route.items():
+        classifications = {peak>=6 for peak in peaks}
+        frequent = (int(next(iter(classifications)))
+                    if len(classifications)==1 and route not in unknown_routes else None)
+        peak = max(peaks)
+        frequent_count += int(frequent == 1)
         cur.execute(
             "INSERT INTO daily_route_class VALUES (?,?,?,?,?)",
             (date_str, label, route, frequent, peak),
@@ -1641,6 +1652,7 @@ def rollup_public_day(
         frequent_routes = rollup_frequency(
             conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, commit=False)
 
+        write_sample_support(conn, date_str, geo_index, fleet_index)
         contradictions = day_consistency_reasons(conn, date_str)
         if contradictions:
             raise RuntimeError(

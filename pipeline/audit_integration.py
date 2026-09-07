@@ -17,7 +17,8 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from audit_operators import OPERATOR_NAMES, SHOW_OPERATORS
+from audit_operators import NETWORK_LABEL, OPERATOR_NAMES, SHOW_OPERATORS
+from audit_publication import publication_exclusions
 
 
 DISTANCE_GATE_M = 150
@@ -27,7 +28,6 @@ INITIAL_START = "20260714"
 PROFILE_DAYS = 56
 PROFILE_MIN_DAYS = 2
 PROFILE_MIN_READINGS = 30
-HEADLINE_MIN_READINGS = 30
 # Signed delay buckets used by the live site's deviation strip.  The edges are
 # deliberately denser around the on-time window and coarser in the tails.  A
 # histogram remains aggregate data and is far smaller than exporting readings.
@@ -91,6 +91,10 @@ def _completed_dates(cur: sqlite3.Cursor, through_date: str) -> list[str]:
 def _headline(cur: sqlite3.Cursor, start_date: str,
               through_date: str) -> dict:
     ops = _placeholders(SHOW_OPERATORS)
+    days=[r[0] for r in cur.execute("SELECT DISTINCT service_date FROM daily_overall_summary WHERE operator='ALL' AND service_date BETWEEN ? AND ?",(start_date,through_date))]
+    excluded = publication_exclusions(cur.connection, days)
+    days=[day for day in days if day not in excluded]
+    dates_sql = _placeholders(days) or 'NULL'
     row = cur.execute(
         f"""SELECT COUNT(*) AS readings,
                    SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
@@ -99,16 +103,17 @@ def _headline(cur: sqlite3.Cursor, start_date: str,
                    SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
             FROM timepoint_observations
             WHERE service_date BETWEEN ? AND ?
+              AND service_date IN ({dates_sql})
               AND operator IN ({ops})
               AND COALESCE(is_origin, 0) = 0
               AND observed_delay_s IS NOT NULL
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
         (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
-         start_date, through_date, *SHOW_OPERATORS, DISTANCE_GATE_M),
+         start_date, through_date, *days, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchone()
     readings = int(row["readings"] or 0)
     on_time = int(row["on_time"] or 0)
-    return {
+    result = {
         "measurement_start": start_date,
         "through_date": through_date,
         "readings": readings,
@@ -116,9 +121,13 @@ def _headline(cur: sqlite3.Cursor, start_date: str,
         "early": int(row["early"] or 0),
         "late": int(row["late"] or 0),
         "on_time_pct": round(100 * on_time / readings, 1) if readings else None,
-        "minimum_readings": HEADLINE_MIN_READINGS,
-        "eligible": readings >= HEADLINE_MIN_READINGS,
+        "minimum_readings": 0,  # legacy field; eligibility uses journey support
+        "eligible": False,
     }
+    from sample_quality import qualify_row
+    q=qualify_row(cur.connection,days,NETWORK_LABEL,result)
+    result['eligible']=q['status']!='unavailable'
+    return result
 
 
 def _profile_dates(completed_dates: list[str]) -> list[str]:

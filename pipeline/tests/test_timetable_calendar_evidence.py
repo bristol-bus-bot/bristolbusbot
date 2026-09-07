@@ -23,6 +23,13 @@ def test_first_regular_weekday_source_contradicts_december_exclusion():
     assert calendar.ordinary_operating_day(PROFILE, DAY)
 
 
+def test_unused_organisation_definitions_do_not_invalidate_simple_profile():
+    assert calendar.ordinary_operating_day(
+        PROFILE + b'<ServicedOrganisation><OrganisationCode>UOB</OrganisationCode></ServicedOrganisation>', DAY)
+    assert not calendar.ordinary_operating_day(PROFILE + b'<Unknown/>', DAY)
+    assert not calendar.ordinary_operating_day(PROFILE + PROFILE, DAY)
+
+
 @pytest.mark.parametrize('day', [date(2026, 12, 25), date(2026, 12, 28),
                                date(2027, 1, 1), date(2026, 12, 24),
                                date(2026, 12, 5), date(2022, 6, 3)])
