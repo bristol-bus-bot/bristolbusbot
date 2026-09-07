@@ -504,6 +504,7 @@ export function validatePack(pack, card = 'all') {
   const week = pack?.busWeek;
   if (!week || !Number.isFinite(week.onTimePct)) errors.push('busWeek requires onTimePct');
   if (!week || Number(week.serviceDays) !== 7) errors.push('busWeek requires exactly 7 service days');
+  if (!week || Number(week.readings) < 1000) errors.push('busWeek requires at least 1,000 timing-point readings');
   if (!['supported','indicative'].includes(week?.qualification?.status)) errors.push('busWeek requires available journey sample qualification');
   if (!week || !Number.isFinite(Number(week.onTimeReadings))) errors.push('busWeek requires onTimeReadings');
   if (!week || !Array.isArray(week.daily) || week.daily.length !== 7) errors.push('busWeek requires seven daily percentages');

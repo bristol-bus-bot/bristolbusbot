@@ -177,6 +177,8 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
 
     readings = sum(int(item["readings_in_gate"]) for item in overall)
     on_time = sum(int(item["on_time"]) for item in overall)
+    if readings < 1000:
+        raise ValueError("Bus Week requires at least 1,000 timing-point readings")
     sample = weekly_qualification(overall)
     if sample['status'] == 'unavailable':
         raise ValueError('Bus Week sample is unavailable: ' + ', '.join(sample['reasons']))

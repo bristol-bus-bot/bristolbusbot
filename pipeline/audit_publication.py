@@ -90,6 +90,8 @@ def publication_exclusions(
         if has_support and {'readings_in_gate','on_time'}.issubset(columns):
             support = connection.execute("SELECT support_json FROM daily_sample_support WHERE service_date=? AND operator='ALL' AND scope='overall' AND scope_key=''",(service_date,)).fetchone()
             summary = connection.execute("SELECT readings_in_gate,on_time FROM daily_overall_summary WHERE service_date=? AND operator='ALL'",(service_date,)).fetchone()
+            if summary and summary[0] and not support:
+                reasons.append('retained_sample_support_unavailable')
             if support and summary:
                 counts = json.loads(support[0])
                 if (counts['readings'],counts['on_time']) != tuple(summary):

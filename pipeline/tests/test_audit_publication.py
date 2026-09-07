@@ -25,6 +25,16 @@ def test_retained_raw_mismatch_is_listed_and_neither_source_is_rewritten():
     assert c.execute("SELECT readings_in_gate FROM daily_overall_summary WHERE operator='ALL'").fetchone()[0]==10
 
 
+def test_expired_evidence_without_preserved_support_is_explicitly_excluded():
+    c = database()
+    add_row(c, '20260602', 'ALL', (10, 10, 8, 0, 2, 0))
+    add_row(c, '20260602', 'FBRI', (10, 10, 8, 0, 2, 0))
+    init_schema(c)
+    assert audit_publication.publication_exclusions(c, ['20260602']) == {
+        '20260602': ['retained_sample_support_unavailable']}
+    assert c.execute('SELECT count(*) FROM daily_overall_summary').fetchone()[0] == 2
+
+
 def database() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.executescript(
