@@ -251,7 +251,7 @@ def test_week_gate_rejects_gaps_and_small_samples():
     try:
         build_pack.build_week(audit_payload(readings=100))
     except ValueError as exc:
-        assert "invalid_sample_counts" in str(exc)
+        assert "1,000 timing-point" in str(exc)
     else:
         raise AssertionError("small sample must fail")
 
@@ -323,3 +323,14 @@ def test_single_card_cli_writes_bot_only_pack(tmp_path):
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert set(payload) == {"generatedAt", "botSaid"}
     assert payload["botSaid"]["postUri"].endswith("/abc")
+
+
+def test_weekly_existing_floor_still_applies_to_independent_journeys():
+    payload = audit_payload()
+    for day in payload["days"]:
+        row = day["by_operator"]["FBRI"]["overall"]
+        row.update(readings_in_gate=140,on_time=100,on_time_pct=71.4,
+                   sample_support=dict(readings=140,on_time=100,journeys=140,
+                                       squared_weights=140,service_days=1))
+    with pytest.raises(ValueError,match="1,000 timing-point"):
+        build_pack.build_week(payload)
