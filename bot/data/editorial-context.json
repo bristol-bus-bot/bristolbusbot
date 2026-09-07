@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-23T00:00:00Z",
+  "updated_at": "2026-09-07T12:46:36Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -398,6 +398,40 @@
         "url": "https://www.gov.uk/government/news/cheaper-travel-for-millions-with-a-third-off-fares",
         "published_on": "2026-07-22",
         "verified_on": "2026-07-23"
+      }
+    },
+    {
+      "id": "govuk-new-era-for-liverpool-buses-as-government-backs-lo-b72dd976",
+      "label": "New era for Liverpool buses as government backs local control",
+      "claim": "New era for Liverpool buses as government backs local control. Liverpool City Region's bus services are coming back under public control, with buses franchised first in St. Helens before being rolled out to the Wirral later this year and the rest of the city region in 2027.",
+      "prompt_hint": "This wording came from the approved GOV.UK title and summary. Use exact dates, make no prediction, and do not add facts from outside this claim.",
+      "requirements": [
+        {
+          "label": "approved story subject",
+          "alternatives": [
+            "New era for Liverpool buses as government backs local control"
+          ]
+        },
+        {
+          "label": "approved detail 2027",
+          "alternatives": [
+            "2027"
+          ]
+        }
+      ],
+      "published_at": "2026-09-07T08:30:00Z",
+      "active_from": "2026-09-07T12:46:36Z",
+      "expires_at": "2026-09-14T08:30:00Z",
+      "probability": 0.1,
+      "max_uses_total": 2,
+      "cooldown_hours": 36,
+      "append_source_link": false,
+      "source": {
+        "publisher": "UK Government",
+        "title": "New era for Liverpool buses as government backs local control",
+        "url": "https://www.gov.uk/government/news/new-era-for-liverpool-buses-as-government-backs-local-control",
+        "published_on": "2026-09-07",
+        "verified_on": "2026-09-07"
       }
     }
   ]
