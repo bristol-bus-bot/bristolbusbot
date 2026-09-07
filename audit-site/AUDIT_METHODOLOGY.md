@@ -297,6 +297,8 @@ weekly cards compose the retained daily support instead of applying a separate
 1,000-reading rule. Missing support, impossible counts and contradictions with
 the durable rollup cannot support a published result. Known contradictory days
 are listed as excluded; neither the old observations nor summaries are rewritten.
+Dates whose raw evidence expired before journey support was preserved are also
+explicitly excluded. An inherited daily total alone cannot recreate that support.
 
 The displayed percentage remains descriptive timing-point adherence. Sample
 precision uses journey clusters weighted by their number of readings: the
