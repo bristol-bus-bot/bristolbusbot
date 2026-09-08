@@ -56,6 +56,8 @@ def test_only_proven_old_dates_are_removed_and_stop_inventory_is_unchanged(tmp_p
     expected=[('20260906',2),('20260907',1),('20260913',2)]
     if date_only:expected.insert(0,('20260830',1))
     assert c.execute('SELECT date,exception_type FROM calendar_dates WHERE service_id=? ORDER BY date',(clone,)).fetchall()==expected
+    if date_only:
+        assert c.execute('SELECT count(*) FROM calendar').fetchone()[0] == 0
     assert c.execute("SELECT service_id FROM trips WHERE trip_id='short'").fetchone()[0]=='oldcal'
     assert c.execute('SELECT count(*) FROM stop_times').fetchone()[0]==6
     assert duplicate.reconcile_database(path,tmp_path)=={'trips_corrected':0,'dates_excluded':0}

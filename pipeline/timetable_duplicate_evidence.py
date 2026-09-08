@@ -196,12 +196,12 @@ def reconcile_database(database: Path, directory: Path) -> dict:
             original=trips[trip]['service_id']
             clone='BBBDUP_'+hashlib.sha256((trip+json.dumps(sorted(excluded))).encode()).hexdigest()[:24]
             calendar=calendars.get(original)
-            if calendar is None:
-                dates=sorted(day.strftime('%Y%m%d') for day in days[original])
-                calendar=dict.fromkeys(WEEKDAYS,0)
-                calendar.update(start_date=dates[0],end_date=dates[-1])
-            conn.execute('INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)',
-                         (clone,*[calendar[k] for k in WEEKDAYS],calendar['start_date'],calendar['end_date']))
+            # Exception-only services must remain exception-only. Inventing a
+            # calendar start would also invent a route-edition identity after
+            # normalization has already recorded the real calendar cohorts.
+            if calendar is not None:
+                conn.execute('INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)',
+                             (clone,*[calendar[k] for k in WEEKDAYS],calendar['start_date'],calendar['end_date']))
             conn.execute('INSERT INTO calendar_dates SELECT ?,date,exception_type FROM calendar_dates WHERE service_id=?',
                          (clone,original))
             for day,proof in excluded.items():
