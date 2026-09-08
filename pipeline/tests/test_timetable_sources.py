@@ -4,6 +4,9 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace as NS
+from datetime import date, timedelta
+import xml.etree.ElementTree as ET
 
 
 PIPELINE = Path(__file__).resolve().parents[1]
@@ -233,3 +236,37 @@ def test_txc_merge_rolls_back_when_any_required_archive_is_corrupt(
     check = sqlite3.connect(database)
     assert check.execute("SELECT COUNT(*) FROM routes").fetchone()[0] == 0
     check.close()
+
+
+def test_txc_supplement_keeps_original_journey_code_for_source_reconciliation(tmp_path,monkeypatch):
+    database=tmp_path/'tt.db';c=sqlite3.connect(database)
+    c.executescript('''CREATE TABLE agency(agency_id,agency_noc);
+    CREATE TABLE routes(route_id,agency_id,route_short_name,route_type);
+    CREATE TABLE trips(trip_id,route_id,service_id,direction_id);
+    CREATE TABLE stops(stop_id,stop_code,stop_name,stop_lat,stop_lon);
+    CREATE TABLE stop_times(trip_id,arrival_time,departure_time,stop_id,stop_sequence,timepoint);
+    CREATE TABLE calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date);
+    INSERT INTO agency VALUES('a','FBRI');
+    INSERT INTO stops VALUES('A','A','A',51,-2),('B','B','B',51,-2);''')
+    c.commit();c.close()
+    source=tmp_path/'sources';source.mkdir()
+    with zipfile.ZipFile(source/'one.zip','w') as z:
+        z.writestr('one.xml','<FBRI><LineName>373</LineName></FBRI>')
+    profile=NS(regular_days=[NS(day=0)])
+    cells=[NS(stopusage=NS(stop=NS(atco_code=stop),timingstatus='PTP'),
+              arrival_time=timedelta(hours=8,minutes=i),departure_time=timedelta(hours=8,minutes=i))
+           for i,stop in enumerate(['A','outside','B'])]
+    journey=NS(code='VJ780',operating_profile=profile,journey_pattern=NS(is_inbound=lambda:False),get_times=lambda:cells)
+    service=NS(operator='op',service_code='PH0000132:3',lines=[NS(line_name='373',id='L')],
+               operating_profile=profile,operating_period=NS(start=date(2026,9,6),end=date(2026,9,30)))
+    doc=NS(operators=[ET.fromstring('<Operator id="op"><NationalOperatorCode>FBRI</NationalOperatorCode></Operator>')],
+           services={'S':service},get_journeys=lambda *_:[journey])
+    monkeypatch.setattr(txc_merge.txc,'TransXChange',lambda *_:doc)
+    monkeypatch.setattr(sys,'argv',['merge',str(database),str(source)])
+    assert txc_merge.main()==0
+    c=sqlite3.connect(database)
+    assert c.execute('SELECT trip_id,vehicle_journey_code FROM trips').fetchall()==[('SUP_T_PH0000132:3_VJ780','VJ780')]
+    assert c.execute('SELECT count(*) FROM stop_times').fetchone()[0]==2
+    import json
+    calls=json.loads(c.execute('SELECT full_calls_json FROM supplement_trip_sources').fetchone()[0])
+    assert [row[0] for row in calls]==['A','outside','B']
