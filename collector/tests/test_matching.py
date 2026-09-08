@@ -9,6 +9,28 @@ LDN = ZoneInfo("Europe/London")
 WED_1115 = datetime(2026, 6, 10, 11, 15, tzinfo=LDN)  # Wednesday
 
 
+@pytest.mark.parametrize('hour,minute,departure,service_date', [
+    (0, 2, '24:02:00', '20260610'),
+    (0, 2, '00:02:00', '20260611'),
+    (0, 2, '23:58:00', '20260610'),
+    (23, 58, '24:02:00', '20260611'),
+    (23, 58, '00:02:00', '20260612'),
+])
+def test_midnight_window_matches_the_correct_service_day(hour, minute, departure, service_date):
+    from collector.matching import _diagnostic_rows
+    c = build()
+    c.execute("DELETE FROM calendar")
+    c.execute("INSERT INTO calendar_dates VALUES ('WK',?,1)", (service_date,))
+    c.execute("UPDATE stop_times SET arrival_time=?,departure_time=? WHERE trip_id='T_NIGHT'", (departure, departure))
+    origin = datetime(2026, 6, 11, hour, minute, tzinfo=LDN)
+    match = match_fuzzy(c.cursor(), 'FBRI', 'N75', 'outbound', origin)
+    assert match and match.trip_id == 'T_NIGHT'
+    rows, truncated = _diagnostic_rows(c.cursor(), 'FBRI', 'N75', 0, origin)
+    assert len(rows) == 1 and rows[0][0] == 'T_NIGHT' and not truncated
+    c.execute('DELETE FROM calendar_dates')
+    assert match_fuzzy(c.cursor(), 'FBRI', 'N75', 'outbound', origin) is None
+
+
 def cur():
     return build().cursor()
 

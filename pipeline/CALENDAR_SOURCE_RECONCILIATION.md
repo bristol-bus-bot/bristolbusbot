@@ -77,3 +77,27 @@ source calls, including calls outside the regional coordinate inventory.
 Reconciliation requires both identical stored calls and identical full source
 calls, so different full journeys cannot be merged just because their local
 stop subsets happen to match.
+
+## Explicit weekday and university-calendar exclusions
+
+For an identical-schedule collision, an exact source journey can also prove
+that one ID does not operate on the date in question. The ordinary-day evaluator
+checks its regular weekday mask and a single supported organisation rule with
+explicit, inclusive working-date ranges. Under the
+[TXC-PTI profile, sections 3.2 and 9.3](https://pti.org.uk/system/files/files/TransXChange%20UK%20PTI%20Profile%20v1.1.pdf),
+days outside working ranges are holidays. Dates after the last supplied term,
+public holidays, provisional ranges, missing organisations, conflicting source
+witnesses and unsupported overrides remain unproven.
+
+This exclusion needs the exact journey code and complete source calls; absence
+from a newer file is not evidence. All newest available declarations of that
+exact journey must explicitly agree on non-operation. Only dates with an actual
+schedule collision are considered. Lone special-date services are untouched.
+Receipts are stored in `calendar_nonoperation_corrections`, separately from
+replacement receipts. Trips and stop calls remain intact, and exception-only
+services retain their original representation. Delivery validation is unchanged.
+
+Supplemental journey IDs include the line and source edition start as well as
+the operator journey code. Reusing a code in a later source file must not cause
+that later timetable to be skipped; all editions reach the existing window
+normalizer before duplicate/calendar reconciliation.

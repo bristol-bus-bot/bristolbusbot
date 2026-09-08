@@ -207,7 +207,11 @@ def main():
                             continue
                         jp = j.journey_pattern
                         direction = 1 if (jp and jp.is_inbound()) else 0
-                        trip_id = f"SUP_T_{service.service_code}_{j.code}"
+                        # Operators reuse journey codes across timetable editions.
+                        # Keep each edition so normalization can select its dates;
+                        # otherwise the first XML silently hides later schedules.
+                        edition = ymd(service.operating_period.start, 'undated')
+                        trip_id = f"SUP_T_{service.service_code}_{ln}_{edition}_{j.code}"
                         if cur.execute(
                                 "SELECT 1 FROM trips WHERE trip_id=? LIMIT 1",
                                 (trip_id,)).fetchone():

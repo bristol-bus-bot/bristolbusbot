@@ -1,7 +1,8 @@
 """Retire superseded identical journeys only with exact operator evidence.
 
 No trip or stop-time row is deleted. A private calendar clone excludes the old
-identity only on dates where the latest source edition proves its replacement.
+identity only on dates where the latest source edition proves its replacement,
+or an exact source declaration explicitly rules out that operating day.
 Unproven collisions remain visible to snapshot quality checks.
 """
 from collections import defaultdict
@@ -14,6 +15,7 @@ import xml.etree.ElementTree as ET
 from functools import lru_cache
 
 from timetable_calendar_evidence import source_evidence, witnesses_for, WEEKDAYS
+from timetable_operating_days import nonoperation_witnesses
 
 
 def active_days(calendar, exceptions):
@@ -174,12 +176,28 @@ def reconcile_database(database: Path, directory: Path) -> dict:
         days={service:active_days(calendars.get(service),exceptions[service])
               for service in set(calendars) | set(exceptions)}
         corrections=defaultdict(dict)
+        excluded_by_source=defaultdict(dict)
+        collision_days=defaultdict(set)
+        for ids in groups:
+            for old in ids:
+                for new in ids:
+                    if old != new:
+                        collision_days[old].update(days.get(trips[old]['service_id'],set()) &
+                                                   days.get(trips[new]['service_id'],set()))
+        for trip in targets:
+            for day in collision_days[trip]:
+                proof=nonoperation_witnesses(day, evidence.get(keys[trip], []))
+                if proof:
+                    excluded_by_source[trip][day.strftime('%Y%m%d')]=dict(
+                        reason='exact_source_nonoperation', witnesses=[w.record() for w in proof])
         for ids in groups:
             for old in ids:
                 for new in ids:
                     if old==new:continue
                     common=days.get(trips[old]['service_id'],set()) & days.get(trips[new]['service_id'],set())
                     for day in sorted(common):
+                        if any(day.strftime('%Y%m%d') in excluded_by_source[t] for t in (old,new)):
+                            continue
                         proof=replacement_proof(day,keys[old],keys[new],evidence,editions)
                         if (not proof and old > new and keys[old] == keys[new]
                                 and new == min(t for t in ids if keys[t] == keys[new])):
@@ -192,7 +210,14 @@ def reconcile_database(database: Path, directory: Path) -> dict:
             trip_id TEXT NOT NULL,date TEXT NOT NULL,original_service_id TEXT NOT NULL,
             corrected_service_id TEXT NOT NULL,evidence_json TEXT NOT NULL,
             PRIMARY KEY(trip_id,date))''')
-        for trip,excluded in corrections.items():
+        conn.execute('''CREATE TABLE IF NOT EXISTS calendar_nonoperation_corrections (
+            trip_id TEXT NOT NULL,date TEXT NOT NULL,original_service_id TEXT NOT NULL,
+            corrected_service_id TEXT NOT NULL,evidence_json TEXT NOT NULL,
+            PRIMARY KEY(trip_id,date))''')
+        all_corrections={trip:{**corrections.get(trip,{}), **excluded_by_source.get(trip,{})}
+                         for trip in set(corrections) | set(excluded_by_source)
+                         if corrections.get(trip) or excluded_by_source.get(trip)}
+        for trip,excluded in all_corrections.items():
             original=trips[trip]['service_id']
             clone='BBBDUP_'+hashlib.sha256((trip+json.dumps(sorted(excluded))).encode()).hexdigest()[:24]
             calendar=calendars.get(original)
@@ -207,8 +232,10 @@ def reconcile_database(database: Path, directory: Path) -> dict:
             for day,proof in excluded.items():
                 conn.execute('DELETE FROM calendar_dates WHERE service_id=? AND date=?',(clone,day))
                 conn.execute('INSERT INTO calendar_dates VALUES (?,?,2)',(clone,day))
-                conn.execute('INSERT INTO duplicate_source_corrections VALUES (?,?,?,?,?)',
+                table=('calendar_nonoperation_corrections' if 'reason' in proof
+                       else 'duplicate_source_corrections')
+                conn.execute(f'INSERT INTO {table} VALUES (?,?,?,?,?)',
                              (trip,day,original,clone,json.dumps(proof,sort_keys=True)))
             conn.execute('UPDATE trips SET service_id=? WHERE trip_id=?',(clone,trip))
-        return {'trips_corrected':len(corrections),
-                'dates_excluded':sum(len(days) for days in corrections.values())}
+        return {'trips_corrected':len(all_corrections),
+                'dates_excluded':sum(len(days) for days in all_corrections.values())}

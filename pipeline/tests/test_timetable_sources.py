@@ -238,7 +238,8 @@ def test_txc_merge_rolls_back_when_any_required_archive_is_corrupt(
     check.close()
 
 
-def test_txc_supplement_keeps_original_journey_code_for_source_reconciliation(tmp_path,monkeypatch):
+@pytest.mark.parametrize('reused_code', [False, True])
+def test_txc_supplement_keeps_original_journey_code_for_source_reconciliation(tmp_path,monkeypatch,reused_code):
     database=tmp_path/'tt.db';c=sqlite3.connect(database)
     c.executescript('''CREATE TABLE agency(agency_id,agency_noc);
     CREATE TABLE routes(route_id,agency_id,route_short_name,route_type);
@@ -252,6 +253,8 @@ def test_txc_supplement_keeps_original_journey_code_for_source_reconciliation(tm
     source=tmp_path/'sources';source.mkdir()
     with zipfile.ZipFile(source/'one.zip','w') as z:
         z.writestr('one.xml','<FBRI><LineName>373</LineName></FBRI>')
+        if reused_code:
+            z.writestr('two.xml','<FBRI><LineName>373</LineName></FBRI>')
     profile=NS(regular_days=[NS(day=0)])
     cells=[NS(stopusage=NS(stop=NS(atco_code=stop),timingstatus='PTP'),
               arrival_time=timedelta(hours=8,minutes=i),departure_time=timedelta(hours=8,minutes=i))
@@ -261,12 +264,18 @@ def test_txc_supplement_keeps_original_journey_code_for_source_reconciliation(tm
                operating_profile=profile,operating_period=NS(start=date(2026,9,6),end=date(2026,9,30)))
     doc=NS(operators=[ET.fromstring('<Operator id="op"><NationalOperatorCode>FBRI</NationalOperatorCode></Operator>')],
            services={'S':service},get_journeys=lambda *_:[journey])
-    monkeypatch.setattr(txc_merge.txc,'TransXChange',lambda *_:doc)
+    import copy
+    newer=copy.deepcopy(doc)
+    newer.services['S'].operating_period.start=date(2026,9,13)
+    parsed=iter([doc,newer])
+    monkeypatch.setattr(txc_merge.txc,'TransXChange',lambda *_:next(parsed))
     monkeypatch.setattr(sys,'argv',['merge',str(database),str(source)])
     assert txc_merge.main()==0
     c=sqlite3.connect(database)
-    assert c.execute('SELECT trip_id,vehicle_journey_code FROM trips').fetchall()==[('SUP_T_PH0000132:3_VJ780','VJ780')]
-    assert c.execute('SELECT count(*) FROM stop_times').fetchone()[0]==2
+    expected=[('SUP_T_PH0000132:3_373_20260906_VJ780','VJ780')]
+    if reused_code:expected.append(('SUP_T_PH0000132:3_373_20260913_VJ780','VJ780'))
+    assert c.execute('SELECT trip_id,vehicle_journey_code FROM trips ORDER BY trip_id').fetchall()==expected
+    assert c.execute('SELECT count(*) FROM stop_times').fetchone()[0]==2*len(expected)
     import json
     calls=json.loads(c.execute('SELECT full_calls_json FROM supplement_trip_sources').fetchone()[0])
     assert [row[0] for row in calls]==['A','outside','B']

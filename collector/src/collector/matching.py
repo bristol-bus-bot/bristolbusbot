@@ -175,6 +175,25 @@ def _nearest_route_distance(
     return min(distances) if distances else None
 
 
+def _departure_windows(origin_local: datetime):
+    """Keep the +/-10 minute window on one service-day time axis at midnight."""
+    seconds = origin_local.hour * 3600 + origin_local.minute * 60 + origin_local.second
+    def clock(value):
+        hours, remainder = divmod(max(0, value), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    offsets = [0, -1] if origin_local.hour < 6 else [0]
+    if seconds + 600 >= 86400:
+        offsets.append(1)
+    windows = []
+    for offset in offsets:
+        service_day = origin_local + timedelta(days=offset)
+        target = seconds - offset * 86400
+        windows.append((clock(target - 600), clock(target + 600),
+                        DAYS[service_day.weekday()], service_day.strftime("%Y%m%d"), target))
+    return windows
+
+
 def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | None,
                 origin_local: datetime,
                 vehicle_pos: tuple[float, float] | None = None,
@@ -188,26 +207,7 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
 
     direction_id = _direction_id(direction_ref)
 
-    today_str = origin_local.strftime("%Y%m%d")
-    lo = origin_local - timedelta(minutes=10)
-    hi = origin_local + timedelta(minutes=10)
-    lo_t = f"{lo.hour:02d}:{lo.minute:02d}:{lo.second:02d}"
-    hi_t = f"{hi.hour:02d}:{hi.minute:02d}:{hi.second:02d}"
-    origin_secs = origin_local.hour * 3600 + origin_local.minute * 60 \
-        + origin_local.second
-    search_sets = [(lo_t, hi_t, DAYS[origin_local.weekday()], today_str,
-                    origin_secs)]
-
-    if origin_local.hour < 6:
-        # A pre-dawn bus may belong to YESTERDAY's service day, timetabled
-        # with hours >= 24 ("25:30"). Search that window too.
-        prev = origin_local - timedelta(days=1)
-        search_sets.append((
-            f"{lo.hour + 24:02d}:{lo.minute:02d}:{lo.second:02d}",
-            f"{hi.hour + 24:02d}:{hi.minute:02d}:{hi.second:02d}",
-            DAYS[prev.weekday()], prev.strftime("%Y%m%d"),
-            origin_secs + 24 * 3600,
-        ))
+    search_sets = _departure_windows(origin_local)
 
     for use_direction in (True, False):
         for lower, upper, day_col, date_str, target_secs in search_sets:
@@ -300,22 +300,7 @@ def _diagnostic_rows(cur, operator_noc: str, line_name: str,
     only called after a reading has been identified as suspicious, keeping the
     ordinary poll path unchanged and making the receipt observational only.
     """
-    today_str = origin_local.strftime("%Y%m%d")
-    lo = origin_local - timedelta(minutes=10)
-    hi = origin_local + timedelta(minutes=10)
-    origin_secs = (origin_local.hour * 3600 + origin_local.minute * 60
-                   + origin_local.second)
-    search_sets = [(
-        f"{lo.hour:02d}:{lo.minute:02d}:{lo.second:02d}",
-        f"{hi.hour:02d}:{hi.minute:02d}:{hi.second:02d}",
-        DAYS[origin_local.weekday()], today_str, origin_secs)]
-    if origin_local.hour < 6:
-        prev = origin_local - timedelta(days=1)
-        search_sets.append((
-            f"{lo.hour + 24:02d}:{lo.minute:02d}:{lo.second:02d}",
-            f"{hi.hour + 24:02d}:{hi.minute:02d}:{hi.second:02d}",
-            DAYS[prev.weekday()], prev.strftime("%Y%m%d"),
-            origin_secs + 24 * 3600))
+    search_sets = _departure_windows(origin_local)
 
     unique: dict[tuple[str, str], tuple] = {}
     truncated = False
