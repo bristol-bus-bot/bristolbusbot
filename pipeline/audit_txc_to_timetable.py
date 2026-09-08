@@ -23,6 +23,7 @@ import sys
 import glob
 import zipfile
 import sqlite3
+import json
 
 import txc_parser as txc
 
@@ -75,6 +76,11 @@ def main():
 
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
+    if 'vehicle_journey_code' not in {row[1] for row in cur.execute('PRAGMA table_info(trips)')}:
+        cur.execute('ALTER TABLE trips ADD COLUMN vehicle_journey_code TEXT')
+    cur.execute('''CREATE TABLE IF NOT EXISTS supplement_trip_sources (
+        trip_id TEXT PRIMARY KEY, vehicle_journey_code TEXT NOT NULL,
+        service_code TEXT NOT NULL, full_calls_json TEXT NOT NULL)''')
 
     agency_row = cur.execute("SELECT agency_id FROM agency WHERE agency_noc='FBRI' LIMIT 1").fetchone()
     if not agency_row:
@@ -232,8 +238,18 @@ def main():
                             wrote_any = True
                         if wrote_any:
                             cur.execute(
-                                "INSERT OR IGNORE INTO trips (trip_id, route_id, service_id, direction_id) "
-                                "VALUES (?,?,?,?)", (trip_id, route_id, service_id, direction))
+                                "INSERT OR IGNORE INTO trips (trip_id, route_id, service_id, direction_id, vehicle_journey_code) "
+                                "VALUES (?,?,?,?,?)", (trip_id, route_id, service_id, direction, j.code))
+                            # Preserve the complete source schedule even where
+                            # an out-of-area stop has no coordinate in our map.
+                            # Reconciliation must not mistake a shared subset
+                            # of calls for identical full journeys.
+                            source_calls=[(cell.stopusage.stop.atco_code,
+                                           td_to_gtfs(cell.arrival_time) or td_to_gtfs(cell.departure_time),
+                                           td_to_gtfs(cell.departure_time) or td_to_gtfs(cell.arrival_time))
+                                          for cell in cells]
+                            cur.execute('INSERT INTO supplement_trip_sources VALUES (?,?,?,?)',
+                                        (trip_id,j.code,service.service_code,json.dumps(source_calls)))
                             n_trips += 1
         zf.close()
 

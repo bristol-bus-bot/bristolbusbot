@@ -60,3 +60,20 @@ This second case does not add operating dates or interpret school calendars:
 the identical replacement must remain active. Different or conflicting profiles
 remain unresolved. Raw inventory, source validation and promotion gates still
 apply.
+
+Regular weekday masks are compared for the particular overlapping day: a
+Tuesday-Thursday mask and a Monday-Thursday mask have the same remaining
+conditions on Tuesday. All school-calendar definitions and other conditions
+must still agree. Services represented entirely by `calendar_dates` are handled
+without adding any operating dates.
+
+Several GTFS IDs for one positively operating, uniquely declared source journey
+can share one deterministic surviving identity on overlapping dates. Different
+source journey codes are not treated as aliases. Replacement receipts follow
+any alias chain to the surviving identity; cycles refuse the build.
+
+Supplemented journeys retain their original source journey code and complete
+source calls, including calls outside the regional coordinate inventory.
+Reconciliation requires both identical stored calls and identical full source
+calls, so different full journeys cannot be merged just because their local
+stop subsets happen to match.
