@@ -19,5 +19,8 @@ dev = [
 # only app/ is the package; templates/ and static/ are served files
 include = ["app*"]
 
+[tool.setuptools.package-data]
+app = ["data/*.geojson"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify, request, url_for
 
 from .. import db
 from ..services import buses as buses_svc
+from ..services.stop_names import clean_stop_name
 
 bp = Blueprint("api_buses", __name__)
 
@@ -45,6 +46,7 @@ def _fill_stop_names(payload: list[dict]) -> None:
     rows = db.gtfs().execute(
         f"SELECT stop_code, stop_name FROM stops WHERE stop_code IN ({q})",
         tuple(codes)).fetchall()
-    names = {r["stop_code"]: r["stop_name"] for r in rows}
+    names = {r["stop_code"]: clean_stop_name(r["stop_name"], r["stop_code"])
+             for r in rows}
     for b in payload:
         b["lastStopName"] = names.get(b["lastStopName"], b["lastStopName"])

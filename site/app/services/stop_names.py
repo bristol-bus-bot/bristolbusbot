@@ -54,6 +54,12 @@ STOP_NAME_EXACT = {
     ('bthawmt', 'Two Headed Man'): 'Keynsham Motors',
     ('bthdjtp', 'Newbridge P&R'): 'Newbridge Park & Ride',
     # South Gloucestershire
+    # NaPTAN stop area 017G0001, checked 2026-09-10.
+    ('sglmtmg', 'Shopping Centre'): 'Yate Shopping Centre',
+    ('sglmtma', 'Shopping Centre'): 'Yate Shopping Centre',
+    ('sglmtmd', 'Shopping Centre'): 'Yate Shopping Centre',
+    ('sglpwdj', 'Shopping Centre'): 'Yate Shopping Centre',
+    ('sglpwdm', 'Shopping Centre'): 'Yate Shopping Centre',
     ('sglatjp', "Sainsbury's"): "Gloucester Road Sainsbury's",
     ('sglatjp', 'Sainsburys'): "Gloucester Road Sainsbury's",
     ('sgladam', 'Post Office'): 'Thornbury High Street Post Office',
@@ -105,9 +111,6 @@ STOP_NAME_PREFIX = [
     ('sgldg', 'Tesco', 'Thornbury Tesco'),
     ('sglmt', 'Morrisons', 'Thornbury Morrisons'),
     ('sglpm', 'Morrisons', 'Thornbury Morrisons'),
-    ('sglmt', 'Shopping Centre', 'Thornbury Shopping Centre'),
-    ('sglpm', 'Shopping Centre', 'Thornbury Shopping Centre'),
-    ('sglpw', 'Shopping Centre', 'Thornbury Shopping Centre'),
 ]
 
 def clean_stop_name(stop_name, stop_code):
