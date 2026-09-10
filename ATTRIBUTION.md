@@ -12,6 +12,10 @@ Government Licence v3.0.
   not published to BODS. https://www.travelinedata.org.uk/
 - **NaPTAN** (National Public Transport Access Nodes) - bus stop locations and
   codes. OGL v3.0.
+- **OpenStreetMap contributors** - depot boundary data with maintainer
+  adjustments, licensed under the [ODbL](https://opendatacommons.org/licenses/odbl/1-0/).
+  See [depot data provenance](site/DEPOT_BOUNDARIES.md) and
+  [OpenStreetMap copyright](https://www.openstreetmap.org/copyright).
 - **Bristol City Council, Bristol Bus Stops** - local stop-name and facility
   enrichment. Open Government Licence.
   https://www.data.gov.uk/dataset/bee75961-c3b8-4bcf-a41d-2ab7617e4793/bristol-bus-stops-raised-kerbs

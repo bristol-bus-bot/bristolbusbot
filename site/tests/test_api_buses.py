@@ -104,10 +104,23 @@ def test_eurocoaches_yard_detected():
     from app.services.depots import check_depot
     # centroid of the surveyed yard outline
     assert check_depot(51.45592, -2.56926) == "Eurocoaches Yard"
-    # edge of the yard, still inside the buffered circle
-    assert check_depot(51.455401562115725, -2.56966093589615) == "Eurocoaches Yard"
+    # The old circle included this point south of the reviewed yard.
+    assert check_depot(51.455401562115725, -2.56966093589615) is None
     # Bedminster Parade, ~400 m away: not a depot
     assert check_depot(51.4520, -2.5900) is None
+
+
+def test_last_stop_uses_shared_yate_name(app, client):
+    import sqlite3
+    with sqlite3.connect(app.config["BBB"].timetable_db) as conn:
+        conn.execute("UPDATE stops SET stop_code='sglmtmg', stop_name='Shopping Centre' WHERE stop_id='S2'")
+    with sqlite3.connect(app.config["BBB"].live_db) as conn:
+        conn.execute("UPDATE vehicles SET stop_code='sglmtmg' WHERE vehicle_ref='FBRI-36205'")
+    bus = next(b for b in get_buses(client)["buses"] if b["vehicleRef"] == "FBRI-36205")
+    assert bus["lastStopName"] == "Yate Shopping Centre"
+    stop = next(s for s in client.get("/api/stops").get_json()["stops"]
+                if s["stop_code"] == "sglmtmg")
+    assert stop["common_name"] == bus["lastStopName"]
 
 
 def test_stale_recorded_position_is_hidden(app, client):
