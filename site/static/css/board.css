@@ -183,3 +183,15 @@
 .rv-sub-inline { color: var(--fg-3); font-size: 11px; margin-left: 4px; }
 .rv-near { font-size: 11px; color: var(--fg-2); margin-top: 1px; }
 .board-error { color: rgba(212,53,28,.6); }
+/* Compact source notices, expanded only when the traveller asks. */
+.travel-notices { margin: 0 0 16px; padding: 12px; border-left: 3px solid #c88c20; background: var(--surface-2); color: var(--fg-1); border-radius: 4px; }
+.travel-notices[hidden] { display: none; }
+.travel-notices h3 { font-size: 0.85rem; margin: 0 0 8px; }
+.travel-notice { border-top: 1px solid #8884; padding: 8px 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+.travel-notice summary { cursor: pointer; line-height: 1.5; }
+.notice-state { display: inline-block; margin-right: 6px; font-size: 0.72rem; font-weight: 700; }
+.travel-notice p { white-space: pre-line; margin: 8px 0; }
+.notice-dates { margin: 8px 0; padding-left: 18px; }
+.travel-notice a { color: inherit; text-decoration: underline; }
+.notice-updated { font-size: 0.72rem; line-height: 1.5; margin: 8px 0 0; }
+.notice-caution { font-weight: 600; }

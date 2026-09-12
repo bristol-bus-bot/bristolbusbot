@@ -9,6 +9,7 @@ Run:  python -m collector.run   (from collector/, with .env + timetable.db)
 from __future__ import annotations
 
 import logging
+import json
 import signal
 import time
 from datetime import datetime, timedelta, timezone
@@ -115,12 +116,12 @@ def fetch_vm(session: requests.Session, cfg: Config) -> str | None:
         return None
 
 
-def fetch_sx(session: requests.Session, cfg: Config) -> str | None:
+def fetch_sx(session: requests.Session, cfg: Config) -> bytes | None:
     try:
         r = session.get(f"{SIRI_SX_URL}?api_key={cfg.bods_api_key}",
                         timeout=cfg.fetch_timeout_s)
         r.raise_for_status()
-        return r.text
+        return r.content
     except requests.RequestException as e:
         logger.warning("SIRI-SX fetch failed: %s", redact_query_secrets(e))
         return None
@@ -313,7 +314,10 @@ def sx_cycle(fetch, live_conn, boundary: BoundaryFilter, observed_nocs: set) -> 
     now = datetime.now(timezone.utc).isoformat()
     seen = set()
     for s in kept:
-        seen.add(s.situation_number)
+        # Source namespaces are independent. Legacy unscoped rows are withdrawn
+        # by the existing seen-set comparison on the first successful new poll.
+        key = json.dumps([s.participant, s.situation_number], separators=(",", ":"))
+        seen.add(key)
         live_conn.execute(
             """INSERT INTO situations (situation_number, version, participant,
                    progress, planned, reason, summary, description, advice,
@@ -330,7 +334,7 @@ def sx_cycle(fetch, live_conn, boundary: BoundaryFilter, observed_nocs: set) -> 
                    affected_json=excluded.affected_json, closed_at=NULL,
                    updated_at=excluded.updated_at
                WHERE excluded.version >= situations.version""",
-            (s.situation_number, s.version, s.participant, s.progress,
+            (key, s.version, s.participant, s.progress,
              int(s.planned), s.reason, s.summary, s.description, s.advice,
              s.severity, s.validity_start, s.validity_end, s.versioned_at,
              s.link, s.affected_json, now))
