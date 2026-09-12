@@ -113,3 +113,17 @@ def test_affected_json_roundtrip():
     blob = json.loads(sits[0].affected_json)
     assert blob["lines"][0]["line"] == "43"
     assert blob["stops"][0]["name"] == "Baden Road"
+
+
+def test_repeated_validity_periods_survive_without_a_continuous_envelope():
+    import json
+    doc = xmltodict.parse(FEED)
+    element = doc['Siri']['ServiceDelivery']['SituationExchangeDelivery']['Situations']['PtSituationElement'][0]
+    periods = [
+        {'StartTime': '2026-09-15T08:30:00Z', 'EndTime': '2026-09-15T14:00:00Z'},
+        {'StartTime': '2026-09-16T08:30:00Z', 'EndTime': '2026-09-16T14:00:00Z'},
+    ]
+    element['ValidityPeriod'] = periods
+    situation = parse_situations(doc)[0]
+    assert json.loads(situation.affected_json)['validity_periods'] == periods
+    assert situation.validity_start is None and situation.validity_end is None

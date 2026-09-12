@@ -5,10 +5,10 @@ of: published by WestofEngland; any affected stop inside the WECA polygon;
 any affected line belongs to an operator we observe AND geography doesn't
 rule it out. Everything else is dropped.
 
-Situations are upserted on situation_number, replaced when Version
-increases, and closed when they vanish from a poll (handled in live_db by
-the caller comparing seen sets). Long-open situations (VersionedAtTime older
-than 90 days) are flagged 'long_term' for display.
+Situations are stored by participant and situation number, replaced by equal
+or newer versions, and withdrawn when they vanish from a successful poll.
+Withdrawal is not evidence that service has resumed. Every validity period
+is preserved, including separate daily windows.
 """
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ class Situation:
     affected_operators: list = field(default_factory=list)   # ["FBRI", ...] or ["ALL"]
     affected_lines: list = field(default_factory=list)       # [{operator,line,direction}]
     affected_stops: list = field(default_factory=list)       # [{stop_ref,name,lat,lon}]
+    validity_periods: list = field(default_factory=list)
 
     @property
     def affected_json(self) -> str:
@@ -50,6 +51,8 @@ class Situation:
             "operators": self.affected_operators,
             "lines": self.affected_lines,
             "stops": self.affected_stops,
+            # Additive JSON field: preserves disjoint windows without a DB rebuild.
+            "validity_periods": self.validity_periods,
         }, separators=(",", ":"))
 
 
@@ -115,6 +118,9 @@ def parse_situations(parsed_xml: dict) -> list[Situation]:
                     "lat": lat, "lon": lon,
                 })
 
+        periods = [p for p in _as_list(el.get("ValidityPeriod")) if isinstance(p, dict)]
+        single = periods[0] if len(periods) == 1 else {}
+        links = _as_list(get_nested_value(el, "InfoLinks/InfoLink"))
         out.append(Situation(
             situation_number=number,
             version=int(el.get("Version") or 0),
@@ -126,13 +132,14 @@ def parse_situations(parsed_xml: dict) -> list[Situation]:
             description=str(el.get("Description") or ""),
             advice=" / ".join(advice_parts),
             severity=severity,
-            validity_start=get_nested_value(el, "ValidityPeriod/StartTime"),
-            validity_end=get_nested_value(el, "ValidityPeriod/EndTime"),
+            validity_start=single.get("StartTime"),
+            validity_end=single.get("EndTime"),
             versioned_at=el.get("VersionedAtTime"),
-            link=get_nested_value(el, "InfoLinks/InfoLink/Uri"),
+            link=next((p.get("Uri") for p in links if isinstance(p, dict) and p.get("Uri")), None),
             affected_operators=operators,
             affected_lines=lines,
             affected_stops=stops,
+            validity_periods=periods,
         ))
     return out
 
