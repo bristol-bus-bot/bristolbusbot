@@ -12,6 +12,8 @@
     <script src="{{ asset_url('js/theme_control.js') }}" defer></script>
     <link rel="stylesheet" href="{{ asset_url('vendor/leaflet-1.9.4/leaflet.a7837102.css') }}">
 
+    <link rel="stylesheet" href="{{ asset_url('vendor/maplibre-gl-6.6.0/maplibre-gl.css') }}">
+
     <link rel="icon" type="image/svg+xml" href="{{ asset_url('favicon.svg') }}">
 
     <link rel="stylesheet" href="{{ asset_url('css/fonts.css') }}">
@@ -35,6 +37,7 @@
 
 {% block app_scripts %}
     <script src="{{ asset_url('vendor/leaflet-1.9.4/leaflet.85d455b4.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/basemap.js') }}"></script>
     <!-- Module scripts populate window.BBB before the main bundle starts. -->
     <script type="module" src="{{ asset_url('js/board.js') }}"></script>
     <script type="module" src="{{ asset_url('js/notices.js') }}"></script>

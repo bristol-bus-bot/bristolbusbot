@@ -53,13 +53,28 @@ operator-scoped key such as `FBRI:36801` exists.
 
 ## Browser privacy and third-party requests
 
-Fonts and Leaflet JavaScript/CSS are served by bristolbuses.live itself.
-The live basemap is the one intentional browser-side third-party dependency:
-map image tiles are fetched from CARTO at `*.basemaps.cartocdn.com`. As with
-any remote image host, CARTO receives the visitor's IP address, user agent and
-the tile coordinates requested by their browser. CARTO supplies map imagery
-only; no CARTO JavaScript, fonts or tracking code is loaded. The Content
-Security Policy therefore permits CARTO only in `img-src`.
+Application fonts, Leaflet, MapLibre GL JS and the Leaflet bridge are served
+by bristolbuses.live itself. Leaflet continues to own the camera, bus markers,
+stop markers, popups and route lines. MapLibre paints the background only:
+Voyager by day and Dark Matter at night. Theme changes call `setStyle()` on the
+same background map, preserving overlays and camera position.
+
+CARTO is the intentional browser-side third-party dependency. The browser
+fetches styles, vector tiles, sprites and map-label glyphs from
+`basemaps.cartocdn.com` and its subdomains. CARTO receives the visitor's IP
+address, user agent and requested map coordinates. No remote executable code
+is loaded. CSP permits these resources in `connect-src`; module workers and
+scripts remain same-origin, without `unsafe-eval` or blob worker permission.
+
+If module loading, WebGL or a map resource fails, or initial/style loading
+stalls for 15 seconds, the background falls back to the existing keyed CARTO
+raster service for that page visit. Bus overlays and Leaflet controls survive;
+theme changes still work. A generic console warning and the map element's
+`data-basemap` (`loading`, `vector`, or `raster`) allow diagnosis without
+logging the key. Raster is a temporary compatibility path while the provider
+continues to serve it. A failed server release uses the normal atomic rollback.
+MapLibre uses two workers and caps canvas pixel density at 2 to bound mobile
+rendering cost; real-device responsiveness and heat still need direct testing.
 
 The free CARTO key is deliberately supplied by the protected production
 environment and rendered as a `data-` attribute on the map. It is not a true
@@ -81,5 +96,6 @@ decision rather than waiting for the five-million fair-use limit. Direct
 browser tile traffic does not pass through the Pi, so the Pi access log is not
 an authoritative CARTO usage counter.
 
-Font licences are retained in `static/fonts/`; Leaflet's BSD licence is
-retained in `static/vendor/leaflet-1.9.4/`.
+Font licences are retained in `static/fonts/`; library licences are retained
+next to each pinned version in `static/vendor/`. See `BASEMAP.md` for asset
+provenance and the browser verification procedure.

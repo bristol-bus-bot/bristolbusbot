@@ -1,6 +1,6 @@
 /* Main browser application: map state, data refresh and user interactions. */
         let map = null;
-        let tileLayer = null;
+        let basemap = null;
         let busMarkers = new Map();
         let busByRef = new Map();
         let stopMarkers = new Map();
@@ -21,17 +21,6 @@
         let activeRouteVehicleRefs = [];  // Vehicle refs highlighted in route view
         let activeRoutePathLoading = false;
         let activeStatusFilter = null;     // One of window.BBB.BUS_STATUSES
-        const TILE_URLS = {
-            day: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        };
-
-        function tileUrl(theme) {
-            const key = document.getElementById('map')?.dataset.cartoBasemapKey;
-            if (!key) throw new Error('Map configuration is unavailable');
-            return `${TILE_URLS[theme]}?key=${encodeURIComponent(key)}`;
-        }
-
         function featuredPostFor(bus) {
             return window.BBB.featuredPostForBus(busbotPosts, bus);
         }
@@ -41,12 +30,11 @@
         }
 
         function initMap() {
-            map = L.map('map', { zoomControl: true }).setView([51.4545, -2.5879], 13);
-            tileLayer = L.tileLayer(tileUrl(currentTheme()), {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
+            map = L.map('map', { zoomControl: true, minZoom: 1, maxZoom: 20 }).setView([51.4545, -2.5879], 13);
+            basemap = window.BBB.createBasemap(map, {
+                key: document.getElementById('map').dataset.cartoBasemapKey,
+                theme: currentTheme(),
+            });
         }
 
         // Extract first hex colour from a CSS gradient string
@@ -1716,7 +1704,7 @@
             });
             document.addEventListener('bbb:themechange', event => {
                 const theme = event.detail?.theme === 'night' ? 'night' : 'day';
-                if (tileLayer) tileLayer.setUrl(tileUrl(theme));
+                basemap?.setTheme(theme);
                 syncAllMarkerAppearances(true);
             });
 

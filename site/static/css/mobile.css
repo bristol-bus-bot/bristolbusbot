@@ -33,6 +33,13 @@ button:focus-visible, .dep:focus-visible, .search-result:focus-visible,
 }
 
 @media (max-width: 768px) {
+    /* Keep provider credits above the bottom sheet in every sheet state. */
+    .leaflet-bottom.leaflet-right {
+        top: 0;
+        bottom: auto;
+    }
+    .leaflet-control-attribution { margin-top: 0; }
+
     /* expensive glow effects trimmed on small screens (battery + clarity) */
     .vc-quote, #last-updated { text-shadow: none; }
     .rv-est-current { text-shadow: none; }

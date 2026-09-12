@@ -9,22 +9,29 @@ from app.config import Config
 SITE_ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_page_passes_key_as_data_and_javascript_keys_both_themes(app, client):
+def test_page_passes_key_as_data_and_loads_self_hosted_basemap(app, client):
     key = app.config["BBB"].carto_basemap_key
     page = client.get("/").get_data(as_text=True)
     assert f'data-carto-basemap-key="{key}"' in page
 
-    source = (SITE_ROOT / "static/js/app.js").read_text(encoding="utf-8")
-    assert "rastertiles/voyager/{z}/{x}/{y}{r}.png" in source
-    assert "dark_all/{z}/{x}/{y}{r}.png" in source
-    assert "?key=${encodeURIComponent(key)}" in source
-    assert "tileLayer.setUrl(tileUrl(theme))" in source
+    assert '/js/basemap.js' in page
+    assert '/vendor/maplibre-gl-6.6.0/maplibre-gl.css' in page
+    assert 'unpkg.com' not in page
 
 
 def test_attribution_is_visible_and_linked():
-    source = (SITE_ROOT / "static/js/app.js").read_text(encoding="utf-8")
+    source = (SITE_ROOT / "static/js/basemap.js").read_text(encoding="utf-8")
     assert "https://www.openstreetmap.org/copyright" in source
     assert "https://carto.com/attributions" in source
+
+
+def test_self_hosted_module_worker_graph(client, app):
+    prefix = f'/assets/{app.extensions["bbb_asset_version"]}/vendor/'
+    for name in ('maplibre-gl.mjs', 'maplibre-gl-shared.mjs', 'maplibre-gl-worker.mjs'):
+        response = client.get(prefix + 'maplibre-gl-6.6.0/' + name)
+        assert response.status_code == 200
+        assert response.mimetype in ('text/javascript', 'application/javascript')
+    assert client.get(prefix + 'maplibre-gl-leaflet-0.1.4/leaflet-maplibre-gl.js').status_code == 200
 
 
 def test_production_refuses_missing_or_malformed_key_without_echoing_value():

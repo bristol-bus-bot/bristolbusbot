@@ -1,17 +1,30 @@
 """Hand-curated stop-name corrections used by search and departures."""
-import re
 
-# Maps (stop_code_prefix_or_exact, original_name) -> cleaned_name
-# Exact codes checked first, then prefixes (longest match wins)
+# Maps (exact_stop_code, original_name) -> cleaned_name.
+# Location corrections use reviewed NaPTAN codes rather than guessed prefixes.
 STOP_NAME_EXACT = {
-    # Weston-super-Mare
+    # NaPTAN stop identities and NPTG localities checked 2026-09-12.
+    ('sglmtap', 'Morrisons'): 'Yate Morrisons',
+    ('sglpmpg', 'Morrisons'): 'Yate Morrisons',
+    ('bthpdat', 'Tesco'): 'Old Mills Tesco',
+    ('bthpdap', 'Tesco'): 'Old Mills Tesco',
+    ('wsmdpmg', 'Tesco'): 'Clevedon Tesco',
+    ('wsmdpmp', 'Tesco'): 'Clevedon Tesco',
+    ('wsmjwgj', 'Dental Practice'): 'Portishead Dental Practice',
+    ('wsmjwgp', 'Marina Healthcare Centre'): 'Portishead Marina Healthcare Centre',
+    ('wsmpgwm', 'Public Transport Interchange'): 'Bristol Airport Interchange',
+    ('wsmpjag', 'Public Transport Interchange'): 'Bristol Airport Interchange',
+    ('wsmpjat', 'Public Transport Interchange'): 'Bristol Airport Interchange',
+    ('wsmpjaw', 'Public Transport Interchange'): 'Bristol Airport Interchange',
+
+    # North Somerset
     ('wsmpawp', 'Sainsburys'): 'Locking Sainsburys',
-    ('wsmgwjg', 'Leisure Centre'): 'Hutton Moor Leisure Centre',
-    ('wsmgwjd', 'Leisure Centre'): 'Hutton Moor Leisure Centre',
-    ('wsmgapj', 'Tesco'): 'Weston Station Road Tesco',
-    ('wsmgapm', 'Tesco'): 'Weston Station Road Tesco',
-    ('wsmjdgm', 'Post Office'): 'Weston-super-Mare Post Office',
-    ('wsmjdgd', 'Post Office'): 'Weston-super-Mare Post Office',
+    ('wsmgwjg', 'Leisure Centre'): 'Backwell Leisure Centre',
+    ('wsmgwjd', 'Leisure Centre'): 'Backwell Leisure Centre',
+    ('wsmgapj', 'Tesco'): 'Congresbury Tesco',
+    ('wsmgapm', 'Tesco'): 'Congresbury Tesco',
+    ('wsmjdgm', 'Post Office'): 'Felton Post Office',
+    ('wsmjdgd', 'Post Office'): 'Felton Post Office',
     # Bristol
     ('bstpgmj', 'Transport Hub'): 'Bristol University North Village Transport Hub',
     ('bstpgmp', 'Transport Hub'): 'Bristol University North Village Transport Hub',
@@ -35,20 +48,19 @@ STOP_NAME_EXACT = {
     ('bstpjmd', 'Third Way'): 'Third Way Avonmouth',
     ('bstpjtg', 'Filwood Grn Business Pk'): 'Filwood Green Business Park',
     ('bstpmwt', 'Portway P&R'): 'Portway Park & Ride',
-    ('bstpgmj', 'Transport Hub'): 'Bristol University North Village Transport Hub',
-    # Bath
-    ('bthjdwg', "Sainsbury's"): "Bath Green Park Sainsbury's",
-    ('bthjdwg', 'Sainsburys'): "Bath Green Park Sainsbury's",
-    ('bthmwjt', "Sainsbury's"): "Bath Green Park Sainsbury's",
-    ('bthmwjt', 'Sainsburys'): "Bath Green Park Sainsbury's",
-    ('bthadgp', 'Post Office'): 'Bath Union Street Post Office',
-    ('bthadgt', 'Post Office'): 'Bath Union Street Post Office',
-    ('bthadtw', 'Post Office'): 'Bath Union Street Post Office',
-    ('bthadwa', 'Post Office'): 'Bath Union Street Post Office',
-    ('bthagat', 'Post Office'): 'Bath Moorland Road Post Office',
-    ('bthagaw', 'Post Office'): 'Bath Moorland Road Post Office',
-    ('bthjatw', 'Post Office'): 'Bath Green Park Post Office',
-    ('bthpamj', 'Post Office'): 'Bath Weston Post Office',
+    # Bath and North East Somerset
+    ('bthjdwg', "Sainsbury's"): "Odd Down Sainsbury's",
+    ('bthjdwg', 'Sainsburys'): "Odd Down Sainsbury's",
+    ('bthmwjt', "Sainsbury's"): "Odd Down Sainsbury's",
+    ('bthmwjt', 'Sainsburys'): "Odd Down Sainsbury's",
+    ('bthadgp', 'Post Office'): 'Compton Martin Post Office',
+    ('bthadgt', 'Post Office'): 'Compton Martin Post Office',
+    ('bthadtw', 'Post Office'): 'Chew Magna Post Office',
+    ('bthadwa', 'Post Office'): 'Chew Magna Post Office',
+    ('bthagat', 'Post Office'): 'Bishop Sutton Post Office',
+    ('bthagaw', 'Post Office'): 'Bishop Sutton Post Office',
+    ('bthjatw', 'Post Office'): 'Odd Down Post Office',
+    ('bthpamj', 'Post Office'): 'Keynsham Post Office',
     ('bthajaj', 'Hillcrest'): 'Hillcrest Pensford',
     ('bthawjm', 'Recreation Ground'): 'Timsbury Recreation Ground',
     ('bthawmt', 'Two Headed Man'): 'Keynsham Motors',
@@ -60,15 +72,15 @@ STOP_NAME_EXACT = {
     ('sglmtmd', 'Shopping Centre'): 'Yate Shopping Centre',
     ('sglpwdj', 'Shopping Centre'): 'Yate Shopping Centre',
     ('sglpwdm', 'Shopping Centre'): 'Yate Shopping Centre',
-    ('sglatjp', "Sainsbury's"): "Gloucester Road Sainsbury's",
-    ('sglatjp', 'Sainsburys'): "Gloucester Road Sainsbury's",
-    ('sgladam', 'Post Office'): 'Thornbury High Street Post Office',
-    ('sgladaj', 'Post Office'): 'Thornbury High Street Post Office',
-    ('sglpatd', 'Post Office'): 'Emersons Green Post Office',
-    ('sglpata', 'Post Office'): 'Emersons Green Post Office',
+    ('sglatjp', "Sainsbury's"): "Stoke Gifford Sainsbury's",
+    ('sglatjp', 'Sainsburys'): "Stoke Gifford Sainsbury's",
+    ('sgladam', 'Post Office'): 'Severn Beach Post Office',
+    ('sgladaj', 'Post Office'): 'Severn Beach Post Office',
+    ('sglpatd', 'Post Office'): 'Horton Post Office',
+    ('sglpata', 'Post Office'): 'Horton Post Office',
     ('sglgwgp', "Sainsbury's"): "Emersons Green Sainsbury's",
-    ('sgldgat', 'Leisure Centre'): 'Kingswood Leisure Centre',
-    ('sgldgap', 'Leisure Centre'): 'Kingswood Leisure Centre',
+    ('sgldgat', 'Leisure Centre'): 'Thornbury Leisure Centre',
+    ('sgldgap', 'Leisure Centre'): 'Thornbury Leisure Centre',
     ('sglagdg', 'Rugby Club'): 'Clifton Rugby Club',
     ('sglagdj', 'Rugby Club'): 'Clifton Rugby Club',
     ('sglmwma', 'The Clock'): 'Chipping Sodbury Clock Tower',
@@ -89,12 +101,6 @@ STOP_NAME_EXACT = {
 
 # Prefix-based mappings: (prefix, original_name) -> cleaned_name
 STOP_NAME_PREFIX = [
-    # Weston-super-Mare
-    ('wsmp', 'Public Transport Interchange', 'Weston-super-Mare Bus Station'),
-    ('wsmga', 'Tesco', 'Weston-super-Mare Tesco'),
-    ('wsmdp', 'Tesco', 'Worle Tesco'),
-    ('wsmjw', 'Dental Practice', 'Weston Marina Dental Practice'),
-    ('wsmjw', 'Marina Healthcare Centre', 'Weston Marina Healthcare Centre'),
     # Bristol
     ('bstg', 'Bus Station', 'Bristol Bus Station'),
     ('bstj', 'Temple Meads Stn', 'Bristol Temple Meads Station'),
@@ -102,15 +108,10 @@ STOP_NAME_PREFIX = [
     # Bath
     ('bthm', 'Bus Station', 'Bath Bus Station'),
     ('bthj', 'Morrisons', 'Bath Morrisons'),
-    ('bthp', 'Tesco', 'Bath Tesco'),
     # South Gloucestershire / Thornbury
     ('sglagt', 'Bus Station', 'Cribbs Causeway Bus Station'),
     ('sglag', 'Retail Park', 'Cribbs Causeway Retail Park'),
-    ('sglat', 'Sainsburys', 'Thornbury Sainsburys'),
-    ('sglat', "Sainsbury's", 'Thornbury Sainsburys'),
     ('sgldg', 'Tesco', 'Thornbury Tesco'),
-    ('sglmt', 'Morrisons', 'Thornbury Morrisons'),
-    ('sglpm', 'Morrisons', 'Thornbury Morrisons'),
 ]
 
 def clean_stop_name(stop_name, stop_code):
