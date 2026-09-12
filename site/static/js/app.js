@@ -7,6 +7,10 @@
         let selectedStopCode = null;
         let refreshInterval = null;
         let departureRefreshInterval = null;
+        let noticeController = null;
+        function travelNotices() {
+            return noticeController ||= window.BBB.createNoticeController(document.getElementById('travel-notices'));
+        }
         let routeShapesData = {};  // "OPERATOR_line_direction" key -> { route, operator, direction, points }
         let routeShapeLayers = []; // Leaflet polyline layers
         let latestBusData = [];    // Raw bus array from last /api/buses fetch
@@ -414,6 +418,7 @@
         async function loadDepartures(stopCode) {
             // Don't overwrite sidebar if route view is active
             if (routeViewActive) return;
+            if (!vehicleSidebarState) travelNotices().show({ stop: stopCode });
             try {
                 const [liveRes, schedRes] = await Promise.all([
                     fetch(`/api/departures/${stopCode}`),
@@ -1190,6 +1195,7 @@
         }
 
         function openVehicleSidebarView(vehicle, bus, preferredTab) {
+            travelNotices().clear();
             setSearchOpen(false);
             if (map) map.closePopup();
             clearBusRoute(true);
@@ -1427,6 +1433,7 @@
             const parts = activeRouteLine.split('_');
             const operator = parts[0];
             const line = parts.slice(1).join('_');
+            travelNotices().show({ operator, line });
             const variants = routeIndex[activeRouteLine] || [];
             const operatorName = OPERATOR_NAMES[operator] || operator;
 
@@ -1463,6 +1470,7 @@
         }
 
         function clearRouteView(keepSidebar) {
+            travelNotices().clear();
             // Remove route polylines
             activeRouteLineLayers.forEach(l => map.removeLayer(l));
             activeRouteLineLayers = [];

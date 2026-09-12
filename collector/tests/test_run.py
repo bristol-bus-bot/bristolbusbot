@@ -139,6 +139,25 @@ def test_sx_cycle_upsert_and_close():
     assert row2["closed_at"] is not None
 
 
+def test_sx_source_identity_periods_updates_and_failed_poll():
+    import json
+    _, conn, _, boundary, _ = setup()
+    feed = SX_FEED.replace('</ValidityPeriod>', '<EndTime>2027-01-01T00:00:00Z</EndTime></ValidityPeriod>')
+    sx_cycle(lambda: feed, conn, boundary, {'FBRI'})
+    row = conn.execute('SELECT * FROM situations').fetchone()
+    assert json.loads(row['affected_json'])['validity_periods'][0]['EndTime'] == '2027-01-01T00:00:00Z'
+    sx_cycle(lambda: None, conn, boundary, {'FBRI'})
+    assert conn.execute('SELECT closed_at FROM situations').fetchone()[0] is None
+    # Same source version can backfill the additive field after deployment.
+    sx_cycle(lambda: feed.replace('2027-01-01', '2027-02-01'), conn, boundary, {'FBRI'})
+    assert '2027-02-01' in conn.execute('SELECT affected_json FROM situations').fetchone()[0]
+    # An independent participant can reuse a number without replacing the first.
+    other = feed.replace('WestofEngland', 'OtherSource')
+    combined = feed.replace('</Situations>', other.split('<Situations>')[1].split('</Situations>')[0] + '</Situations>')
+    sx_cycle(lambda: combined, conn, boundary, {'FBRI'})
+    assert conn.execute('SELECT count(*) FROM situations WHERE closed_at IS NULL').fetchone()[0] == 2
+
+
 def test_stale_recorded_at_is_a_ghost_not_a_bus():
     """BODS re-broadcasts parked vehicles with old RecordedAtTime; those
     snapshots must be skipped entirely (the frozen-city-centre bug)."""

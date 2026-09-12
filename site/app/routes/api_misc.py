@@ -10,11 +10,24 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import Blueprint, current_app, jsonify, url_for
+from flask import Blueprint, current_app, jsonify, url_for, request
 
 from .. import db
 
 bp = Blueprint("api_misc", __name__)
+
+
+@bp.route("/api/notices")
+def api_notices():
+    from ..services.notices import for_context
+    stop = request.args.get("stop")
+    operator, line = request.args.get("operator"), request.args.get("line")
+    if not ((stop and not operator and not line) or (operator and line and not stop)):
+        return jsonify({"error": "Choose a stop or an operator and route"}), 400
+    result = for_context(db.live(), db.gtfs(), stop=stop, operator=operator, line=line)
+    response = jsonify(result)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 logger = logging.getLogger(__name__)
 
 BUSBOT_HANDLE = "bristolbusbot.live"  # the bot's own-domain handle (launch 2026-07-13)
