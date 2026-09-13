@@ -47,5 +47,5 @@ def test_unknown_stop_404(client):
 def test_stop_name_cleaner_curated_codes():
     from app.services.stop_names import clean_stop_name
     assert clean_stop_name("Hengrove Leisure Pk", "bstgpmt") == "Hengrove Leisure Park"
-    assert clean_stop_name("Post Office", "bthadgp") == "Bath Union Street Post Office"
+    assert clean_stop_name("Post Office", "bthadgp") == "Compton Martin Post Office"
     assert clean_stop_name("Cabot Circus", "anything") == "Cabot Circus"

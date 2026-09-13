@@ -116,7 +116,8 @@ def create_app(config: Config | None = None) -> Flask:
                 "style-src 'self' 'unsafe-inline'",
                 "font-src 'self'",
                 "img-src 'self' data: blob: https://*.basemaps.cartocdn.com",
-                "connect-src 'self'",
+                "connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com",
+                "worker-src 'self'",
                 "manifest-src 'self'",
                 "upgrade-insecure-requests",
             )))

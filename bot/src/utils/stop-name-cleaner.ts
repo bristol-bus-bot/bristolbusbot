@@ -93,7 +93,7 @@ function manualOverrides(stopName: string, stopCode: string): string | null {
 
     // === BRISTOL AIRPORT ===
     // These wsmp* codes are at Bristol Airport, not Weston-super-Mare
-    if (code === 'wsmpgwp' || code === 'wsmpgwt' || code === 'wsmpjad' || code === 'wsmpjaj' || code === 'wsmpjam' || code === 'wsmpjap') {
+    if (code === 'wsmpgwp' || code === 'wsmpgwt' || code === 'wsmpjad' || code === 'wsmpjaj' || code === 'wsmpjam' || code === 'wsmpjap' || code === 'wsmpgwm' || code === 'wsmpjag' || code === 'wsmpjat' || code === 'wsmpjaw') {
         if (stopName === 'Public Transport Interchange') {
             return 'Bristol Airport Interchange';
         }
@@ -101,13 +101,6 @@ function manualOverrides(stopName: string, stopCode: string): string | null {
     if (code === 'wsmpdtw') {
         if (stopName === 'Airport Bus Station') {
             return 'Bristol Airport Bus Station';
-        }
-    }
-
-    // === WESTON-SUPER-MARE ===
-    if (code.startsWith('wsmp')) {
-        if (stopName === 'Public Transport Interchange') {
-            return 'Weston-super-Mare Bus Station';
         }
     }
 
@@ -210,14 +203,14 @@ function manualOverrides(stopName: string, stopCode: string): string | null {
         return 'Whiteleaze - Southmead Road';
     }
 
-    // Bath Green Park Sainsbury's (enrichment says locality="Odd Down" which is wrong area context)
+    // NaPTAN/NPTG confirms these stops are on Frome Road in Odd Down.
     if ((code === 'bthjdwg' || code === 'bthmwjt') && (stopName === "Sainsbury's" || stopName === 'Sainsburys')) {
-        return "Bath Green Park Sainsbury's";
+        return "Odd Down Sainsbury's";
     }
 
-    // Gloucester Road Sainsbury's (enrichment would prefix with wrong locality)
+    // NaPTAN/NPTG confirms Fox Den Road, Stoke Gifford.
     if (code === 'sglatjp' && (stopName === "Sainsbury's" || stopName === 'Sainsburys')) {
-        return "Gloucester Road Sainsbury's";
+        return "Stoke Gifford Sainsbury's";
     }
 
     // Clifton Rugby Club

@@ -22,6 +22,9 @@ def test_security_headers(client):
     assert "fonts.gstatic.com" not in csp
     assert "unpkg.com" not in csp
     assert "https://*.basemaps.cartocdn.com" in csp
+    assert "connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com" in csp
+    assert "worker-src 'self'" in csp
+    assert "'unsafe-eval'" not in csp
 
 
 def test_rendered_page_has_no_third_party_fonts_or_libraries(client):

@@ -28,6 +28,18 @@ code is covered by the root AGPL-3.0-only licence.
 contributors, BSD 2-Clause licence. The licence text is retained
 alongside the vendored files.
 
+### MapLibre GL JS 6.6.0
+
+`site/static/vendor/maplibre-gl-6.6.0/` contains the production ES module,
+shared module, module worker and CSS from the official npm package.
+BSD 3-Clause licence; the complete upstream licence and bundled dependency
+notices are retained in `LICENSE.txt`.
+
+### MapLibre GL Leaflet bridge 0.1.4
+
+`site/static/vendor/maplibre-gl-leaflet-0.1.4/` contains the upstream browser
+bridge from `@maplibre/maplibre-gl-leaflet`. ISC licence, retained in `LICENSE`.
+
 ## Fonts
 
 ### Overpass
@@ -63,7 +75,8 @@ Full attributions in `ATTRIBUTION.md`; in summary:
 
 ## Services
 
-- **Carto** supplies map-image tiles to visitors' browsers (the one
+- **CARTO** supplies vector map tiles, styles, sprites and label glyphs
+  (with image tiles as a compatibility fallback) to visitors' browsers (the one
   intentional third-party browser dependency; see `site/README.md`).
 - **Bluesky** public APIs for bot posting and post display.
 - **OpenWeather** for weather context in bot commentary.

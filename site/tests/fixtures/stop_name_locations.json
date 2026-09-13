@@ -1,0 +1,251 @@
+{
+  "source": "NaPTAN and NPTG, Department for Transport, Open Government Licence v3.0",
+  "downloaded": "2026-09-10",
+  "stops": [
+    {
+      "code": "sgldgat",
+      "name": "Leisure Centre",
+      "expected": "Thornbury Leisure Centre",
+      "locality": "Thornbury",
+      "street": "Bristol Road"
+    },
+    {
+      "code": "sgldgap",
+      "name": "Leisure Centre",
+      "expected": "Thornbury Leisure Centre",
+      "locality": "Thornbury",
+      "street": "Alveston Hill"
+    },
+    {
+      "code": "sgladam",
+      "name": "Post Office",
+      "expected": "Severn Beach Post Office",
+      "locality": "Severn Beach",
+      "street": "Beach Road"
+    },
+    {
+      "code": "sgladaj",
+      "name": "Post Office",
+      "expected": "Severn Beach Post Office",
+      "locality": "Severn Beach",
+      "street": "Beach Road"
+    },
+    {
+      "code": "sglmtap",
+      "name": "Morrisons",
+      "expected": "Yate Morrisons",
+      "locality": "Yate",
+      "street": "Station Road"
+    },
+    {
+      "code": "sglpmpg",
+      "name": "Morrisons",
+      "expected": "Yate Morrisons",
+      "locality": "Yate",
+      "street": "Station Road"
+    },
+    {
+      "code": "sglpatd",
+      "name": "Post Office",
+      "expected": "Horton Post Office",
+      "locality": "Horton",
+      "street": "Horton Hill"
+    },
+    {
+      "code": "sglpata",
+      "name": "Post Office",
+      "expected": "Horton Post Office",
+      "locality": "Horton",
+      "street": "Horton Hill"
+    },
+    {
+      "code": "sglatjp",
+      "name": "Sainsbury's",
+      "expected": "Stoke Gifford Sainsbury's",
+      "locality": "Stoke Gifford",
+      "street": "Fox Den Road"
+    },
+    {
+      "code": "bthadwa",
+      "name": "Post Office",
+      "expected": "Chew Magna Post Office",
+      "locality": "Chew Magna",
+      "street": "South Parade"
+    },
+    {
+      "code": "bthadtw",
+      "name": "Post Office",
+      "expected": "Chew Magna Post Office",
+      "locality": "Chew Magna",
+      "street": "South Parade"
+    },
+    {
+      "code": "bthadgt",
+      "name": "Post Office",
+      "expected": "Compton Martin Post Office",
+      "locality": "Compton Martin",
+      "street": "The Batch"
+    },
+    {
+      "code": "bthadgp",
+      "name": "Post Office",
+      "expected": "Compton Martin Post Office",
+      "locality": "Compton Martin",
+      "street": "The Batch"
+    },
+    {
+      "code": "bthagaw",
+      "name": "Post Office",
+      "expected": "Bishop Sutton Post Office",
+      "locality": "Bishop Sutton",
+      "street": "The Street"
+    },
+    {
+      "code": "bthagat",
+      "name": "Post Office",
+      "expected": "Bishop Sutton Post Office",
+      "locality": "Bishop Sutton",
+      "street": "The Street"
+    },
+    {
+      "code": "bthjatw",
+      "name": "Post Office",
+      "expected": "Odd Down Post Office",
+      "locality": "Odd Down",
+      "street": "Frome Road"
+    },
+    {
+      "code": "bthjdwg",
+      "name": "Sainsbury's",
+      "expected": "Odd Down Sainsbury's",
+      "locality": "Odd Down",
+      "street": "Frome Road"
+    },
+    {
+      "code": "bthmwjt",
+      "name": "Sainsbury's",
+      "expected": "Odd Down Sainsbury's",
+      "locality": "Odd Down",
+      "street": "Frome Road"
+    },
+    {
+      "code": "bthpamj",
+      "name": "Post Office",
+      "expected": "Keynsham Post Office",
+      "locality": "Keynsham",
+      "street": "High Street"
+    },
+    {
+      "code": "bthpdat",
+      "name": "Tesco",
+      "expected": "Old Mills Tesco",
+      "locality": "Old Mills",
+      "street": "A362"
+    },
+    {
+      "code": "bthpdap",
+      "name": "Tesco",
+      "expected": "Old Mills Tesco",
+      "locality": "Old Mills",
+      "street": "A362"
+    },
+    {
+      "code": "wsmdpmg",
+      "name": "Tesco",
+      "expected": "Clevedon Tesco",
+      "locality": "Clevedon",
+      "street": "Southern Way"
+    },
+    {
+      "code": "wsmdpmp",
+      "name": "Tesco",
+      "expected": "Clevedon Tesco",
+      "locality": "Clevedon",
+      "street": "Southern Way"
+    },
+    {
+      "code": "wsmjwgj",
+      "name": "Dental Practice",
+      "expected": "Portishead Dental Practice",
+      "locality": "Portishead",
+      "street": "Nore Road"
+    },
+    {
+      "code": "wsmgapj",
+      "name": "Tesco",
+      "expected": "Congresbury Tesco",
+      "locality": "Congresbury",
+      "street": "Bristol Road"
+    },
+    {
+      "code": "wsmgapm",
+      "name": "Tesco",
+      "expected": "Congresbury Tesco",
+      "locality": "Congresbury",
+      "street": "Bristol Road"
+    },
+    {
+      "code": "wsmgwjd",
+      "name": "Leisure Centre",
+      "expected": "Backwell Leisure Centre",
+      "locality": "Backwell",
+      "street": "Farleigh Road"
+    },
+    {
+      "code": "wsmgwjg",
+      "name": "Leisure Centre",
+      "expected": "Backwell Leisure Centre",
+      "locality": "Backwell",
+      "street": "Farleigh Road"
+    },
+    {
+      "code": "wsmjdgm",
+      "name": "Post Office",
+      "expected": "Felton Post Office",
+      "locality": "Felton",
+      "street": "Upper Town Lane"
+    },
+    {
+      "code": "wsmjdgd",
+      "name": "Post Office",
+      "expected": "Felton Post Office",
+      "locality": "Felton",
+      "street": "Upper Town Lane"
+    },
+    {
+      "code": "wsmjwgp",
+      "name": "Marina Healthcare Centre",
+      "expected": "Portishead Marina Healthcare Centre",
+      "locality": "Portishead",
+      "street": "Harbour Road"
+    },
+    {
+      "code": "wsmpgwm",
+      "name": "Public Transport Interchange",
+      "expected": "Bristol Airport Interchange",
+      "locality": "Bristol Airport",
+      "street": "Transport Interchange"
+    },
+    {
+      "code": "wsmpjag",
+      "name": "Public Transport Interchange",
+      "expected": "Bristol Airport Interchange",
+      "locality": "Bristol Airport",
+      "street": "Transport Interchange"
+    },
+    {
+      "code": "wsmpjat",
+      "name": "Public Transport Interchange",
+      "expected": "Bristol Airport Interchange",
+      "locality": "Bristol Airport",
+      "street": "Transport Interchange"
+    },
+    {
+      "code": "wsmpjaw",
+      "name": "Public Transport Interchange",
+      "expected": "Bristol Airport Interchange",
+      "locality": "Bristol Airport",
+      "street": "Transport Interchange"
+    }
+  ]
+}
