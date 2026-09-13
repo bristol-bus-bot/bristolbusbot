@@ -187,6 +187,13 @@ test('operator identities distinguish First Bristol from Stagecoach West', () =>
   );
 });
 
+test('observation clock times use British local time, not raw UTC', () => {
+  const prose = 'The 21 was five minutes early at Newbridge at 21:00.';
+  assert.deepEqual(validateCommentaryCandidate(prose, EVENT, null, false), []);
+  assert.match(validateCommentaryCandidate(prose.replace('21:00', '20:00'), EVENT, null, false)
+    .join(' '), /UK local time 21:00/);
+});
+
 
 test('cleaning never permits public sources and keeps compliant prose intact', () => {
   const post = 'The outbound 21 reaches Newbridge five minutes early.';

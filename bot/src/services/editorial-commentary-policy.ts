@@ -1,4 +1,5 @@
 import type { BusEvent } from '../types/bus-types.js';
+import { DateTime } from 'luxon';
 import type {
     EditorialRequirement,
     EditorialSelection,
@@ -306,6 +307,13 @@ export function validateCommentaryCandidate(
             ? 'on time'
             : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
         issues.push(`post is missing the exact observed status: ${status}`);
+    }
+    if (!hookUsed) {
+        const local = DateTime.fromISO(event.timestamp).setZone('Europe/London').toFormat('HH:mm');
+        const clocks = post.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || [];
+        if (clocks.some(clock => clock.padStart(5, '0') !== local)) {
+            issues.push(`any observation clock time must be UK local time ${local}`);
+        }
     }
     if (hookUsed && !hook) issues.push('hook_used is true but no hook was supplied');
     if (hookUsed && hook) {
