@@ -17,6 +17,8 @@ import { logger, logSummary, logDetailed, logAlways, TARGET_TIMEZONE } from '../
 import { ApplicationState } from '../services/application-state.js';
 import { DelayAnalyzer } from '../services/delay-analyzer.js';
 import type { BusEvent } from '../types/bus-types.js';
+import { observationIssue } from '../services/story-brief.js';
+import { cleanStopName, getStopEnrichment } from '../utils/stop-name-cleaner.js';
 
 interface EventRow {
     id: number;
@@ -75,6 +77,34 @@ export class EventReader {
     stop(): void {
         if (this.timer) clearInterval(this.timer);
         this.db.close();
+    }
+
+    /** Include fresh normal running, even when it produced no exception event. */
+    getCurrentStories(now = Date.now()): BusEvent[] {
+        try {
+            const names = new Map<string, string>();
+            const recentStops = this.db.prepare('SELECT stop_code, stop_name FROM events ORDER BY id DESC LIMIT 5000')
+                .all() as { stop_code: string; stop_name: string }[];
+            for (const row of recentStops) {
+                if (row.stop_name && !names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
+            }
+            const rows = this.db.prepare(`SELECT v.*, v.recorded_at AS created_at
+                FROM vehicles v WHERE v.recorded_at >= ? AND v.delay_seconds IS NOT NULL
+                AND v.event_type IN ('delayed', 'early', 'punctual')
+                ORDER BY v.recorded_at DESC LIMIT 1000`)
+                .all(new Date(now - 90_000).toISOString()) as any[];
+            return rows.filter(row => this.operators.has(row.operator_ref)).map(row => {
+                const name = getStopEnrichment()[row.stop_code]?.name || names.get(row.stop_code);
+                const event = this.toBusEvent({ ...row, id: undefined, source: 'live_snapshot',
+                    stop_name: name ? cleanStopName(name, row.stop_code) : null,
+                    corroboration: row.streak_count || 0 });
+                event.significance = Math.max(1, event.significance);
+                return event;
+            }).filter(event => !observationIssue(event, now) && this.isObservationCurrent(event, now));
+        } catch (error: any) {
+            logger.warn('Could not read current stories', { error: error.message });
+            return [];
+        }
     }
 
     /** Read the current collector snapshot; never reinterpret its timing. */
