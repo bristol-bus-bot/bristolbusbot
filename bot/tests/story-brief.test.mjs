@@ -8,6 +8,7 @@ import { buildStoryPrompt, observationIssue, latestStoryEvents, factualStoryIssu
 import { EventReader } from '../dist/ingest/event-reader.js';
 import { SocialMediaManager } from '../dist/services/social-media.js';
 import { AICommentary } from '../dist/services/ai-commentary.js';
+import { observationPost, reservePost } from '../dist/services/posting-fallback.js';
 
 const now = Date.parse('2026-09-13T12:00:00Z');
 const event = {
@@ -71,30 +72,69 @@ test('collector recheck rejects stale positions, changed runs, depots, confidenc
     assert.equal(reader.isObservationCurrent(event, now), false, column);
     db.prepare(`UPDATE vehicles SET ${column} = ?`).run(original);
   }
+  db.exec(`CREATE TABLE events (id INTEGER PRIMARY KEY, stop_code TEXT, stop_name TEXT);
+    INSERT INTO events VALUES (1, 'bst-test', 'Two Mile Hill');
+    UPDATE vehicles SET event_type='punctual', delay_seconds=0;`);
+  reader.delayAnalyzer = { calculateEventSignificance: () => ({ type: 'ignore', score: 0 }),
+    extractBusDetails: () => undefined };
+  const [normal] = reader.getCurrentStories(now);
+  assert.equal(normal.eventType, 'punctual');
+  assert.equal(normal.source, 'live_snapshot');
+  assert.equal(normal.collectorEventId, undefined, 'snapshot must not claim an old exception event id');
+  assert.equal(normal.timestamp, '2026-09-13T11:59:50Z');
 });
 
 function socialHarness(events = [freshEvent()]) {
   const state = { postsTodayCount: 0, resetDailyCounters() {}, getAndClearBusEvents: () => events };
   const manager = new SocialMediaManager({ dailyLimit: 10, postLimit: 300, testMode: false }, state);
   let publications = 0;
-  manager.postUpdate = async () => { publications++; return { bluesky: true }; };
-  return { manager, state, publications: () => publications };
+  const delivered = [];
+  manager.postUpdate = async (text, event) => { publications++; delivered.push({ text, event }); return { bluesky: true }; };
+  return { manager, state, delivered, publications: () => publications };
 }
 
-test('rejected AI drafts never publish unchecked fallback templates', async () => {
+test('rejected AI drafts publish a factual observation with its timestamp', async () => {
   const h = socialHarness();
   h.manager.setAICommentary({ generatePost: async () => null });
   await h.manager.processEventCollector();
-  assert.equal(h.publications(), 0);
+  assert.equal(h.publications(), 1);
+  assert.match(h.delivered[0].text, /^At \d\d:\d\d, the 42 was recorded 8 minutes late at Two Mile Hill\.$/);
 });
 
-test('a changed observation during writing cancels publication', async () => {
+test('a changed observation during writing uses reserve prose without a fake bus event', async () => {
   const h = socialHarness();
   let current = true;
   h.manager.setObservationValidator(() => current);
   h.manager.setAICommentary({ generatePost: async () => { current = false; return 'A draft.'; } });
   await h.manager.processEventCollector();
-  assert.equal(h.publications(), 0);
+  assert.equal(h.publications(), 1);
+  assert.equal(h.delivered[0].event, null);
+  assert.doesNotMatch(h.delivered[0].text, /Two Mile Hill|A draft/);
+});
+
+test('empty collector publishes and fresh snapshots can supply an on-time story', async () => {
+  const empty = socialHarness([]);
+  await empty.manager.processEventCollector();
+  assert.equal(empty.publications(), 1);
+  assert.equal(empty.delivered[0].event, null);
+  const normal = socialHarness([]);
+  normal.manager.setStoryProvider(() => [{ ...freshEvent(), eventType: 'punctual', delayMinutes: 0 }]);
+  await normal.manager.processEventCollector();
+  assert.match(normal.delivered[0].text, /recorded on time/);
+});
+
+test('reserve posts fit the platform and differ between consecutive cycles', () => {
+  for (let i = 0; i < 12; i++) assert.ok(reservePost(i * 1200000).length <= 300);
+  assert.notEqual(reservePost(now), reservePost(now + 1200000));
+  assert.match(observationPost(event), /At 12:59, the 42 was recorded 8 minutes late/);
+});
+
+test('uncertain delivery never triggers a second different post', async () => {
+  const h = socialHarness();
+  let attempts = 0;
+  h.manager.postUpdate = async () => { attempts++; return { bluesky: false }; };
+  await h.manager.processEventCollector();
+  assert.equal(attempts, 1);
 });
 
 test('periodic budget and overlapping cycles cannot start another generation', async () => {

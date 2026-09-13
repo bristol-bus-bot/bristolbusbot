@@ -25,7 +25,7 @@ export interface EngagementRecord {
     postType: string;
     significance: number;
     postUri?: string;
-    event: BusEvent;
+    event?: BusEvent;
 }
 
 export interface RecentPost {
@@ -862,17 +862,17 @@ export class DatabaseManager {
                   corroboration, low_confidence)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [record.postContent, record.postType, record.significance,
-                 DateTime.now().toISO() ?? '', event.vehicleRef || null,
-                 record.postUri || null, event.collectorEventId ?? null,
-                 event.operatorRef || null, event.line || null,
-                 event.datedJourneyRef || null,
-                 event.originAimedDepartureTimeStr || null,
-                 event.timestamp || null,
-                 event.delaySeconds ?? Math.round(event.delayMinutes * 60),
-                 event.direction || null, event.lastStopCode || null,
-                 event.lastStopName || null,
-                 event.source || null, event.corroboration ?? null,
-                 event.lowConfidence ? 1 : 0],
+                 DateTime.now().toISO() ?? '', event?.vehicleRef || null,
+                 record.postUri || null, event?.collectorEventId ?? null,
+                 event?.operatorRef || null, event?.line || null,
+                 event?.datedJourneyRef || null,
+                 event?.originAimedDepartureTimeStr || null,
+                 event?.timestamp || null,
+                 event ? (event.delaySeconds ?? Math.round(event.delayMinutes * 60)) : null,
+                 event?.direction || null, event?.lastStopCode || null,
+                 event?.lastStopName || null,
+                 event?.source || null, event?.corroboration ?? null,
+                 event ? (event.lowConfidence ? 1 : 0) : null],
                 err => err ? reject(err) : resolve()
             );
         }).catch((error: any) => {

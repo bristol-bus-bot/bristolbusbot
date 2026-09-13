@@ -8,6 +8,7 @@ import { DatabaseManager } from './database-manager.js';
 import { AICommentary } from './ai-commentary.js';
 import type { BusEvent, SocialMediaPost } from '../types/bus-types.js';
 import { latestStoryEvents, observationIssue } from './story-brief.js';
+import { observationPost, reservePost } from './posting-fallback.js';
 
 /**
  * Handle Bluesky publishing and optional platform integrations.
@@ -21,6 +22,12 @@ export class SocialMediaManager {
     private postingInterval: NodeJS.Timeout | null = null;
     private followerInterval: NodeJS.Timeout | null = null;
     private processingStory = false;
+    private storyProvider: (() => BusEvent[]) | null = null;
+
+    setStoryProvider(provider: () => BusEvent[]): void {
+        this.storyProvider = provider;
+    }
+
     private observationValidator: ((event: BusEvent) => boolean) | null = null;
 
     setObservationValidator(validate: (event: BusEvent) => boolean): void {
@@ -88,15 +95,15 @@ export class SocialMediaManager {
     /**
      * Publish an update with bounded retries.
      */
-    async postUpdate(postText: string, busEvent: BusEvent): Promise<{ bluesky: boolean }> {
+    async postUpdate(postText: string, busEvent: BusEvent | null): Promise<{ bluesky: boolean; stale?: boolean }> {
         const timer = new PerformanceTimer('social_media_post', logger);
 
         this.appState.resetDailyCounters();
         if (this.hasReachedDailyLimit()) return { bluesky: false };
-        if (busEvent.collectorEventId !== undefined
+        if ((busEvent?.collectorEventId !== undefined || busEvent?.source === 'live_snapshot')
             && (observationIssue(busEvent) || !this.observationValidator?.(busEvent))) {
             logSummary('info', '[POST_SKIP] Observation could not be confirmed before publication');
-            return { bluesky: false };
+            return { bluesky: false, stale: true };
         }
 
         let blueskySuccess = false;
@@ -112,8 +119,8 @@ export class SocialMediaManager {
                 timer.complete({
                     testMode: true,
                     postLength: postText.length,
-                    eventType: busEvent.eventType,
-                    route: busEvent.line,
+                    eventType: (busEvent?.eventType || 'editorial'),
+                    route: busEvent?.line,
                     platforms: { bluesky: true }
                 });
                 return { bluesky: true };
@@ -131,7 +138,7 @@ export class SocialMediaManager {
                 ? postText.substring(0, this.socialConfig.postLimit - 3) + "..."
                 : postText;
 
-            logger.info(`[DUAL_POST] About to post: "${finalPostText}" (${finalPostText.length} chars, type: ${busEvent.eventType}, significance: ${busEvent.significance})`);
+            logger.info(`[DUAL_POST] About to post: "${finalPostText}" (${finalPostText.length} chars, type: ${(busEvent?.eventType || 'editorial')}, significance: ${(busEvent?.significance || 0)})`);
 
             // POST TO BLUESKY
             if (this.socialConfig.handle && this.socialConfig.appPassword) {
@@ -176,10 +183,10 @@ export class SocialMediaManager {
                         if (this.databaseManager) {
                             await this.databaseManager.storeEngagementRecord({
                                 postContent: finalPostText,
-                                postType: busEvent.eventType,
-                                significance: busEvent.significance,
+                                postType: (busEvent?.eventType || 'editorial'),
+                                significance: (busEvent?.significance || 0),
                                 postUri,
-                                event: busEvent,
+                                event: busEvent || undefined,
                             });
                         }
 
@@ -215,7 +222,7 @@ export class SocialMediaManager {
                         if (attempt < MAX_RETRIES) {
                             const retryDelay = RETRY_DELAYS[attempt - 1];
                             logger.warn(`🔄 Bluesky network error, retrying in ${retryDelay/1000}s (attempt ${attempt}/${MAX_RETRIES})`, {
-                                route: busEvent.line,
+                                route: busEvent?.line,
                                 error: error.message,
                                 retryCount: attempt
                             });
@@ -225,7 +232,7 @@ export class SocialMediaManager {
                         } else {
                             // All retries exhausted
                             logger.error("--- Bluesky final network timeout after all attempts ---", {
-                                route: busEvent.line,
+                                route: busEvent?.line,
                                 totalAttempts: MAX_RETRIES,
                                 lastError: error.message
                             });
@@ -248,9 +255,9 @@ export class SocialMediaManager {
             timer.complete({
                 testMode: false,
                 postLength: finalPostText.length,
-                eventType: busEvent.eventType,
-                route: busEvent.line,
-                significance: busEvent.significance,
+                eventType: (busEvent?.eventType || 'editorial'),
+                route: busEvent?.line,
+                significance: (busEvent?.significance || 0),
                 platforms: { bluesky: blueskySuccess }
             });
 
@@ -566,228 +573,61 @@ export class SocialMediaManager {
 public async processEventCollector(): Promise<void> {
     if (this.processingStory) return;
     this.processingStory = true;
-    logAlways('info', '[POSTING] ▶️ processEventCollector() called');
-
+    let publishing = false;
     try {
-        // Safety check - ensure appState is initialized
-        logAlways('info', `[POSTING] AppState check: exists=${!!this.appState}, hasMethod=${this.appState ? typeof this.appState.getAndClearBusEvents === 'function' : 'N/A'}`);
-
-        if (!this.appState || typeof this.appState.getAndClearBusEvents !== 'function') {
-            logAlways('warn', '[POSTING] ❌ AppState not ready yet, skipping this cycle');
-            return;
-        }
-
-        const now = Date.now();
         this.appState.resetDailyCounters();
-        const collected = this.appState.getAndClearBusEvents();
         if (this.hasReachedDailyLimit()) return;
-        const events = latestStoryEvents(collected, now)
+        const collected = this.appState.getAndClearBusEvents();
+        let snapshots: BusEvent[] = [];
+        try { snapshots = this.storyProvider?.() || []; }
+        catch (error: any) { logger.warn('Current story lookup failed', { error: error.message }); }
+        const candidates = latestStoryEvents([...collected, ...snapshots])
             .filter(event => !this.observationValidator || this.observationValidator(event));
-
-        logAlways('info', `[POSTING] Retrieved ${events.length} events from collector`);
-        
-        if (events.length === 0) {
-            logSummary('info', `💤 No events collected - skipping posting cycle`);
-            logDetailed('info', "Event collector empty - no posts to generate this cycle");
-            return;
+        logAlways('info', `[POSTING] ${collected.length} queued, ${snapshots.length} current, ${candidates.length} eligible`);
+        let event: BusEvent | null = candidates.length
+            ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+        let text: string | null = null;
+        if (event && this.aiCommentary) {
+            try { text = await this.aiCommentary.generatePost(event); }
+            catch (error: any) { logger.warn('Writer failed; using factual fallback', { error: error.message }); }
         }
-        
-        // Log the posting decision.
-        logSummary('info', `🚀 POSTING: Processing ${events.length} events for potential posts`);
-        logDetailed('info', `--- Processing ${events.length} events for potential posting ---`);
-        
-        // Determine if we're in rush hour
-        const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
-        const hour = currentTime.hour;
-        const isWeekday = currentTime.weekday <= 5;
-        const isRushHour = isWeekday && ([7, 8, 9, 17, 18, 19].includes(hour));
-        
-        // Filter out buses that are too late based on time of day
-        const maxDelay = isRushHour ? 24 : 15; // 24 mins max during rush hour, 15 otherwise
-        const postableEvents = events.filter(e => {
-            if (e.eventType === 'delay' && e.delayMinutes > maxDelay) {
-                logDetailed('info', `[FILTER] ${e.line} excluded: ${e.delayMinutes}min delay exceeds ${maxDelay}min limit (${isRushHour ? 'rush hour' : 'off-peak'})`);
-                return false;
-            }
-            if (e.eventType === 'early' && Math.abs(e.delayMinutes) > 10) {
-                logDetailed('info', `[FILTER] ${e.line} excluded: ${Math.abs(e.delayMinutes)}min early exceeds 10min limit`);
-                return false;
-            }
-            return true;
-        });
-        
-        if (postableEvents.length === 0) {
-            logSummary('info', `💤 No suitable events (all exceed delay limits) - skipping posting`);
-            return;
+        const current = (item: BusEvent) => !observationIssue(item)
+            && (!this.observationValidator || this.observationValidator(item));
+        if (event && !current(event)) {
+            // Re-select without another model call when a bus moved while writing.
+            let refreshed: BusEvent[] = [];
+            try { refreshed = this.storyProvider?.() || []; } catch { /* reserve below */ }
+            event = latestStoryEvents(refreshed).find(current) || null;
+            text = null;
         }
-
-        // Prefer Bristol and South Gloucestershire events over Bath and Weston.
-        const getArea = (stopCode?: string): string => {
-            if (!stopCode) return 'Bristol';
-            const code = stopCode.toLowerCase();
-            if (code.startsWith('wsm')) return 'Weston-super-Mare';
-            if (code.startsWith('bth')) return 'Bath';
-            if (code.startsWith('sgl')) return 'South Gloucestershire';
-            if (code.startsWith('bst')) return 'Bristol';
-            return 'Bristol';
-        };
-
-        const bristolAndSouthGlosEvents = postableEvents.filter(e => {
-            const area = getArea(e.lastStopCode);
-            return area === 'Bristol' || area === 'South Gloucestershire';
-        });
-
-        const bathAndWestonEvents = postableEvents.filter(e => {
-            const area = getArea(e.lastStopCode);
-            return area === 'Bath' || area === 'Weston-super-Mare';
-        });
-
-        // Only use Bath/Weston events if there are NO Bristol/South Glos events
-        const eventsToSelect = bristolAndSouthGlosEvents.length > 0 ? bristolAndSouthGlosEvents : bathAndWestonEvents;
-
-        if (eventsToSelect.length === 0) {
-            logSummary('info', `💤 No events in coverage area - skipping posting`);
-            return;
-        }
-
-        logDetailed('info', `[GEO_FILTER] ${bristolAndSouthGlosEvents.length} Bristol/South Glos, ${bathAndWestonEvents.length} Bath/Weston → Using ${eventsToSelect.length} events`);
-
-        // Mix of strategies for variety
-        const strategy = Math.random();
-        let topEvent;
-        
-        if (strategy < 0.3) {
-            // 30% chance: Pick highest significance (but filtered)
-            const sorted = eventsToSelect.sort((a, b) => b.significance - a.significance);
-            topEvent = sorted[0];
-            logDetailed('info', `[STRATEGY] Picking highest significance: ${topEvent.line} (sig: ${topEvent.significance})`);
-
-        } else if (strategy < 0.6) {
-            // 30% chance: Pick a minor delay (4-10 mins) or small early (3-5 mins)
-            const minorEvents = eventsToSelect.filter(e =>
-                (e.eventType === 'delay' && e.delayMinutes >= 4 && e.delayMinutes <= 10) ||
-                (e.eventType === 'early' && Math.abs(e.delayMinutes) >= 3 && Math.abs(e.delayMinutes) <= 5) ||
-                (e.eventType === 'punctual')
-            );
-
-            if (minorEvents.length > 0) {
-                topEvent = minorEvents[Math.floor(Math.random() * minorEvents.length)];
-                logDetailed('info', `[STRATEGY] Picking random minor event: ${topEvent.line} (${topEvent.delayMinutes}min ${topEvent.eventType})`);
-            } else {
-                // Fallback to any random event
-                topEvent = eventsToSelect[Math.floor(Math.random() * eventsToSelect.length)];
-                logDetailed('info', `[STRATEGY] No minor events, picking random: ${topEvent.line}`);
-            }
-
-        } else if (strategy < 0.85) {
-            // 25% chance: Pick moderate delays (11-20 mins during rush, 11-15 off-peak)
-            const moderateMax = isRushHour ? 20 : 15;
-            const moderateEvents = eventsToSelect.filter(e =>
-                e.eventType === 'delay' && e.delayMinutes >= 11 && e.delayMinutes <= moderateMax
-            );
-
-            if (moderateEvents.length > 0) {
-                topEvent = moderateEvents[Math.floor(Math.random() * moderateEvents.length)];
-                logDetailed('info', `[STRATEGY] Picking moderate delay: ${topEvent.line} (${topEvent.delayMinutes}min)`);
-            } else {
-                // Fallback to highest significance
-                const sorted = eventsToSelect.sort((a, b) => b.significance - a.significance);
-                topEvent = sorted[0];
-                logDetailed('info', `[STRATEGY] No moderate delays, picking highest sig: ${topEvent.line}`);
-            }
-
-        } else {
-            // 15% chance: Completely random from available events
-            topEvent = eventsToSelect[Math.floor(Math.random() * eventsToSelect.length)];
-            logDetailed('info', `[STRATEGY] Picking completely random: ${topEvent.line} (${topEvent.delayMinutes}min ${topEvent.eventType})`);
-        }
-        
-        // Summary: Show what will be posted
-        logSummary('info', `📱 TOP EVENT: ${topEvent.line} (${Math.abs(topEvent.delayMinutes)}min ${topEvent.eventType} at ${topEvent.lastStopName}, sig:${topEvent.significance})`);
-        
-        // Generate AI commentary for the event
-        let postText = null;
-        logAlways('info', `[POSTING_DEBUG] Checking aiCommentary: ${!!this.aiCommentary}`);
-        if (this.aiCommentary) {
-            logAlways('info', `[POSTING_DEBUG] Calling AI generatePost for ${topEvent.line}`);
-            try {
-                postText = await this.aiCommentary.generatePost(topEvent);
-                if (postText) {
-                    logSummary('info', `✅ AI: Generated post for ${topEvent.line} - "${postText}"`);
-                } else {
-                    logSummary('info', `AI skipped story for ${topEvent.line}`);
-                }
-            } catch (error: any) {
-                logSummary('warn', `⚠️ AI: Error generating post for ${topEvent.line} - ${error.message}`);
+        if (!text && event) {
+            text = observationPost(event);
+            // Do not truncate away qualifying evidence on unusually long names.
+            if (text.length > Math.min(300, this.socialConfig.postLimit || 300)) {
+                event = null;
+                text = null;
             }
         }
-        
-// A rejected draft must not bypass its checks through an unchecked template.
-if (this.aiCommentary && !postText) return;
-
-// Fallback templates used only when no commentary service is configured.
-if (!postText) {
-    const delayText = topEvent.eventType === 'delay' ? 
-        `running ${topEvent.delayMinutes} minutes late` :
-        topEvent.eventType === 'early' ? 
-        `${Math.abs(topEvent.delayMinutes)} minutes early` :
-        'on time';
-    
-    // Add the vehicle type when it is available.
-    let vehicleType = '';
-    if (topEvent.busDetails?.vehicle_type) {
-        const vt = topEvent.busDetails.vehicle_type;
-        if (vt.electric && vt.double_decker) {
-            vehicleType = 'electric double-decker ';
-        } else if (vt.double_decker) {
-            vehicleType = 'double-decker ';
-        } else if (vt.electric) {
-            vehicleType = 'electric bus ';
+        text ||= reservePost();
+        publishing = true;
+        let result = await this.postUpdate(text, event);
+        // A last-instant freshness rejection has made no network request. Reserve
+        // prose is safe to send; an uncertain network result must not send a second post.
+        if (result.stale) {
+            result = await this.postUpdate(reservePost(), null);
         }
-    }
-    
-    const templates = [
-        `Route ${topEvent.line} is ${delayText} near ${topEvent.lastStopName}`,
-        `The ${topEvent.line} ${vehicleType}finds itself ${delayText} at ${topEvent.lastStopName}`,
-        `Service ${topEvent.line}: ${delayText} near ${topEvent.lastStopName}`,
-        `${topEvent.line} ${vehicleType}currently ${delayText} passing ${topEvent.lastStopName}`,
-        `Near ${topEvent.lastStopName}, the ${topEvent.line} is ${delayText}`,
-        `${topEvent.direction === 'inbound' ? 'Inbound' : 'Outbound'} ${topEvent.line} ${vehicleType}${delayText} at ${topEvent.lastStopName}`
-    ];
-    
-    postText = templates[Math.floor(Math.random() * templates.length)];
-    logSummary('info', `📝 Using fallback template for ${topEvent.line}`);
-}
-        logDetailed('info', `[POSTING_READY] Selected: ${topEvent.line} (${topEvent.vehicleRef}): ${topEvent.delayMinutes}min ${topEvent.eventType} at ${topEvent.lastStopName} (significance: ${topEvent.significance})`);
-        
-        if (this.socialConfig.testMode) {
-            logSummary('info', `🧪 TEST MODE: Would post about ${topEvent.line} ${topEvent.eventType}`);
-            logSummary('info', `📄 POST TEXT: "${postText}"`);
-            logDetailed('info', `[TEST_MODE] Would post about ${topEvent.line} ${topEvent.eventType}: "${postText}"`);
-        } else {
-            if (observationIssue(topEvent)
-                || (this.observationValidator && !this.observationValidator(topEvent))) {
-                logSummary('info', '[POST_SKIP] Observation changed while writing');
-                return;
-            }
-            // Publish to Bluesky in production.
-            const results = await this.postUpdate(postText, topEvent);
-
-            if (results.bluesky) {
-                logSummary('info', `✅ Posted to Bluesky: ${topEvent.line} ${topEvent.eventType}`);
-            } else {
-                logSummary('error', `❌ Failed to post to Bluesky: ${topEvent.line} ${topEvent.eventType}`);
-            }
-
-        }
-        
+        if (!result.bluesky) logger.error('[POSTING] Scheduled post could not be delivered');
     } catch (error: any) {
-        logAlways('error', 'Error processing event collector', { error: error.message });
+        logger.error('Posting cycle failed', { error: error.message });
+        if (!publishing) {
+            try { await this.postUpdate(reservePost(), null); }
+            catch (fallbackError: any) { logger.error('Reserve post failed', { error: fallbackError.message }); }
+        }
     } finally {
         this.processingStory = false;
     }
 }
-    
+
     /**
      * Fetch and update follower counts from Bluesky
      * Called periodically to keep AI context aware of audience size

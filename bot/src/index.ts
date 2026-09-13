@@ -263,6 +263,8 @@ class BristolBusBot {
                 this.eventReader.start();
                 this.socialMediaManager.setObservationValidator(
                     event => this.eventReader?.isObservationCurrent(event) ?? false);
+                this.socialMediaManager.setStoryProvider(
+                    () => this.eventReader?.getCurrentStories() ?? []);
                 logger.info('Ingest: collector events', { liveDbPath, operators });
                 if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
                     const snapshotPath = process.env.AUDIT_INTEGRATION_PATH
