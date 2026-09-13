@@ -292,8 +292,10 @@ export function validateCommentaryCandidate(
     if (operatorName && !hasOperator(post, event.operatorRef)) {
         issues.push(`post is missing operator ${operatorName}`);
     }
-    if (!new RegExp(`\\b${escapeRegExp(event.direction)}\\b`, 'i').test(post)) {
-        issues.push(`post is missing ${event.direction} direction`);
+    const opposite = event.direction === 'inbound' ? 'outbound'
+        : event.direction === 'outbound' ? 'inbound' : null;
+    if (opposite && new RegExp(`\\b${opposite}\\b`, 'i').test(post)) {
+        issues.push('post reverses the observed direction');
     }
     if (event.lastStopName && !hasLocation(post, event.lastStopName)) {
         issues.push(`post is missing location ${event.lastStopName}`);

@@ -104,7 +104,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 // Main fetch helper
-export async function httpFetch(url: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+export async function httpFetch(url: string, options: RequestInit & { timeoutMs?: number; retries?: number } = {}): Promise<Response> {
   const isHttps = url.startsWith('https://');
   const agent = isHttps ? httpsAgent : httpAgent;
   const timeoutMs = options.timeoutMs ?? HTTP_TIMEOUT;
@@ -121,7 +121,7 @@ export async function httpFetch(url: string, options: RequestInit & { timeoutMs?
           .then(res => { clearTimeout(t); resolve(res); })
           .catch(err => { clearTimeout(t); reject(err); });
       });
-    });
+    }, options.retries ?? HTTP_RETRIES);
   } finally {
     limiter.release();
   }

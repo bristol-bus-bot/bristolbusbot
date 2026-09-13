@@ -237,7 +237,8 @@ export interface AICommentaryResult {
     confidence: number;
     responseTime: number;
     metadata: {
-        tokenCount: number;
+        tokenCount?: number;
+        outputCharacters?: number;
         model: string;
         temperature: number;
         editorialMode?: boolean;

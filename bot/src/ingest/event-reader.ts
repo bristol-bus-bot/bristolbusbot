@@ -77,6 +77,28 @@ export class EventReader {
         this.db.close();
     }
 
+    /** Read the current collector snapshot; never reinterpret its timing. */
+    isObservationCurrent(event: BusEvent, now = Date.now()): boolean {
+        try {
+            const row = this.db.prepare('SELECT * FROM vehicles WHERE vehicle_ref = ?')
+                .get(event.vehicleRef) as any;
+            if (!row || row.low_confidence || row.at_depot || row.delay_seconds == null) return false;
+            const age = now - Date.parse(row.recorded_at);
+            return Number.isFinite(age) && age >= -30_000 && age <= 90_000
+                && Date.parse(row.recorded_at) >= Date.parse(event.timestamp) - 30_000
+                && row.operator_ref === event.operatorRef && row.line === event.line
+                && (row.journey_ref || '') === event.datedJourneyRef
+                && (row.origin_aimed_departure || '') === event.originAimedDepartureTimeStr
+                && (row.direction || '') === event.direction
+                && row.stop_code === event.lastStopCode
+                && this.mapEventType(row.event_type) === event.eventType
+                && Math.round(row.delay_seconds / 60) === event.delayMinutes;
+        } catch (error: any) {
+            logger.warn('Could not confirm current story observation', { error: error.message });
+            return false;
+        }
+    }
+
     private mapEventType(t: string): BusEvent['eventType'] {
         return t === 'delayed' ? 'delay' : (t === 'early' ? 'early' : 'punctual');
     }
