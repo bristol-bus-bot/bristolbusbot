@@ -261,6 +261,8 @@ class BristolBusBot {
                     liveDbPath, this.appState, this.delayAnalyzer, operators,
                     30_000, maxAgeMin, () => this.systemdWatchdog.progress());
                 this.eventReader.start();
+                this.socialMediaManager.setObservationValidator(
+                    event => this.eventReader?.isObservationCurrent(event) ?? false);
                 logger.info('Ingest: collector events', { liveDbPath, operators });
                 if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
                     const snapshotPath = process.env.AUDIT_INTEGRATION_PATH

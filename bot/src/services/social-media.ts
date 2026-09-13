@@ -7,6 +7,7 @@ import { ApplicationState } from './application-state.js';
 import { DatabaseManager } from './database-manager.js';
 import { AICommentary } from './ai-commentary.js';
 import type { BusEvent, SocialMediaPost } from '../types/bus-types.js';
+import { latestStoryEvents, observationIssue } from './story-brief.js';
 
 /**
  * Handle Bluesky publishing and optional platform integrations.
@@ -19,6 +20,12 @@ export class SocialMediaManager {
     private bskyAgent: BskyAgent;
     private postingInterval: NodeJS.Timeout | null = null;
     private followerInterval: NodeJS.Timeout | null = null;
+    private processingStory = false;
+    private observationValidator: ((event: BusEvent) => boolean) | null = null;
+
+    setObservationValidator(validate: (event: BusEvent) => boolean): void {
+        this.observationValidator = validate;
+    }
 
     constructor(socialConfig: any, appState: ApplicationState) {
         this.socialConfig = socialConfig;
@@ -83,6 +90,14 @@ export class SocialMediaManager {
      */
     async postUpdate(postText: string, busEvent: BusEvent): Promise<{ bluesky: boolean }> {
         const timer = new PerformanceTimer('social_media_post', logger);
+
+        this.appState.resetDailyCounters();
+        if (this.hasReachedDailyLimit()) return { bluesky: false };
+        if (busEvent.collectorEventId !== undefined
+            && (observationIssue(busEvent) || !this.observationValidator?.(busEvent))) {
+            logSummary('info', '[POST_SKIP] Observation could not be confirmed before publication');
+            return { bluesky: false };
+        }
 
         let blueskySuccess = false;
 
@@ -150,6 +165,12 @@ export class SocialMediaManager {
 
                         logger.info(`--- Successfully posted to BlueSky! --- ${postUrl ? `URL: ${postUrl}` : ''}`);
                         blueskySuccess = true;
+                        try {
+                            this.aiCommentary?.recordPublished(finalPostText);
+                        } catch (error: any) {
+                            // A ledger failure must not resubmit an already published post.
+                            logger.error('Published post could not update editorial memory', { error: error.message });
+                        }
 
                         // Store engagement analytics with vehicle ref and post URI
                         if (this.databaseManager) {
@@ -543,6 +564,8 @@ export class SocialMediaManager {
      * commentary and post it.
      */
 public async processEventCollector(): Promise<void> {
+    if (this.processingStory) return;
+    this.processingStory = true;
     logAlways('info', '[POSTING] ▶️ processEventCollector() called');
 
     try {
@@ -555,7 +578,11 @@ public async processEventCollector(): Promise<void> {
         }
 
         const now = Date.now();
-        const events = this.appState.getAndClearBusEvents();
+        this.appState.resetDailyCounters();
+        const collected = this.appState.getAndClearBusEvents();
+        if (this.hasReachedDailyLimit()) return;
+        const events = latestStoryEvents(collected, now)
+            .filter(event => !this.observationValidator || this.observationValidator(event));
 
         logAlways('info', `[POSTING] Retrieved ${events.length} events from collector`);
         
@@ -688,14 +715,17 @@ public async processEventCollector(): Promise<void> {
                 if (postText) {
                     logSummary('info', `✅ AI: Generated post for ${topEvent.line} - "${postText}"`);
                 } else {
-                    logSummary('info', `❌ AI: Failed to generate post for ${topEvent.line}, using fallback`);
+                    logSummary('info', `AI skipped story for ${topEvent.line}`);
                 }
             } catch (error: any) {
                 logSummary('warn', `⚠️ AI: Error generating post for ${topEvent.line} - ${error.message}`);
             }
         }
         
-// Fallback templates used when commentary generation is unavailable.
+// A rejected draft must not bypass its checks through an unchecked template.
+if (this.aiCommentary && !postText) return;
+
+// Fallback templates used only when no commentary service is configured.
 if (!postText) {
     const delayText = topEvent.eventType === 'delay' ? 
         `running ${topEvent.delayMinutes} minutes late` :
@@ -735,6 +765,11 @@ if (!postText) {
             logSummary('info', `📄 POST TEXT: "${postText}"`);
             logDetailed('info', `[TEST_MODE] Would post about ${topEvent.line} ${topEvent.eventType}: "${postText}"`);
         } else {
+            if (observationIssue(topEvent)
+                || (this.observationValidator && !this.observationValidator(topEvent))) {
+                logSummary('info', '[POST_SKIP] Observation changed while writing');
+                return;
+            }
             // Publish to Bluesky in production.
             const results = await this.postUpdate(postText, topEvent);
 
@@ -748,6 +783,8 @@ if (!postText) {
         
     } catch (error: any) {
         logAlways('error', 'Error processing event collector', { error: error.message });
+    } finally {
+        this.processingStory = false;
     }
 }
     

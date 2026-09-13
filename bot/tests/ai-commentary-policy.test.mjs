@@ -143,7 +143,7 @@ test('the deterministic gate preserves editorial figures and action states', () 
 });
 
 
-test('ordinary candidates still require the observed route, place, direction and timing', () => {
+test('ordinary candidates require route, place and timing; direction is optional but cannot reverse', () => {
   const valid = (
     'First Bristol’s outbound 21 reaches Newbridge five minutes early. '
     + 'An admirable burst of enthusiasm, unless you were still walking to the stop.'
@@ -156,15 +156,11 @@ test('ordinary candidates still require the observed route, place, direction and
     /exact observed status/,
   );
   const missingDirection = valid.replace('outbound ', '');
-  assert.match(
-    validateCommentaryCandidate(missingDirection, EVENT, null, false).join(' '),
-    /outbound direction/,
-  );
+  assert.deepEqual(validateCommentaryCandidate(missingDirection, EVENT, null, false), []);
+  assert.match(validateCommentaryCandidate(valid.replace('outbound', 'inbound'), EVENT, null, false)
+    .join(' '), /reverses/);
   const missingOperator = valid.replace('First Bristol’s ', 'The ');
-  assert.match(
-    validateCommentaryCandidate(missingOperator, EVENT, null, false).join(' '),
-    /missing operator First Bristol/,
-  );
+  assert.deepEqual(validateCommentaryCandidate(missingOperator, EVENT, null, false), []);
   assert.deepEqual(
     validateCommentaryCandidate(
       valid.replace('First Bristol’s', 'First Bus’s'), EVENT, null, false,
@@ -187,7 +183,7 @@ test('operator identities distinguish First Bristol from Stagecoach West', () =>
       null,
       false,
     ).join(' '),
-    /missing operator Stagecoach West/,
+    /another operator/,
   );
 });
 
