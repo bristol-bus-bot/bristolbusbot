@@ -160,10 +160,7 @@ test('ordinary candidates require route, place and timing; direction is optional
   assert.match(validateCommentaryCandidate(valid.replace('outbound', 'inbound'), EVENT, null, false)
     .join(' '), /reverses/);
   const missingOperator = valid.replace('First Bristol’s ', 'The ');
-  assert.match(
-    validateCommentaryCandidate(missingOperator, EVENT, null, false).join(' '),
-    /missing operator First Bristol/,
-  );
+  assert.deepEqual(validateCommentaryCandidate(missingOperator, EVENT, null, false), []);
   assert.deepEqual(
     validateCommentaryCandidate(
       valid.replace('First Bristol’s', 'First Bus’s'), EVENT, null, false,
@@ -186,7 +183,7 @@ test('operator identities distinguish First Bristol from Stagecoach West', () =>
       null,
       false,
     ).join(' '),
-    /missing operator Stagecoach West/,
+    /another operator/,
   );
 });
 

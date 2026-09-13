@@ -113,12 +113,13 @@ export function operatorDisplayName(operatorRef?: string): string | null {
     return OPERATOR_IDENTITIES[operatorRef.trim().toUpperCase()]?.name || null;
 }
 
-function hasOperator(post: string, operatorRef?: string): boolean {
-    if (!operatorRef) return true;
-    const identity = OPERATOR_IDENTITIES[operatorRef.trim().toUpperCase()];
-    if (!identity) return true;
+function namesAnotherOperator(post: string, operatorRef?: string): boolean {
+    const expected = operatorRef?.trim().toUpperCase();
+    if (!expected || !OPERATOR_IDENTITIES[expected]) return false;
     const normalisedPost = normalise(post);
-    return identity.aliases.some(alias => normalisedPost.includes(normalise(alias)));
+    return Object.entries(OPERATOR_IDENTITIES).some(([code, identity]) => code !== expected
+        && identity.aliases.some(alias => new RegExp(`\\b${escapeRegExp(normalise(alias))}\\b`)
+            .test(normalisedPost)));
 }
 
 function requireObject(value: unknown, name: string): Record<string, unknown> {
@@ -289,8 +290,8 @@ export function validateCommentaryCandidate(
     }
     if (!hasRoute(post, event.line)) issues.push(`post is missing route ${event.line}`);
     const operatorName = operatorDisplayName(event.operatorRef);
-    if (operatorName && !hasOperator(post, event.operatorRef)) {
-        issues.push(`post is missing operator ${operatorName}`);
+    if (!hookUsed && namesAnotherOperator(post, event.operatorRef)) {
+        issues.push(`post names another operator; this bus belongs to ${operatorName}`);
     }
     const opposite = event.direction === 'inbound' ? 'outbound'
         : event.direction === 'outbound' ? 'inbound' : null;

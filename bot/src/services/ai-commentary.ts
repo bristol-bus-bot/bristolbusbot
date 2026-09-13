@@ -547,7 +547,8 @@ The timestamp is a recent observation, not proof of what is happening at publica
 The origin schedule does not prove the bus actually departed. Local knowledge absent
 from the evidence cannot be assumed. Vehicle specifications beyond those supplied cannot be assumed.
 Humorous metaphor, obvious personification and opinion are allowed; do not fail a joke
-merely because it is figurative. Direction need not be stated. Otherwise return PASS.
+merely because it is figurative. Direction and operator need not be stated for an ordinary observation.
+If an operator is named, it must be correctly attributed. Otherwise return PASS.
 Return only JSON with verdict (PASS or FAIL) and reasons.`;
     }
 

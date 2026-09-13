@@ -79,7 +79,7 @@ ${JSON.stringify({
 }, null, 2)}
 
 Choose one idea. The timing can be the whole story. Use the optional detail only if it makes that idea better; never attach a vehicle-description sentence just to fill space. A listed livery is not evidence of rarity or an unusual allocation.
-Do not write a status report followed by a longer paraphrase of the same delay. The second sentence must earn its place. Avoid explaining why your joke is funny, padding with the day/time, or reassuring readers that a delay is "hardly a disaster". You can sound pleased or annoyed without making a grand claim.
+Prefer a short, dry observation with a little personal judgement. Let small delays receive a gentler response; not every bus needs roasting. Do not write a status report followed by a longer paraphrase of the same delay. The second sentence must earn its place. Avoid explaining why your joke is funny, padding with the day/time, or reassuring readers that a delay is "hardly a disaster". You can sound pleased or annoyed without making a grand claim.
 If an editorial claim has an honest relationship to this bus, you may use it with every required qualification. Otherwise omit it and set hook_used to false. Never force a company statistic into a bus joke.
 
 FACTUAL BOUNDARIES:
@@ -90,7 +90,8 @@ FACTUAL BOUNDARIES:
 - Metaphor, opinion and humour are welcome; invented real-world happenings are not. Do not turn qualifications into punchlines that reverse their meaning.
 
 WRITING:
-- Include route, named location, operator when known, and exact observed timing naturally. Direction is optional; never reverse it.
+- Include route, named location and exact observed timing naturally. Direction is optional; never reverse it.
+- Leave the company name out of routine timing posts. Name the operator only when its identity matters to the story or an editorial claim needs attribution. The operator in the evidence is for accuracy, not a compulsory opening.
 - British English, one or two sentences, maximum 300 characters, complete punctuation. No links, hashtags, emojis or source lines.
 - Vary the subject and rhythm. Avoid repeating an idea, analogy or vehicle joke from recent posts, even with different wording.
 - Do not default to silence/gliding, a bus "taking its time", enthusiasm, timetables as suggestions, or mock congratulations.
@@ -99,9 +100,9 @@ OVERUSED IDEAS IN RECENT POSTS (avoid recycling these):
 ${JSON.stringify(overused)}
 
 STYLE EXAMPLES ONLY — invented buses and places, never evidence to reuse:
-- "First Bristol's 999 was nine minutes late at Example Square. A bold interpretation of a timetable."
-- "Two minutes late for First Bristol's 998 at Fiction Lane. I'll take that."
-- "First Bristol's 997 brought its heritage livery to Made-up Road, six minutes late. The nostalgia extends to remembering when it was due."
+- "Eight minutes late for the 999 at Example Hill. The hill remains reassuringly punctual."
+- "The 998 was one minute late at Fiction Lane. I'll save the outrage."
+- "Fifteen minutes late for the 997 at Made-up Road. A quarter of an hour is quite an ambitious interpretation of 'nearly there'."
 These illustrate brevity, an opinion and a specific comic connection. Find your own angle; do not recycle these punchlines or their factual details.
 ${corrections.length ? `\nCORRECT THESE ISSUES:\n${corrections.join('\n')}` : ''}
 
