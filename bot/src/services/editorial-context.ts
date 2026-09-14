@@ -10,6 +10,7 @@ import {
 import { dirname } from 'path';
 import { DateTime } from 'luxon';
 import { logger } from '../utils/logging.js';
+import type { BusEvent } from '../types/bus-types.js';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,79}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -23,6 +24,7 @@ const ALLOWED_SOURCE_HOSTS = [
     'gov.uk',
     'legislation.gov.uk',
     'mobilityweek.eu',
+    'parliament.uk',
     'tfl.gov.uk',
     'un.org',
 ];
@@ -40,7 +42,20 @@ export interface EditorialRequirement {
     alternatives: string[];
 }
 
-export interface EditorialFact {
+export interface EditorialScope {
+    operators?: string[];
+    routes?: string[];
+    localities?: string[];
+    local_authorities?: string[];
+    excluded_routes?: string[];
+}
+
+interface EditorialRelevance {
+    scope?: EditorialScope;
+    review_due?: string;
+}
+
+export interface EditorialFact extends EditorialRelevance {
     id: string;
     claim: string;
     prompt_hint: string;
@@ -50,7 +65,7 @@ export interface EditorialFact {
     source: EditorialSource;
 }
 
-export interface EditorialOccasion {
+export interface EditorialOccasion extends EditorialRelevance {
     id: string;
     label: string;
     prompt_hint: string;
@@ -63,7 +78,7 @@ export interface EditorialOccasion {
     source: EditorialSource;
 }
 
-export interface EditorialNews {
+export interface EditorialNews extends EditorialRelevance {
     id: string;
     label: string;
     claim: string;
@@ -232,6 +247,55 @@ function validateRequirements(value: unknown, name: string): EditorialRequiremen
     });
 }
 
+function validateRelevance(item: Record<string, unknown>, name: string): EditorialRelevance {
+    const result: EditorialRelevance = {};
+    if (item.review_due !== undefined) {
+        result.review_due = requireDate(item.review_due, `${name}.review_due`);
+        const source = requireObject(item.source, `${name}.source`);
+        if (result.review_due < requireDate(source.verified_on, `${name}.source.verified_on`)) {
+            throw new Error(`${name}.review_due precedes verification`);
+        }
+    }
+    if (item.scope !== undefined) {
+        const scope = requireObject(item.scope, `${name}.scope`);
+        const allowed = ['operators', 'routes', 'localities', 'local_authorities', 'excluded_routes'];
+        if (!Object.keys(scope).length || Object.keys(scope).some(key => !allowed.includes(key))) {
+            throw new Error(`${name}.scope has missing or unsupported fields`);
+        }
+        result.scope = {};
+        for (const [key, values] of Object.entries(scope)) {
+            if (!Array.isArray(values) || values.length < 1 || values.length > 30) {
+                throw new Error(`${name}.scope.${key} must contain 1 to 30 strings`);
+            }
+            const parsed = values.map(value => requireString(value, `${name}.scope.${key}`, 100).trim());
+            if (new Set(parsed.map(value => value.toLowerCase())).size !== parsed.length) {
+                throw new Error(`${name}.scope.${key} contains duplicates`);
+            }
+            result.scope[key as keyof EditorialScope] = parsed;
+        }
+    }
+    return result;
+}
+
+// Constraints combine with AND; alternatives within each constraint combine with OR.
+// Missing collector context cannot satisfy a constraint. Never infer a town from a stop name.
+export function editorialApplies(item: EditorialRelevance & { claim?: string }, today: string,
+    event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>): boolean {
+    if (item.review_due && today > item.review_due) return false;
+    if (event && /FirstGroup|First Bus|First Bristol/i.test(item.claim || '')
+        && event.operatorRef !== 'FBRI') return false;
+    if (!item.scope) return true;
+    if (!event) return false;
+    const equal = (values: string[], value?: string) => !!value
+        && values.some(allowed => allowed.toLowerCase() === value.trim().toLowerCase());
+    const scope = item.scope;
+    if (scope.excluded_routes && equal(scope.excluded_routes, event.line)) return false;
+    return (!scope.operators || equal(scope.operators, event.operatorRef))
+        && (!scope.routes || equal(scope.routes, event.line))
+        && (!scope.localities || equal(scope.localities, event.placeContext?.locality))
+        && (!scope.local_authorities || equal(scope.local_authorities, event.placeContext?.localAuthority));
+}
+
 export function validateEditorialDocument(value: unknown): EditorialDocument {
     const root = requireObject(value, 'editorial context');
     if (root.schema_version !== 1) throw new Error('unsupported editorial schema_version');
@@ -255,6 +319,7 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
         if (activeUntil < activeFrom) throw new Error(`facts[${index}] has an inverted active window`);
         return {
             id: validateId(fact.id, `facts[${index}].id`, ids),
+            ...validateRelevance(fact, `facts[${index}]`),
             claim: requireString(fact.claim, `facts[${index}].claim`, 600),
             prompt_hint: requireString(fact.prompt_hint, `facts[${index}].prompt_hint`, 700),
             requirements: validateRequirements(
@@ -293,6 +358,7 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
         if (!Number.isInteger(maxUses)) throw new Error(`occasions[${index}].max_uses_per_day must be an integer`);
         return {
             id: validateId(occasion.id, `occasions[${index}].id`, ids),
+            ...validateRelevance(occasion, `occasions[${index}]`),
             label: requireString(occasion.label, `occasions[${index}].label`, 120),
             prompt_hint: requireString(occasion.prompt_hint, `occasions[${index}].prompt_hint`, 700),
             requirements: validateRequirements(
@@ -325,6 +391,7 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
         }
         return {
             id: validateId(story.id, `news[${index}].id`, ids),
+            ...validateRelevance(story, `news[${index}]`),
             label: requireString(story.label, `news[${index}].label`, 120),
             claim: requireString(story.claim, `news[${index}].claim`, 800),
             prompt_hint: requireString(story.prompt_hint, `news[${index}].prompt_hint`, 800),
@@ -482,21 +549,23 @@ export class EditorialContextStore {
         return { ...this.status, counts: { ...this.status.counts } };
     }
 
-    select(now: DateTime, recentPosts: string[]): EditorialSelection | null {
+    select(now: DateTime, recentPosts: string[], event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>): EditorialSelection | null {
         if (!this.status.loaded || this.usage.last_post_was_special) return null;
         const today = now.toISODate();
         const nowIso = now.toUTC().toISO();
         if (!today || !nowIso) return null;
 
         const exactOccasions = this.document.occasions.filter(item =>
-            item.schedule.kind === 'annual_date'
+            editorialApplies(item, today, event)
+            && item.schedule.kind === 'annual_date'
             && item.schedule.month === now.month
             && item.schedule.day === now.day
             && this.canUseOccasion(item, today)
             && !this.isDeferred(item.id, now)
         );
         const rangedOccasions = this.document.occasions.filter(item =>
-            item.schedule.kind === 'date_range'
+            editorialApplies(item, today, event)
+            && item.schedule.kind === 'date_range'
             && activeOnDate(item.schedule.start, item.schedule.end, today)
             && this.canUseOccasion(item, today)
             && !this.isDeferred(item.id, now)
@@ -514,6 +583,7 @@ export class EditorialContextStore {
         }
 
         const eligibleNews = this.document.news.filter(item => {
+            if (!editorialApplies(item, today, event)) return false;
             const usage = this.usage.items[item.id];
             const active = item.active_from <= nowIso && nowIso <= item.expires_at;
             const belowLimit = !usage || usage.uses < item.max_uses_total;
@@ -538,6 +608,7 @@ export class EditorialContextStore {
         );
         if (recentFinancial || this.random() >= 0.20) return null;
         const facts = this.document.facts.filter(item => {
+            if (!editorialApplies(item, today, event)) return false;
             if (!activeOnDate(item.active_from, item.active_until, today)) return false;
             if (this.isDeferred(item.id, now)) return false;
             const usage = this.usage.items[item.id];

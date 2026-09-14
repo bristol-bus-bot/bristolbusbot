@@ -27,6 +27,19 @@ def valid_raw() -> bytes:
     return CONTEXT_PATH.read_bytes()
 
 
+def test_preserves_scope_and_review_due_and_rejects_ambiguous_constraints():
+    value = json.loads(valid_raw())
+    value['facts'][0]['scope'] = {'operators': ['FBRI'], 'routes': ['T1']}
+    value['facts'][0]['review_due'] = '2027-01-01'
+    document, _ = validate_bytes(json.dumps(value).encode())
+    assert document['facts'][0]['scope'] == value['facts'][0]['scope']
+    assert document['facts'][0]['review_due'] == '2027-01-01'
+    for scope in [{}, {'operator': ['FBRI']}, {'routes': []}, {'routes': ['T1', 't1']}]:
+        value['facts'][0]['scope'] = scope
+        with pytest.raises(EditorialValidationError, match='scope'):
+            validate_bytes(json.dumps(value).encode())
+
+
 def changed_raw() -> bytes:
     value = json.loads(valid_raw())
     value["updated_at"] = "2026-07-23T12:00:00Z"

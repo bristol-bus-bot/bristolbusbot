@@ -1,9 +1,11 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-23T00:00:00Z",
+  "updated_at": "2026-09-15T00:00:00Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
+      "scope": {"operators": ["FBRI"], "localities": ["Bristol"], "excluded_routes": ["A1", "A2", "A3", "A4"]},
+      "review_due": "2026-10-15",
       "claim": "A First Bus adult single in Bristol is £2.60 from 1 January 2026.",
       "prompt_hint": "Use the exact £2.60 fare only when a fare comparison genuinely fits the live bus event.",
       "requirements": [
@@ -18,11 +20,13 @@
         "title": "Tap On, Tap Off fares",
         "url": "https://www.firstbus.co.uk/bristol-bath-and-west/tickets/tap-tap",
         "published_on": "2026-01-01",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstbus-profit-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "First Bus adjusted operating profit rose 7% to £102.8 million in FY2026.",
       "prompt_hint": "Contrast the £102.8 million figure with the observed service, without implying that one individual bus proves a company-wide trend.",
       "requirements": [
@@ -39,11 +43,13 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "regional-bus-margin-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
       "prompt_hint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
       "requirements": [
@@ -61,11 +67,13 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "regional-bus-passengers-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup recorded 390.4 million Regional Bus passenger journeys in FY2026, down from 403.3 million in FY2025.",
       "prompt_hint": "Use the exact annual totals. Do not present this national Regional Bus figure as Bristol-only data.",
       "requirements": [
@@ -83,11 +91,13 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstgroup-shareholder-returns-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup returned £89 million to shareholders through dividends and its FY2026 £50 million buyback, then announced a further £100 million buyback.",
       "prompt_hint": "Keep the completed £89 million return separate from the newly announced £100 million programme.",
       "requirements": [
@@ -104,11 +114,13 @@
         "title": "FY2026 results",
         "url": "https://www.firstgroupplc.com/investors/results-centre.aspx",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstgroup-revenue-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup adjusted revenue rose 25% to £1.716 billion in FY2026.",
       "prompt_hint": "This is a FirstGroup-wide figure, not Bristol or First Bus revenue.",
       "requirements": [
@@ -125,11 +137,13 @@
         "title": "FY2026 results",
         "url": "https://www.firstgroupplc.com/investors/results-centre.aspx",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstgroup-ceo-pay-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup chief executive Graham Sutherland received £2.974 million total remuneration in FY2026, including £2.337 million of annual bonus and long-term incentive awards.",
       "prompt_hint": "Say total remuneration, not salary. His salary was £605,700; £2.337 million came from the two variable-pay columns.",
       "requirements": [
@@ -147,11 +161,13 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstbus-service-measures-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup said Regional Bus lost mileage fell from 1.8% to 1.5% in FY2026 and its Net Promoter Score rose from 11 to 17.",
       "prompt_hint": "This is a positive operational result. Give credit where it is due and do not claim it describes today's one observed journey.",
       "requirements": [
@@ -168,11 +184,13 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "firstbus-electrification-fy2026",
+      "scope": {"operators": ["FBRI"]},
+      "review_due": "2026-12-15",
       "claim": "FirstGroup reported about £190 million of accelerated capital expenditure, principally on First Bus electrification, with 26% of its UK bus fleet zero-emission by March 2026.",
       "prompt_hint": "This is another positive result. Do not imply all Bristol buses are zero-emission.",
       "requirements": [
@@ -190,13 +208,14 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     }
   ],
   "occasions": [
     {
       "id": "bristol-bus-boycott",
+      "review_due": "2027-09-15",
       "label": "Bristol Bus Boycott anniversary",
       "prompt_hint": "On 30 April 1963, the Bristol Bus Boycott began its challenge to the Bristol Omnibus Company's colour bar. If used, be respectful and factual rather than jokey.",
       "requirements": [
@@ -215,11 +234,12 @@
         "publisher": "First Bus",
         "title": "Bristol's day marking the 60th anniversary of the city's iconic bus boycott",
         "url": "https://news.firstbus.co.uk/news/bus-boycott-60th-anniversary",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "world-bicycle-day",
+      "review_due": "2027-09-15",
       "label": "World Bicycle Day",
       "prompt_hint": "The United Nations observes World Bicycle Day on 3 June. A brief friendly nod to another form of sustainable transport is enough.",
       "requirements": [
@@ -235,12 +255,13 @@
       "source": {
         "publisher": "United Nations",
         "title": "World Bicycle Day",
-        "url": "https://www.un.org/en/observances/bicycle-day/",
-        "verified_on": "2026-07-23"
+        "url": "https://www.un.org/en/node/71511",
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "windrush-day",
+      "review_due": "2027-09-15",
       "label": "Windrush Day",
       "prompt_hint": "National Windrush Day is 22 June. If used, recognise the Windrush generation's contribution to Britain, including public transport, without turning it into a punchline.",
       "requirements": [
@@ -258,11 +279,12 @@
         "publisher": "UK Government",
         "title": "Annual day of celebrations for the Windrush Generation",
         "url": "https://www.gov.uk/government/news/annual-day-of-celebrations-for-the-windrush-generation",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "london-buses-cashless",
+      "review_due": "2027-09-15",
       "label": "London buses went cashless",
       "prompt_hint": "London's bus network became cash-free on 6 July 2014. Keep any comparison practical and do not imply Bristol no longer accepts cash.",
       "requirements": [
@@ -281,11 +303,12 @@
         "publisher": "Transport for London",
         "title": "TfL introduces Oyster One More Journey on London's buses",
         "url": "https://tfl.gov.uk/info-for/media/press-releases/2014/june/tfl-introduces-oyster-one-more-journey-on-london-s-buses",
-        "verified_on": "2026-07-23"
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "catch-the-bus-month-2026",
+      "review_due": "2026-09-30",
       "label": "Catch the Bus Month",
       "prompt_hint": "Bus Users UK runs Catch the Bus Month throughout September 2026. Mention it at most once in a day and only when it naturally fits the observed service.",
       "requirements": [
@@ -302,12 +325,13 @@
       "source": {
         "publisher": "Bus Users UK",
         "title": "Catch the Bus Month 2026",
-        "url": "https://bususers.org/catch-the-bus-month-2/",
-        "verified_on": "2026-07-23"
+        "url": "https://bususers.org/catch-the-bus-month/",
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "world-car-free-day",
+      "review_due": "2027-09-15",
       "label": "World Car Free Day",
       "prompt_hint": "World Car Free Day is observed on 22 September. Keep the reference about giving alternatives a try, not scolding people who need cars.",
       "requirements": [
@@ -323,12 +347,13 @@
       "source": {
         "publisher": "European Mobility Week",
         "title": "Car-Free Day",
-        "url": "https://mobilityweek.eu/eu-initiatives/car-free-day/",
-        "verified_on": "2026-07-23"
+        "url": "https://mobilityweek.eu/fileadmin/user_upload/impact/2023/EMW_Impact%20Report_2023.pdf",
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "uk-bus-deregulation",
+      "review_due": "2027-09-15",
       "label": "UK bus deregulation anniversary",
       "prompt_hint": "The Transport Act 1985 bus deregulation provisions took effect on 26 October 1986 outside London. Keep the distinction between the 1985 Act and its 1986 commencement.",
       "requirements": [
@@ -344,14 +369,15 @@
       "probability": 0.5,
       "max_uses_per_day": 1,
       "source": {
-        "publisher": "UK Legislation",
-        "title": "Transport Act 1985",
-        "url": "https://www.legislation.gov.uk/ukpga/1985/67/contents",
-        "verified_on": "2026-07-23"
+        "publisher": "UK Parliament",
+        "title": "Transport Committee Ninth Report - Bus services",
+        "url": "https://publications.parliament.uk/pa/cm200607/cmselect/cmtran/692/69205.htm",
+        "verified_on": "2026-09-15"
       }
     },
     {
       "id": "world-sustainable-transport-day",
+      "review_due": "2027-09-15",
       "label": "World Sustainable Transport Day",
       "prompt_hint": "The United Nations observes World Sustainable Transport Day on 26 November. A restrained mention of buses as public infrastructure is enough.",
       "requirements": [
@@ -367,8 +393,8 @@
       "source": {
         "publisher": "United Nations",
         "title": "World Sustainable Transport Day",
-        "url": "https://www.un.org/en/observances/sustainable-transport-day",
-        "verified_on": "2026-07-23"
+        "url": "https://www.un.org/en/node/206646",
+        "verified_on": "2026-09-15"
       }
     }
   ],
