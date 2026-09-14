@@ -7,6 +7,7 @@ import { DateTime } from 'luxon';
 
 import {
   EditorialContextStore,
+  editorialApplies,
   validateEditorialDocument,
 } from '../dist/services/editorial-context.js';
 
@@ -48,6 +49,43 @@ function makeStore(document, random = () => 0) {
     store: new EditorialContextStore(contextPath, usagePath, random),
   };
 }
+
+test('scopes require exact collector evidence and combine restrictions', () => {
+  const item = { scope: { operators: ['FBRI'], routes: ['T1'], localities: ['Thornbury'], excluded_routes: ['A1'] } };
+  const event = { operatorRef: 'FBRI', line: 't1', placeContext: { locality: 'Thornbury' } };
+  assert.equal(editorialApplies(item, '2026-09-15', event), true);
+  for (const wrong of [undefined, { ...event, operatorRef: 'OTHER' }, { ...event, line: 'T2' },
+    { ...event, placeContext: {} }, { ...event, placeContext: { locality: 'Thornbury Road' } }]) {
+    assert.equal(editorialApplies(item, '2026-09-15', wrong), false);
+  }
+  assert.equal(editorialApplies({ scope: { excluded_routes: ['A1'] } }, '2026-09-15', { ...event, line: 'A1' }), false);
+  assert.equal(editorialApplies({ review_due: '2026-09-14' }, '2026-09-15', event), false);
+  assert.equal(editorialApplies({ review_due: '2026-09-15' }, '2026-09-15', event), true);
+});
+
+test('selection skips unrelated and overdue facts before choosing an eligible one', () => {
+  const fact = { id: 'local-fact', claim: 'Approved local fact.', prompt_hint: 'Keep the scope.',
+    requirements: REQUIREMENTS, active_from: '2026-01-01', active_until: '2026-12-31', source: SOURCE };
+  const fixture = makeStore(documentWith({ facts: [
+    { ...fact, id: 'wrong-route', scope: { routes: ['42'] } },
+    { ...fact, id: 'overdue', review_due: '2026-08-01' },
+    { ...fact, scope: { operators: ['FBRI'], routes: ['T1'] } },
+  ] }));
+  const now = DateTime.fromISO('2026-09-15T10:00:00', { zone: 'Europe/London' });
+  assert.equal(fixture.store.select(now, [], { operatorRef: 'FBRI', line: 'T1' })?.id, 'local-fact');
+  assert.equal(fixture.store.select(now, [], { operatorRef: 'FBRI', line: '19' }), null);
+});
+
+test('unknown or empty scopes and inverted review dates fail validation', () => {
+  const document = JSON.parse(readFileSync(join(process.cwd(), 'data', 'editorial-context.json'), 'utf8'));
+  for (const scope of [{}, { operator: ['FBRI'] }, { routes: [] }, { routes: ['T1', 't1'] }]) {
+    const copy = structuredClone(document);
+    copy.facts[0].scope = scope;
+    assert.throws(() => validateEditorialDocument(copy), /scope/);
+  }
+  document.facts[0].review_due = '2020-01-01';
+  assert.throws(() => validateEditorialDocument(document), /precedes verification/);
+});
 
 
 test('the checked-in editorial context is valid and contains no Bee Network claims', () => {

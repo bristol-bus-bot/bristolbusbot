@@ -367,7 +367,7 @@ export class AICommentary {
         const timer = new PerformanceTimer('ai_api_call', logger);
         const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
         const hook = selectedHook === undefined
-            ? this.editorialContext.select(currentTime, this.appState.recentPosts)
+            ? this.editorialContext.select(currentTime, this.appState.recentPosts, context.event)
             : selectedHook;
 
         try {
@@ -645,7 +645,7 @@ Return only JSON with verdict (PASS or FAIL) and reasons.`;
         const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${this.aiConfig.model}:generateContent?key=${this.aiConfig.apiKey}`;
         const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
         const hook = selectedHook === undefined
-            ? this.editorialContext.select(currentTime, this.appState.recentPosts)
+            ? this.editorialContext.select(currentTime, this.appState.recentPosts, context.event)
             : selectedHook;
         const isEditorialMode = hook !== null;
         const operatorName = operatorDisplayName(context.event.operatorRef);

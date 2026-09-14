@@ -22,6 +22,7 @@ ALLOWED_SOURCE_HOSTS = {
     "gov.uk",
     "legislation.gov.uk",
     "mobilityweek.eu",
+    "parliament.uk",
     "tfl.gov.uk",
     "un.org",
 }
@@ -154,6 +155,31 @@ def _requirements(value: Any, name: str) -> list[dict[str, Any]]:
     return result
 
 
+def _relevance(item: dict[str, Any], name: str) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    if "review_due" in item:
+        due = _date(item["review_due"], f"{name}.review_due")
+        source = _mapping(item.get("source"), f"{name}.source")
+        if due < _date(source.get("verified_on"), f"{name}.source.verified_on"):
+            raise EditorialValidationError(f"{name}.review_due precedes verification")
+        result["review_due"] = due
+    if "scope" in item:
+        scope = _mapping(item["scope"], f"{name}.scope")
+        allowed = {"operators", "routes", "localities", "local_authorities", "excluded_routes"}
+        if not scope or set(scope) - allowed:
+            raise EditorialValidationError(f"{name}.scope has missing or unsupported fields")
+        parsed = {}
+        for key, values in scope.items():
+            if not isinstance(values, list) or not 1 <= len(values) <= 30:
+                raise EditorialValidationError(f"{name}.scope.{key} must contain 1 to 30 strings")
+            strings = [_text(value, f"{name}.scope.{key}", 100).strip() for value in values]
+            if len({value.lower() for value in strings}) != len(strings):
+                raise EditorialValidationError(f"{name}.scope.{key} contains duplicates")
+            parsed[key] = strings
+        result["scope"] = parsed
+    return result
+
+
 def validate_document(value: Any) -> dict[str, Any]:
     root = _mapping(value, "editorial context")
     if root.get("schema_version") != 1:
@@ -181,6 +207,7 @@ def validate_document(value: Any) -> dict[str, Any]:
         if active_until < active_from:
             raise EditorialValidationError(f"{name} has an inverted active window")
         facts.append({
+            **_relevance(item, name),
             "id": _identifier(item.get("id"), f"{name}.id", identifiers),
             "claim": _text(item.get("claim"), f"{name}.claim", 600),
             "prompt_hint": _text(
@@ -223,6 +250,7 @@ def validate_document(value: Any) -> dict[str, Any]:
             raise EditorialValidationError(
                 f"{name}.schedule.kind is unsupported")
         occasions.append({
+            **_relevance(item, name),
             "id": _identifier(item.get("id"), f"{name}.id", identifiers),
             "label": _text(item.get("label"), f"{name}.label", 120),
             "prompt_hint": _text(
@@ -259,6 +287,7 @@ def validate_document(value: Any) -> dict[str, Any]:
             raise EditorialValidationError(
                 f"{name}.source.url is too long to append safely")
         news.append({
+            **_relevance(item, name),
             "id": _identifier(item.get("id"), f"{name}.id", identifiers),
             "label": _text(item.get("label"), f"{name}.label", 120),
             "claim": _text(item.get("claim"), f"{name}.claim", 800),

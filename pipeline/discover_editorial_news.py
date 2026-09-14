@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Propose one recent official GOV.UK bus story for human GitHub approval."""
+"""Propose one recent relevant official bus story for human GitHub approval."""
 from __future__ import annotations
 
 import argparse
@@ -11,9 +11,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
+from editorial_sources import FEEDS, fetch_feed, relevant_result
 
 
 SEARCH_URL = "https://www.gov.uk/api/search.json?" + urllib.parse.urlencode({
@@ -104,7 +106,8 @@ def source_id(url: str) -> str:
 
 def safe_id(title: str, url: str) -> str:
     slug = ID_PART_RE.sub("-", title.lower()).strip("-")[:50].rstrip("-")
-    return f"govuk-{slug}-{source_id(url)[:8]}"
+    prefix = "govuk" if urllib.parse.urlsplit(url).hostname == "www.gov.uk" else "local"
+    return f"{prefix}-{slug}-{source_id(url)[:8]}"
 
 
 def _bounded_phrase(value: str, maximum: int = 80) -> str:
@@ -184,22 +187,30 @@ def select_candidate(
         if not all(isinstance(value, str) and value.strip()
                    for value in (title, description, link)):
             continue
-        if news_format not in ALLOWED_NEWS_FORMATS \
-                or not link.startswith("/government/news/"):
+        if news_format not in ALLOWED_NEWS_FORMATS:
             continue
         combined = f"{title} {description}"
         if not BUS_RE.search(combined) or "bee network" in combined.lower():
             continue
-        if not link.startswith("/") or "\\" in link or link.startswith("//"):
-            continue
-        url = f"https://www.gov.uk{link}"
+        if raw.get("source_url"):
+            url = raw["source_url"]
+            if not isinstance(url, str) or any(character.isspace() for character in url):
+                continue
+            parsed = urllib.parse.urlsplit(url)
+            trusted = any(parsed.netloc == urllib.parse.urlsplit(feed).netloc for feed in FEEDS)
+            if parsed.scheme != "https" or not trusted or parsed.username or parsed.password:
+                continue
+        else:
+            if not link.startswith("/government/news/") or "\\" in link:
+                continue
+            url = f"https://www.gov.uk{link}"
         if url in known_urls or source_id(url) in excluded_source_ids:
             continue
         try:
             published = parse_timestamp(raw.get("public_timestamp"))
         except ValueError:
             continue
-        if published < oldest or published > now + timedelta(minutes=5):
+        if published <= oldest or published > now + timedelta(minutes=5):
             continue
         claim = f"{title.rstrip('.')}. {description.strip()}"
         if len(claim) > 800:
@@ -214,10 +225,11 @@ def select_candidate(
             "expires": expires,
             "item": {
                 "id": safe_id(title, url),
+                **({"scope": {"operators": ["FBRI"]}} if raw.get("publisher") == "First Bus" else {}),
                 "label": title.strip()[:120],
                 "claim": claim,
                 "prompt_hint": (
-                    "This wording came from the approved GOV.UK title and summary. "
+                    "This wording came from the approved official title and summary. "
                     "Use exact dates, make no prediction, and do not add facts from "
                     "outside this claim."
                 ),
@@ -232,7 +244,7 @@ def select_candidate(
                 # text in the public post.
                 "append_source_link": False,
                 "source": {
-                    "publisher": "UK Government",
+                    "publisher": raw.get("publisher", "UK Government"),
                     "title": title.strip()[:200],
                     "url": url,
                     "published_on": published.date().isoformat(),
@@ -241,6 +253,28 @@ def select_candidate(
             },
         }
     raise NoNewsCandidate("no new official bus story needs review")
+
+
+def discover_sources() -> dict:
+    results = []
+    failures = []
+    try:
+        results.extend(fetch_search()["results"])
+    except (NewsDiscoveryError, KeyError) as exc:
+        failures.append(f"GOV.UK: {exc}")
+    for url in FEEDS:
+        try:
+            results.extend(fetch_feed(url))
+        except (OSError, ValueError, ET.ParseError) as exc:
+            failures.append(f"{url}: {exc}")
+    for failure in failures:
+        print(f"::warning::{failure}")
+    if len(failures) == len(FEEDS) + 1:
+        raise NewsDiscoveryError("all official news sources failed")
+    relevant = [item for item in results if isinstance(item, dict) and relevant_result(item)]
+    # Local stories first, then national policy. Date validation happens in selection.
+    relevant.sort(key=lambda item: (bool(item.get("source_url")), str(item.get("public_timestamp", ""))), reverse=True)
+    return {"results": relevant}
 
 
 def render_context_with_news(
@@ -353,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
     now = parse_timestamp(args.now) if args.now else utcnow()
     try:
         candidate = select_candidate(
-            fetch_search(),
+            discover_sources(),
             context,
             now=now,
             excluded_source_ids={
