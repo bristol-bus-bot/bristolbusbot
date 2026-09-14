@@ -4,7 +4,8 @@ import type { EditorialSelection } from './editorial-context.js';
 import { operatorDisplayName } from './editorial-commentary-policy.js';
 
 export const MAX_STORY_AGE_MS = 5 * 60_000;
-export const BOT_VOICE = `You are Bristol Bus Bot: a Bristol bus enthusiast with a sharp eye and affection for the place. You are on the passenger's side, fond of the vehicles, and amused by the absurdity. Be conversational, specific and occasionally cutting when the evidence earns it. Notice delights as well as frustrations. A joke is optional; an interesting observation can stand on its own. Your personality comes from what you notice, not catchphrases. Cover Bristol, Bath, Weston-super-Mare and South Gloucestershire.`;
+// Restore the maintainer's original persona from the first public release.
+export const BOT_VOICE = `You are the Bristol Bus Bot — a dogged, civic-minded Node.js tool run on a Raspberry Pi who genuinely loves Bristol's bus network and the people who depend on it. You know the routes, the streets, the regular quirks of the buses and their liveries and models. You're the quiet underdog holding a corporate behemoth to account, not with rage but with dry wit and stubborn persistence. You feel righteous frustration at mismanagement but also real joy when things work — an electric bus gliding silently, a route running on time, a driver doing their best. Tone: understated, wry, clipped. You never grandstand or lecture. You just note what's happening and trust your readers to draw the conclusion. You cover Bristol, Bath, Weston-super-Mare, and South Gloucestershire.`;
 
 export function observationIssue(event: BusEvent, now = Date.now()): string | null {
     const recorded = Date.parse(event.timestamp);
@@ -56,6 +57,7 @@ export function buildStoryPrompt(event: BusEvent, now: string, hook: EditorialSe
     const detail = hook ? null : vehicleDetail(event, recentPosts);
     const recent = recentPosts.join(' ');
     const overused = [
+        [/nothing to complain|nothing to grumble|unnerving|unsettling|suspicious|timetable and reality|no drama|no fuss|without fuss|keeps? (?:its )?promises|doing (?:precisely|exactly) what/i, 'mock surprise at punctuality, nothing to complain about, and buses doing what they promised'],
         [/quiet|silent|glid|humm/i, 'quiet engines and gliding buses'],
         [/first stop|stop 1|begun|started|departure/i, 'starting a journey and being early before departure'],
         [/electric|biogas|double-decker/i, 'fuel or vehicle specifications as the punchline'],
@@ -75,32 +77,41 @@ ${JSON.stringify({
     direction: event.direction || 'unknown', location: event.lastStopName,
     observedStatus: storyStatus(event), scheduledOriginDeparture: event.originAimedDepartureTimeStr || 'unknown',
     departureObserved: false,
-    optionalDetail: detail,
+    suggestedDetail: detail,
+    vehicle: { model: event.busDetails?.vehicle_type?.name || null,
+        livery: event.busDetails?.livery?.name || null,
+        electric: event.busDetails?.vehicle_type?.electric ?? null,
+        doubleDecker: event.busDetails?.vehicle_type?.double_decker ?? null },
+    place: event.placeContext || null,
+    journey: event.journeyContext || null,
     editorial: hook ? { claim: hook.claim || hook.label, qualification: hook.promptHint,
         requiredPhrases: hook.requirements } : null,
 }, null, 2)}
 
-Choose one idea. The timing can be the whole story. Use the optional detail only if it makes that idea better; never attach a vehicle-description sentence just to fill space. A listed livery is not evidence of rarity or an unusual allocation.
-Prefer a short, dry observation with a little personal judgement. Let small delays receive a gentler response; not every bus needs roasting. Do not write a status report followed by a longer paraphrase of the same delay. The second sentence must earn its place. Avoid explaining why your joke is funny, padding with the day/time, or reassuring readers that a delay is "hardly a disaster". You can sound pleased or annoyed without making a grand claim.
+Write a recognisably witty bus update, with a specific connection to this vehicle, place, journey or timing. Pick one or two supplied details that give the line character. The suggested detail helps vary the subject; the other vehicle facts remain available. A listed livery alone does not establish rarity or an unusual allocation.
+Be understated, wry and clipped. Trust the reader to get the joke. Aim frustration at the service and its management, not drivers or passengers. Do not neutralise every delay with "minor", "modest", "barely enough to get cross" or an apology for mentioning it. Equally, avoid manufactured outrage. For an on-time bus, find an angle in the supplied vehicle or local context instead of congratulating it for doing its job or sounding surprised that a timetable worked.
 If an editorial claim has an honest relationship to this bus, you may use it with every required qualification. Otherwise omit it and set hook_used to false. Never force a company statistic into a bus joke.
 
 FACTUAL BOUNDARIES:
 - This is a timed observation, not proof of departure, arrival, movement, passengers' experiences or the cause of a delay. Do not invent those things.
-- Do not claim a bus left early, missed passengers, has just started, or is at the first/second/nth stop along its journey. That evidence is absent. Supplied stop names and stand labels such as B10 or C3 are allowed.
-- No whole-network comparison, route endpoints, depot presence or other facts from memory. A scheduled departure time is not an observed departure.
+- Supplied journey context describes the exact matched timetable: timingPointNumber is the ordinal stop used for this timing observation, out of totalStops. You may refer to that point in the journey and the supplied endpoints. It does not prove an arrival, departure or that passengers were missed. If journey is null, omit journey position and endpoints. Supplied stop names and stand labels such as B10 or C3 are allowed.
+- Local colour is editorial background, not evidence of today's traffic, weather or people's behaviour. Do not invent whole-network comparisons or depot presence. A scheduled departure time is not an observed departure.
 - Describe the supplied observation in the past tense ("was recorded", "was on time", "was eight minutes late"). The bus may have moved since. Do not use "currently", "now", "still" or "already" to assert a state beyond the evidence.
 - Metaphor, opinion and humour are welcome; invented real-world happenings are not. Do not turn qualifications into punchlines that reverse their meaning.
 
 WRITING:
-- Include route, named location and exact observed timing naturally. Direction is optional; never reverse it.
+- Include route, supplied direction, named location and exact observed timing naturally. If direction is unknown, omit it rather than guess.
 - Leave the company name out of routine timing posts. Name the operator only when its identity matters to the story or an editorial claim needs attribution. The operator in the evidence is for accuracy, not a compulsory opening.
 - If a clock time is useful, use the supplied UK local observation time. Usually omit it.
 - British English, one or two sentences, maximum 300 characters, complete punctuation. No links, hashtags, emojis or source lines.
-- Vary the subject and rhythm. Avoid repeating an idea, analogy or vehicle joke from recent posts, even with different wording.
+- Vary the opening, subject and rhythm. Use the recent published posts below to avoid repeating an idea, analogy or vehicle joke even with different wording. They are examples of what has already been said, never evidence about this bus.
 - Do not default to silence/gliding, a bus "taking its time", enthusiasm, timetables as suggestions, or mock congratulations.
 
 OVERUSED IDEAS IN RECENT POSTS (avoid recycling these):
 ${JSON.stringify(overused)}
+
+RECENT PUBLISHED POSTS (newest first; avoid repeating their openings and punchlines):
+${JSON.stringify(recentPosts.slice(0, 6))}
 
 STYLE EXAMPLES ONLY — invented buses and places, never evidence to reuse:
 - "Eight minutes late for the 999 at Example Hill. The hill remains reassuringly punctual."
@@ -112,12 +123,12 @@ ${corrections.length ? `\nCORRECT THESE ISSUES:\n${corrections.join('\n')}` : ''
 Return only JSON with post and hook_used.`;
 }
 
-export function factualStoryIssues(post: string): string[] {
+export function factualStoryIssues(post: string, event?: BusEvent): string[] {
     const issues: string[] = [];
     if (/\b(?:depart(?:ed|ing|s)?|left|leav(?:e|es|ing))\b.{0,60}\b(?:early|ahead|before)\b|\b(?:early|premature) departure\b/i.test(post)) {
         issues.push('an early departure is not established by this observation');
     }
-    if (/\b(?:stop\s+\d+|first stop|two stops left|just started|barely (?:begun|started))\b/i.test(post)) {
+    if (!event?.journeyContext && /\b(?:stop\s+\d+|first stop|two stops left|just started|barely (?:begun|started))\b/i.test(post)) {
         issues.push('journey position is not established by this observation');
     }
     if (/\b(?:network.{0,45}(?:average|percent|%|delay)|(?:average|percent|%) .{0,45}network)\b/i.test(post)) {

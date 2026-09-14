@@ -41,10 +41,11 @@ test('brief excludes misleading network/route-position/garage facts and limits v
   const enriched = { ...event, busDetails: { vehicle_type: { name: 'Yutong U11DD' },
     livery: { name: 'Olympia' }, garage: { name: 'Lawrence Hill' } } };
   const prompt = buildStoryPrompt(enriched, new Date(now).toISOString(), null, ['Olympia Yutong U11DD']);
-  assert.match(prompt, /"optionalDetail": null/);
+  assert.match(prompt, /"suggestedDetail": null/);
+  assert.match(prompt, /"model": "Yutong U11DD"/);
   assert.doesNotMatch(prompt, /Lawrence Hill|Network:|Position:|Vehicle notes:/);
   assert.match(prompt, /"departureObserved": false/);
-  assert.match(prompt, /Direction is optional/);
+  assert.match(prompt, /Include route, supplied direction/);
   assert.match(factualStoryIssues('The 42 left ten minutes early.').join(' '), /departure/);
   assert.match(factualStoryIssues('The 42 is at stop 1.').join(' '), /position/);
   assert.match(factualStoryIssues('The network average delay is ten minutes.').join(' '), /network/);
@@ -80,6 +81,14 @@ test('collector recheck rejects stale positions, changed runs, depots, confidenc
   db.prepare('UPDATE vehicles SET event_type=?, delay_seconds=?').run('punctual', 0);
   assert.equal(reader.isObservationCurrent(event, now), false);
   assert.equal(reader.isObservationPublishable(event, now), true, 'later punctuality does not erase the earlier delay');
+  db.exec("ALTER TABLE vehicles ADD COLUMN trip_id TEXT; ALTER TABLE vehicles ADD COLUMN stop_sequence INTEGER; UPDATE vehicles SET trip_id='matched', stop_sequence=30");
+  const withMatch = { ...event, eventType: 'punctual', delayMinutes: 0, collectorTripId: 'matched', collectorStopSequence: 30 };
+  assert.equal(reader.isObservationCurrent(withMatch, now), true);
+  db.exec('UPDATE vehicles SET stop_sequence=40');
+  assert.equal(reader.isObservationCurrent(withMatch, now), false);
+  assert.equal(reader.isObservationPublishable(withMatch, now), true);
+  db.exec("UPDATE vehicles SET trip_id='rematched'");
+  assert.equal(reader.isObservationPublishable(withMatch, now), false, 'changed timetable match invalidates old journey context');
   db.exec(`CREATE TABLE events (id INTEGER PRIMARY KEY, stop_code TEXT, stop_name TEXT);
     INSERT INTO events VALUES (1, 'bst-test', 'Two Mile Hill');
     UPDATE vehicles SET event_type='punctual', delay_seconds=0;`);
@@ -217,7 +226,7 @@ test('ordinary posts receive factual verification and rejected prose is skipped'
   ai.thinkingLevels = { draft: { normal: 'LOW', editorial: 'MEDIUM' }, verifier: 'LOW' };
   let calls = 0;
   ai.requestGeminiStructured = async () => (++calls === 1
-    ? JSON.stringify({ post: 'First Bristol’s 42 was eight minutes late at Two Mile Hill. Apparently it stopped for tea.', hook_used: false })
+    ? JSON.stringify({ post: 'First Bristol’s outbound 42 was eight minutes late at Two Mile Hill. Apparently it stopped for tea.', hook_used: false })
     : JSON.stringify({ verdict: 'FAIL', reasons: ['Invented cause'] }));
   assert.equal(await ai.callSingleWriterGemini({ event }, 0, null), null);
   assert.equal(calls, 2);
@@ -233,7 +242,7 @@ test('verification uses the exact final writer brief, including selected vehicle
     ai.thinkingLevels = { draft: { normal: 'LOW', editorial: 'MEDIUM' }, verifier: 'LOW' };
     const bus = { ...event, lastStopName: 'The Haymarket - B10', busDetails: {
       livery: { name: 'WESTbus' }, vehicle_type: { name: 'Yutong U11DD' } } };
-    const post = 'The 42 was eight minutes late at The Haymarket - B10. A Yutong U11DD with time to spare.';
+    const post = 'The outbound 42 was eight minutes late at The Haymarket - B10. A Yutong U11DD with time to spare.';
     const prompts = [];
     ai.requestGeminiStructured = async prompt => {
       prompts.push(prompt);
