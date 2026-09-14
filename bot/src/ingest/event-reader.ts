@@ -109,6 +109,15 @@ export class EventReader {
 
     /** Read the current collector snapshot; never reinterpret its timing. */
     isObservationCurrent(event: BusEvent, now = Date.now()): boolean {
+        return this.validateObservation(event, now, true);
+    }
+
+    /** A recent observation remains reportable when its bus moves along the same run. */
+    isObservationPublishable(event: BusEvent, now = Date.now()): boolean {
+        return !observationIssue(event, now) && this.validateObservation(event, now, false);
+    }
+
+    private validateObservation(event: BusEvent, now: number, exactPosition: boolean): boolean {
         try {
             const row = this.db.prepare('SELECT * FROM vehicles WHERE vehicle_ref = ?')
                 .get(event.vehicleRef) as any;
@@ -120,9 +129,9 @@ export class EventReader {
                 && (row.journey_ref || '') === event.datedJourneyRef
                 && (row.origin_aimed_departure || '') === event.originAimedDepartureTimeStr
                 && (row.direction || '') === event.direction
-                && row.stop_code === event.lastStopCode
-                && this.mapEventType(row.event_type) === event.eventType
-                && Math.round(row.delay_seconds / 60) === event.delayMinutes;
+                && (!exactPosition || (row.stop_code === event.lastStopCode
+                    && this.mapEventType(row.event_type) === event.eventType
+                    && Math.round(row.delay_seconds / 60) === event.delayMinutes));
         } catch (error: any) {
             logger.warn('Could not confirm current story observation', { error: error.message });
             return false;

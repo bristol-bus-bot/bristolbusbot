@@ -64,14 +64,22 @@ test('collector recheck rejects stale positions, changed runs, depots, confidenc
   const reader = new EventReader(dbPath, {}, {});
   t.after(() => { reader.stop(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   assert.equal(reader.isObservationCurrent(event, now), true);
+  assert.equal(reader.isObservationPublishable(event, now), true);
   for (const [column, value] of [['journey_ref', 'next-run'], ['operator_ref', 'SCGL'],
     ['stop_code', 'next-stop'], ['delay_seconds', 600], ['low_confidence', 1], ['at_depot', 'LH'],
     ['recorded_at', '2026-09-13T11:55:00Z']]) {
     const original = db.prepare(`SELECT ${column} AS value FROM vehicles`).get().value;
     db.prepare(`UPDATE vehicles SET ${column} = ?`).run(value);
     assert.equal(reader.isObservationCurrent(event, now), false, column);
+    assert.equal(reader.isObservationPublishable(event, now),
+      ['stop_code', 'delay_seconds'].includes(column), `publication: ${column}`);
     db.prepare(`UPDATE vehicles SET ${column} = ?`).run(original);
   }
+  assert.equal(reader.isObservationPublishable({ ...event,
+    timestamp: '2026-09-13T11:54:00Z' }, now), false, 'old report with a fresh bus is still stale');
+  db.prepare('UPDATE vehicles SET event_type=?, delay_seconds=?').run('punctual', 0);
+  assert.equal(reader.isObservationCurrent(event, now), false);
+  assert.equal(reader.isObservationPublishable(event, now), true, 'later punctuality does not erase the earlier delay');
   db.exec(`CREATE TABLE events (id INTEGER PRIMARY KEY, stop_code TEXT, stop_name TEXT);
     INSERT INTO events VALUES (1, 'bst-test', 'Two Mile Hill');
     UPDATE vehicles SET event_type='punctual', delay_seconds=0;`);
@@ -110,6 +118,51 @@ test('a changed observation during writing uses reserve prose without a fake bus
   assert.equal(h.publications(), 1);
   assert.equal(h.delivered[0].event, null);
   assert.doesNotMatch(h.delivered[0].text, /Two Mile Hill|A draft/);
+});
+
+test('bus movement during writing keeps the verified recent observation and final publication accepts it', async () => {
+  const original = freshEvent();
+  const h = socialHarness([original]);
+  let samePosition = true;
+  h.manager.setObservationValidator(() => samePosition);
+  h.manager.setPublicationValidator(() => true);
+  const draft = 'The 42 was eight minutes late at Two Mile Hill. Plenty of time to reconsider the timetable.';
+  h.manager.setAICommentary({ generatePost: async () => { samePosition = false; return draft; } });
+  await h.manager.processEventCollector();
+  assert.deepEqual(h.delivered, [{ text: draft, event: original }]);
+  // Exercise the real final publication gate without any external posting.
+  h.manager.socialConfig.testMode = true;
+  h.state.incrementPostCount = () => h.state.postsTodayCount++;
+  assert.deepEqual(await SocialMediaManager.prototype.postUpdate.call(h.manager, draft, original), { bluesky: true });
+  h.manager.setPublicationValidator(() => false);
+  assert.deepEqual(await SocialMediaManager.prototype.postUpdate.call(h.manager, draft, original), { bluesky: false, stale: true });
+});
+
+test('expired observations cannot use the movement allowance', async () => {
+  const original = freshEvent();
+  const h = socialHarness([original]);
+  h.manager.setObservationValidator(() => true);
+  h.manager.setPublicationValidator(() => true);
+  h.manager.setAICommentary({ generatePost: async () => {
+    original.timestamp = new Date(Date.now() - 6 * 60_000).toISOString();
+    return 'An expired draft.';
+  } });
+  await h.manager.processEventCollector();
+  assert.equal(h.delivered.length, 1);
+  assert.equal(h.delivered[0].event, null);
+  assert.notEqual(h.delivered[0].text, 'An expired draft.');
+});
+
+test('last-instant failed publication check sends one reserve and never the rejected observation', async () => {
+  const h = socialHarness();
+  const attempts = [];
+  h.manager.postUpdate = async (text, event) => {
+    attempts.push({ text, event });
+    return attempts.length === 1 ? { bluesky: false, stale: true } : { bluesky: true };
+  };
+  await h.manager.processEventCollector();
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[1].event, null);
 });
 
 test('empty collector publishes and fresh snapshots can supply an on-time story', async () => {
@@ -169,6 +222,34 @@ test('ordinary posts receive factual verification and rejected prose is skipped'
   assert.equal(await ai.callSingleWriterGemini({ event }, 0, null), null);
   assert.equal(calls, 2);
   assert.equal(ai.pendingPublications.size, 0);
+});
+
+test('verification uses the exact final writer brief, including selected vehicle detail and stop labels', async () => {
+  for (const repair of [false, true]) {
+    const ai = Object.create(AICommentary.prototype);
+    ai.appState = { recentPosts: ['A bus in WESTbus livery.'] };
+    ai.pendingPublications = new Map();
+    ai.aiConfig = { model: 'test' };
+    ai.thinkingLevels = { draft: { normal: 'LOW', editorial: 'MEDIUM' }, verifier: 'LOW' };
+    const bus = { ...event, lastStopName: 'The Haymarket - B10', busDetails: {
+      livery: { name: 'WESTbus' }, vehicle_type: { name: 'Yutong U11DD' } } };
+    const post = 'The 42 was eight minutes late at The Haymarket - B10. A Yutong U11DD with time to spare.';
+    const prompts = [];
+    ai.requestGeminiStructured = async prompt => {
+      prompts.push(prompt);
+      if (prompt.startsWith('Check facts')) return JSON.stringify({ verdict: 'PASS', reasons: [] });
+      return JSON.stringify({ post: repair && prompts.length === 1 ? 'Missing the evidence.' : post, hook_used: false });
+    };
+    assert.ok(await ai.callSingleWriterGemini({ event: bus }, 0, null));
+    const writerBrief = prompts.at(-2);
+    const verifier = prompts.at(-1);
+    const verifierData = JSON.parse(verifier.split('\n').find(line => line.startsWith('{"brief":')));
+    assert.equal(verifierData.brief, writerBrief);
+    assert.match(writerBrief, /Listed vehicle model: Yutong U11DD/);
+    assert.match(verifier, /stand label such as B10 or C3, is allowed/);
+    assert.match(writerBrief, /Supplied stop names and stand labels such as B10 or C3 are allowed/);
+    assert.equal(prompts.length, repair ? 3 : 2, 'no extra model calls for the fix');
+  }
 });
 
 test('draft completion does not spend editorial usage; confirmation does', () => {
