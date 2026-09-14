@@ -53,7 +53,7 @@ export function vehicleDetail(event: BusEvent, recentPosts: string[]): string | 
 }
 
 export function buildStoryPrompt(event: BusEvent, now: string, hook: EditorialSelection | null,
-    recentPosts: string[], corrections: string[] = []): string {
+    recentPosts: string[], corrections: string[] = [], weatherContext?: string | null): string {
     const detail = hook ? null : vehicleDetail(event, recentPosts);
     const recent = recentPosts.join(' ');
     const overused = [
@@ -80,15 +80,18 @@ ${JSON.stringify({
     suggestedDetail: detail,
     vehicle: { model: event.busDetails?.vehicle_type?.name || null,
         livery: event.busDetails?.livery?.name || null,
+        assignedDepot: event.busDetails?.garage?.name || null,
         electric: event.busDetails?.vehicle_type?.electric ?? null,
         doubleDecker: event.busDetails?.vehicle_type?.double_decker ?? null },
     place: event.placeContext || null,
     journey: event.journeyContext || null,
+    weather: weatherContext || null,
     editorial: hook ? { claim: hook.claim || hook.label, qualification: hook.promptHint,
         requiredPhrases: hook.requirements } : null,
 }, null, 2)}
 
 Write a recognisably witty bus update, with a specific connection to this vehicle, place, journey or timing. Pick one or two supplied details that give the line character. The suggested detail helps vary the subject; the other vehicle facts remain available. A listed livery alone does not establish rarity or an unusual allocation.
+Weather and the bus's assigned depot are welcome subjects when they give the observation character. Vary them with livery, location and journey details; neither needs a mention in every post.
 Be understated, wry and clipped. Trust the reader to get the joke. Aim frustration at the service and its management, not drivers or passengers. Do not neutralise every delay with "minor", "modest", "barely enough to get cross" or an apology for mentioning it. Equally, avoid manufactured outrage. For an on-time bus, find an angle in the supplied vehicle or local context instead of congratulating it for doing its job or sounding surprised that a timetable worked.
 If an editorial claim has an honest relationship to this bus, you may use it with every required qualification. Otherwise omit it and set hook_used to false. Never force a company statistic into a bus joke.
 
@@ -96,6 +99,7 @@ FACTUAL BOUNDARIES:
 - This is a timed observation, not proof of departure, arrival, movement, passengers' experiences or the cause of a delay. Do not invent those things.
 - Supplied journey context describes the exact matched timetable: timingPointNumber is the ordinal stop used for this timing observation, out of totalStops. You may refer to that point in the journey and the supplied endpoints. It does not prove an arrival, departure or that passengers were missed. If journey is null, omit journey position and endpoints. Supplied stop names and stand labels such as B10 or C3 are allowed.
 - Local colour is editorial background, not evidence of today's traffic, weather or people's behaviour. Do not invent whole-network comparisons or depot presence. A scheduled departure time is not an observed departure.
+- assignedDepot is the fleet-listed home garage, not the bus's current location, journey origin or proof it has just left the depot. Weather is the supplied area's dated observation, not a measurement at the exact bus stop or proof of what caused the delay. If either is null, omit that detail.
 - Describe the supplied observation in the past tense ("was recorded", "was on time", "was eight minutes late"). The bus may have moved since. Do not use "currently", "now", "still" or "already" to assert a state beyond the evidence.
 - Metaphor, opinion and humour are welcome; invented real-world happenings are not. Do not turn qualifications into punchlines that reverse their meaning.
 

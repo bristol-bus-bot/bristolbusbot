@@ -325,11 +325,11 @@ export class AICommentary {
             currentTime.hour < 21 ? 'evening' : 'late evening';
 
         const networkStatus = this.appState.getNetworkStatus();
-        const weatherData = this.aiConfig.pipeline === 'legacy'
-            ? await this.weatherService.getCurrentWeather() : undefined;
-
         const stop = getStopEnrichment()[busEvent.lastStopCode];
         const locality = stopLocalities[busEvent.lastStopCode];
+        const weatherLocation = busEvent.location || (locality
+            ? { latitude: locality.lat, longitude: locality.lon } : undefined);
+        const weatherData = await this.weatherService.getCurrentWeather(weatherLocation);
         const neighbourhood = locality ? findNeighbourhood(locality.lat, locality.lon) : null;
         return {
             event: { ...busEvent, placeContext: {
@@ -535,7 +535,7 @@ export class AICommentary {
         recentPosts: string[],
         corrections: string[],
     ): string {
-        return buildStoryPrompt(context.event, currentTime.toISO() || '', hook, recentPosts, corrections);
+        return buildStoryPrompt(context.event, currentTime.toISO() || '', hook, recentPosts, corrections, context.weatherContext);
     }
 
     private buildVerifierPrompt(

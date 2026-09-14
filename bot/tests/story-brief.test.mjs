@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { DateTime } from 'luxon';
 import { buildStoryPrompt, observationIssue, latestStoryEvents, factualStoryIssues } from '../dist/services/story-brief.js';
 import { EventReader } from '../dist/ingest/event-reader.js';
 import { SocialMediaManager } from '../dist/services/social-media.js';
@@ -37,18 +38,39 @@ test('newer uncertainty suppresses an older good report and operators do not col
   assert.equal(latestStoryEvents([event, { ...event, operatorRef: 'SCGL' }], now).length, 2);
 });
 
-test('brief excludes misleading network/route-position/garage facts and limits vehicle repetition', () => {
+test('brief distinguishes assigned depot from location and limits vehicle repetition', () => {
   const enriched = { ...event, busDetails: { vehicle_type: { name: 'Yutong U11DD' },
     livery: { name: 'Olympia' }, garage: { name: 'Lawrence Hill' } } };
   const prompt = buildStoryPrompt(enriched, new Date(now).toISOString(), null, ['Olympia Yutong U11DD']);
   assert.match(prompt, /"suggestedDetail": null/);
   assert.match(prompt, /"model": "Yutong U11DD"/);
-  assert.doesNotMatch(prompt, /Lawrence Hill|Network:|Position:|Vehicle notes:/);
+  assert.match(prompt, /"assignedDepot": "Lawrence Hill"/);
+  assert.match(prompt, /fleet-listed home garage, not the bus's current location/);
+  assert.doesNotMatch(prompt, /Network:|Position:|Vehicle notes:/);
   assert.match(prompt, /"departureObserved": false/);
   assert.match(prompt, /Include route, supplied direction/);
   assert.match(factualStoryIssues('The 42 left ten minutes early.').join(' '), /departure/);
   assert.match(factualStoryIssues('The 42 is at stop 1.').join(' '), /position/);
   assert.match(factualStoryIssues('The network average delay is ten minutes.').join(' '), /network/);
+});
+
+test('current writing path fetches weather for the bus and preserves it in the writer and verifier brief', async () => {
+  const ai = Object.create(AICommentary.prototype);
+  ai.aiConfig = { pipeline: 'single' };
+  ai.appState = { getNetworkStatus: () => ({}) };
+  const weather = 'OpenWeather area observation near Bath: 12°C, light rain';
+  let requested;
+  ai.weatherService = { getCurrentWeather: async location => { requested = location; return weather; } };
+  const bus = { ...event, location: { latitude: 51.38, longitude: -2.36 } };
+  const context = await ai.buildAIContext(bus);
+  assert.deepEqual(requested, bus.location);
+  const prompt = ai.buildSingleWriterPrompt(context, DateTime.utc(), null, [], []);
+  assert.ok(prompt.includes(weather));
+  assert.ok(ai.buildVerifierPrompt(prompt, 'A post.').includes('OpenWeather area observation near Bath'));
+  ai.weatherService.getCurrentWeather = async () => null;
+  const missing = await ai.buildAIContext(bus);
+  assert.equal(missing.weatherContext, undefined);
+  assert.match(ai.buildSingleWriterPrompt(missing, DateTime.utc(), null, [], []), /"weather": null/);
 });
 
 test('collector recheck rejects stale positions, changed runs, depots, confidence and changed timing', t => {
