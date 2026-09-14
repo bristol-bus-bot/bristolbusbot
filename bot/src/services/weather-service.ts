@@ -2,8 +2,11 @@
 
 import { httpFetch } from '../utils/http-client.js';
 import { logger } from '../utils/logging.js';
+import { DateTime } from 'luxon';
 
 interface WeatherResponse {
+    dt: number;
+    name?: string;
     weather: {
         description: string;
         main: string;
@@ -50,13 +53,12 @@ interface AirQualityResponse {
 
 export class WeatherService {
     private weatherConfig: any;
-    private lastFetch: number = 0;
-    private cachedWeather: string | null = null;
+    private weatherCache = new Map<string, { fetched: number; observed: number; text: string }>();
     private lastAirQualityFetch: number = 0;
     private cachedAirQuality: string | null = null;
     private cacheDuration: number = 10 * 60 * 1000; // 10 minutes
 
-    constructor(weatherConfig: any) {
+    constructor(weatherConfig: any, private readonly fetcher: typeof httpFetch = httpFetch) {
         this.weatherConfig = weatherConfig;
         logger.info('Weather Service initialized', {
             hasApiKey: !!weatherConfig.apiKey,
@@ -72,33 +74,51 @@ export class WeatherService {
         }
     }
 
-    public async getCurrentWeather(): Promise<string | null> {
+    public async getCurrentWeather(location?: { latitude: number; longitude: number }, includeAirQuality = false): Promise<string | null> {
         const now = Date.now();
-        if (this.cachedWeather && (now - this.lastFetch < this.cacheDuration)) {
-            logger.info('Returning cached weather data.');
-            return this.cachedWeather;
-        }
-
         if (!this.weatherConfig.apiKey) return null;
-
         const { baseUrl, bristolLat, bristolLon, apiKey } = this.weatherConfig;
-        const url = `${baseUrl}?lat=${bristolLat}&lon=${bristolLon}&appid=${apiKey}&units=metric`;
+        const lat = location?.latitude ?? bristolLat;
+        const lon = location?.longitude ?? bristolLon;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+        const latitude = Number(lat.toFixed(2));
+        const longitude = Number(lon.toFixed(2));
+        const cacheKey = `${latitude},${longitude},${includeAirQuality}`;
+        const cached = this.weatherCache.get(cacheKey);
+        if (cached && now - cached.fetched < this.cacheDuration && now - cached.observed <= 60 * 60_000) {
+            return cached.text;
+        }
+        const url = `${baseUrl}?lat=${latitude}&lon=${longitude}&appid=${encodeURIComponent(apiKey)}&units=metric`;
 
         try {
             logger.info('Fetching new weather data...');
-            const response = await httpFetch(url, { timeoutMs: 15000 });
-            if (!response.ok) {
-                logger.error('OpenWeatherMap API request failed', { status: response.status });
+            // Optional colour must not hold up the mandatory posting cycle.
+            let deadline: ReturnType<typeof setTimeout> | undefined;
+            const request = async (): Promise<WeatherResponse | null> => {
+                const response = await this.fetcher(url, { timeoutMs: 5000, retries: 0 });
+                if (!response.ok) {
+                    logger.warn('OpenWeatherMap API request failed', { status: response.status });
+                    return null;
+                }
+                return await response.json() as WeatherResponse;
+            };
+            const data = await Promise.race([
+                request(),
+                new Promise<null>(resolve => { deadline = setTimeout(() => resolve(null), 6000); }),
+            ]).finally(() => clearTimeout(deadline));
+            if (!data) return null;
+            if (!Number.isFinite(data.dt) || data.dt * 1000 > now + 5 * 60_000
+                || now - data.dt * 1000 > 60 * 60_000 || !Number.isFinite(data.main?.temp)) {
+                logger.warn('Weather observation is stale or incomplete; omitting weather');
                 return null;
             }
-            const data = await response.json() as WeatherResponse;
 
             // Build the weather summary.
             const parts: string[] = [];
 
             // Temperature and feels-like
             const temp = data.main?.temp.toFixed(0);
-            const feelsLike = data.main?.feels_like.toFixed(0);
+            const feelsLike = Number.isFinite(data.main.feels_like) ? data.main.feels_like.toFixed(0) : temp;
             if (temp !== feelsLike) {
                 parts.push(`${temp}°C (feels like ${feelsLike}°C)`);
             } else {
@@ -138,16 +158,19 @@ export class WeatherService {
                 parts.push(`visibility ${visKm}km`);
             }
 
-            // Fetch air quality data (non-blocking)
-            const airQuality = await this.getAirQuality();
+            // Preserve the legacy Bristol air-quality option without applying it to Bath or Wells.
+            const airQuality = includeAirQuality && !location ? await this.getAirQuality() : null;
             if (airQuality) {
                 parts.push(airQuality);
             }
 
-            const formattedWeather = parts.join(', ');
-
-            this.cachedWeather = formattedWeather;
-            this.lastFetch = now;
+            const observedAt = DateTime.fromSeconds(data.dt).setZone('Europe/London').setLocale('en-GB').toFormat('yyyy-MM-dd HH:mm ZZZZ');
+            const area = typeof data.name === 'string' && data.name.trim()
+                ? data.name.trim() : `${latitude}, ${longitude}`;
+            const formattedWeather = `OpenWeather area observation near ${area} at ${observedAt}: ${parts.join(', ')}`;
+            this.weatherCache.delete(cacheKey);
+            this.weatherCache.set(cacheKey, { fetched: now, observed: data.dt * 1000, text: formattedWeather });
+            if (this.weatherCache.size > 16) this.weatherCache.delete(this.weatherCache.keys().next().value!);
             logger.info(`Fetched and cached weather: ${formattedWeather}`);
             return formattedWeather;
 
@@ -179,7 +202,7 @@ export class WeatherService {
         const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${bristolLat}&lon=${bristolLon}&appid=${apiKey}`;
 
         try {
-            const response = await httpFetch(url, { timeoutMs: 10000 });
+            const response = await this.fetcher(url, { timeoutMs: 5000, retries: 0 });
             if (!response.ok) {
                 logger.error('Air quality API request failed', { status: response.status });
                 return null;
