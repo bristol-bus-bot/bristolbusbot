@@ -9,6 +9,7 @@ import { AICommentary } from './ai-commentary.js';
 import type { BusEvent, SocialMediaPost } from '../types/bus-types.js';
 import { latestStoryEvents, observationIssue } from './story-brief.js';
 import { observationPost, reservePost } from './posting-fallback.js';
+import { selectStory, type PublishedStory } from './story-selection.js';
 
 /**
  * Handle Bluesky publishing and optional platform integrations.
@@ -22,6 +23,7 @@ export class SocialMediaManager {
     private postingInterval: NodeJS.Timeout | null = null;
     private followerInterval: NodeJS.Timeout | null = null;
     private processingStory = false;
+    private recentStories: PublishedStory[] = [];
     private storyProvider: (() => BusEvent[]) | null = null;
 
     setStoryProvider(provider: () => BusEvent[]): void {
@@ -590,8 +592,12 @@ public async processEventCollector(): Promise<void> {
         const candidates = latestStoryEvents([...collected, ...snapshots])
             .filter(event => !this.observationValidator || this.observationValidator(event));
         logAlways('info', `[POSTING] ${collected.length} queued, ${snapshots.length} current, ${candidates.length} eligible`);
-        let event: BusEvent | null = candidates.length
-            ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+        let event = selectStory(candidates, this.recentStories);
+        if (event) {
+            logAlways('info', `[STORY_SELECTION] ${event.eventType} route ${event.line}; pool ${candidates.filter(item => item.eventType === 'punctual').length} on-time, ${candidates.filter(item => item.eventType !== 'punctual').length} late/early`);
+            try { event = await this.databaseManager?.enrichStoryJourney(event) || event; }
+            catch (error: any) { logger.warn('Journey context unavailable', { error: error.message }); }
+        }
         let text: string | null = null;
         let fallbackReason = event ? 'writer_unavailable' : 'no_eligible_observation';
         if (event && this.aiCommentary) {
@@ -608,7 +614,7 @@ public async processEventCollector(): Promise<void> {
             // Re-select only if the observation expired or its run/quality changed.
             let refreshed: BusEvent[] = [];
             try { refreshed = this.storyProvider?.() || []; } catch { /* reserve below */ }
-            event = latestStoryEvents(refreshed).find(current) || null;
+            event = selectStory(latestStoryEvents(refreshed).filter(current), this.recentStories);
             text = null;
             fallbackReason = 'observation_no_longer_publishable';
         }
@@ -633,7 +639,9 @@ public async processEventCollector(): Promise<void> {
         if (result.stale) {
             logAlways('info', '[POSTING_FALLBACK] reserve: publication_recheck_failed');
             result = await this.postUpdate(reservePost(), null);
+            event = null;
         }
+        if (result.bluesky && event) this.recentStories = [...this.recentStories, event].slice(-6);
         if (!result.bluesky) logger.error('[POSTING] Scheduled post could not be delivered');
     } catch (error: any) {
         logger.error('Posting cycle failed', { error: error.message });

@@ -21,6 +21,8 @@ import { observationIssue } from '../services/story-brief.js';
 import { cleanStopName, getStopEnrichment } from '../utils/stop-name-cleaner.js';
 
 interface EventRow {
+    trip_id?: string;
+    stop_sequence?: number;
     id: number;
     created_at: string;
     vehicle_ref: string;
@@ -129,7 +131,9 @@ export class EventReader {
                 && (row.journey_ref || '') === event.datedJourneyRef
                 && (row.origin_aimed_departure || '') === event.originAimedDepartureTimeStr
                 && (row.direction || '') === event.direction
+                && (!event.collectorTripId || row.trip_id === event.collectorTripId)
                 && (!exactPosition || (row.stop_code === event.lastStopCode
+                    && (event.collectorStopSequence === undefined || row.stop_sequence === event.collectorStopSequence)
                     && this.mapEventType(row.event_type) === event.eventType
                     && Math.round(row.delay_seconds / 60) === event.delayMinutes));
         } catch (error: any) {
@@ -153,6 +157,8 @@ export class EventReader {
             row.vehicle_ref || '', row.operator_ref || '');
         return {
             collectorEventId: row.id,
+            collectorTripId: row.trip_id || undefined,
+            collectorStopSequence: row.stop_sequence ?? undefined,
             operatorRef: row.operator_ref,
             timestamp: row.created_at,
             vehicleRef: row.vehicle_ref,

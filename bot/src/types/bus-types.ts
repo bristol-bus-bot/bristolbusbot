@@ -6,6 +6,10 @@ import { DateTime } from 'luxon';
 export interface BusEvent {
     /** Collector provenance. Optional so direct-SIRI/test events remain valid. */
     collectorEventId?: number;
+    collectorTripId?: string;
+    collectorStopSequence?: number;
+    journeyContext?: { tripId: string; timingPointNumber: number; totalStops: number; origin: string; destination: string };
+    placeContext?: { locality?: string; street?: string; localAuthority?: string; neighbourhood?: string; localColour?: string };
     operatorRef?: string;
     timestamp: string;
     vehicleRef: string;

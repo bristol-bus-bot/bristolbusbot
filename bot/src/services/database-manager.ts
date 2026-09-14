@@ -11,6 +11,7 @@ import { ApplicationState } from './application-state.js';
 import { buildFleetIdentityIndex, emptyFleetIdentityIndex } from './vehicle-identity.js';
 import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import { DatabaseError } from '../types/bus-types.js';
+import { matchedJourneyContext, type JourneyStop } from './journey-context.js';
 import type { 
     DatabaseStop, 
     DatabaseRoute, 
@@ -756,6 +757,18 @@ export class DatabaseManager {
                 (err, rows) => resolve(err ? [] : rows)
             );
         });
+    }
+
+    async enrichStoryJourney(event: BusEvent): Promise<BusEvent> {
+        if (!this.timetableDb || this.appState.dbIsReloading || !event.collectorTripId) return event;
+        const stops = await new Promise<JourneyStop[]>(resolve => {
+            this.timetableDb!.all(`SELECT st.stop_sequence, s.stop_code, s.stop_name
+                FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
+                JOIN trips t ON t.trip_id = st.trip_id JOIN routes r ON r.route_id = t.route_id
+                WHERE st.trip_id = ? AND r.route_short_name = ? ORDER BY st.stop_sequence`,
+                [event.collectorTripId, event.line], (error, rows: JourneyStop[]) => resolve(error ? [] : rows));
+        });
+        return { ...event, journeyContext: matchedJourneyContext(event, stops) };
     }
 
     /**
