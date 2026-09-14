@@ -29,9 +29,14 @@ export class SocialMediaManager {
     }
 
     private observationValidator: ((event: BusEvent) => boolean) | null = null;
+    private publicationValidator: ((event: BusEvent) => boolean) | null = null;
 
     setObservationValidator(validate: (event: BusEvent) => boolean): void {
         this.observationValidator = validate;
+    }
+
+    setPublicationValidator(validate: (event: BusEvent) => boolean): void {
+        this.publicationValidator = validate;
     }
 
     constructor(socialConfig: any, appState: ApplicationState) {
@@ -101,7 +106,8 @@ export class SocialMediaManager {
         this.appState.resetDailyCounters();
         if (this.hasReachedDailyLimit()) return { bluesky: false };
         if ((busEvent?.collectorEventId !== undefined || busEvent?.source === 'live_snapshot')
-            && (observationIssue(busEvent) || !this.observationValidator?.(busEvent))) {
+            && (observationIssue(busEvent)
+                || !(this.publicationValidator || this.observationValidator)?.(busEvent))) {
             logSummary('info', '[POST_SKIP] Observation could not be confirmed before publication');
             return { bluesky: false, stale: true };
         }
@@ -587,26 +593,37 @@ public async processEventCollector(): Promise<void> {
         let event: BusEvent | null = candidates.length
             ? candidates[Math.floor(Math.random() * candidates.length)] : null;
         let text: string | null = null;
+        let fallbackReason = event ? 'writer_unavailable' : 'no_eligible_observation';
         if (event && this.aiCommentary) {
             try { text = await this.aiCommentary.generatePost(event); }
             catch (error: any) { logger.warn('Writer failed; using factual fallback', { error: error.message }); }
+            fallbackReason = 'writer_rejected_or_failed';
         }
         const current = (item: BusEvent) => !observationIssue(item)
             && (!this.observationValidator || this.observationValidator(item));
-        if (event && !current(event)) {
-            // Re-select without another model call when a bus moved while writing.
+        const validatePublication = this.publicationValidator || this.observationValidator;
+        const publishable = (item: BusEvent) => !observationIssue(item)
+            && (!validatePublication || validatePublication(item));
+        if (event && !publishable(event)) {
+            // Re-select only if the observation expired or its run/quality changed.
             let refreshed: BusEvent[] = [];
             try { refreshed = this.storyProvider?.() || []; } catch { /* reserve below */ }
             event = latestStoryEvents(refreshed).find(current) || null;
             text = null;
+            fallbackReason = 'observation_no_longer_publishable';
         }
+        const usedFallback = !text;
         if (!text && event) {
             text = observationPost(event);
             // Do not truncate away qualifying evidence on unusually long names.
             if (text.length > Math.min(300, this.socialConfig.postLimit || 300)) {
                 event = null;
                 text = null;
+                fallbackReason = 'observation_exceeds_post_limit';
             }
+        }
+        if (usedFallback) {
+            logAlways('info', `[POSTING_FALLBACK] ${event ? 'observation' : 'reserve'}: ${fallbackReason}`);
         }
         text ||= reservePost();
         publishing = true;
@@ -614,6 +631,7 @@ public async processEventCollector(): Promise<void> {
         // A last-instant freshness rejection has made no network request. Reserve
         // prose is safe to send; an uncertain network result must not send a second post.
         if (result.stale) {
+            logAlways('info', '[POSTING_FALLBACK] reserve: publication_recheck_failed');
             result = await this.postUpdate(reservePost(), null);
         }
         if (!result.bluesky) logger.error('[POSTING] Scheduled post could not be delivered');
