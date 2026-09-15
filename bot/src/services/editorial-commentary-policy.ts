@@ -273,6 +273,24 @@ function sentenceCount(post: string): number {
     return post.split(/(?<=[.!?])\s+/).filter(Boolean).length;
 }
 
+// Catch the observed copy-and-paste failure without trying to score humour in code.
+// The verifier checks paraphrases; this narrow guard allows the existing repair turn.
+export function isBareEditorialPair(post: string, event: BusEvent, hook: EditorialSelection): boolean {
+    if (!event.lastStopName) return false;
+    const sentences = post.split(/(?<=[.!?])\s+/).filter(Boolean);
+    const plain = (text: string) => text.trim().replace(/[.!?]$/, '').toLowerCase();
+    if (sentences.length !== 2) return false;
+    const claimIndex = sentences.findIndex(sentence => plain(sentence) === plain(hook.claim || hook.label));
+    if (claimIndex < 0) return false;
+    const minutes = Math.abs(event.delayMinutes);
+    const number = `(?:${minutes}|${escapeRegExp(NUMBER_WORDS.get(minutes) || String(minutes))})`;
+    const timing = event.eventType === 'punctual' ? 'on time'
+        : `${number} minutes? ${event.eventType === 'early' ? 'early' : 'late'}`;
+    const direction = event.direction ? `(?:${escapeRegExp(event.direction)} )?` : '';
+    const observation = new RegExp(`^(?:At \\d{1,2}:\\d{2},? )?(?:the )?${direction}${escapeRegExp(event.line)} was (?:recorded )?${timing} at ${escapeRegExp(event.lastStopName)}$`, 'i');
+    return observation.test(plain(sentences[1 - claimIndex]));
+}
+
 export function validateCommentaryCandidate(
     post: string,
     event: BusEvent,

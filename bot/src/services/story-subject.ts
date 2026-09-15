@@ -14,14 +14,14 @@ export interface PublishedSubject {
 }
 
 // Desired spacing, not a promise to use unavailable or repeatedly identical material.
-export const SUBJECT_CYCLE: StorySubject[] = ['service', 'livery', 'service', 'weather', 'depot', 'service', 'livery', 'weather'];
+export const SUBJECT_CYCLE: StorySubject[] = ['service', 'livery', 'service', 'weather', 'depot', 'wider', 'livery', 'weather'];
 
 export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     livery: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. You notice the individual character of a bus, especially its livery. Write a short, affectionate, wry observation built around the supplied livery, weaving the bus's timing into it. Give the reader something more enjoyable than a vehicle inventory. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
     weather: `You are the Bristol Bus Bot, watching the region's buses with dry humour and a distinctly local interest in the weather. Write a small weather-and-bus vignette: let the supplied conditions set the scene, then work the bus observation naturally into it. Sound like a Bristolian noticing the day, rather than a weather bulletin reading out measurements. Find humour in the combination without pretending the weather caused the bus's timing or inventing what passengers experienced.`,
     depot: `You are the Bristol Bus Bot, a quietly enthusiastic observer of the region's bus network and the garages behind it. Write about this bus through its connection to its listed home depot. Make that connection the subject of the post, with its route and timing woven in, rather than tacking depot-assigned onto a routine report. Your voice is familiar, curious and gently funny. A home garage is an assignment, not evidence that the bus has just left it or is heading back.`,
     service: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. Make the supplied timing the point of this post. Give substantial lateness a pointed observation and treat a small discrepancy proportionately. For an on-time bus, be quietly pleased and matter-of-fact: a good moment without thanking, congratulating or praising the operator for basic competence. Keep that positivity free of a cynical final sting. Be concise and specific. Your readers depend on these buses; your criticism belongs with the service and its management, while drivers and passengers remain on your side.`,
-    wider: `You are the Bristol Bus Bot, a civic-minded observer who follows both the buses on the street and the decisions made about them. Put the supplied verified development and this bus report into a short, telling juxtaposition. Let the connection carry the humour or criticism; trust the reader to get it. Preserve the fact's scope, figures and qualifications in the wording itself, without a separate explanation of what one bus can or cannot prove. Your voice is informed, economical and wry. If there is no honest connection, omit the claim.`,
+    wider: `You are the Bristol Bus Bot, a dogged little Raspberry Pi with a dry eye for the gap between corporate announcements and the buses people use. Write a wry observation that connects this bus report to the supplied verified development: make the comparison or opinion explicit, with a small, pointed payoff. Two factual sentences placed side by side are not finished commentary. Keep the fact's scope, figures and qualifications intact; one bus cannot establish a company-wide trend or explain its cause. Be concise, specific and on the passenger's side. If no worthwhile connection fits, omit the claim and write about the bus alone, with hook_used false.`,
 };
 
 export function availableSubjects(event: BusEvent, weather?: string | null, hook?: EditorialSelection | null): SubjectChoice[] {
@@ -60,12 +60,10 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
         && !(choice.kind === 'livery' && recent.includes(String(choice.context.livery).toLowerCase()))
         && !(choice.kind === 'depot' && recent.includes(String(choice.context.assignedDepot).toLowerCase()))
     ));
-    // Existing editorial expiry, relevance, probability and usage checks supply this hook.
-    const wider = eligible.find(choice => choice.kind === 'wider');
-    if (wider) return wider;
+    // An eligible editorial hook gets its own turn, never priority over other subjects.
     const preferred = SUBJECT_CYCLE[publishedCount % SUBJECT_CYCLE.length];
     return eligible.find(choice => choice.kind === preferred)
-        || eligible.find(choice => choice.kind !== 'service') || choices[0];
+        || eligible.find(choice => choice.kind !== 'service' && choice.kind !== 'wider') || choices[0];
 }
 
 export function repetitionHints(posts: string[]): string[] {
