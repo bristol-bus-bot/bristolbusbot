@@ -7,6 +7,7 @@ import { availableSubjects, chooseSubject } from '../dist/services/story-subject
 import { buildStoryPrompt } from '../dist/services/story-brief.js';
 import { SubjectHistory } from '../dist/services/subject-history.js';
 import { AICommentary } from '../dist/services/ai-commentary.js';
+import { isBareEditorialPair } from '../dist/services/editorial-commentary-policy.js';
 
 const event = { line: '43', direction: 'inbound', operatorRef: 'FBRI', vehicleRef: 'test',
   timestamp: '2026-09-15T19:00:00Z', eventType: 'delay', delayMinutes: 5, lastStopName: 'Blackswarth Road',
@@ -48,10 +49,60 @@ test('same weather conditions remain on cooldown despite a new observation times
 });
 
 test('approved wider context stays scoped to its own subject and respects recent use', () => {
-  const selected=chooseSubject(event,weather,hook);
+  const selected=chooseSubject(event,weather,hook,5);
   assert.equal(selected.kind,'wider');
-  assert.notEqual(chooseSubject(event,weather,hook,0,[selected]).kind,'wider');
+  assert.notEqual(chooseSubject(event,weather,hook,5,[selected]).kind,'wider');
   assert.equal(chooseSubject(event,weather,null).kind,'service');
+  for (const [count,kind] of [[0,'service'],[1,'livery'],[3,'weather'],[4,'depot']]) {
+    assert.equal(chooseSubject(event,weather,hook,count).kind,kind);
+  }
+  assert.equal(chooseSubject({...event,busDetails:undefined},null,hook,1).kind,'service',
+    'unavailable subjects must not fall back to a corporate fact');
+});
+
+const x4 = {...event,line:'X4',lastStopName:'Newsome Avenue',delayMinutes:9};
+const profit = {id:'firstbus-profit-fy2026',label:'Profit',requirements:[],
+  claim:'First Bus adjusted operating profit rose 7% to £102.8 million in FY2026.'};
+const badPost = `At 21:07, the inbound X4 was 9 minutes late at Newsome Avenue. ${profit.claim}`;
+
+test('bare copied editorial pairs are detected without rejecting connected commentary', () => {
+  assert.equal(isBareEditorialPair(badPost,x4,profit),true);
+  assert.equal(isBareEditorialPair(`${profit.claim} The inbound X4 was nine minutes late at Newsome Avenue.`,x4,profit),true);
+  assert.equal(isBareEditorialPair(`${profit.claim} The inbound X4 was nine minutes late at Newsome Avenue; a different sort of growth.`,x4,profit),false);
+  assert.equal(isBareEditorialPair('The inbound X4 was nine minutes late at Newsome Avenue.',x4,profit),false);
+});
+
+test('a bare wider draft uses the existing repair attempt for a different subject', async () => {
+  const ai=Object.create(AICommentary.prototype);
+  ai.appState={recentPosts:[]};
+  ai.subjectHistory={publishedCount:5,history:[]};
+  ai.pendingPublications=new Map();
+  ai.aiConfig={model:'test'};
+  ai.thinkingLevels={draft:{normal:'LOW',editorial:'MEDIUM'},verifier:'LOW'};
+  const prompts=[];
+  const replacement='The inbound X4 was nine minutes late at Newsome Avenue. South Glos Lynx: more house cat than predator tonight.';
+  ai.requestGeminiStructured=async prompt=>{
+    prompts.push(prompt);
+    if(prompt.startsWith('Check facts')) return JSON.stringify({verdict:'PASS',reasons:[]});
+    return JSON.stringify({post:prompts.length===1?badPost:replacement,hook_used:prompts.length===1});
+  };
+  assert.ok(await ai.callSingleWriterGemini({event:x4},0,profit));
+  assert.equal(prompts.length,3);
+  assert.match(prompts[0],/"editorial":/);
+  assert.doesNotMatch(prompts[1],/102\.8|"editorial":/);
+  assert.match(prompts[1],/"livery":"South Glos Lynx"/);
+  const verified=JSON.parse(prompts[2].split('\n').find(line=>line.startsWith('{"brief":')));
+  assert.equal(verified.brief,prompts[1]);
+  const pending=ai.pendingPublications.get(replacement);
+  assert.equal(pending.subject.kind,'livery');
+  assert.equal(pending.used,false);
+  assert.equal(pending.hook,null);
+});
+
+test('the existing verifier checks editorial connection only when the fact is used',()=>{
+  const ai=Object.create(AICommentary.prototype);
+  assert.match(ai.buildVerifierPrompt('brief',badPost,true),/without a connecting comparison or opinion/);
+  assert.doesNotMatch(ai.buildVerifierPrompt('brief',badPost,false),/without a connecting comparison or opinion/);
 });
 
 test('confirmed publications persist across restarts; retries do not advance and identical new publications do', t => {
