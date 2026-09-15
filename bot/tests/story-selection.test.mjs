@@ -76,7 +76,7 @@ test('database lookup uses only the collector-selected trip and matching route',
   assert.equal((await manager.enrichStoryJourney({ ...event, collectorTripId: 'missing' })).journeyContext, undefined);
 });
 
-test('writer restores the original persona, direction, local and vehicle context, and real recent posts', () => {
+test('service writer preserves the civic voice and timing without leaking unrelated context or previous prose', () => {
   const contextual = { ...event, journeyContext: matchedJourneyContext(event, stops),
     placeContext: { locality: 'Example district', localColour: 'A steep hill.' },
     busDetails: { vehicle_type: { name: 'Model A', electric: true }, livery: { name: 'Livery B' } } };
@@ -85,9 +85,9 @@ test('writer restores the original persona, direction, local and vehicle context
   assert.match(BOT_VOICE, /quiet underdog holding a corporate behemoth to account/);
   assert.doesNotMatch(prompt, /A joke is optional|Direction is optional|That evidence is absent/);
   for (const text of ['Model A', 'Livery B', 'Example district', 'A steep hill.', recent[0], '"timingPointNumber": 3']) {
-    assert.ok(prompt.includes(text), text);
+    assert.ok(!prompt.includes(text), text);
   }
-  assert.match(prompt, /mock surprise at punctuality/);
+  assert.match(prompt, /corporate behemoth/);
   assert.deepEqual(factualStoryIssues('The inbound 42 was late at stop 3.', contextual), []);
   assert.ok(factualStoryIssues('The 42 left early.', contextual).length);
 });

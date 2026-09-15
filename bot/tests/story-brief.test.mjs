@@ -10,6 +10,7 @@ import { EventReader } from '../dist/ingest/event-reader.js';
 import { SocialMediaManager } from '../dist/services/social-media.js';
 import { AICommentary } from '../dist/services/ai-commentary.js';
 import { observationPost, reservePost } from '../dist/services/posting-fallback.js';
+import { availableSubjects } from '../dist/services/story-subject.js';
 
 const now = Date.parse('2026-09-13T12:00:00Z');
 const event = {
@@ -41,14 +42,14 @@ test('newer uncertainty suppresses an older good report and operators do not col
 test('brief distinguishes assigned depot from location and limits vehicle repetition', () => {
   const enriched = { ...event, busDetails: { vehicle_type: { name: 'Yutong U11DD' },
     livery: { name: 'Olympia' }, garage: { name: 'Lawrence Hill' } } };
-  const prompt = buildStoryPrompt(enriched, new Date(now).toISOString(), null, ['Olympia Yutong U11DD']);
-  assert.match(prompt, /"suggestedDetail": null/);
-  assert.match(prompt, /"model": "Yutong U11DD"/);
-  assert.match(prompt, /"assignedDepot": "Lawrence Hill"/);
-  assert.match(prompt, /fleet-listed home garage, not the bus's current location/);
+  const depot = availableSubjects(enriched).find(s => s.kind === 'depot');
+  const prompt = buildStoryPrompt(enriched, new Date(now).toISOString(), null, [], [], null, depot);
+  assert.doesNotMatch(prompt, /Olympia|Yutong|suggestedDetail/);
+  assert.match(prompt, /"assignedDepot":"Lawrence Hill"/);
+  assert.match(prompt, /home garage is an assignment/);
   assert.doesNotMatch(prompt, /Network:|Position:|Vehicle notes:/);
-  assert.match(prompt, /"departureObserved": false/);
-  assert.match(prompt, /Include route, supplied direction/);
+  assert.match(prompt, /do not establish arrival, departure/);
+  assert.match(prompt, /Include route, known direction/);
   assert.match(factualStoryIssues('The 42 left ten minutes early.').join(' '), /departure/);
   assert.match(factualStoryIssues('The 42 is at stop 1.').join(' '), /position/);
   assert.match(factualStoryIssues('The network average delay is ten minutes.').join(' '), /network/);
@@ -64,13 +65,13 @@ test('current writing path fetches weather for the bus and preserves it in the w
   const bus = { ...event, location: { latitude: 51.38, longitude: -2.36 } };
   const context = await ai.buildAIContext(bus);
   assert.deepEqual(requested, bus.location);
-  const prompt = ai.buildSingleWriterPrompt(context, DateTime.utc(), null, [], []);
+  const prompt = ai.buildSingleWriterPrompt(context, DateTime.utc(), null, [], [], availableSubjects(bus, weather).find(s => s.kind === 'weather'));
   assert.ok(prompt.includes(weather));
   assert.ok(ai.buildVerifierPrompt(prompt, 'A post.').includes('OpenWeather area observation near Bath'));
   ai.weatherService.getCurrentWeather = async () => null;
   const missing = await ai.buildAIContext(bus);
   assert.equal(missing.weatherContext, undefined);
-  assert.match(ai.buildSingleWriterPrompt(missing, DateTime.utc(), null, [], []), /"weather": null/);
+  assert.doesNotMatch(ai.buildSingleWriterPrompt(missing, DateTime.utc(), null, [], []), /areaWeather/);
 });
 
 test('collector recheck rejects stale positions, changed runs, depots, confidence and changed timing', t => {
@@ -258,13 +259,14 @@ test('ordinary posts receive factual verification and rejected prose is skipped'
 test('verification uses the exact final writer brief, including selected vehicle detail and stop labels', async () => {
   for (const repair of [false, true]) {
     const ai = Object.create(AICommentary.prototype);
-    ai.appState = { recentPosts: ['A bus in WESTbus livery.'] };
+    ai.appState = { recentPosts: [] };
+    ai.subjectHistory = { publishedCount: 1, history: [] };
     ai.pendingPublications = new Map();
     ai.aiConfig = { model: 'test' };
     ai.thinkingLevels = { draft: { normal: 'LOW', editorial: 'MEDIUM' }, verifier: 'LOW' };
     const bus = { ...event, lastStopName: 'The Haymarket - B10', busDetails: {
       livery: { name: 'WESTbus' }, vehicle_type: { name: 'Yutong U11DD' } } };
-    const post = 'The outbound 42 was eight minutes late at The Haymarket - B10. A Yutong U11DD with time to spare.';
+    const post = 'The outbound 42 was eight minutes late at The Haymarket - B10. WESTbus livery with time to spare.';
     const prompts = [];
     ai.requestGeminiStructured = async prompt => {
       prompts.push(prompt);
@@ -276,9 +278,10 @@ test('verification uses the exact final writer brief, including selected vehicle
     const verifier = prompts.at(-1);
     const verifierData = JSON.parse(verifier.split('\n').find(line => line.startsWith('{"brief":')));
     assert.equal(verifierData.brief, writerBrief);
-    assert.match(writerBrief, /Listed vehicle model: Yutong U11DD/);
+    assert.match(writerBrief, /"livery":"WESTbus"/);
+    assert.doesNotMatch(writerBrief, /Yutong|assignedDepot|areaWeather/);
     assert.match(verifier, /stand label such as B10 or C3, is allowed/);
-    assert.match(writerBrief, /Supplied stop names and stand labels such as B10 or C3 are allowed/);
+    assert.match(writerBrief, /The Haymarket - B10/);
     assert.equal(prompts.length, repair ? 3 : 2, 'no extra model calls for the fix');
   }
 });

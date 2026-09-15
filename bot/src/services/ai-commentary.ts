@@ -3,6 +3,8 @@
 // Keeps retry + timeout logic Pi-friendly and uses BUS_MODEL_BLURBS
 
 import { BOT_VOICE, buildStoryPrompt, factualStoryIssues, observationIssue } from './story-brief.js';
+import { chooseSubject, type SubjectChoice } from './story-subject.js';
+import { SubjectHistory } from './subject-history.js';
 import { httpFetch } from '../utils/http-client.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed } from '../utils/logging.js';
@@ -184,12 +186,19 @@ export class AICommentary {
 
     // Single consistent persona - the bot knows who it is and what it believes
     private readonly botPersona = BOT_VOICE;
-    private pendingPublications = new Map<string, { hook: EditorialSelection | null; used: boolean }>();
+    private pendingPublications = new Map<string, { hook: EditorialSelection | null; used: boolean; subject?: SubjectChoice }>();
+    private subjectHistory?: SubjectHistory;
+
+    private getSubjectHistory(): SubjectHistory {
+        return this.subjectHistory ||= new SubjectHistory(this.aiConfig.editorialUsagePath
+            ? `${this.aiConfig.editorialUsagePath}.subjects.json` : undefined);
+    }
 
     /** Called only after the publisher confirms delivery. Drafts never consume a fact. */
-    recordPublished(post: string): void {
+    recordPublished(post: string, publicationId?: string): void {
         const pending = this.pendingPublications.get(post);
         this.pendingPublications.delete(post);
+        this.getSubjectHistory().record(post, pending?.subject, publicationId);
         this.editorialContext.recordPost(pending?.used ? pending.hook : null,
             DateTime.now().setZone(TARGET_TIMEZONE));
         this.appState.recentPosts.push(post);
@@ -375,11 +384,15 @@ export class AICommentary {
             // Company-specific hooks cannot be paired with another operator.
             const relevantHook = hook && /FirstGroup|First Bus|First Bristol/i.test(hook.claim || '')
                 && context.event.operatorRef !== 'FBRI' ? null : hook;
-            let writer = await this.requestWriter(context, currentTime, relevantHook, recentPosts);
-            let prepared = this.prepareWriterCandidate(writer, context, relevantHook);
+            const history = this.getSubjectHistory();
+            const subject = chooseSubject(context.event, context.weatherContext, relevantHook,
+                history.publishedCount, history.history, recentPosts);
+            const writerHook = subject.kind === 'wider' ? relevantHook : null;
+            let writer = await this.requestWriter(context, currentTime, writerHook, recentPosts, [], subject);
+            let prepared = this.prepareWriterCandidate(writer, context, writerHook);
             if (prepared.issues.length) {
-                writer = await this.requestWriter(context, currentTime, relevantHook, recentPosts, prepared.issues);
-                prepared = this.prepareWriterCandidate(writer, context, relevantHook);
+                writer = await this.requestWriter(context, currentTime, writerHook, recentPosts, prepared.issues, subject);
+                prepared = this.prepareWriterCandidate(writer, context, writerHook);
             }
             if (!prepared.post || prepared.issues.length) {
                 logSummary('info', `[AI_SKIP] ${prepared.issues.join('; ')}`);
@@ -396,8 +409,10 @@ export class AICommentary {
                 logSummary('info', `[AI_SKIP] ${verified.reasons.join('; ')}`);
                 return null;
             }
-            return this.completeSingleWriterPost(prepared.post, context, relevantHook,
-                Boolean(relevantHook && writer.hookUsed), currentTime, timer);
+            return this.completeSingleWriterPost(prepared.post, context, writerHook,
+                Boolean(writerHook && writer.hookUsed), currentTime, timer,
+                subject.kind === 'wider' && !writer.hookUsed
+                    ? { kind: 'service', key: '', context: {} } : subject);
         } catch (error: any) {
             // At most two writer requests and one verifier per cycle. Do not
             // retry an entire completed workflow or substitute an unchecked post.
@@ -430,6 +445,7 @@ export class AICommentary {
         hook: EditorialSelection | null,
         recentPosts: string[],
         corrections: string[] = [],
+        subject?: SubjectChoice,
     ): Promise<EditorialWriterOutput & { brief: string }> {
         const prompt = this.buildSingleWriterPrompt(
             context,
@@ -437,6 +453,7 @@ export class AICommentary {
             hook,
             recentPosts,
             corrections,
+            subject,
         );
         this.appState.lastAIDraftPrompt = prompt;
         this.appState.lastAIPrompt = prompt;
@@ -534,8 +551,9 @@ export class AICommentary {
         hook: EditorialSelection | null,
         recentPosts: string[],
         corrections: string[],
+        subject?: SubjectChoice,
     ): string {
-        return buildStoryPrompt(context.event, currentTime.toISO() || '', hook, recentPosts, corrections, context.weatherContext);
+        return buildStoryPrompt(context.event, currentTime.toISO() || '', hook, recentPosts, corrections, context.weatherContext, subject);
     }
 
     private buildVerifierPrompt(
@@ -568,10 +586,11 @@ Return only JSON with verdict (PASS or FAIL) and reasons.`;
         hookUsed: boolean,
         currentTime: DateTime,
         timer: PerformanceTimer,
+        subject?: SubjectChoice,
     ): AICommentaryResult {
         // Bound discarded drafts in memory; only successful publication consumes usage.
         if (this.pendingPublications.size >= 20) this.pendingPublications.clear();
-        this.pendingPublications.set(post, { hook: selectedHook, used: hookUsed });
+        this.pendingPublications.set(post, { hook: selectedHook, used: hookUsed, subject });
         this.appState.lastAIResponse = post;
 
         const editorialPublished = Boolean(selectedHook && hookUsed);
@@ -600,6 +619,7 @@ Return only JSON with verdict (PASS or FAIL) and reasons.`;
                 temperature: 1,
                 editorialMode: editorialPublished,
                 editorialKind: editorialPublished ? selectedHook?.kind : undefined,
+                subject: subject?.kind,
             },
         };
     }
