@@ -247,6 +247,7 @@ export interface AICommentaryResult {
         temperature: number;
         editorialMode?: boolean;
         editorialKind?: 'fact' | 'occasion' | 'news';
+        subject?: 'service' | 'livery' | 'depot' | 'weather' | 'wider';
     };
 }
 

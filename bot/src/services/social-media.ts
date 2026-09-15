@@ -181,7 +181,7 @@ export class SocialMediaManager {
                         logger.info(`--- Successfully posted to BlueSky! --- ${postUrl ? `URL: ${postUrl}` : ''}`);
                         blueskySuccess = true;
                         try {
-                            this.aiCommentary?.recordPublished(finalPostText);
+                            this.aiCommentary?.recordPublished(finalPostText, postUri || undefined);
                         } catch (error: any) {
                             // A ledger failure must not resubmit an already published post.
                             logger.error('Published post could not update editorial memory', { error: error.message });
