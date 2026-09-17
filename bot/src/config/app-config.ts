@@ -99,6 +99,11 @@ export function loadConfig(): AppConfig {
             bristolLat: 51.4545,
             bristolLon: -2.5879
         },
+        traffic: {
+            apiKey: process.env.TOMTOM_API_KEY || '',
+            enabled: process.env.TRAFFIC_ENABLED === 'true',
+            usagePath: process.env.TRAFFIC_USAGE_PATH || path.join(path.dirname(APP_DATA_DB_FILE), 'traffic-usage.json'),
+        },
 
         social: {
             handle: bskyHandle || '',
