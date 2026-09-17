@@ -623,7 +623,7 @@ Return FAIL for an unsupported real-world claim, invented cause/passengers/arriv
 unsupported journey position, reversed timing/direction, unsupported whole-network comparison,
 or a change to the scope, figures or qualifications of an editorial claim.
 ${editorialUsed ? 'Also return FAIL if the post merely lists the bus observation and editorial claim without a connecting comparison or opinion. Do not judge how funny the joke is.' : ''}
-${brief.includes('"nearbyTraffic":') ? 'Nearby traffic describes only one road segment, not a matched bus route or direction. Reject claims that it caused the bus delay, trapped this bus, describes the whole area, or establishes passenger waiting time. TomTom must be credited for the traffic report.' : ''}
+${brief.includes('"nearbyTraffic":') ? 'Nearby traffic describes only one road segment, not a matched bus route or direction. Reject claims that it caused the bus delay, trapped this bus, describes the whole area, or establishes passenger waiting time. Lateness cannot establish bus speed, a detour or taking the long way round. TomTom must be credited for the traffic report.' : ''}
 An exact supplied stop name, including a stand label such as B10 or C3, is allowed.
 That label is not a claim about the stop's ordinal position along the journey.
 The timestamp is a recent observation, not proof of what is happening at publication.
