@@ -248,11 +248,14 @@ test('ordinary posts receive factual verification and rejected prose is skipped'
   ai.aiConfig = { model: 'test' };
   ai.thinkingLevels = { draft: { normal: 'LOW', editorial: 'MEDIUM' }, verifier: 'LOW' };
   let calls = 0;
-  ai.requestGeminiStructured = async () => (++calls === 1
-    ? JSON.stringify({ post: 'First Bristol’s outbound 42 was eight minutes late at Two Mile Hill. Apparently it stopped for tea.', hook_used: false })
-    : JSON.stringify({ verdict: 'FAIL', reasons: ['Invented cause'] }));
+  ai.requestGeminiStructured = async prompt => {
+    calls++;
+    return prompt.startsWith('Check facts')
+      ? JSON.stringify({ verdict: 'FAIL', reasons: ['Invented cause'] })
+      : JSON.stringify({ post: 'First Bristol’s outbound 42 was eight minutes late at Two Mile Hill. Apparently it stopped for tea.', hook_used: false });
+  };
   assert.equal(await ai.callSingleWriterGemini({ event }, 0, null), null);
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   assert.equal(ai.pendingPublications.size, 0);
 });
 
