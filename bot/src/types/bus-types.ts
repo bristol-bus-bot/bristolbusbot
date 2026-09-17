@@ -226,6 +226,14 @@ export interface SystemMetrics {
 }
 
 // AI Commentary system
+export interface TrafficContext {
+    source: 'TomTom';
+    checkedAt: string;
+    condition: 'moving freely' | 'a little slower than on a clear road' | 'moving slowly' | 'moving very slowly';
+    scope: string;
+    key: string;
+}
+
 export interface AICommentaryContext {
     event: BusEvent;
     pattern?: DelayPattern;
@@ -233,6 +241,7 @@ export interface AICommentaryContext {
     networkStatus: NetworkStatus;
     timeContext: string;
     weatherContext?: string | null | undefined;
+    trafficContext?: TrafficContext | null;
 }
 
 export interface AICommentaryResult {
@@ -247,7 +256,7 @@ export interface AICommentaryResult {
         temperature: number;
         editorialMode?: boolean;
         editorialKind?: 'fact' | 'occasion' | 'news';
-        subject?: 'service' | 'livery' | 'depot' | 'weather' | 'wider';
+        subject?: 'service' | 'livery' | 'depot' | 'weather' | 'wider' | 'traffic';
     };
 }
 
@@ -304,6 +313,7 @@ export interface AppConfig {
         bristolLat: number;
         bristolLon: number;
     };
+    traffic: { apiKey: string; enabled: boolean; usagePath: string };
     social: {
         handle: string;
         appPassword: string;

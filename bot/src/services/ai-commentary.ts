@@ -3,7 +3,8 @@
 // Keeps retry + timeout logic Pi-friendly and uses BUS_MODEL_BLURBS
 
 import { BOT_VOICE, buildStoryPrompt, factualStoryIssues, observationIssue } from './story-brief.js';
-import { chooseSubject, type SubjectChoice } from './story-subject.js';
+import { chooseSubject, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
+import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
 import { httpFetch } from '../utils/http-client.js';
 import { DateTime } from 'luxon';
@@ -215,7 +216,8 @@ export class AICommentary {
         verifier: "LOW",
     };
 
-    constructor(aiConfig: any, appState: ApplicationState, weatherService: WeatherService) {
+    constructor(aiConfig: any, appState: ApplicationState, weatherService: WeatherService,
+        private readonly trafficService?: TrafficService) {
         this.aiConfig = { ...aiConfig };
         this.appState = appState;
         this.weatherService = weatherService;
@@ -339,7 +341,12 @@ export class AICommentary {
         const locality = stopLocalities[busEvent.lastStopCode];
         const weatherLocation = busEvent.location || (locality
             ? { latitude: locality.lat, longitude: locality.lon } : undefined);
-        const weatherData = await this.weatherService.getCurrentWeather(weatherLocation);
+        const trafficTurn = this.trafficService && this.aiConfig.pipeline !== 'legacy'
+            && SUBJECT_CYCLE[this.getSubjectHistory().publishedCount % SUBJECT_CYCLE.length] === 'traffic';
+        const [weatherData, trafficData] = await Promise.all([
+            this.weatherService.getCurrentWeather(weatherLocation),
+            trafficTurn ? this.trafficService!.getTraffic(busEvent) : Promise.resolve(null),
+        ]);
         const neighbourhood = locality ? findNeighbourhood(locality.lat, locality.lon) : null;
         return {
             event: { ...busEvent, placeContext: {
@@ -350,7 +357,8 @@ export class AICommentary {
             history,
             networkStatus,
             timeContext,
-            weatherContext: weatherData || undefined
+            weatherContext: weatherData || undefined,
+            trafficContext: trafficData,
         };
     }
 
@@ -408,14 +416,14 @@ export class AICommentary {
                 && context.event.operatorRef !== 'FBRI' ? null : hook;
             const history = this.getSubjectHistory();
             let subject = chooseSubject(context.event, context.weatherContext, relevantHook,
-                history.publishedCount, history.history, recentPosts);
+                history.publishedCount, history.history, recentPosts, context.trafficContext);
             let writerHook = subject.kind === 'wider' ? relevantHook : null;
             let corrections: string[] = [];
             let previousDraft: string | undefined;
             for (let attempt = 0; attempt < 2; attempt++) {
                 const writer = await this.requestWriter(context, currentTime, writerHook, recentPosts,
                     corrections, subject, request, previousDraft);
-                const prepared = this.prepareWriterCandidate(writer, context, writerHook);
+                const prepared = this.prepareWriterCandidate(writer, context, writerHook, subject);
                 let issues = prepared.issues;
                 if (prepared.post && !issues.length) {
                     const verifierPrompt = this.buildVerifierPrompt(writer.brief, prepared.post, Boolean(writerHook && writer.hookUsed));
@@ -441,7 +449,7 @@ export class AICommentary {
                 if (subject.kind === 'wider' && prepared.issues.length) {
                     // Retain the existing escape from forced or mechanically invalid facts.
                     subject = chooseSubject(context.event, context.weatherContext, null,
-                        history.publishedCount, history.history, recentPosts);
+                        history.publishedCount, history.history, recentPosts, context.trafficContext);
                     writerHook = null;
                     corrections = [];
                     previousDraft = undefined;
@@ -568,6 +576,7 @@ export class AICommentary {
         writer: EditorialWriterOutput,
         context: AICommentaryContext,
         hook: EditorialSelection | null,
+        subject?: SubjectChoice,
     ): { post: string | null; issues: string[] } {
         const post = cleanEditorialPost(writer.post);
         if (!post) {
@@ -583,6 +592,8 @@ export class AICommentary {
                     && !new RegExp(`\\b${context.event.direction}\\b`, 'i').test(post)
                     ? [`post is missing the supplied ${context.event.direction} direction`] : []),
                 ...factualStoryIssues(post, context.event),
+                ...(subject?.kind === 'traffic' && !/\bTomTom\b/i.test(post)
+                    ? ['attribute the nearby traffic report to TomTom'] : []),
                 ...(hook && writer.hookUsed && isBareEditorialPair(post, context.event, hook)
                     ? ['editorial draft only pairs a bare observation with a copied claim'] : [])],
         };
@@ -612,6 +623,7 @@ Return FAIL for an unsupported real-world claim, invented cause/passengers/arriv
 unsupported journey position, reversed timing/direction, unsupported whole-network comparison,
 or a change to the scope, figures or qualifications of an editorial claim.
 ${editorialUsed ? 'Also return FAIL if the post merely lists the bus observation and editorial claim without a connecting comparison or opinion. Do not judge how funny the joke is.' : ''}
+${brief.includes('"nearbyTraffic":') ? 'Nearby traffic describes only one road segment, not a matched bus route or direction. Reject claims that it caused the bus delay, trapped this bus, describes the whole area, or establishes passenger waiting time. Lateness cannot establish bus speed, a detour or taking the long way round. TomTom must be credited for the traffic report.' : ''}
 An exact supplied stop name, including a stand label such as B10 or C3, is allowed.
 That label is not a claim about the stop's ordinal position along the journey.
 The timestamp is a recent observation, not proof of what is happening at publication.

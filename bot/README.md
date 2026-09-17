@@ -38,6 +38,23 @@ BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_details.json
 
 ## Production
 
+Optional traffic commentary uses TomTom Flow Segment Data. Set `TOMTOM_API_KEY`
+and `TRAFFIC_ENABLED=true` in the private bot environment after checking the
+account's allowance. `TRAFFIC_USAGE_PATH` must point to durable writable state
+(normally `/var/lib/bristolbusbot/bot/traffic-usage.json`). No key belongs in Git.
+Traffic has one slot in the eight-post subject rotation; absent or unsuitable
+data falls back to another subject. Requests have a five-second overall wait,
+no retries, at least ten minutes between lookups, and persisted limits of 50
+per UTC day and 500 per UTC month. Counts include failures. Provider responses
+are not cached or archived by the traffic service. Traffic posts name TomTom.
+
+Only recent bus GPS positions and high-confidence segments within 100 metres
+are used. This is nearby road context, not a directional route match or proof
+of what delayed the bus. Closed roads are omitted from this initial flow-only
+integration. See [TomTom's endpoint documentation](https://docs.tomtom.com/traffic-api/documentation/tomtom-maps/v1/traffic-flow/flow-segment-data)
+and [current pricing](https://docs.tomtom.com/pricing). Set `TRAFFIC_ENABLED=false`
+and restart the bot to disable it without affecting other posting subjects.
+
 - Current release: `~/bristolbusbot/current/bot` on the Pi
 - Durable state: `/var/lib/bristolbusbot/bot/app_data.db`
 - Durable enrichment: `/var/lib/bristolbusbot/enrichment/*.json`

@@ -16,7 +16,7 @@ export class SubjectHistory {
             const data = JSON.parse(raw);
             if (data.version !== 1 || !Number.isSafeInteger(data.publishedCount) || data.publishedCount < 0
                 || !Array.isArray(data.history) || data.history.length > 20
-                || data.history.some((item: any) => !item || !['service', 'livery', 'depot', 'weather', 'wider', 'fallback'].includes(item.kind)
+                || data.history.some((item: any) => !item || !['service', 'livery', 'depot', 'weather', 'wider', 'traffic', 'fallback'].includes(item.kind)
                     || typeof item.key !== 'string' || item.key.length > 1000
                     || typeof item.postHash !== 'string' || !/^[a-f0-9]{64}$/.test(item.postHash))) throw new Error('invalid subject history');
             this.publishedCount = data.publishedCount;

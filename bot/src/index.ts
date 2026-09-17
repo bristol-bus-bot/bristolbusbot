@@ -19,6 +19,7 @@ import { PatternDetector } from './services/pattern-detector.js';
 import { HealthMonitor } from './services/health-monitor.js';
 import { APIRoutes } from './api/routes.js';
 import { WeatherService } from './services/weather-service.js';
+import { TrafficService } from './services/traffic-service.js';
 import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
@@ -108,7 +109,8 @@ class BristolBusBot {
             () => this.systemdWatchdog.progress());
         this.delayAnalyzer = new DelayAnalyzer(this.config.processing, this.appState);
         this.weatherService = new WeatherService(this.config.weather);
-        this.aiCommentary = new AICommentary(this.config.ai, this.appState, this.weatherService);
+        this.aiCommentary = new AICommentary(this.config.ai, this.appState, this.weatherService,
+            new TrafficService(this.config.traffic));
         this.socialMediaManager = new SocialMediaManager(this.config.social, this.appState);
         this.patternDetector = new PatternDetector(this.appState);
         
