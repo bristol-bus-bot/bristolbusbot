@@ -46,7 +46,8 @@ Traffic has one slot in the eight-post subject rotation; absent or unsuitable
 data falls back to another subject. Requests have a five-second overall wait,
 no retries, at least ten minutes between lookups, and persisted limits of 50
 per UTC day and 500 per UTC month. Counts include failures. Provider responses
-are not cached or archived by the traffic service. Traffic posts name TomTom.
+are not cached or archived by the traffic service. Public posts refer to local
+traffic reports; the provider identity stays in the internal service context.
 
 Only recent bus GPS positions and high-confidence segments within 100 metres
 are used. This is nearby road context, not a directional route match or proof

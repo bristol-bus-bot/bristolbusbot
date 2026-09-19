@@ -107,6 +107,8 @@ test('traffic gets only its own turn, keeps evidence scoped, and survives public
   assert.equal(chooseSubject(bus,null,null,7,[],[],{...traffic,checkedAt:'2000-01-01'}).kind,'service');
   const prompt=buildStoryPrompt(bus,bus.timestamp,null,[],[],null,chosen);
   assert.match(prompt,/"nearbyTraffic":/);
+  assert.match(prompt,/"source":"local traffic reports"/);
+  assert.doesNotMatch(prompt,/TomTom/i);
   assert.doesNotMatch(prompt,/currentSpeed|freeFlowSpeed|test-key/);
   assert.match(prompt,/not necessarily this bus's road or direction/);
   const history=new SubjectHistory(config.usagePath+'.subjects');
@@ -129,12 +131,13 @@ test('the live context builder fetches traffic only on its scheduled turn and ne
   assert.deepEqual(calls[0].location,point);
 });
 
-test('traffic attribution is checked without adding traffic requirements to ordinary drafts',()=>{
+test('traffic drafts use natural local-report wording without naming the supplier',()=>{
   const ai=Object.create(AICommentary.prototype);
   const bus=event();
   const writer={post:'The inbound 43 was five minutes late at Broad Quay. Traffic nearby was moving slowly.',hookUsed:false};
-  assert.match(ai.prepareWriterCandidate(writer,{event:bus},null,{kind:'traffic'}).issues.join(' '),/TomTom/);
-  assert.equal(ai.prepareWriterCandidate({...writer,post:'The inbound 43 was five minutes late at Broad Quay. TomTom reported traffic moving slowly nearby.'},{event:bus},null,{kind:'traffic'}).issues.length,0);
+  assert.equal(ai.prepareWriterCandidate(writer,{event:bus},null,{kind:'traffic'}).issues.length,0);
+  assert.equal(ai.prepareWriterCandidate({...writer,post:'The inbound 43 was five minutes late at Broad Quay. Local traffic reports showed slow traffic nearby.'},{event:bus},null,{kind:'traffic'}).issues.length,0);
+  assert.match(ai.prepareWriterCandidate({...writer,post:'The inbound 43 was five minutes late at Broad Quay. TomTom reported traffic moving slowly nearby.'},{event:bus},null,{kind:'traffic'}).issues.join(' '),/without naming the data supplier/);
   assert.equal(ai.prepareWriterCandidate(writer,{event:bus},null,{kind:'service'}).issues.length,0);
 });
 
@@ -160,7 +163,7 @@ test('the traffic subject and source reach the actual writer and exact final ver
   ai.requestGeminiStructured=async prompt=>{
     prompts.push(prompt);
     return prompt.startsWith('Check facts')?JSON.stringify({verdict:'PASS',reasons:[]})
-      :JSON.stringify({post:'The inbound 43 was five minutes late at Broad Quay. TomTom reported traffic moving slowly nearby.',hook_used:false});
+      :JSON.stringify({post:'The inbound 43 was five minutes late at Broad Quay. Local traffic reports showed slow traffic nearby.',hook_used:false});
   };
   const result=await ai.callSingleWriterGemini({event:bus,trafficContext:traffic},0,null);
   assert.equal(result.metadata.subject,'traffic');
