@@ -3,6 +3,7 @@
 // Keeps retry + timeout logic Pi-friendly and uses BUS_MODEL_BLURBS
 
 import { BOT_VOICE, buildStoryPrompt, factualStoryIssues, observationIssue, openingIssues } from './story-brief.js';
+import { spokenDestination, destinationMentioned } from './journey-context.js';
 import { chooseSubject, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
 import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
@@ -590,6 +591,7 @@ export class AICommentary {
             issues: [...validateCommentaryCandidate(post, context.event, hook, writer.hookUsed),
                 ...(['inbound', 'outbound'].includes(context.event.direction)
                     && !new RegExp(`\\b${context.event.direction}\\b`, 'i').test(post)
+                    && !(spokenDestination(context.event) && destinationMentioned(post, spokenDestination(context.event)!))
                     ? [`post is missing the supplied ${context.event.direction} direction`] : []),
                 ...factualStoryIssues(post, context.event),
                 ...openingIssues(post, this.appState?.recentPosts || []),
@@ -640,6 +642,8 @@ The origin schedule does not prove the bus actually departed. Local knowledge ab
 from the evidence cannot be assumed. Vehicle specifications beyond those supplied cannot be assumed.
 Humorous metaphor, obvious personification and opinion are allowed; do not fail a joke
 merely because it is figurative. Include the supplied direction; do not guess a missing direction. The operator need not be named.
+If the evidence supplies towards, 'towards <that exact destination>' is an alternative
+to the inbound/outbound word. A different terminus or opposite direction remains wrong.
 If an operator is named, it must be correctly attributed. Otherwise return PASS.
 Return only JSON with verdict (PASS or FAIL) and reasons.`;
     }
