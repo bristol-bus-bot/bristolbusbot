@@ -1,5 +1,6 @@
 import type { BusEvent } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
+import { spokenStopName } from '../utils/stop-name-cleaner.js';
 import type {
     EditorialRequirement,
     EditorialSelection,
@@ -317,7 +318,7 @@ export function validateCommentaryCandidate(
     if (opposite && new RegExp(`\\b${opposite}\\b`, 'i').test(post)) {
         issues.push('post reverses the observed direction');
     }
-    if (event.lastStopName && !hasLocation(post, event.lastStopName)) {
+    if (event.lastStopName && !hasLocation(post, event.lastStopName) && !hasLocation(post, spokenStopName(event.lastStopName))) {
         issues.push(`post is missing location ${event.lastStopName}`);
     }
     if (!hasObservedStatus(post, event)) {
