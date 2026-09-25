@@ -33,7 +33,8 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     }
     const choices = [service];
     const trafficAge = traffic ? Date.now() - Date.parse(traffic.checkedAt) : Infinity;
-    if (traffic && trafficAge >= -30_000 && trafficAge <= 2 * 60_000) {
+    const notableTraffic = traffic && ['moving slowly', 'moving very slowly', 'much slower than a clear road'].includes(traffic.condition);
+    if (traffic && notableTraffic && trafficAge >= -30_000 && trafficAge <= 2 * 60_000) {
         choices.push({ kind: 'traffic', key: `traffic:${traffic.key}`, context: {
             nearbyTraffic: { source: 'local traffic reports', checkedAt: traffic.checkedAt, condition: traffic.condition, scope: traffic.scope },
         } });
