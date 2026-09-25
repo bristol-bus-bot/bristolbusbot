@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+# Exact synthetic road IDs in the two fixed replay files, including after squash.
+# Both path AND value must match; all default credential rules remain enabled.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Synthetic audition traffic identifiers, not credentials"
+condition = "AND"
+paths = ['''^bot/tests/fixtures/audition/(cases|baseline)\.json$''']
+regexTarget = "secret"
+regexes = ['''^fixture-road-(7|15|23)$''']

@@ -1,8 +1,0 @@
-# Synthetic traffic context IDs fixture-road-7, fixture-road-15 and fixture-road-23.
-# Exact findings only; these values identify replay scenarios, not credentials.
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/cases.json:generic-api-key:412
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/cases.json:generic-api-key:818
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/cases.json:generic-api-key:1224
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/baseline.json:generic-api-key:1459
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/baseline.json:generic-api-key:3510
-63edd1364263eb76f034b34d31314f800e6202f7:bot/tests/fixtures/audition/baseline.json:generic-api-key:6025
