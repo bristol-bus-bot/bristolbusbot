@@ -5,7 +5,7 @@ import {AICommentary, GeminiRequestError} from '../dist/services/ai-commentary.j
 const event={line:'42',direction:'outbound',operatorRef:'FBRI',vehicleRef:'test',
   timestamp:new Date().toISOString(),eventType:'delay',delayMinutes:8,lastStopName:'Two Mile Hill',
   busDetails:{livery:{name:'Olympia'}}};
-const original='The outbound 42 arrived eight minutes late at Two Mile Hill. Olympia paintwork, Olympic patience.';
+const original='The outbound 42 was eight minutes late at Two Mile Hill because the driver took a wrong turn.';
 const corrected='The outbound 42 was eight minutes late at Two Mile Hill. Olympia paintwork, Olympic patience.';
 const output=post=>JSON.stringify({post,hook_used:false});
 const pass=JSON.stringify({verdict:'PASS',reasons:[]});
