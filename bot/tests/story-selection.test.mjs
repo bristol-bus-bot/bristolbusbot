@@ -82,12 +82,12 @@ test('service writer preserves the civic voice and timing without leaking unrela
     busDetails: { vehicle_type: { name: 'Model A', electric: true }, livery: { name: 'Livery B' } } };
   const recent = ['On time. Nothing to complain about.'];
   const prompt = buildStoryPrompt(contextual, '2026-09-14T21:01:00Z', null, recent);
-  assert.match(BOT_VOICE, /quiet underdog holding a corporate behemoth to account/);
+  assert.match(BOT_VOICE, /dry, concise and on the passenger's side/);
   assert.doesNotMatch(prompt, /A joke is optional|Direction is optional|That evidence is absent/);
   for (const text of ['Model A', 'Livery B', 'Example district', 'A steep hill.', recent[0], '"timingPointNumber": 3']) {
     assert.ok(!prompt.includes(text), text);
   }
-  assert.match(prompt, /corporate behemoth/);
+  assert.match(prompt, /Aim criticism at the service/);
   assert.deepEqual(factualStoryIssues('The inbound 42 was late at stop 3.', contextual), []);
   assert.ok(factualStoryIssues('The 42 left early.', contextual).length);
 });
