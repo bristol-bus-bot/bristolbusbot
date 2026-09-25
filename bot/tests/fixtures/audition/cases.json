@@ -1,0 +1,1545 @@
+{
+  "version": 1,
+  "provenance": {
+    "capturedAt": "2026-09-25T19:12:43.388072+00:00",
+    "sourceSha256": "ad84a5473f56d60af3d2b9fd537538fd9d053e703fc59058e6c068de11ff7a93",
+    "source": "Bounded read-only collector events/vehicles plus current exact-stop timetable and projected fleet metadata.",
+    "selection": "30 deliberately varied real base observations, not a representative random sample; chosen order is an audition sequence, not chronological history.",
+    "overlays": "Weather replay, synthetic traffic and preselected editorial fact are individually labelled; never publish these outputs.",
+    "identity": "Vehicle, run and trip identifiers pseudonymised; no raw fleet file, credentials, coordinates or operator-host paths."
+  },
+  "cases": [
+    {
+      "now": "2026-09-25T19:12:49+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:19+00:00",
+        "vehicleRef": "fixture-vehicle-01",
+        "datedJourneyRef": "fixture-run-01",
+        "line": "U1N",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:15:00+00:00",
+        "delayMinutes": -3,
+        "delaySeconds": -161,
+        "lastStopCode": "bstpgmj",
+        "lastStopName": "Transport Hub",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "citylines east"
+          },
+          "garage": {
+            "name": "Lawrence Hill"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-01",
+        "collectorStopSequence": 0,
+        "journeyContext": {
+          "tripId": "fixture-trip-01",
+          "timingPointNumber": 1,
+          "totalStops": 18,
+          "origin": "Transport Hub",
+          "destination": "Transport Hub"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-01"
+    },
+    {
+      "now": "2026-09-25T19:12:42+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:12+00:00",
+        "vehicleRef": "fixture-vehicle-02",
+        "datedJourneyRef": "fixture-run-02",
+        "line": "D2",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:09:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 132,
+        "lastStopCode": "bthjmdp",
+        "lastStopName": "St Mary's Buildings",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Cymru Red"
+          },
+          "garage": {
+            "name": "Wells"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro200 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-02",
+        "collectorStopSequence": 58,
+        "journeyContext": {
+          "tripId": "fixture-trip-02",
+          "timingPointNumber": 59,
+          "totalStops": 60,
+          "origin": "Sainsbury's Superstore",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-02"
+    },
+    {
+      "now": "2026-09-25T19:12:53+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:23+00:00",
+        "vehicleRef": "fixture-vehicle-03",
+        "datedJourneyRef": "fixture-run-03",
+        "line": "m4",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:30:00+00:00",
+        "delayMinutes": 3,
+        "delaySeconds": 203,
+        "lastStopCode": "bstgajm",
+        "lastStopName": "The Centre",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "metrobus m4"
+          },
+          "garage": {
+            "name": "Marlborough Street"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-03",
+        "collectorStopSequence": 15,
+        "journeyContext": {
+          "tripId": "fixture-trip-03",
+          "timingPointNumber": 16,
+          "totalStops": 16,
+          "origin": "Bus Station",
+          "destination": "The Centre"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-03"
+    },
+    {
+      "now": "2026-09-25T19:12:52+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:22+00:00",
+        "vehicleRef": "fixture-vehicle-04",
+        "datedJourneyRef": "fixture-run-04",
+        "line": "75",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T17:51:00+00:00",
+        "delayMinutes": 1,
+        "delaySeconds": 82,
+        "lastStopCode": "sgltajg",
+        "lastStopName": "Wood Street",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-04",
+        "collectorStopSequence": 50,
+        "journeyContext": {
+          "tripId": "fixture-trip-04",
+          "timingPointNumber": 51,
+          "totalStops": 63,
+          "origin": "Hengrove Park",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Scenario overlay: captured Bath weather replayed as a supplied input; not asserted to match this bus time/location.",
+      "id": "case-04",
+      "weatherContext": "OpenWeather area observation near Bath at 2026-09-25 20:00 BST: 16°C (feels like 15°C), with overcast clouds, wind WNW 7mph (gusts 11mph)"
+    },
+    {
+      "now": "2026-09-25T19:12:52+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:22+00:00",
+        "vehicleRef": "fixture-vehicle-05",
+        "datedJourneyRef": "fixture-run-05",
+        "line": "76",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T17:59:00+00:00",
+        "delayMinutes": 17,
+        "delaySeconds": 1042,
+        "lastStopCode": "bstgawd",
+        "lastStopName": "Dalby Avenue",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-05",
+        "collectorStopSequence": 32,
+        "journeyContext": {
+          "tripId": "fixture-trip-05",
+          "timingPointNumber": 33,
+          "totalStops": 54,
+          "origin": "Crow Lane Lay-by",
+          "destination": "Hengrove Depot"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-05"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-06",
+        "datedJourneyRef": "fixture-run-06",
+        "line": "76",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:42:00+00:00",
+        "delayMinutes": 15,
+        "delaySeconds": 921,
+        "lastStopCode": "bstpgjw",
+        "lastStopName": "Southmead Hospital",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-06",
+        "collectorStopSequence": 13,
+        "journeyContext": {
+          "tripId": "fixture-trip-06",
+          "timingPointNumber": 14,
+          "totalStops": 54,
+          "origin": "Crow Lane Lay-by",
+          "destination": "Hengrove Depot"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Editorial fact supplied from the checked-in library at 11422bd; preselected for audition, not a replay of live fact selection.",
+      "id": "case-06",
+      "hook": {
+        "id": "regional-bus-margin-fy2026",
+        "kind": "fact",
+        "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
+        "label": "sourced fact",
+        "promptHint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
+        "requirements": [
+          {
+            "label": "Regional Bus scope",
+            "alternatives": [
+              "Regional Bus"
+            ]
+          },
+          {
+            "label": "8.8% margin",
+            "alternatives": [
+              "8.8%"
+            ]
+          },
+          {
+            "label": "9.7% comparison",
+            "alternatives": [
+              "9.7%"
+            ]
+          },
+          {
+            "label": "falling direction",
+            "alternatives": [
+              "down from",
+              "fell from",
+              "fallen from",
+              "lower than"
+            ]
+          },
+          {
+            "label": "FY2026",
+            "alternatives": [
+              "FY2026"
+            ]
+          },
+          {
+            "label": "FY2025",
+            "alternatives": [
+              "FY2025"
+            ]
+          }
+        ]
+      },
+      "hookSource": {
+        "publisher": "FirstGroup plc",
+        "title": "Annual Report and Accounts 2026",
+        "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
+        "published_on": "2026-06-18",
+        "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "now": "2026-09-25T19:12:50+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:20+00:00",
+        "vehicleRef": "fixture-vehicle-07",
+        "datedJourneyRef": "fixture-run-07",
+        "line": "522",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:00:00+00:00",
+        "delayMinutes": -4,
+        "delaySeconds": -220,
+        "lastStopCode": "bthpamw",
+        "lastStopName": "Memorial Park",
+        "lastStopTime": "",
+        "eventType": "early",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Fuchsia Front Urban"
+          },
+          "garage": {
+            "name": "Bath"
+          },
+          "vehicle_type": {
+            "name": "Wright StreetDeck Ultroliner"
+          }
+        },
+        "collectorTripId": "fixture-trip-07",
+        "collectorStopSequence": 69,
+        "journeyContext": {
+          "tripId": "fixture-trip-07",
+          "timingPointNumber": 70,
+          "totalStops": 90,
+          "origin": "Bus Station",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-07"
+    },
+    {
+      "now": "2026-09-25T15:41:26+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T15:40:56+00:00",
+        "vehicleRef": "fixture-vehicle-08",
+        "datedJourneyRef": "fixture-run-08",
+        "line": "4",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T14:15:00+00:00",
+        "delayMinutes": 33,
+        "delaySeconds": 1976,
+        "lastStopCode": "bthdtat",
+        "lastStopName": "Eastfield Avenue - Top",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Bath"
+          },
+          "vehicle_type": {
+            "name": "Wright StreetDeck NewPower EV"
+          }
+        },
+        "collectorTripId": "fixture-trip-08",
+        "collectorStopSequence": 31,
+        "journeyContext": {
+          "tripId": "fixture-trip-08",
+          "timingPointNumber": 32,
+          "totalStops": 33,
+          "origin": "Odd Down P&R",
+          "destination": "Haviland Park"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Synthetic traffic context for eligibility/verifier coverage; not a real road observation.",
+      "id": "case-08",
+      "trafficContext": {
+        "key": "fixture-road-7",
+        "checkedAt": "2026-09-25T15:41:26+00:00",
+        "condition": "much slower than a clear road",
+        "scope": "one nearby road segment, not the bus route or direction"
+      }
+    },
+    {
+      "now": "2026-09-25T03:18:12+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T03:17:42+00:00",
+        "vehicleRef": "fixture-vehicle-09",
+        "datedJourneyRef": "fixture-run-09",
+        "line": "m1",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T02:15:00+00:00",
+        "delayMinutes": -3,
+        "delaySeconds": -198,
+        "lastStopCode": "sglagta",
+        "lastStopName": "Bus Station",
+        "lastStopTime": "",
+        "eventType": "early",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "metrobus m1"
+          },
+          "garage": {
+            "name": "Marlborough Street"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-09",
+        "collectorStopSequence": 28,
+        "journeyContext": {
+          "tripId": "fixture-trip-09",
+          "timingPointNumber": 29,
+          "totalStops": 29,
+          "origin": "Hengrove Park",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-09"
+    },
+    {
+      "now": "2026-09-25T19:12:52+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:22+00:00",
+        "vehicleRef": "fixture-vehicle-10",
+        "datedJourneyRef": "fixture-run-10",
+        "line": "17",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:05:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 142,
+        "lastStopCode": "bstgwtg",
+        "lastStopName": "Muller Road Top",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "campus to campus"
+          },
+          "garage": {
+            "name": "Keynsham"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro400 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-10",
+        "collectorStopSequence": 3,
+        "journeyContext": {
+          "tripId": "fixture-trip-10",
+          "timingPointNumber": 4,
+          "totalStops": 70,
+          "origin": "Southmead Hospital",
+          "destination": "Burnett Business Park"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-10"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-11",
+        "datedJourneyRef": "fixture-run-11",
+        "line": "45",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:18:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 141,
+        "lastStopCode": "bstpdta",
+        "lastStopName": "Croydon Street",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-11",
+        "collectorStopSequence": 34,
+        "journeyContext": {
+          "tripId": "fixture-trip-11",
+          "timingPointNumber": 35,
+          "totalStops": 62,
+          "origin": "Hengrove Depot",
+          "destination": "Cherry Garden Road"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-11"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-12",
+        "datedJourneyRef": "fixture-run-12",
+        "line": "2a",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:20:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 141,
+        "lastStopCode": "bstjada",
+        "lastStopName": "Temple Meads Stn",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-12",
+        "collectorStopSequence": 29,
+        "journeyContext": {
+          "tripId": "fixture-trip-12",
+          "timingPointNumber": 30,
+          "totalStops": 50,
+          "origin": "Charlton Road",
+          "destination": "The Coots"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Scenario overlay: captured Bath weather replayed as a supplied input; not asserted to match this bus time/location.",
+      "id": "case-12",
+      "weatherContext": "OpenWeather area observation near Bath at 2026-09-25 20:00 BST: 16°C (feels like 15°C), with overcast clouds, wind WNW 7mph (gusts 11mph)"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-13",
+        "datedJourneyRef": "fixture-run-13",
+        "line": "X9",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:00:00+00:00",
+        "delayMinutes": 4,
+        "delaySeconds": 261,
+        "lastStopCode": "wsmgpjp",
+        "lastStopName": "Christ Church",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Weston"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-13",
+        "collectorStopSequence": 14,
+        "journeyContext": {
+          "tripId": "fixture-trip-13",
+          "timingPointNumber": 15,
+          "totalStops": 16,
+          "origin": "Ash Hayes Road",
+          "destination": "Link Road"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-13"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-14",
+        "datedJourneyRef": "fixture-run-14",
+        "line": "A1",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:05:00+00:00",
+        "delayMinutes": 0,
+        "delaySeconds": 21,
+        "lastStopCode": "wsmjgat",
+        "lastStopName": "Dundry Lane",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Bristol Airport Flyer"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-14",
+        "collectorStopSequence": 5,
+        "journeyContext": {
+          "tripId": "fixture-trip-14",
+          "timingPointNumber": 6,
+          "totalStops": 22,
+          "origin": "Public Transport Interchange",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Editorial fact supplied from the checked-in library at 11422bd; preselected for audition, not a replay of live fact selection.",
+      "id": "case-14",
+      "hook": {
+        "id": "regional-bus-margin-fy2026",
+        "kind": "fact",
+        "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
+        "label": "sourced fact",
+        "promptHint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
+        "requirements": [
+          {
+            "label": "Regional Bus scope",
+            "alternatives": [
+              "Regional Bus"
+            ]
+          },
+          {
+            "label": "8.8% margin",
+            "alternatives": [
+              "8.8%"
+            ]
+          },
+          {
+            "label": "9.7% comparison",
+            "alternatives": [
+              "9.7%"
+            ]
+          },
+          {
+            "label": "falling direction",
+            "alternatives": [
+              "down from",
+              "fell from",
+              "fallen from",
+              "lower than"
+            ]
+          },
+          {
+            "label": "FY2026",
+            "alternatives": [
+              "FY2026"
+            ]
+          },
+          {
+            "label": "FY2025",
+            "alternatives": [
+              "FY2025"
+            ]
+          }
+        ]
+      },
+      "hookSource": {
+        "publisher": "FirstGroup plc",
+        "title": "Annual Report and Accounts 2026",
+        "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
+        "published_on": "2026-06-18",
+        "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-15",
+        "datedJourneyRef": "fixture-run-15",
+        "line": "A4",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:10:00+00:00",
+        "delayMinutes": -1,
+        "delaySeconds": -39,
+        "lastStopCode": "bthjgam",
+        "lastStopName": "Nile Street",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Bristol Airport Flyer"
+          },
+          "garage": {
+            "name": "Bath"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro400 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-15",
+        "collectorStopSequence": 46,
+        "journeyContext": {
+          "tripId": "fixture-trip-15",
+          "timingPointNumber": 47,
+          "totalStops": 51,
+          "origin": "Airport Tavern",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-15"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-16",
+        "datedJourneyRef": "fixture-run-16",
+        "line": "U2",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:00:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 141,
+        "lastStopCode": "wsmpgmg",
+        "lastStopName": "Beaufighter Road",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Weston"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro400 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-16",
+        "collectorStopSequence": 44,
+        "journeyContext": {
+          "tripId": "fixture-trip-16",
+          "timingPointNumber": 45,
+          "totalStops": 69,
+          "origin": "Bus Station",
+          "destination": "Interchange"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Synthetic traffic context for eligibility/verifier coverage; not a real road observation.",
+      "id": "case-16",
+      "trafficContext": {
+        "key": "fixture-road-15",
+        "checkedAt": "2026-09-25T19:12:51+00:00",
+        "condition": "much slower than a clear road",
+        "scope": "one nearby road segment, not the bus route or direction"
+      }
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-17",
+        "datedJourneyRef": "fixture-run-17",
+        "line": "42",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:32:00+00:00",
+        "delayMinutes": 4,
+        "delaySeconds": 261,
+        "lastStopCode": "sgldwjw",
+        "lastStopName": "Hollyguest Road",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Keynsham"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro400 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-17",
+        "collectorStopSequence": 24,
+        "journeyContext": {
+          "tripId": "fixture-trip-17",
+          "timingPointNumber": 25,
+          "totalStops": 56,
+          "origin": "The Centre",
+          "destination": "Burnett Business Park"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-17"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-18",
+        "datedJourneyRef": "fixture-run-18",
+        "line": "1",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:28:00+00:00",
+        "delayMinutes": 13,
+        "delaySeconds": 801,
+        "lastStopCode": "bstdgda",
+        "lastStopName": "Black Boy Hill",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "citylines east"
+          },
+          "garage": {
+            "name": "Lawrence Hill"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-18",
+        "collectorStopSequence": 23,
+        "journeyContext": {
+          "tripId": "fixture-trip-18",
+          "timingPointNumber": 24,
+          "totalStops": 46,
+          "origin": "Bus Station",
+          "destination": "Whitmore Avenue"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-18"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-19",
+        "datedJourneyRef": "fixture-run-19",
+        "line": "m3",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:40:00+00:00",
+        "delayMinutes": 7,
+        "delaySeconds": 441,
+        "lastStopCode": "sglpwtm",
+        "lastStopName": "Emerald Park",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "metrobus m3"
+          },
+          "garage": {
+            "name": "Marlborough Street"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-19",
+        "collectorStopSequence": 9,
+        "journeyContext": {
+          "tripId": "fixture-trip-19",
+          "timingPointNumber": 10,
+          "totalStops": 14,
+          "origin": "The Centre",
+          "destination": "Emersons Green"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-19"
+    },
+    {
+      "now": "2026-09-25T19:12:51+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:21+00:00",
+        "vehicleRef": "fixture-vehicle-20",
+        "datedJourneyRef": "fixture-run-20",
+        "line": "U1",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:02:00+00:00",
+        "delayMinutes": -2,
+        "delaySeconds": -99,
+        "lastStopCode": "bthjpwt",
+        "lastStopName": "Grand Parade",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Bath"
+          },
+          "vehicle_type": {
+            "name": "Wright StreetDeck NewPower EV"
+          }
+        },
+        "collectorTripId": "fixture-trip-20",
+        "collectorStopSequence": 12,
+        "journeyContext": {
+          "tripId": "fixture-trip-20",
+          "timingPointNumber": 13,
+          "totalStops": 13,
+          "origin": "Arrivals Square",
+          "destination": "Grand Parade"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Scenario overlay: captured Bath weather replayed as a supplied input; not asserted to match this bus time/location.",
+      "id": "case-20",
+      "weatherContext": "OpenWeather area observation near Bath at 2026-09-25 20:00 BST: 16°C (feels like 15°C), with overcast clouds, wind WNW 7mph (gusts 11mph)"
+    },
+    {
+      "now": "2026-09-25T19:12:50+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:20+00:00",
+        "vehicleRef": "fixture-vehicle-21",
+        "datedJourneyRef": "fixture-run-21",
+        "line": "36",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:23:00+00:00",
+        "delayMinutes": 0,
+        "delaySeconds": 20,
+        "lastStopCode": "bstmgmt",
+        "lastStopName": "The Rock",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-21",
+        "collectorStopSequence": 39,
+        "journeyContext": {
+          "tripId": "fixture-trip-21",
+          "timingPointNumber": 40,
+          "totalStops": 48,
+          "origin": "Kings Head Lane",
+          "destination": "Wootton Crescent"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-21"
+    },
+    {
+      "now": "2026-09-25T19:12:50+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:20+00:00",
+        "vehicleRef": "fixture-vehicle-22",
+        "datedJourneyRef": "fixture-run-22",
+        "line": "X39",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:00:00+00:00",
+        "delayMinutes": -1,
+        "delaySeconds": -40,
+        "lastStopCode": "bthdmjg",
+        "lastStopName": "Newbridge Gardens",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Bath City"
+          },
+          "garage": {
+            "name": "Wells"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro400"
+          }
+        },
+        "collectorTripId": "fixture-trip-22",
+        "collectorStopSequence": 11,
+        "journeyContext": {
+          "tripId": "fixture-trip-22",
+          "timingPointNumber": 12,
+          "totalStops": 39,
+          "origin": "Bus Station",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Editorial fact supplied from the checked-in library at 11422bd; preselected for audition, not a replay of live fact selection.",
+      "id": "case-22",
+      "hook": {
+        "id": "regional-bus-margin-fy2026",
+        "kind": "fact",
+        "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
+        "label": "sourced fact",
+        "promptHint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
+        "requirements": [
+          {
+            "label": "Regional Bus scope",
+            "alternatives": [
+              "Regional Bus"
+            ]
+          },
+          {
+            "label": "8.8% margin",
+            "alternatives": [
+              "8.8%"
+            ]
+          },
+          {
+            "label": "9.7% comparison",
+            "alternatives": [
+              "9.7%"
+            ]
+          },
+          {
+            "label": "falling direction",
+            "alternatives": [
+              "down from",
+              "fell from",
+              "fallen from",
+              "lower than"
+            ]
+          },
+          {
+            "label": "FY2026",
+            "alternatives": [
+              "FY2026"
+            ]
+          },
+          {
+            "label": "FY2025",
+            "alternatives": [
+              "FY2025"
+            ]
+          }
+        ]
+      },
+      "hookSource": {
+        "publisher": "FirstGroup plc",
+        "title": "Annual Report and Accounts 2026",
+        "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
+        "published_on": "2026-06-18",
+        "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "now": "2026-09-25T19:12:50+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:20+00:00",
+        "vehicleRef": "fixture-vehicle-23",
+        "datedJourneyRef": "fixture-run-23",
+        "line": "70",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:05:00+00:00",
+        "delayMinutes": -1,
+        "delaySeconds": -40,
+        "lastStopCode": "bstgadg",
+        "lastStopName": "The Centre",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "citylines east"
+          },
+          "garage": {
+            "name": "Lawrence Hill"
+          },
+          "vehicle_type": {
+            "name": "Scania N280UD ADL Enviro400 City CBG"
+          }
+        },
+        "collectorTripId": "fixture-trip-23",
+        "collectorStopSequence": 3,
+        "journeyContext": {
+          "tripId": "fixture-trip-23",
+          "timingPointNumber": 4,
+          "totalStops": 31,
+          "origin": "Temple Meads Stn",
+          "destination": "Frenchay Campus"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-23"
+    },
+    {
+      "now": "2026-09-25T19:12:50+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:20+00:00",
+        "vehicleRef": "fixture-vehicle-24",
+        "datedJourneyRef": "fixture-run-24",
+        "line": "8",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:05:00+00:00",
+        "delayMinutes": 2,
+        "delaySeconds": 140,
+        "lastStopCode": "bstgwgp",
+        "lastStopName": "Cabot Circus South",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong E12"
+          }
+        },
+        "collectorTripId": "fixture-trip-24",
+        "collectorStopSequence": 5,
+        "journeyContext": {
+          "tripId": "fixture-trip-24",
+          "timingPointNumber": 6,
+          "totalStops": 38,
+          "origin": "Temple Quarter Campus",
+          "destination": "Temple Quarter Campus"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Synthetic traffic context for eligibility/verifier coverage; not a real road observation.",
+      "id": "case-24",
+      "trafficContext": {
+        "key": "fixture-road-23",
+        "checkedAt": "2026-09-25T19:12:50+00:00",
+        "condition": "much slower than a clear road",
+        "scope": "one nearby road segment, not the bus route or direction"
+      }
+    },
+    {
+      "now": "2026-09-25T19:12:49+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:19+00:00",
+        "vehicleRef": "fixture-vehicle-25",
+        "datedJourneyRef": "fixture-run-25",
+        "line": "24",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T19:05:00+00:00",
+        "delayMinutes": 1,
+        "delaySeconds": 79,
+        "lastStopCode": "bstjgwt",
+        "lastStopName": "Turville Drive",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-25",
+        "collectorStopSequence": 5,
+        "journeyContext": {
+          "tripId": "fixture-trip-25",
+          "timingPointNumber": 6,
+          "totalStops": 46,
+          "origin": "Southmead Hospital",
+          "destination": "Langley Crescent"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-25"
+    },
+    {
+      "now": "2026-09-25T19:12:49+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:19+00:00",
+        "vehicleRef": "fixture-vehicle-26",
+        "datedJourneyRef": "fixture-run-26",
+        "line": "X1",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:50:00+00:00",
+        "delayMinutes": -1,
+        "delaySeconds": -41,
+        "lastStopCode": "wsmpdpg",
+        "lastStopName": "Interchange",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Weston"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-26",
+        "collectorStopSequence": 15,
+        "journeyContext": {
+          "tripId": "fixture-trip-26",
+          "timingPointNumber": 16,
+          "totalStops": 67,
+          "origin": "Asda Store",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-26"
+    },
+    {
+      "now": "2026-09-25T19:12:49+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:19+00:00",
+        "vehicleRef": "fixture-vehicle-27",
+        "datedJourneyRef": "fixture-run-27",
+        "line": "171",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:55:00+00:00",
+        "delayMinutes": 6,
+        "delaySeconds": 379,
+        "lastStopCode": "bthdwpj",
+        "lastStopName": "Combe Hay Lane",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Bath City"
+          },
+          "garage": {
+            "name": "Bath"
+          },
+          "vehicle_type": {
+            "name": "ADL Enviro200 MMC"
+          }
+        },
+        "collectorTripId": "fixture-trip-27",
+        "collectorStopSequence": 10,
+        "journeyContext": {
+          "tripId": "fixture-trip-27",
+          "timingPointNumber": 11,
+          "totalStops": 65,
+          "origin": "Bus Station",
+          "destination": "Bus Station"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-27"
+    },
+    {
+      "now": "2026-09-25T19:12:49+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:19+00:00",
+        "vehicleRef": "fixture-vehicle-28",
+        "datedJourneyRef": "fixture-run-28",
+        "line": "48x",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:45:00+00:00",
+        "delayMinutes": 1,
+        "delaySeconds": 79,
+        "lastStopCode": "bstmdat",
+        "lastStopName": "Royate Hill",
+        "lastStopTime": "",
+        "eventType": "punctual",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "Olympia"
+          },
+          "garage": {
+            "name": "Marlborough Street"
+          },
+          "vehicle_type": {
+            "name": "Volvo B9TL Wright Eclipse Gemini"
+          }
+        },
+        "collectorTripId": "fixture-trip-28",
+        "collectorStopSequence": 24,
+        "journeyContext": {
+          "tripId": "fixture-trip-28",
+          "timingPointNumber": 25,
+          "totalStops": 28,
+          "origin": "Sainsbury's",
+          "destination": "The Centre"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Scenario overlay: captured Bath weather replayed as a supplied input; not asserted to match this bus time/location.",
+      "id": "case-28",
+      "weatherContext": "OpenWeather area observation near Bath at 2026-09-25 20:00 BST: 16°C (feels like 15°C), with overcast clouds, wind WNW 7mph (gusts 11mph)"
+    },
+    {
+      "now": "2026-09-25T19:12:48+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:18+00:00",
+        "vehicleRef": "fixture-vehicle-29",
+        "datedJourneyRef": "fixture-run-29",
+        "line": "74",
+        "direction": "inbound",
+        "originAimedDepartureTimeStr": "2026-09-25T17:53:00+00:00",
+        "delayMinutes": 7,
+        "delaySeconds": 438,
+        "lastStopCode": "bstdwdp",
+        "lastStopName": "The Malago",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-29",
+        "collectorStopSequence": 47,
+        "journeyContext": {
+          "tripId": "fixture-trip-29",
+          "timingPointNumber": 48,
+          "totalStops": 61,
+          "origin": "Great Park Road",
+          "destination": "Hengrove Depot"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim.",
+      "id": "case-29"
+    },
+    {
+      "now": "2026-09-25T19:12:48+00:00",
+      "event": {
+        "operatorRef": "FBRI",
+        "timestamp": "2026-09-25T19:12:18+00:00",
+        "vehicleRef": "fixture-vehicle-30",
+        "datedJourneyRef": "fixture-run-30",
+        "line": "2",
+        "direction": "outbound",
+        "originAimedDepartureTimeStr": "2026-09-25T18:40:00+00:00",
+        "delayMinutes": 6,
+        "delaySeconds": 378,
+        "lastStopCode": "bstdgwm",
+        "lastStopName": "Henleaze Road",
+        "lastStopTime": "",
+        "eventType": "delay",
+        "significance": 1,
+        "lowConfidence": false,
+        "source": "live_snapshot",
+        "busDetails": {
+          "livery": {
+            "name": "WESTbus"
+          },
+          "garage": {
+            "name": "Hengrove"
+          },
+          "vehicle_type": {
+            "name": "Yutong U11DD"
+          }
+        },
+        "collectorTripId": "fixture-trip-30",
+        "collectorStopSequence": 25,
+        "journeyContext": {
+          "tripId": "fixture-trip-30",
+          "timingPointNumber": 26,
+          "totalStops": 61,
+          "origin": "Bus Station",
+          "destination": "The Coots"
+        }
+      },
+      "provenance": "Real collector vehicle snapshot with exact matched timetable stop sequence. Livery/depot are the fleet metadata captured with this export, not a historical allocation claim. Editorial fact supplied from the checked-in library at 11422bd; preselected for audition, not a replay of live fact selection.",
+      "id": "case-30",
+      "hook": {
+        "id": "regional-bus-margin-fy2026",
+        "kind": "fact",
+        "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
+        "label": "sourced fact",
+        "promptHint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
+        "requirements": [
+          {
+            "label": "Regional Bus scope",
+            "alternatives": [
+              "Regional Bus"
+            ]
+          },
+          {
+            "label": "8.8% margin",
+            "alternatives": [
+              "8.8%"
+            ]
+          },
+          {
+            "label": "9.7% comparison",
+            "alternatives": [
+              "9.7%"
+            ]
+          },
+          {
+            "label": "falling direction",
+            "alternatives": [
+              "down from",
+              "fell from",
+              "fallen from",
+              "lower than"
+            ]
+          },
+          {
+            "label": "FY2026",
+            "alternatives": [
+              "FY2026"
+            ]
+          },
+          {
+            "label": "FY2025",
+            "alternatives": [
+              "FY2025"
+            ]
+          }
+        ]
+      },
+      "hookSource": {
+        "publisher": "FirstGroup plc",
+        "title": "Annual Report and Accounts 2026",
+        "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
+        "published_on": "2026-06-18",
+        "verified_on": "2026-09-15"
+      }
+    }
+  ]
+}
