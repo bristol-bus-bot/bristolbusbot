@@ -16,7 +16,8 @@
     "windows-summary": "cross-env TEST_MODE=true NODE_ENV=test PORT=3001 npm run build && npm run start:summary",
     "lint": "echo 'Linting not configured yet'",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "audition": "npm run build && node scripts/audition.mjs"
   },
   "keywords": [
     "bristol",
