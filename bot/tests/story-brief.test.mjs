@@ -133,12 +133,12 @@ function socialHarness(events = [freshEvent()]) {
   return { manager, state, delivered, publications: () => publications };
 }
 
-test('rejected AI drafts publish a factual observation with its timestamp', async () => {
+test('rejected AI drafts publish a factual observation with direction and status', async () => {
   const h = socialHarness();
   h.manager.setAICommentary({ generatePost: async () => null });
   await h.manager.processEventCollector();
   assert.equal(h.publications(), 1);
-  assert.match(h.delivered[0].text, /^At \d\d:\d\d, the 42 was recorded 8 minutes late at Two Mile Hill\.$/);
+  assert.match(h.delivered[0].text, /^The outbound 42 was 8 minutes late at Two Mile Hill\.$/);
 });
 
 test('a changed observation during writing uses reserve prose without a fake bus event', async () => {
@@ -205,13 +205,13 @@ test('empty collector publishes and fresh snapshots can supply an on-time story'
   const normal = socialHarness([]);
   normal.manager.setStoryProvider(() => [{ ...freshEvent(), eventType: 'punctual', delayMinutes: 0 }]);
   await normal.manager.processEventCollector();
-  assert.match(normal.delivered[0].text, /recorded on time/);
+  assert.match(normal.delivered[0].text, /was on time/);
 });
 
 test('reserve posts fit the platform and differ between consecutive cycles', () => {
   for (let i = 0; i < 12; i++) assert.ok(reservePost(i * 1200000).length <= 300);
-  assert.notEqual(reservePost(now), reservePost(now + 1200000));
-  assert.match(observationPost(event), /At 12:59, the 42 was recorded 8 minutes late/);
+  assert.notEqual(reservePost(now), reservePost(now + 1200000,[{text:reservePost(now),publishedAt:new Date(now).toISOString()}]));
+  assert.match(observationPost(event), /The outbound 42 was 8 minutes late/);
 });
 
 test('uncertain delivery never triggers a second different post', async () => {
