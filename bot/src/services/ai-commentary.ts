@@ -426,7 +426,7 @@ export class AICommentary {
             for (let attempt = 0; attempt < 2; attempt++) {
                 const writer = await this.requestWriter(context, currentTime, writerHook, recentPosts,
                     corrections, subject, request, previousDraft);
-                const prepared = this.prepareWriterCandidate(writer, context, writerHook, subject);
+                const prepared = this.prepareWriterCandidate(writer, context, writerHook, subject, recentPosts);
                 let issues = prepared.issues;
                 if (prepared.post && !issues.length) {
                     const verifierPrompt = this.buildVerifierPrompt(writer.brief, prepared.post, Boolean(writerHook && writer.hookUsed));
@@ -580,6 +580,7 @@ export class AICommentary {
         context: AICommentaryContext,
         hook: EditorialSelection | null,
         subject?: SubjectChoice,
+        recentPosts: string[] = [],
     ): { post: string | null; issues: string[] } {
         const post = cleanEditorialPost(writer.post);
         if (!post) {
@@ -596,7 +597,7 @@ export class AICommentary {
                     && !(spokenDestination(context.event) && destinationMentioned(post, spokenDestination(context.event)!))
                     ? [`post is missing the supplied ${context.event.direction} direction`] : []),
                 ...factualStoryIssues(post, context.event),
-                ...openingIssues(post, this.appState?.recentPosts || []),
+                ...openingIssues(post, recentPosts),
                 ...(subject?.kind === 'traffic' && /\btom\s*tom\b/i.test(post)
                     ? ['refer to local traffic reports without naming the data supplier'] : []),
                 ...(hook && writer.hookUsed && isBareEditorialPair(post, context.event, hook)

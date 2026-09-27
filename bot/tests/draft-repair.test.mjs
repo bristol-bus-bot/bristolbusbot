@@ -105,3 +105,42 @@ test('the story time budget prevents a late retry and caps request timeouts',asy
   assert.equal(calls.length,2);
   assert.equal(calls[1][4],3000);
 });
+
+import { ApplicationState } from '../dist/services/application-state.js';
+import { factualStoryIssues, buildStoryPrompt } from '../dist/services/story-brief.js';
+import { destinationMentioned, hasDestinationClaim } from '../dist/services/journey-context.js';
+
+test('real publication state is oldest-first but writer and opening checks share newest-first history', async () => {
+  for (const clocksAreRecent of [true, false]) {
+    const {ai,calls,run}=fixture(n => n===1 ? output('At ' + new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/London',hour:'2-digit',minute:'2-digit'}).format(new Date(event.timestamp)) + ', the outbound 42 was eight minutes late at Two Mile Hill.') : n===2 && clocksAreRecent ? output(corrected) : pass);
+    ai.appState=ApplicationState.getInstance();
+    ai.appState.recentPosts=[];
+    ai.editorialContext={recordPost(){}};
+    ai.subjectHistory=undefined;
+    const plain=Array.from({length:15},(_,i)=>`Older observation ${i}`);
+    const clock=['At 10:00, an observation.','At 10:20, another observation.'];
+    for(const post of clocksAreRecent ? [...plain,...clock] : [...clock,...plain]) ai.recordPublished(post);
+    const recent=await ai.getRecentPostsForWriter();
+    assert.equal(recent[0],ai.appState.recentPosts.at(-1));
+    const result=await run();
+    assert.ok(result);
+    assert.equal(calls.length,clocksAreRecent?3:2);
+    if(clocksAreRecent) assert.match(calls[1][0],/two of the last five/);
+    ai.appState.recentPosts=[];
+  }
+});
+
+test('movement checks recognise spoken and raw stop names',()=>{
+  const bus={...event,lastStopName:'The Haymarket - B10'};
+  assert.ok(factualStoryIssues('The 42 passed The Haymarket.',bus).length);
+  assert.ok(factualStoryIssues('The 42 passed The Haymarket - B10.',bus).length);
+  assert.equal(factualStoryIssues('The 42 was late at The Haymarket.',bus).length,0);
+});
+
+test('temporal towards phrases do not become destination claims',()=>{
+  assert.equal(hasDestinationClaim('towards the end of the evening'),false);
+  assert.equal(destinationMentioned('Towards Kingswood, towards the end of the evening.','Kingswood'),true);
+  assert.equal(destinationMentioned('Towards Kingswood, then towards Bath.','Kingswood'),false);
+  assert.equal(hasDestinationClaim('towards Bath'),true);
+  assert.doesNotMatch(buildStoryPrompt(event,event.timestamp,null,[]),/GMT[+-]|BST/);
+});
