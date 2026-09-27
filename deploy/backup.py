@@ -677,7 +677,9 @@ def _git_bundle(source: Source, destination: Path) -> None:
     trusted_repository = f"safe.directory={source.path}"
     commands = (
         [
-            "git", "-c", trusted_repository, "-C", str(source.path),
+            "git", "-c", trusted_repository,
+            "-c", "pack.threads=1", "-c", "pack.windowMemory=32m",
+            "-c", "pack.deltaCacheSize=16m", "-C", str(source.path),
             "bundle", "create", str(destination), "--all",
         ],
         [
@@ -753,6 +755,7 @@ def stage(config: Config, *, integrity_check: bool) -> tuple[Path, dict[str, Any
     missing = manifest["optional_sources_absent"]
     try:
         for source in config.sqlite_databases:
+            LOG.info("staging SQLite source: %s", source.name)
             if not _require_or_skip(source, missing):
                 continue
             if source.path.is_symlink():
@@ -768,6 +771,7 @@ def stage(config: Config, *, integrity_check: bool) -> tuple[Path, dict[str, Any
             manifest["databases"].append(record)
 
         for source in config.paths:
+            LOG.info("staging file source: %s", source.name)
             if not _require_or_skip(source, missing):
                 continue
             destination = Path("files") / source.name / source.path.name
@@ -775,6 +779,7 @@ def stage(config: Config, *, integrity_check: bool) -> tuple[Path, dict[str, Any
             manifest["paths"].append(_source_details(source, destination))
 
         for source in config.git_repositories:
+            LOG.info("staging git bundle: %s", source.name)
             if not _require_or_skip(source, missing):
                 continue
             destination = Path("git") / f"{source.name}.bundle"
@@ -796,7 +801,8 @@ def stage(config: Config, *, integrity_check: bool) -> tuple[Path, dict[str, Any
         raise
 
 
-def run_backup(config: Config, *, integrity_check: bool) -> None:
+def run_backup(config: Config, *, integrity_check: bool,
+               skip_retention: bool = False) -> None:
     health = Healthcheck(os.environ.get("BBB_BACKUP_HEALTHCHECK_URL"))
     health.ping("start")
     payload: Path | None = None
@@ -812,8 +818,11 @@ def run_backup(config: Config, *, integrity_check: bool) -> None:
         restic.backup(payload)
         # Copy before local expiry so an earlier failed R2 run can catch up.
         restic.copy_to_r2()
-        restic.forget_local()
-        restic.forget_r2()
+        if not skip_retention:
+            restic.forget_local()
+            restic.forget_r2()
+        else:
+            LOG.info("retention skipped for this recovery run")
     except Exception:
         health.ping("fail")
         raise
@@ -969,6 +978,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     backup = subparsers.add_parser("backup", help="create local and R2 snapshots")
     backup.add_argument(
+        "--skip-retention", action="store_true",
+        help="create/copy snapshots without forgetting or pruning any snapshot",
+    )
+    backup.add_argument(
         "--integrity-check", action="store_true",
         help="use full SQLite integrity_check instead of nightly quick_check",
     )
@@ -992,7 +1005,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = Config.load(args.config)
         with ProcessLock(config.lock_file):
             if args.command == "backup":
-                run_backup(config, integrity_check=args.integrity_check)
+                run_backup(config, integrity_check=args.integrity_check,
+                           skip_retention=args.skip_retention)
             elif args.command == "check":
                 run_check(config)
             elif args.command == "restore":
