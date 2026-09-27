@@ -351,7 +351,9 @@ export class AICommentary {
         const neighbourhood = locality ? findNeighbourhood(locality.lat, locality.lon) : null;
         return {
             event: { ...busEvent, placeContext: {
+                sourceStopCode: busEvent.lastStopCode,
                 locality: stop?.locality || undefined, street: stop?.street || undefined, localAuthority: stop?.local_authority || undefined,
+                ward: locality?.stop_code === busEvent.lastStopCode ? locality.ward_name || undefined : undefined,
                 neighbourhood: neighbourhood?.name, localColour: neighbourhood?.data.flavour,
             } },
             pattern,
@@ -639,7 +641,12 @@ That label is not a claim about the stop's ordinal position along the journey.
 The timestamp is a recent observation, not proof of what is happening at publication.
 The post must describe that observation, not assert the bus's current position or timing.
 The origin schedule does not prove the bus actually departed. Local knowledge absent
-from the evidence cannot be assumed. Vehicle specifications beyond those supplied cannot be assumed.
+from the evidence cannot be assumed. stopGeography describes only the reported stop:
+do not turn a ward into a neighbourhood or attribute its geography to the bus now.
+scheduledJourney describes the matched timetable, not stops actually visited or a
+whole-journey punctuality record. Its termini are not new direction alternatives;
+only the explicit towards field or supplied inbound/outbound direction is allowed.
+Vehicle specifications beyond those supplied cannot be assumed.
 Humorous metaphor, obvious personification and opinion are allowed; do not fail a joke
 merely because it is figurative. Include the supplied direction; do not guess a missing direction. The operator need not be named.
 If the evidence supplies towards, 'towards <that exact destination>' is an alternative

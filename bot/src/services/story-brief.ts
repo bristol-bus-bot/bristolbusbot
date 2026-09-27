@@ -2,6 +2,7 @@ import type { BusEvent } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
 import { spokenStopName } from '../utils/stop-name-cleaner.js';
 import { spokenDestination } from './journey-context.js';
+import { stopGeography, scheduledJourney } from './story-context.js';
 import type { EditorialSelection } from './editorial-context.js';
 import { operatorDisplayName } from './editorial-commentary-policy.js';
 import { chooseSubject, repetitionHints, SUBJECT_PERSONAS, type SubjectChoice } from './story-subject.js';
@@ -69,6 +70,8 @@ ${JSON.stringify({
     direction: event.direction || 'unknown', location: spokenStopName(event.lastStopName || ''),
     ...(spokenDestination(event) ? { towards: spokenDestination(event) } : {}),
     rawStopName: event.lastStopName, stopIdentity: event.lastStopCode,
+    ...(stopGeography(event) ? { stopGeography: stopGeography(event) } : {}),
+    ...(subject.kind === 'service' && scheduledJourney(event) ? { scheduledJourney: scheduledJourney(event) } : {}),
     observedStatus: storyStatus(event), ...subject.context,
 })}
 
