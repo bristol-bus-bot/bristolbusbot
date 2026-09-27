@@ -18,9 +18,13 @@ export function spokenDestination(event: BusEvent): string | null {
 
 export function destinationMentioned(post: string, destination: string): boolean {
     const escaped = destination.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const mentions = [...post.matchAll(/\btowards\s+/gi)];
+    const mentions = [...post.matchAll(/\btowards\s+(?!the (?:end|start) of (?:the )?(?:day|evening|night|morning|afternoon)\b)/gi)];
     const expected = new RegExp(`^towards\\s+${escaped}(?=$|[^\\p{L}\\p{N}])`, 'iu');
     return mentions.length > 0 && mentions.every(m => expected.test(post.slice(m.index)));
+}
+
+export function hasDestinationClaim(post: string): boolean {
+    return /\btowards\s+(?!the (?:end|start) of (?:the )?(?:day|evening|night|morning|afternoon)\b)/i.test(post);
 }
 
 export interface JourneyStop { stop_sequence: number; stop_code: string; stop_name: string; }

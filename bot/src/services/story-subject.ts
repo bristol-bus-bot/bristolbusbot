@@ -34,7 +34,7 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     }
     const choices = [service];
     const trafficAge = traffic ? Date.now() - Date.parse(traffic.checkedAt) : Infinity;
-    const notableTraffic = traffic && ['moving slowly', 'moving very slowly', 'much slower than a clear road'].includes(traffic.condition);
+    const notableTraffic = traffic && ['moving slowly', 'moving very slowly'].includes(traffic.condition);
     if (traffic && notableTraffic && trafficAge >= -30_000 && trafficAge <= 2 * 60_000) {
         choices.push({ kind: 'traffic', key: `traffic:${traffic.key}`, context: {
             nearbyTraffic: { source: 'local traffic reports', checkedAt: traffic.checkedAt, condition: traffic.condition, scope: traffic.scope },
@@ -82,6 +82,10 @@ export function repetitionHints(posts: string[]): string[] {
         [/promise|doing its job|without fuss|no drama/i, 'mock congratulations for punctuality'],
         [/taking.{0,10}time|unhurried|leisure/i, 'taking its time'],
         [/home turf|doorstep|short hop/i, 'home turf and depot doorstep'],
+        [/timetable.{0,25}(?:fiction|suggestion|optimis)|fiction.{0,25}timetable/i, 'timetables as fiction or suggestions'],
+        [/timetable.{0,25}reality|reality.{0,25}timetable/i, 'timetable and reality agreeing'],
+        [/quiet satisfaction|modest slip|minor wobble|calm|composure/i, 'calm delays and quiet satisfaction'],
+        [/wearing.{0,65}like|dressed|coat|wardrobe/i, 'livery as clothing'],
     ];
     return patterns.filter(([pattern]) => pattern.test(recent)).map(([, hint]) => hint);
 }

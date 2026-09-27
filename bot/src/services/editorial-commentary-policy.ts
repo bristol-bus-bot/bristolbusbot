@@ -1,7 +1,7 @@
 import type { BusEvent } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
 import { spokenStopName } from '../utils/stop-name-cleaner.js';
-import { spokenDestination, destinationMentioned } from './journey-context.js';
+import { spokenDestination, destinationMentioned, hasDestinationClaim } from './journey-context.js';
 import type {
     EditorialRequirement,
     EditorialSelection,
@@ -320,7 +320,7 @@ export function validateCommentaryCandidate(
         issues.push('post reverses the observed direction');
     }
     const destination = spokenDestination(event);
-    if (/\btowards\b/i.test(post) && (!destination || !destinationMentioned(post, destination))) {
+    if (hasDestinationClaim(post) && (!destination || !destinationMentioned(post, destination))) {
         issues.push('post names a direction destination not established by the matched journey');
     }
     if (event.lastStopName && !hasLocation(post, event.lastStopName) && !hasLocation(post, spokenStopName(event.lastStopName))) {
