@@ -52,6 +52,19 @@ jobs:
       - name: Run independent production validation
         run: python deploy/timetable_control.py validate "$BBB_TIMETABLE_DB"
 
+      - name: Enforce the Pi delivery size limit before publishing
+        run: |
+          python - <<'PY'
+          import os, sys
+          from pathlib import Path
+          sys.path[:0] = ['deploy', 'pipeline']
+          from timetable_delivery import MAX_DATABASE_BYTES
+          size = Path(os.environ['BBB_TIMETABLE_DB']).stat().st_size
+          if not 0 < size <= MAX_DATABASE_BYTES:
+              raise SystemExit(f'timetable.db is {size} bytes; delivery limit is {MAX_DATABASE_BYTES}')
+          print(f'timetable.db: {size} / {MAX_DATABASE_BYTES} bytes')
+          PY
+
       - name: Create provenance manifest
         run: |
           python pipeline/timetable_manifest.py create \

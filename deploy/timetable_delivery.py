@@ -402,7 +402,11 @@ def extract_safely(archive: Path, destination: Path) -> None:
                         or file_type not in {0, stat.S_IFREG}):
                     raise DeliveryError("unsafe_archive", "artifact contains an unsafe ZIP entry")
                 if info.file_size <= 0 or info.file_size > limits[info.filename]:
-                    raise DeliveryError("unsafe_archive", f"{info.filename} has an unsafe size")
+                    raise DeliveryError(
+                        "unsafe_archive", f"{info.filename} has an unsafe size",
+                        {"detail": "allowed file exceeds size bounds",
+                         "filename": info.filename, "bytes": info.file_size,
+                         "limit_bytes": limits[info.filename]})
                 total += info.file_size
             if total > MAX_TOTAL_BYTES:
                 raise DeliveryError("unsafe_archive", "artifact expands beyond the byte limit")
