@@ -517,7 +517,9 @@ def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str
         if days > maximum_days:
             warnings.append(text)
     if backup.get('result') == 'interrupted':
-        warnings.append('Backup was interrupted by a Pi restart.')
+        warnings.append('Backup was interrupted by a Pi restart.'
+                        if backup.get('failure_code') != 'interrupted_without_result'
+                        else 'Backup stopped without recording a result.')
     elif backup.get('result') == 'failure':
         warnings.append('The latest backup failed.')
     return warnings, freshness
@@ -561,7 +563,8 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         ":bus: *Bristol Bus Bot - daily update*",
         "",
         *(['*Needs attention*', *(f'- {line}' for line in warnings), ''] if warnings else []),
-        overall_line(snapshot),
+        ('Backup or timetable freshness needs attention; see above.'
+         if warnings else overall_line(snapshot)),
         "",
         f"*{heading}*",
         *(f"- {line}" for line in progress),

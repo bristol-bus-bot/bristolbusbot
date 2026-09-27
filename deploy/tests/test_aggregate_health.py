@@ -18,6 +18,8 @@ def test_previous_boot_running_job_is_interrupted_even_with_recent_success(tmp_p
     monkeypatch.setattr(aggregate_health, 'STATE', tmp_path)
     monkeypatch.setattr(aggregate_health, 'JOB_MAX_AGE_HOURS', {'backup': 30})
     monkeypatch.setattr(aggregate_health, 'boot_started_at', lambda: boot)
+    monkeypatch.setattr(aggregate_health.subprocess, 'run', lambda *a, **k:
+                        SimpleNamespace(stdout='LoadState=loaded\nActiveState=activating\n'))
     checks, issues = aggregate_health.job_checks()
     assert checks['backup']['result'] == 'interrupted'
     assert checks['backup']['failure_code'] == 'interrupted_by_restart'
@@ -27,6 +29,11 @@ def test_previous_boot_running_job_is_interrupted_even_with_recent_success(tmp_p
     payload['last_started_at'] = (boot + timedelta(seconds=1)).isoformat()
     path.write_text(json.dumps(payload))
     assert aggregate_health.job_checks()[0]['backup']['result'] == 'running'
+    monkeypatch.setattr(aggregate_health.subprocess, 'run', lambda *a, **k:
+                        SimpleNamespace(stdout='LoadState=loaded\nActiveState=failed\n'))
+    checks, issues = aggregate_health.job_checks()
+    assert checks['backup']['failure_code'] == 'interrupted_without_result'
+    assert issues == ['job:backup']
 
 
 def test_data_health_findings_remain_report_only(tmp_path, monkeypatch):

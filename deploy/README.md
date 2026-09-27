@@ -261,6 +261,16 @@ to `/etc/bristolbusbot/timetable-delivery.token` with mode `0600`. systemd
 mounts that token privately into only the short-lived shadow service; it is not
 placed in the service environment. Monitoring records only its expiry date.
 
+For renewal, the owner creates a replacement with the same repository scope and
+Actions read/write permission, then runs
+`sudo /usr/local/sbin/bbb-configure-timetable-delivery --replace` on the Pi.
+The helper prompts privately for the token and for its GitHub expiry date. It
+updates both the root-only token file and `BBB_GITHUB_TOKEN_EXPIRES_UTC` in
+`/etc/bristolbusbot/timetable-delivery.env`; the next shadow invocation copies
+that date into delivery monitoring state. No application restart is needed.
+The September 2026 incident found an expiry of October 20; renewal remains an
+owner action. Never put the token in an issue, chat, or shell command.
+
 Routine timer runs use the dedicated automatic unit. An exact-run instance is
 diagnostic only and cannot chain into the promoter. Stop the timer and disable
 the root promotion marker during rollout, then run the reviewed numeric GitHub

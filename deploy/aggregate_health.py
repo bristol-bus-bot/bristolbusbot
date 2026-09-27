@@ -151,6 +151,21 @@ def job_checks() -> tuple[dict, list[str]]:
                 interrupted = started_at.tzinfo is not None and started_at < boot
                 if interrupted:
                     result = 'interrupted'
+            ended_without_result = False
+            if result == 'running':
+                try:
+                    unit = subprocess.run(
+                        ['systemctl', 'show', f'bbb-{name}.service',
+                         '-p', 'LoadState', '-p', 'ActiveState'],
+                        capture_output=True, text=True, check=False, timeout=5)
+                    props = dict(line.split('=', 1) for line in unit.stdout.splitlines()
+                                 if '=' in line)
+                    ended_without_result = (props.get('LoadState') == 'loaded' and
+                                            props.get('ActiveState') in {'inactive', 'failed'})
+                    if ended_without_result:
+                        result = 'interrupted'
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
             success = payload.get("last_success_at")
             age_h = age_seconds(success) / 3600 if success else None
             healthy = (result not in {"failure", "interrupted"} and
@@ -165,6 +180,10 @@ def job_checks() -> tuple[dict, list[str]]:
                     failure_code='interrupted_by_restart',
                     interrupted_at=boot.isoformat(),
                     summary='Job was interrupted by a Pi restart')
+            elif ended_without_result:
+                checks[name].update(
+                    failure_code='interrupted_without_result',
+                    summary='Job stopped without recording a result')
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             healthy = False
             checks[name] = {"result": "missing", "error": str(exc)}
