@@ -21,6 +21,7 @@ export class SocialMediaManager {
     private aiCommentary: AICommentary | null = null;
     private bskyAgent: BskyAgent;
     private postingInterval: NodeJS.Timeout | null = null;
+    private currentFallbackReason?: string;
     private followerInterval: NodeJS.Timeout | null = null;
     private processingStory = false;
     private recentStories: PublishedStory[] = [];
@@ -181,7 +182,7 @@ export class SocialMediaManager {
                         logger.info(`--- Successfully posted to BlueSky! --- ${postUrl ? `URL: ${postUrl}` : ''}`);
                         blueskySuccess = true;
                         try {
-                            this.aiCommentary?.recordPublished(finalPostText, postUri || undefined);
+                            this.aiCommentary?.recordPublished(finalPostText, postUri || undefined, this.currentFallbackReason);
                         } catch (error: any) {
                             // A ledger failure must not resubmit an already published post.
                             logger.error('Published post could not update editorial memory', { error: error.message });
@@ -632,11 +633,13 @@ public async processEventCollector(): Promise<void> {
             logAlways('info', `[POSTING_FALLBACK] ${event ? 'observation' : 'reserve'}: ${fallbackReason}`);
         }
         text ||= reservePost();
+        this.currentFallbackReason = usedFallback ? fallbackReason : undefined;
         publishing = true;
         let result = await this.postUpdate(text, event);
         // A last-instant freshness rejection has made no network request. Reserve
         // prose is safe to send; an uncertain network result must not send a second post.
         if (result.stale) {
+            this.currentFallbackReason = 'publication_recheck_failed';
             logAlways('info', '[POSTING_FALLBACK] reserve: publication_recheck_failed');
             result = await this.postUpdate(reservePost(), null);
             event = null;
@@ -646,10 +649,12 @@ public async processEventCollector(): Promise<void> {
     } catch (error: any) {
         logger.error('Posting cycle failed', { error: error.message });
         if (!publishing) {
+            this.currentFallbackReason = 'posting_cycle_failed';
             try { await this.postUpdate(reservePost(), null); }
             catch (fallbackError: any) { logger.error('Reserve post failed', { error: fallbackError.message }); }
         }
     } finally {
+        this.currentFallbackReason = undefined;
         this.processingStory = false;
     }
 }
@@ -659,6 +664,12 @@ public async processEventCollector(): Promise<void> {
      * Called periodically to keep AI context aware of audience size
      */
     async updateFollowerCounts(): Promise<void> {
+        try {
+            await this.aiCommentary?.getPublicationLedger().collectMetrics(async uris => {
+                const result = await this.bskyAgent.getPosts({ uris });
+                return result.data.posts;
+            });
+        } catch { logger.warn('Publication metrics unavailable; posting is unaffected'); }
         const timer = new PerformanceTimer('social_media_follower_update', logger);
 
         try {
