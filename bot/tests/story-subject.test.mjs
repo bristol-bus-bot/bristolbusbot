@@ -10,7 +10,8 @@ import { AICommentary } from '../dist/services/ai-commentary.js';
 import { isBareEditorialPair } from '../dist/services/editorial-commentary-policy.js';
 
 const event = { line: '43', direction: 'inbound', operatorRef: 'FBRI', vehicleRef: 'test',
-  timestamp: '2026-09-15T19:00:00Z', eventType: 'delay', delayMinutes: 5, lastStopName: 'Blackswarth Road',
+  timestamp: '2026-09-15T19:00:00Z', eventType: 'delay', delayMinutes: 5, lastStopName: 'Blackswarth Road', lastStopCode:'fixture-stop',
+  depotContext:{name:'Lawrence Hill',distanceKm:20,sourceStopCode:'fixture-stop',scope:'Reported stop to reviewed yard; not unusual allocation.'},
   busDetails: { livery: { name: 'South Glos Lynx' }, garage: { name: 'Lawrence Hill' }, vehicle_type: { name: 'Scania City CBG' } },
   journeyContext: { timingPointNumber: 10, totalStops: 30, origin: 'Never supplied origin', destination: 'Never supplied destination' } };
 const weather='OpenWeather area observation near Kingswood at 2026-09-15 20:00 BST: 18°C, with clear sky, wind SSW 11mph, humidity 92%';
@@ -23,7 +24,7 @@ test('each subject receives only its relevant supporting facts, never previous p
     assert.equal(evidence.route,'43');
     assert.equal(evidence.observedStatus,'5 minutes late');
     assert.equal('livery' in evidence,choice.kind==='livery');
-    assert.equal('assignedDepot' in evidence,choice.kind==='depot');
+    assert.equal('depot' in evidence,choice.kind==='depot');
     assert.equal('areaWeather' in evidence,choice.kind==='weather');
     assert.equal('editorial' in evidence,choice.kind==='wider');
     assert.doesNotMatch(prompt,/Scania|Never supplied|Made-up Town|TODAY'S VOICE|STYLE EXAMPLES/);

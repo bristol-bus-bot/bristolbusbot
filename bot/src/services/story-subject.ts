@@ -1,6 +1,7 @@
 import type { BusEvent, TrafficContext } from '../types/bus-types.js';
 import type { EditorialSelection } from './editorial-context.js';
 import { scheduledJourney } from './story-context.js';
+import { weatherDescription } from './weather-description.js';
 
 export type StorySubject = 'service' | 'livery' | 'depot' | 'weather' | 'wider' | 'traffic';
 export interface SubjectChoice {
@@ -43,14 +44,18 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     const livery = event.busDetails?.livery?.name?.trim();
     if (livery) choices.push({ kind: 'livery', key: `livery:${livery.toLowerCase()}`, context: { livery } });
     const depot = event.busDetails?.garage?.name?.trim();
-    if (depot) choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`, context: { assignedDepot: depot } });
+    const geography = event.depotContext;
+    if (depot && !event.lowConfidence && geography?.name === depot && geography.sourceStopCode === event.lastStopCode
+        && Number.isFinite(geography.distanceKm) && geography.distanceKm >= 15) choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`,
+        context: { depot: { name: depot, distanceFromReportedStopKm: geography.distanceKm, scope: geography.scope } } });
     if (weather?.trim()) {
         // WeatherService already enforces observation freshness. Keep its area and date,
         // but humidity is rarely a useful story and creates a stream of measurements.
-        const text = weather.replace(/, humidity \d+%/gi, '').trim();
-        const condition = text.match(/, with ([^,]+)/i)?.[1]
-            || text.split(': ').slice(1).join(': ') || text;
-        choices.push({ kind: 'weather', key: `weather:${condition.toLowerCase()}`, context: { areaWeather: text } });
+        const text = weatherDescription(weather);
+        if (text) {
+            const condition = text.split(': ').slice(1).join(': ').replace(/\s*\(-?\d+°C\)/g, '');
+            choices.push({ kind: 'weather', key: `weather:${condition.toLowerCase()}`, context: { areaWeather: text } });
+        }
     }
     if (hook) choices.push({ kind: 'wider', key: `wider:${hook.id}`, context: {
         editorial: { claim: hook.claim || hook.label, qualification: hook.promptHint, requiredPhrases: hook.requirements },
@@ -66,7 +71,7 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
         history.at(-1)?.kind !== choice.kind
         && !history.slice(-6).some(item => item.key === choice.key)
         && !(choice.kind === 'livery' && recent.includes(String(choice.context.livery).toLowerCase()))
-        && !(choice.kind === 'depot' && recent.includes(String(choice.context.assignedDepot).toLowerCase()))
+        && !(choice.kind === 'depot' && recent.includes(event.busDetails?.garage?.name?.toLowerCase() || '\u0000'))
     ));
     // An eligible editorial hook gets its own turn, never priority over other subjects.
     const preferred = SUBJECT_CYCLE[publishedCount % SUBJECT_CYCLE.length];
