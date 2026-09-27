@@ -42,6 +42,24 @@ from timetable_editions import normalize_database
 
 
 NOW = datetime(2026, 7, 22, 10, 0, tzinfo=timezone.utc)
+
+
+def test_oversize_archive_records_safe_diagnostic_context(tmp_path, monkeypatch):
+    import timetable_delivery
+    monkeypatch.setattr(timetable_delivery, 'MAX_DATABASE_BYTES', 10)
+    archive = tmp_path / 'large.zip'
+    with zipfile.ZipFile(archive, 'w') as package:
+        package.writestr('timetable.db', b'x' * 11)
+        package.writestr('manifest.json', '{}')
+        package.writestr('TIMETABLE_ARTIFACT_ATTRIBUTION.txt', 'OGL')
+    with pytest.raises(DeliveryError) as error:
+        extract_safely(archive, tmp_path / 'out')
+    assert error.value.safe_context == {
+        'detail': 'allowed file exceeds size bounds',
+        'filename': 'timetable.db', 'bytes': 11, 'limit_bytes': 10,
+    }
+
+
 RUN_ID = 123456
 COMMIT = "a" * 40
 
