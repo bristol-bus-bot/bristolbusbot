@@ -25,6 +25,9 @@ export class SocialMediaManager {
     private followerInterval: NodeJS.Timeout | null = null;
     private processingStory = false;
     private recentStories: PublishedStory[] = [];
+    private reserveText(): string {
+        return reservePost(Date.now(), this.aiCommentary?.getPublicationLedger?.()?.records || []);
+    }
     private storyProvider: (() => BusEvent[]) | null = null;
 
     setStoryProvider(provider: () => BusEvent[]): void {
@@ -621,7 +624,7 @@ public async processEventCollector(): Promise<void> {
         }
         const usedFallback = !text;
         if (!text && event) {
-            text = observationPost(event);
+            text = observationPost(event, this.aiCommentary?.getPublicationLedger?.()?.recentTexts(1) || []);
             // Do not truncate away qualifying evidence on unusually long names.
             if (text.length > Math.min(300, this.socialConfig.postLimit || 300)) {
                 event = null;
@@ -632,7 +635,7 @@ public async processEventCollector(): Promise<void> {
         if (usedFallback) {
             logAlways('info', `[POSTING_FALLBACK] ${event ? 'observation' : 'reserve'}: ${fallbackReason}`);
         }
-        text ||= reservePost();
+        text ||= this.reserveText();
         this.currentFallbackReason = usedFallback ? fallbackReason : undefined;
         publishing = true;
         let result = await this.postUpdate(text, event);
@@ -641,7 +644,7 @@ public async processEventCollector(): Promise<void> {
         if (result.stale) {
             this.currentFallbackReason = 'publication_recheck_failed';
             logAlways('info', '[POSTING_FALLBACK] reserve: publication_recheck_failed');
-            result = await this.postUpdate(reservePost(), null);
+            result = await this.postUpdate(this.reserveText(), null);
             event = null;
         }
         if (result.bluesky && event) this.recentStories = [...this.recentStories, event].slice(-6);
@@ -650,7 +653,7 @@ public async processEventCollector(): Promise<void> {
         logger.error('Posting cycle failed', { error: error.message });
         if (!publishing) {
             this.currentFallbackReason = 'posting_cycle_failed';
-            try { await this.postUpdate(reservePost(), null); }
+            try { await this.postUpdate(this.reserveText(), null); }
             catch (fallbackError: any) { logger.error('Reserve post failed', { error: fallbackError.message }); }
         }
     } finally {

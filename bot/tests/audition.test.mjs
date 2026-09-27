@@ -36,7 +36,7 @@ test('verifier rejection repairs once, repeated rejection uses factual fallback'
     const run = await replay(cases(event), async (r) => r.kind === 'verifier' ? { text: JSON.stringify({ verdict: 'FAIL', reasons: ['unsupported claim'] }) } : reply(good));
     assert.equal(run.calls.length, 4);
     assert.equal(run.results[0].status, 'observation_fallback');
-    assert.match(run.results[0].post, /was recorded 8 minutes late/);
+    assert.match(run.results[0].post, /was 8 minutes late/);
 });
 test('stale evidence uses reserve with no model call; unavailable response stops sequential history', async () => {
     let calls = 0;
