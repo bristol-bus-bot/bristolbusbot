@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {TrafficService,segmentDistance} from '../dist/services/traffic-service.js';
-import {chooseSubject} from '../dist/services/story-subject.js';
+import {chooseSubject,availableSubjects} from '../dist/services/story-subject.js';
 import {buildStoryPrompt} from '../dist/services/story-brief.js';
 import {SubjectHistory} from '../dist/services/subject-history.js';
 import {AICommentary} from '../dist/services/ai-commentary.js';
@@ -170,4 +170,18 @@ test('the traffic subject and source reach the actual writer and exact final ver
   assert.match(prompts[0],/"nearbyTraffic":/);
   assert.match(prompts[1],/not a matched bus route or direction/);
   assert.equal(prompts.length,2,'traffic does not add an AI call');
+});
+
+test('traffic subjects require notable slow conditions and preserve freshness/fallback',()=>{
+  const bus=event();
+  for (const condition of ['moving freely','a little slower than on a clear road','unknown']) {
+    const traffic={condition,checkedAt:new Date().toISOString(),key:'scenario',scope:'one nearby segment'};
+    assert.ok(!availableSubjects(bus,null,null,traffic).some(s=>s.kind==='traffic'));
+    assert.notEqual(chooseSubject(bus,null,null,7,[],[],traffic).kind,'traffic');
+  }
+  for (const condition of ['moving slowly','moving very slowly']) {
+    const traffic={condition,checkedAt:new Date().toISOString(),key:'scenario',scope:'one nearby segment'};
+    assert.equal(chooseSubject(bus,null,null,7,[],[],traffic).kind,'traffic');
+    assert.ok(!availableSubjects(bus,null,null,{...traffic,checkedAt:new Date(Date.now()-180000).toISOString()}).some(s=>s.kind==='traffic'));
+  }
 });
