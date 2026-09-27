@@ -15,6 +15,7 @@ from datetime import date
 from timetable_editions import normalize_database as normalize_route_editions
 from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
 from timetable_duplicate_evidence import reconcile_database as reconcile_duplicate_sources
+from timetable_evidence_storage import compact_evidence
 
 HERE = Path(__file__).parent
 PY = sys.executable
@@ -115,6 +116,7 @@ def finalize_static_database(path: Path) -> None:
     conn = sqlite3.connect(path)
     try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+        compact_evidence(conn)
         conn.execute("ANALYZE")
         conn.execute("PRAGMA optimize").fetchall()
         conn.commit()
