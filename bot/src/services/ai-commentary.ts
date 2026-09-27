@@ -7,6 +7,7 @@ import { spokenDestination, destinationMentioned } from './journey-context.js';
 import { chooseSubject, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
 import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
+import { depotGeography } from './depot-geography.js';
 import { httpFetch } from '../utils/http-client.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed } from '../utils/logging.js';
@@ -350,7 +351,7 @@ export class AICommentary {
         ]);
         const neighbourhood = locality ? findNeighbourhood(locality.lat, locality.lon) : null;
         return {
-            event: { ...busEvent, placeContext: {
+            event: { ...busEvent, depotContext: depotGeography(busEvent, locality), placeContext: {
                 sourceStopCode: busEvent.lastStopCode,
                 locality: stop?.locality || undefined, street: stop?.street || undefined, localAuthority: stop?.local_authority || undefined,
                 ward: locality?.stop_code === busEvent.lastStopCode ? locality.ward_name || undefined : undefined,
