@@ -15,6 +15,11 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 CPUWeight=20
+# Protect the 1 GiB Pi: a failed backup must not exhaust the whole host.
+MemoryHigh=256M
+MemoryMax=384M
+MemorySwapMax=128M
+Environment=GOGC=20
 NoNewPrivileges=yes
 PrivateDevices=no
 DevicePolicy=closed
