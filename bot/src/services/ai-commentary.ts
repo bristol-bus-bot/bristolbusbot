@@ -7,6 +7,7 @@ import { spokenDestination, destinationMentioned } from './journey-context.js';
 import { chooseSubject, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
 import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
+import { PublicationLedger } from './publication-ledger.js';
 import { httpFetch } from '../utils/http-client.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed } from '../utils/logging.js';
@@ -191,6 +192,11 @@ export class AICommentary {
     private readonly botPersona = BOT_VOICE;
     private pendingPublications = new Map<string, { hook: EditorialSelection | null; used: boolean; subject?: SubjectChoice }>();
     private subjectHistory?: SubjectHistory;
+    private publicationLedger?: PublicationLedger;
+    getPublicationLedger(): PublicationLedger {
+        return this.publicationLedger ||= new PublicationLedger(this.aiConfig.editorialUsagePath
+            ? `${this.aiConfig.editorialUsagePath}.publications.json` : undefined);
+    }
 
     private getSubjectHistory(): SubjectHistory {
         return this.subjectHistory ||= new SubjectHistory(this.aiConfig.editorialUsagePath
@@ -198,10 +204,12 @@ export class AICommentary {
     }
 
     /** Called only after the publisher confirms delivery. Drafts never consume a fact. */
-    recordPublished(post: string, publicationId?: string): void {
+    recordPublished(post: string, publicationId?: string, fallbackReason?: string): void {
         const pending = this.pendingPublications.get(post);
         this.pendingPublications.delete(post);
         this.getSubjectHistory().record(post, pending?.subject, publicationId);
+        this.getPublicationLedger().record(post, publicationId, pending?.subject,
+            pending?.used && pending.hook ? [pending.hook.id] : [], fallbackReason);
         this.editorialContext.recordPost(pending?.used ? pending.hook : null,
             DateTime.now().setZone(TARGET_TIMEZONE));
         this.appState.recentPosts.push(post);
@@ -482,7 +490,8 @@ export class AICommentary {
                 );
             }
         }
-        return this.appState.recentPosts.slice(-20).reverse();
+        const saved = this.getPublicationLedger().recentTexts(60);
+        return saved.length ? saved : this.appState.recentPosts.slice(-20).reverse();
     }
 
     private async requestWriter(
