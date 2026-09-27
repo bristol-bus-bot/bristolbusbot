@@ -155,7 +155,9 @@ def test_git_bundle_creation_and_verification_use_repository_context(
     )
 
     assert calls[0][0] == [
-        "git", "-c", f"safe.directory={repository}", "-C", str(repository),
+        "git", "-c", f"safe.directory={repository}",
+        "-c", "pack.threads=1", "-c", "pack.windowMemory=32m",
+        "-c", "pack.deltaCacheSize=16m", "-C", str(repository),
         "bundle", "create",
         str(destination), "--all",
     ]
@@ -476,6 +478,31 @@ def urllib_path(url: str) -> str:
 def urllib_query(url: str) -> dict[str, str]:
     from urllib.parse import parse_qsl, urlsplit
     return dict(parse_qsl(urlsplit(url).query))
+
+
+@pytest.mark.parametrize('skip_retention', [True, False])
+def test_recovery_backup_can_copy_without_pruning(tmp_path, monkeypatch, skip_retention):
+    database = tmp_path / 'live.db'
+    sqlite_source(database).close()
+    config = make_config(tmp_path, sqlite_databases=[{
+        'name': 'live', 'path': str(database),
+    }])
+    calls = []
+
+    class RecordingRestic:
+        def __init__(self, _config): pass
+        def backup(self, _payload): calls.append('backup')
+        def copy_to_r2(self): calls.append('copy')
+        def forget_local(self): calls.append('forget_local')
+        def forget_r2(self): calls.append('forget_r2')
+
+    monkeypatch.setattr(backup, 'validate_runtime', lambda _config: None)
+    monkeypatch.setattr(backup.Healthcheck, 'ping', lambda *_: None)
+    monkeypatch.setattr(backup, 'Restic', RecordingRestic)
+    backup.run_backup(config, integrity_check=False, skip_retention=skip_retention)
+    assert calls == (['backup', 'copy'] if skip_retention else
+                     ['backup', 'copy', 'forget_local', 'forget_r2'])
+    assert not (config.staging_root / 'payload').exists()
 
 
 def test_restic_failure_cleans_plaintext_staging_and_pings_fail(
