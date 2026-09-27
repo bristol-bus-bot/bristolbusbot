@@ -1,5 +1,6 @@
 import type { BusEvent, TrafficContext } from '../types/bus-types.js';
 import type { EditorialSelection } from './editorial-context.js';
+import { scheduledJourney } from './story-context.js';
 
 export type StorySubject = 'service' | 'livery' | 'depot' | 'weather' | 'wider' | 'traffic';
 export interface SubjectChoice {
@@ -28,7 +29,7 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     const journey = event.journeyContext;
     const service: SubjectChoice = { kind: 'service', key: '', context: {} };
     // Only an interesting timetable position; no full list of endpoints and counts.
-    if (journey && (journey.timingPointNumber === 1 || journey.timingPointNumber === journey.totalStops)) {
+    if (journey && scheduledJourney(event) && (journey.timingPointNumber === 1 || journey.timingPointNumber === journey.totalStops)) {
         service.context.timetablePosition = journey.timingPointNumber === 1 ? 'first scheduled stop' : 'final scheduled stop';
     }
     const choices = [service];
