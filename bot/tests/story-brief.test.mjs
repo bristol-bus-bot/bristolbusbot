@@ -40,12 +40,12 @@ test('newer uncertainty suppresses an older good report and operators do not col
 });
 
 test('brief distinguishes assigned depot from location and limits vehicle repetition', () => {
-  const enriched = { ...event, busDetails: { vehicle_type: { name: 'Yutong U11DD' },
+  const enriched = { ...event, depotContext:{name:'Lawrence Hill',distanceKm:20,sourceStopCode:event.lastStopCode,scope:'Stop distance, not departure or unusual allocation.'}, busDetails: { vehicle_type: { name: 'Yutong U11DD' },
     livery: { name: 'Olympia' }, garage: { name: 'Lawrence Hill' } } };
   const depot = availableSubjects(enriched).find(s => s.kind === 'depot');
   const prompt = buildStoryPrompt(enriched, new Date(now).toISOString(), null, [], [], null, depot);
   assert.doesNotMatch(prompt, /Olympia|Yutong|suggestedDetail/);
-  assert.match(prompt, /"assignedDepot":"Lawrence Hill"/);
+  assert.match(prompt, /"depot":\{"name":"Lawrence Hill"/);
   assert.match(prompt, /home garage is an assignment/);
   assert.doesNotMatch(prompt, /Network:|Position:|Vehicle notes:/);
   assert.match(prompt, /do not establish arrival, departure/);
@@ -59,15 +59,15 @@ test('current writing path fetches weather for the bus and preserves it in the w
   const ai = Object.create(AICommentary.prototype);
   ai.aiConfig = { pipeline: 'single' };
   ai.appState = { getNetworkStatus: () => ({}) };
-  const weather = 'OpenWeather area observation near Bath: 12°C, light rain';
+  const weather = 'OpenWeather area observation near Bath at 2026-09-27 12:00 BST: 12°C, with light rain';
   let requested;
   ai.weatherService = { getCurrentWeather: async location => { requested = location; return weather; } };
   const bus = { ...event, location: { latitude: 51.38, longitude: -2.36 } };
   const context = await ai.buildAIContext(bus);
   assert.deepEqual(requested, bus.location);
   const prompt = ai.buildSingleWriterPrompt(context, DateTime.utc(), null, [], [], availableSubjects(bus, weather).find(s => s.kind === 'weather'));
-  assert.ok(prompt.includes(weather));
-  assert.ok(ai.buildVerifierPrompt(prompt, 'A post.').includes('OpenWeather area observation near Bath'));
+  assert.match(prompt,/mild, light rain/); assert.doesNotMatch(prompt,/12°C/);
+  assert.ok(ai.buildVerifierPrompt(prompt, 'A post.').includes('Area observation near Bath'));
   ai.weatherService.getCurrentWeather = async () => null;
   const missing = await ai.buildAIContext(bus);
   assert.equal(missing.weatherContext, undefined);

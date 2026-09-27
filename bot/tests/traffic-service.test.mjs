@@ -103,7 +103,7 @@ test('traffic gets only its own turn, keeps evidence scoped, and survives public
   assert.equal(chooseSubject(bus,null,null,0,[],[],traffic).kind,'service');
   assert.equal(chooseSubject(bus,null,null,1,[],[],traffic).kind,'service','not a fallback subject');
   assert.equal(chooseSubject(bus,null,null,7,[chosen],[],traffic).kind,'service');
-  assert.equal(chooseSubject(bus,'Local weather: clear sky',null,7).kind,'weather','preserve weather turn when traffic is unavailable');
+  assert.equal(chooseSubject(bus,'OpenWeather area observation near Bath at 2026-09-27 12:00 BST: 12°C, with clear sky',null,7).kind,'weather','preserve weather turn when traffic is unavailable');
   assert.equal(chooseSubject(bus,null,null,7,[],[],{...traffic,checkedAt:'2000-01-01'}).kind,'service');
   const prompt=buildStoryPrompt(bus,bus.timestamp,null,[],[],null,chosen);
   assert.match(prompt,/"nearbyTraffic":/);

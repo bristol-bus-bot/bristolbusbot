@@ -7,6 +7,7 @@ export interface BusEvent {
     /** Collector provenance. Optional so direct-SIRI/test events remain valid. */
     collectorEventId?: number;
     collectorTripId?: string;
+    depotContext?: { name: string; distanceKm: number; sourceStopCode: string; scope: string };
     collectorStopSequence?: number;
     journeyContext?: { tripId: string; timingPointNumber: number; totalStops: number; origin: string; destination: string };
     placeContext?: { sourceStopCode?: string; locality?: string; street?: string; localAuthority?: string; ward?: string; neighbourhood?: string; localColour?: string };
