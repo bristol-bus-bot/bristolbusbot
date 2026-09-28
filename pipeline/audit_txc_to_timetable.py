@@ -129,12 +129,19 @@ def main():
             return atco
         return None
 
+    # Open-ended TXC editions follow the regional GTFS service horizon. A fixed
+    # default (previously 20270101) silently ended supplemented routes early.
+    horizon = cur.execute(
+        "SELECT MAX(c.end_date) FROM calendar c JOIN trips t USING(service_id) "
+        "JOIN routes r USING(route_id) JOIN agency a USING(agency_id) "
+        "WHERE a.agency_noc='FBRI'").fetchone()[0] or "20270101"
+
     def ensure_calendar(profile, period):
         flags = weekday_flags(profile)
         if not flags:
             return None
         start = ymd(period.start if period else None, "20200101")
-        end = ymd(period.end if period else None, "20270101")
+        end = ymd(period.end if period else None, horizon)
         key = (tuple(flags), start, end)
         if key in calendar_ids:
             return calendar_ids[key]

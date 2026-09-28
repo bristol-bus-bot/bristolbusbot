@@ -111,6 +111,16 @@ def same_source_alias_proof(day, key, evidence, editions):
     return active
 
 
+def _stale_lineage(key, index, represented):
+    """True when a newer edition of the journey's only scope is carried by GTFS."""
+    from timetable_source_index import single_scope_lineage
+    found = single_scope_lineage(index, key)
+    if found is None:
+        return False
+    scope, newest, _ = found
+    return any(start > newest for start in represented.get(scope, ()))
+
+
 def resolve_replacements(corrections):
     """Every receipt must name a surviving journey, including alias chains."""
     original={(trip,day):proof for trip,dates in corrections.items()
@@ -126,10 +136,66 @@ def resolve_replacements(corrections):
             next_proof=original[(target,day)]
             witnesses.extend(next_proof['witnesses'])
             target=next_proof['replacement_trip_id']
-        corrections[trip][day]=dict(replacement_trip_id=target,witnesses=witnesses)
+        corrections[trip][day]=dict(proof,replacement_trip_id=target,witnesses=witnesses)
 
 
-def reconcile_database(database: Path, directory: Path) -> dict:
+def lineage_duplicate_proof(day, old_key, new_key, index):
+    """Retire a GTFS copy superseded by an identical copy from a newer edition.
+
+    Used only inside an identical-journey group (same route, direction and
+    complete calls with permissions), on days both copies are active in GTFS.
+    The surviving copy carries exactly the same stop service, so no scheduled
+    service is removed, whatever the day's profile says. Two cases:
+
+    * orphan: no available source edition declares the old copy at all
+      (First withdrew that edition), while the survivor has single-scope
+      lineage in an edition that has started;
+    * superseded: both copies have single-scope lineage in the same scope and
+      the survivor's newest edition is later and has started.
+
+    Returns ``(basis, witnesses)`` or ``(None, [])``.
+    """
+    from timetable_source_index import single_scope_lineage
+    new = single_scope_lineage(index, new_key)
+    if new is None:
+        return None, []
+    scope, new_start, new_witnesses = new
+    if new_start > day:
+        return None, []
+    survivor = [item for item in new_witnesses if item.start == new_start]
+    if not index.exact(old_key):
+        return 'orphan_duplicate', survivor
+    old = single_scope_lineage(index, old_key)
+    if old is None or old[0] != scope or old[1] >= new_start:
+        return None, []
+    return 'superseded_duplicate', [item for item in old[2] if item.start == old[1]] + survivor
+
+
+def superseded_nonoperation(day, key, index, represented):
+    """Explicit non-operation stated by the newer edition that replaced this one.
+
+    Applies only when the journey's whole lineage lies in one scope and is older
+    than the edition in force on ``day``, the GTFS carries that newer edition,
+    and every journey there with identical complete calls explicitly does not
+    operate on ``day``. Absence of the schedule, unsupported profiles and
+    unknown results never count.
+    """
+    from timetable_operating_days import operating_day
+    from timetable_source_index import single_scope_lineage
+    found = single_scope_lineage(index, key)
+    if found is None:
+        return []
+    scope, newest, witnesses = found
+    in_force = index.in_force(scope, day)
+    if in_force is None or in_force <= newest or in_force not in represented.get(scope, ()):
+        return []
+    same = index.same_schedule(key[0], key[1], key[3], scope, in_force)
+    if not same or any(operating_day(journey.evidence.profile, day) is not False for journey in same):
+        return []
+    return [item for item in witnesses if item.start == newest] + [journey.evidence for journey in same]
+
+
+def reconcile_database(database: Path, directory: Path, index=None) -> dict:
     with sqlite3.connect(database) as conn:
         conn.row_factory = sqlite3.Row
         trips = {r['trip_id']: dict(r) for r in conn.execute('''
@@ -166,9 +232,24 @@ def reconcile_database(database: Path, directory: Path) -> dict:
         targets={trip for ids in groups for trip in ids}
         keys={trip:(trips[trip]['route_short_name'],trips[trip]['direction_id'],
                     trips[trip]['vehicle_journey_code'],schedules[trip]) for trip in targets}
+        represented = {}
+        if index is not None:
+            from timetable_source_index import represented_editions
+            all_keys = {trip:(t['route_short_name'],t['direction_id'],t['vehicle_journey_code'],schedules[trip])
+                        for trip,t in trips.items() if trip in schedules}
+            represented = represented_editions(index, all_keys.values())
+            stale = {trip for trip,key in all_keys.items()
+                     if _stale_lineage(key, index, represented)}
+            for trip in stale:
+                keys.setdefault(trip, all_keys[trip])
+            targets = targets | stale
         if not targets:
             return {'trips_corrected':0,'dates_excluded':0}
-        evidence,editions=source_evidence(directory,set(keys.values()))
+        if index is None:
+            evidence,editions=source_evidence(directory,set(keys.values()))
+        else:
+            evidence={key:index.exact(key) for key in set(keys.values())}
+            editions=index.editions
         calendars={r['service_id']:dict(r) for r in conn.execute('SELECT * FROM calendar')}
         exceptions=defaultdict(list)
         for service,day,kind in conn.execute('SELECT service_id,date,exception_type FROM calendar_dates'):
@@ -190,6 +271,16 @@ def reconcile_database(database: Path, directory: Path) -> dict:
                 if proof:
                     excluded_by_source[trip][day.strftime('%Y%m%d')]=dict(
                         reason='exact_source_nonoperation', witnesses=[w.record() for w in proof])
+        if index is not None:
+            for trip in stale:
+                for day in sorted(days.get(trips[trip]['service_id'], set())):
+                    text=day.strftime('%Y%m%d')
+                    if text in excluded_by_source[trip]:
+                        continue
+                    proof=superseded_nonoperation(day, keys[trip], index, represented)
+                    if proof:
+                        excluded_by_source[trip][text]=dict(
+                            reason='superseded_edition_nonoperation', witnesses=[w.record() for w in proof])
         for ids in groups:
             for old in ids:
                 for new in ids:
@@ -202,9 +293,15 @@ def reconcile_database(database: Path, directory: Path) -> dict:
                         if (not proof and old > new and keys[old] == keys[new]
                                 and new == min(t for t in ids if keys[t] == keys[new])):
                             proof=same_source_alias_proof(day,keys[old],evidence,editions)
+                        basis=None
+                        if (not proof and index is not None
+                                and day.strftime('%Y%m%d') not in corrections[old]):
+                            # The first qualifying twin in stable trip order is recorded.
+                            basis,proof=lineage_duplicate_proof(day,keys[old],keys[new],index)
                         if proof:
                             corrections[old][day.strftime('%Y%m%d')]=dict(
-                                replacement_trip_id=new,witnesses=[w.record() for w in proof])
+                                replacement_trip_id=new,witnesses=[w.record() for w in proof],
+                                **({'basis':basis} if basis else {}))
         resolve_replacements(corrections)
         conn.execute('''CREATE TABLE IF NOT EXISTS duplicate_source_corrections (
             trip_id TEXT NOT NULL,date TEXT NOT NULL,original_service_id TEXT NOT NULL,

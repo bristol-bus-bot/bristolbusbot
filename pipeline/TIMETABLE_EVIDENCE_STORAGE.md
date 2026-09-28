@@ -22,3 +22,14 @@ through normal validation and promotion, not the locally modified copy.
 CI checks the same database size constant used by delivery before publishing.
 Archive size rejection records the allowed filename, actual bytes and limit;
 no archive path or secret is added to monitoring state.
+
+## Growth from source-edition repairs (September 2026)
+
+The successor-edition calendar repair and the lineage duplicate retirements add
+many more receipts. A dry run on the 28 September candidate produced 5,947
+calendar corrections and 4,040 duplicate trips covering 442,316 dates. After
+compaction the database was 419,966,976 bytes. That is about 18% under the
+512 MiB GitHub limit, just short of the 20% margin this design aims for. If a
+fresh build lands closer to the limit, store duplicate receipts as date ranges
+per trip and basis (as calendar corrections already do) before loosening the
+margin.
