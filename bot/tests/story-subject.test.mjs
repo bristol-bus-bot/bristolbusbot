@@ -3,8 +3,8 @@ import test from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { availableSubjects, chooseSubject } from '../dist/services/story-subject.js';
-import { buildStoryPrompt } from '../dist/services/story-brief.js';
+import { availableSubjects, chooseSubject, SUBJECT_PERSONAS } from '../dist/services/story-subject.js';
+import { buildStoryPrompt, BOT_VOICE } from '../dist/services/story-brief.js';
 import { SubjectHistory } from '../dist/services/subject-history.js';
 import { AICommentary } from '../dist/services/ai-commentary.js';
 import { isBareEditorialPair } from '../dist/services/editorial-commentary-policy.js';
@@ -27,8 +27,9 @@ test('each subject receives only its relevant supporting facts, never previous p
     assert.equal('areaWeather' in evidence,choice.kind==='weather');
     assert.equal('editorial' in evidence,choice.kind==='wider');
     assert.doesNotMatch(prompt,/Scania|Never supplied|Made-up Town|TODAY'S VOICE|STYLE EXAMPLES/);
-    assert.equal((prompt.match(/You are the Bristol Bus Bot/g)||[]).length,1);
-    assert.ok(prompt.split(/\s+/).length<400);
+    assert.ok(prompt.startsWith(BOT_VOICE + '\n\n' + SUBJECT_PERSONAS[choice.kind]));
+    assert.equal(prompt.split(BOT_VOICE).length - 1, 1);
+    assert.equal(prompt.split(SUBJECT_PERSONAS[choice.kind]).length - 1, 1);
   }
 });
 
