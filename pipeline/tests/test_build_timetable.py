@@ -90,6 +90,9 @@ def test_direct_entry_refuses_before_starting_a_build(monkeypatch):
 def configure_shadow_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(builder, 'reconcile_duplicate_sources', lambda *_: {
         'trips_corrected':0,'dates_excluded':0})
+    monkeypatch.setattr(builder, 'build_source_index', lambda *_: None)
+    monkeypatch.setattr(builder, 'check_candidate_quality', lambda *_: {
+        'passed': True, 'duplicate_active_schedules': {'worst': {}}})
     scratch = tmp_path / "scratch"
     gtfs = scratch / "busaudit_gtfs"
     first = scratch / "busaudit_first_txc"
@@ -102,6 +105,8 @@ def configure_shadow_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(builder, "WECA_DB", scratch / "weca.db")
     monkeypatch.setattr(
         builder, "SOURCE_STATUS", scratch / "source-status.json")
+    monkeypatch.setattr(
+        builder, "QUALITY_STATUS", scratch / "quality-status.json")
     monkeypatch.setattr(
         builder, "TIMETABLE_DB", tmp_path / "output" / "timetable.db")
     monkeypatch.setattr(builder, "BUSBOT_DB", tmp_path / "missing-fallback.db")
@@ -184,3 +189,20 @@ def test_missing_primary_route_requires_tnds_fallback(tmp_path, monkeypatch):
 
     assert builder.main() == 1
     assert not builder.SOURCE_STATUS.exists()
+
+
+def test_duplicated_first_service_refuses_build_before_publication(tmp_path, monkeypatch):
+    configure_shadow_paths(tmp_path, monkeypatch)
+    def fake_run(command):
+        if any('build_timetable_weca.py' in str(part) for part in command):
+            builder.WECA_DB.write_bytes(b'candidate')
+        return True
+    monkeypatch.setattr(builder, 'run', fake_run)
+    monkeypatch.setattr(builder, 'validate', lambda _: {
+        'integrity': 'ok', 'missing': [], 'stale': False,
+        'fbri_count': 121, 'latest_service': '20991231'})
+    monkeypatch.setattr(builder, 'check_candidate_quality', lambda *_: {
+        'passed': False, 'duplicate_active_schedules': {'worst': {'duplicates': 2596}}})
+    monkeypatch.setattr(sys, 'argv', ['build_timetable.py', '--skip-deploy', '--no-download'])
+    assert builder.main() == 2
+    assert not builder.TIMETABLE_DB.exists()

@@ -426,3 +426,31 @@ def test_exact_22_and_29_july_artifacts_pass_semantic_policy():
     totals = {gate["metric"]: gate for gate in result["near_term_totals"]}
     assert totals["trips"]["ratio"] == pytest.approx(1.003, abs=0.002)
     assert totals["stop_times"]["ratio"] == pytest.approx(1.003, abs=0.002)
+
+
+def test_duplicated_service_is_refused_as_inflation(tmp_path):
+    """A second service carrying the same journeys looks like extra coverage.
+
+    Reproduces the 28 September 2026 candidate: superseded-edition copies of
+    First journeys stayed active beside their replacements every Mon-Thu.
+    """
+    base = [{"operator": "FBRI", "route": "D1x", "trips": 20}]
+    doubled = base + [{"operator": "FBRI", "route": "D1x", "trips": 20,
+                       "service_id": "stale-copy"}]
+    with pytest.raises(ServiceProfileError) as error:
+        compare(tmp_path, base, doubled)
+    assert error.value.code == "candidate_service_inflation"
+
+
+def test_growth_explained_by_a_new_route_is_not_inflation(tmp_path):
+    base = [{"operator": "FBRI", "route": "D1x", "trips": 20}]
+    grown = base + [{"operator": "FBRI", "route": "NEW1", "trips": 20}]
+    result = compare(tmp_path, base, grown)
+    assert result["status"] == "pass"
+    assert all(gate["passed"] for gate in result["inflation"])
+
+
+def test_small_growth_is_not_inflation(tmp_path):
+    base = [{"operator": "FBRI", "route": "D1x", "trips": 20}]
+    grown = [{"operator": "FBRI", "route": "D1x", "trips": 24}]
+    assert compare(tmp_path, base, grown)["status"] == "pass"
