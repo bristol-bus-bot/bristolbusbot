@@ -314,6 +314,13 @@ def reconcile_database(database: Path, directory: Path, index=None) -> dict:
         all_corrections={trip:{**corrections.get(trip,{}), **excluded_by_source.get(trip,{})}
                          for trip in set(corrections) | set(excluded_by_source)
                          if corrections.get(trip) or excluded_by_source.get(trip)}
+        # Build every row in memory and insert in bulk. A fresh build has no
+        # ANALYZE statistics, so a per-date "DELETE ... WHERE service_id=? AND
+        # date=?" is planned on the date index and rescans every row for that
+        # date; at hundreds of thousands of excluded dates that exceeded the
+        # 45-minute CI limit.
+        calendar_rows, date_rows, trip_rows = [], [], []
+        receipt_rows = defaultdict(list)
         for trip,excluded in all_corrections.items():
             original=trips[trip]['service_id']
             clone='BBBDUP_'+hashlib.sha256((trip+json.dumps(sorted(excluded))).encode()).hexdigest()[:24]
@@ -322,17 +329,22 @@ def reconcile_database(database: Path, directory: Path, index=None) -> dict:
             # calendar start would also invent a route-edition identity after
             # normalization has already recorded the real calendar cohorts.
             if calendar is not None:
-                conn.execute('INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)',
-                             (clone,*[calendar[k] for k in WEEKDAYS],calendar['start_date'],calendar['end_date']))
-            conn.execute('INSERT INTO calendar_dates SELECT ?,date,exception_type FROM calendar_dates WHERE service_id=?',
-                         (clone,original))
+                calendar_rows.append((clone,*[calendar[k] for k in WEEKDAYS],
+                                      calendar['start_date'],calendar['end_date']))
+            # Copy the original exceptions, replacing every excluded date with a
+            # single removal (the same result as copy, delete, then insert).
+            date_rows.extend((clone,day,kind) for day,kind in exceptions[original]
+                             if day not in excluded)
             for day,proof in excluded.items():
-                conn.execute('DELETE FROM calendar_dates WHERE service_id=? AND date=?',(clone,day))
-                conn.execute('INSERT INTO calendar_dates VALUES (?,?,2)',(clone,day))
+                date_rows.append((clone,day,2))
                 table=('calendar_nonoperation_corrections' if 'reason' in proof
                        else 'duplicate_source_corrections')
-                conn.execute(f'INSERT INTO {table} VALUES (?,?,?,?,?)',
-                             (trip,day,original,clone,json.dumps(proof,sort_keys=True)))
-            conn.execute('UPDATE trips SET service_id=? WHERE trip_id=?',(clone,trip))
+                receipt_rows[table].append((trip,day,original,clone,json.dumps(proof,sort_keys=True)))
+            trip_rows.append((clone,trip))
+        conn.executemany('INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)',calendar_rows)
+        conn.executemany('INSERT INTO calendar_dates VALUES (?,?,?)',date_rows)
+        for table,rows in receipt_rows.items():
+            conn.executemany(f'INSERT INTO {table} VALUES (?,?,?,?,?)',rows)
+        conn.executemany('UPDATE trips SET service_id=? WHERE trip_id=?',trip_rows)
         return {'trips_corrected':len(all_corrections),
                 'dates_excluded':sum(len(days) for days in all_corrections.values())}
