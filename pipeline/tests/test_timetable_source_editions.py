@@ -271,3 +271,33 @@ def test_newer_copy_is_never_retired_in_favour_of_an_older_one(tmp_path):
     db = duplicate_db(tmp_path / 'd.db', [('a_newer', 'n', 'VJ4425', CALLS), ('b_older', 'o', 'VJ5', CALLS)])
     duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
     assert {r[0] for r in db.execute('SELECT trip_id FROM duplicate_source_corrections')} <= {'b_older'}
+
+
+def test_duplicate_writes_never_delete_calendar_dates_one_date_at_a_time(tmp_path, monkeypatch):
+    # A fresh build has no ANALYZE statistics, so SQLite plans a per-date
+    # DELETE on the date index and rescans every row for that date. With
+    # hundreds of thousands of exclusions that exceeded the 45-minute CI limit
+    # (run 36482544509). Writes must be bulk inserts instead.
+    index = index_of(journey('VJ1259', SEP27, MON_WED))
+    db = duplicate_db(tmp_path / 'd.db', [('orphan', 'old', 'VJ739', CALLS),
+                                          ('lineage', 'new', 'VJ1259', CALLS)])
+    db.execute("INSERT INTO calendar_dates VALUES('old','20261124',2)")
+    db.commit()
+    statements = []
+    real_connect = duplicate.sqlite3.connect
+
+    def traced(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(duplicate.sqlite3, 'connect', traced)
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result['trips_corrected'] == 1
+    assert not [sql for sql in statements
+                if sql.lstrip().upper().startswith('DELETE FROM CALENDAR_DATES')]
+    clone = db.execute("SELECT service_id FROM trips WHERE trip_id='orphan'").fetchone()[0]
+    # The copied removal (24th) and both excluded dates each appear once.
+    assert db.execute('SELECT date,exception_type FROM calendar_dates WHERE service_id=? '
+                      'ORDER BY date', (clone,)).fetchall() == [
+        ('20261123', 2), ('20261124', 2), ('20261125', 2)]

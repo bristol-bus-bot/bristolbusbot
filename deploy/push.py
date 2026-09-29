@@ -946,6 +946,53 @@ def install_layout(remote: Remote, workspace: Path) -> None:
     log.info("unified deployment layout installed and live health checks passed")
 
 
+LAYOUT_INSTALL_LINE = re.compile(
+    r'^install -o root -g root -m [0-7]{4} "\$stage/([^"/]+)" (/usr/local/\S+)$')
+
+
+def layout_targets(root: Path) -> dict[str, str]:
+    """Map each helper installed verbatim by the layout script to its source."""
+    script = (root / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    targets: dict[str, str] = {}
+    for line in script.splitlines():
+        match = LAYOUT_INSTALL_LINE.match(line.strip())
+        if match and (root / match.group(1)).is_file():
+            targets[match.group(2)] = match.group(1)
+    return targets
+
+
+def compare_layout(expected: dict[str, str], remote_output: str) -> list[str]:
+    """Return one line per installed helper that differs from this checkout."""
+    installed: dict[str, str] = {}
+    for line in remote_output.splitlines():
+        digest, _, path = line.strip().partition("  ")
+        if len(digest) == 64 and path:
+            installed[path.strip()] = digest
+    drift = []
+    for path, digest in sorted(expected.items()):
+        found = installed.get(path)
+        if found is None:
+            drift.append(f"MISSING  {path}")
+        elif found != digest:
+            drift.append(f"DIFFERS  {path}")
+    return drift
+
+
+def check_layout(remote: Remote, workspace: Path) -> list[str]:
+    """Read-only: compare the Pi's installed helpers with this checkout."""
+    install_payload(workspace, remote.settings)
+    root = workspace / "unified-layout"
+    targets = layout_targets(root)
+    expected = {
+        path: hashlib.sha256((root / name).read_bytes()).hexdigest()
+        for path, name in targets.items()
+    }
+    output = remote.run(
+        "sha256sum " + " ".join(q(path) for path in sorted(expected)) + " 2>/dev/null; true",
+        check=False)
+    return compare_layout(expected, output)
+
+
 def refresh_timetable(no_download: bool) -> Path:
     command = [sys.executable, str(REPO / "pipeline/build_timetable.py"), "--skip-deploy"]
     if no_download:
@@ -961,6 +1008,11 @@ def command_plan(args: argparse.Namespace) -> list[str]:
             "Install or update the exact sudo allowlist, helpers and release-aware systemd units.",
             "Create any missing current symlinks while preserving existing live release selections.",
             "Restart and health-check all four live services, restoring the old units on failure.",
+        ]
+    if args.check_layout:
+        return [
+            "Read-only: compare the Pi's installed helper programs with this checkout.",
+            "Uses SSH but changes nothing on the Pi and restarts nothing.",
         ]
     if args.timetable:
         return [
@@ -1007,6 +1059,7 @@ Commands and scope:
   --timetable PATH       only a known timetable; restarts collector, site and bot
   --refresh-timetable    builds locally, then performs --timetable deployment
   --install-layout       install/update symlink, systemd and sudo layout; no app code
+  --check-layout         read-only: list Pi helper programs that differ from this checkout
   --dry-run              prints the exact scope; no build, SSH or live change
 
 Every code release is staged and verified before its atomic switch. Production
@@ -1019,6 +1072,8 @@ secrets stay in /etc/bristolbusbot and durable data stays in /var/lib/bristolbus
     action.add_argument("--timetable", type=Path, metavar="PATH")
     action.add_argument("--refresh-timetable", action="store_true")
     action.add_argument("--install-layout", action="store_true", help=argparse.SUPPRESS)
+    action.add_argument("--check-layout", action="store_true",
+                        help="read-only: report Pi helpers that differ from this checkout")
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--no-download", action="store_true",
                         help="with --refresh-timetable, reuse the existing local GTFS")
@@ -1038,6 +1093,21 @@ def main(argv: Iterable[str] | None = None) -> int:
         print("DRY RUN COMPLETE: no build, SSH connection or live change was made.")
         return 0
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.check_layout:
+        settings = load_deploy_settings().with_overrides(
+            user=args.user, host=args.host, remote_home=args.remote_home)
+        with tempfile.TemporaryDirectory(prefix=".bbb-check-", dir=REPO) as temp:
+            with Remote(settings) as remote:
+                drift = check_layout(remote, Path(temp))
+        if not drift:
+            print("LAYOUT OK: every installed helper matches this checkout.")
+            return 0
+        print("LAYOUT DIFFERS from this checkout (nothing was changed):")
+        for line in drift:
+            print(f"  {line}")
+        print("Only matters if the checkout is current main. Install reviewed "
+              "helpers deliberately; see the operations one-pager.")
+        return 1
     try:
         require_clean_tree()
         settings = load_deploy_settings().with_overrides(

@@ -37,6 +37,7 @@ render private values only into temporary upload payloads.
 | `python deploy/push.py --timetable PATH` | one already-built timetable | collector, site and bot | application code, tunnel, secrets |
 | `python deploy/push.py --refresh-timetable` | builds and validates locally, then replaces the timetable | collector, site and bot | application code, tunnel, secrets |
 | `python deploy/push.py --dry-run --all` | prints the scope | none | everything |
+| `python deploy/push.py --check-layout` | nothing; lists root-installed helpers that differ from this checkout | none | everything |
 
 `--refresh-timetable --no-download` reuses the existing local GTFS input.
 `--all` deliberately does not rebuild or replace the timetable.
@@ -377,3 +378,24 @@ The output file must be outside the repository. The command uploads a private
 candidate, validates it through the exact sudo-allowlisted helper, restarts
 `bbb-bot.service`, and automatically restores the previous environment if the
 systemd health gate fails. Neither token value is printed.
+
+## Installed helper drift
+
+Normal component releases do not update the root-installed helpers in
+`/usr/local/libexec` and `/usr/local/sbin`, such as the timetable checker and
+aggregate health. `--install-layout` does. Run
+`python deploy/push.py --check-layout` from an up-to-date `main` checkout to see
+which installed helpers differ from the repository. It is read-only and needs no
+clean working tree.
+
+## Health severity
+
+`bbb-aggregate-health` reports `ok`, `warning` or `error`. Warnings are
+reminders that need action soon but do not mean anything is broken: a GitHub
+timetable token expiring within 30 days, or holiday timetables due for review.
+They stay in `health.json`, Slack and the daily digest, but only errors make
+`bbb-health.service` fail. A token within 7 days of expiry, expired or
+unreadable is an error. The token expiry is read first from
+`/etc/bristolbusbot/timetable-delivery.env`, which the configuration helper now
+writes readable (it holds only the date; the token itself stays root-only), so
+a renewal clears the warning at the next health pass.

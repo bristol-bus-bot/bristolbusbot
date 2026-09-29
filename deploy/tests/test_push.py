@@ -616,3 +616,33 @@ def test_layout_payload_renders_all_private_identity_tokens(tmp_path):
     assert "@BBB_" not in combined
     assert "User=rickdagless" in combined
     assert "/srv/darkplace/bristolbusbot/current/site" in combined
+
+
+def test_layout_check_maps_verbatim_helpers_and_reports_drift(tmp_path):
+    root = tmp_path / "unified-layout"
+    root.mkdir()
+    (root / "aggregate_health.py").write_text("print('new')\n", encoding="utf-8")
+    (root / "timetable_service_profile.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "install_unified_deploy.sh").write_text("\n".join((
+        'install -o root -g root -m 0755 "$stage/aggregate_health.py" /usr/local/libexec/bbb-aggregate-health',
+        'install -o root -g root -m 0644 "$stage/timetable_service_profile.py" '
+        '/usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py',
+        'install -o root -g root -m 0440 "$stage/sudoers/bristolbusbot-deploy" /etc/sudoers.d/x.new',
+        'install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable',
+    )) + "\n", encoding="utf-8")
+    targets = push.layout_targets(root)
+    assert targets == {
+        "/usr/local/libexec/bbb-aggregate-health": "aggregate_health.py",
+        "/usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py":
+            "timetable_service_profile.py",
+    }
+    expected = {"/a": "1" * 64, "/b": "2" * 64, "/c": "3" * 64}
+    remote_output = f"{'1' * 64}  /a\n{'9' * 64}  /b\n"
+    assert push.compare_layout(expected, remote_output) == [
+        "DIFFERS  /b", "MISSING  /c"]
+    assert push.compare_layout({"/a": "1" * 64}, f"{'1' * 64}  /a\n") == []
+
+
+def test_check_layout_is_read_only_and_needs_no_clean_tree():
+    plan = push.command_plan(push.parser().parse_args(["--check-layout"]))
+    assert any("changes nothing" in line for line in plan)

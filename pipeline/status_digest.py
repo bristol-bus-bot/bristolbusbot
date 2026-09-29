@@ -440,6 +440,12 @@ def overall_line(snapshot: dict) -> str:
             "Live buses, the website, the Bluesky bot and automatic updates "
             "are healthy."
         )
+    if snapshot.get("status") == "warning":
+        return (
+            ":large_yellow_circle: *Overall:* Everything important is working. "
+            "A reminder needs attention soon, such as renewing a token or "
+            "reviewing holiday timetables. Nothing is broken."
+        )
     safe_update_issues = {
         "job:timetable-automation", "job:fleet-automation",
         "job:locality-automation", "job:blurb-generation",

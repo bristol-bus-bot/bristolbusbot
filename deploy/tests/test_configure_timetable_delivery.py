@@ -50,3 +50,14 @@ def test_private_writer_refuses_accidental_overwrite_and_symlink(tmp_path):
         pytest.skip("test account cannot create Windows symlinks")
     with pytest.raises(ConfigurationError, match="regular file"):
         private_write(link, "TOKEN=no\n", replace=True)
+
+
+def test_expiry_record_is_readable_but_token_stays_private(tmp_path):
+    record = tmp_path / "delivery.env"
+    private_write(record, "BBB_GITHUB_TOKEN_EXPIRES_UTC=2027-03-29T00:00:00Z\n",
+                  replace=False, mode=0o644)
+    token = tmp_path / "delivery.token"
+    private_write(token, "secret-token-value\n", replace=False)
+    if os.name != "nt":
+        assert stat.S_IMODE(record.stat().st_mode) == 0o644
+        assert stat.S_IMODE(token.stat().st_mode) == 0o600
