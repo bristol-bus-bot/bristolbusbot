@@ -68,6 +68,17 @@ TIMETABLE_PROMOTION_MARKER = Path(
     "/etc/bristolbusbot/timetable-promotion-enabled")
 TIMETABLE_PROMOTION_STATE = STATE / "timetable-promotion.json"
 TIMETABLE_TOKEN_WARNING_DAYS = 30
+TIMETABLE_TOKEN_URGENT_DAYS = 7
+# Written by bbb-configure-timetable-delivery when a token is installed. It
+# holds only the expiry date, so it is the freshest source after a renewal.
+TIMETABLE_DELIVERY_ENV = Path("/etc/bristolbusbot/timetable-delivery.env")
+# Reminders that need action soon but do not mean anything is broken now.
+# They stay visible in health.json, Slack and the digest, but the health
+# unit only reports failure for real errors.
+WARNING_ISSUES = frozenset({
+    "credential:timetable-token-renewal-due",
+    "timetable:provisional-holiday-due",
+})
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/actions/runs/{}")
@@ -75,6 +86,32 @@ EDITORIAL_STATE = Path("/var/lib/bristolbusbot-editorial/state.json")
 EDITORIAL_FILE_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/blob/main/"
     "bot/data/editorial-context.json")
+
+
+def token_expiry_issue(days: float) -> str | None:
+    if days <= TIMETABLE_TOKEN_URGENT_DAYS:
+        return "credential:timetable-token-expiry"
+    if days <= TIMETABLE_TOKEN_WARNING_DAYS:
+        return "credential:timetable-token-renewal-due"
+    return None
+
+
+def installed_token_expiry() -> datetime | None:
+    """Expiry recorded when the current timetable token was installed."""
+    try:
+        text = TIMETABLE_DELIVERY_ENV.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "BBB_GITHUB_TOKEN_EXPIRES_UTC":
+            try:
+                expires = datetime.fromisoformat(
+                    value.strip().strip("'\"").replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            return expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)
+    return None
 
 
 def utcnow() -> datetime:
@@ -191,17 +228,25 @@ def timetable_delivery_check() -> tuple[dict, list[str]]:
         result["last_attempt"] = {"outcome": "missing", "error": str(exc)}
 
     try:
-        expires = datetime.fromisoformat(
-            str(state["token_expires_utc"]).replace("Z", "+00:00"))
+        # Prefer the installed record: the delivery state only learns about a
+        # renewed token the next time the daily check runs.
+        expires = installed_token_expiry()
+        source = "installed"
+        if expires is None:
+            expires = datetime.fromisoformat(
+                str(state["token_expires_utc"]).replace("Z", "+00:00"))
+            source = "delivery_state"
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
         days = (expires.astimezone(timezone.utc) - utcnow()).total_seconds() / 86400
         result["token"] = {
             "expires_utc": expires.astimezone(timezone.utc).isoformat(),
             "days_remaining": round(days, 1),
+            "source": source,
         }
-        if days <= TIMETABLE_TOKEN_WARNING_DAYS:
-            issues.append("credential:timetable-token-expiry")
+        issue = token_expiry_issue(days)
+        if issue:
+            issues.append(issue)
     except (OSError, KeyError, json.JSONDecodeError, ValueError, TypeError) as exc:
         result["token"] = {"status": "missing", "error": str(exc)}
         issues.append("credential:timetable-token-expiry")
@@ -375,8 +420,9 @@ def timetable_automation_check() -> tuple[dict, list[str]]:
     token = delivery.get("token")
     if isinstance(token, dict):
         days = token.get("days_remaining")
-        if isinstance(days, (int, float)) and days <= TIMETABLE_TOKEN_WARNING_DAYS:
-            issues.append("credential:timetable-token-expiry")
+        issue = token_expiry_issue(days) if isinstance(days, (int, float)) else None
+        if issue:
+            issues.append(issue)
 
     # The recorded-job wrapper changes to ``running`` before the shadow
     # transaction has written its new detailed result. A health pass can land
@@ -1307,6 +1353,8 @@ def plain_issue_area(issue: str) -> str:
         "feed:stale": "fresh live bus information",
         "disk:low": "Pi storage space",
         "timetable:provisional-holiday-due": "holiday timetables still incomplete within eight weeks",
+        "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
+        "credential:timetable-token-expiry": "the GitHub timetable token (expiring within a week, or missing)",
     }
     if issue in exact:
         return exact[issue]
@@ -1324,6 +1372,12 @@ def plain_issue_area(issue: str) -> str:
         }
         return replacements.get(job, f"the automatic {job} check")
     return "an automatic safety check"
+
+
+def health_status(issues: list[str]) -> str:
+    if any(issue not in WARNING_ISSUES for issue in issues):
+        return "error"
+    return "warning" if issues else "ok"
 
 
 def general_incident_message(issues: list[str]) -> str:
@@ -1427,7 +1481,7 @@ def main() -> int:
     unique_issues = sorted(set(issues))
     snapshot = {
         "generated_at": utcnow().isoformat(),
-        "status": "ok" if not unique_issues else "error",
+        "status": health_status(unique_issues),
         "issues": unique_issues,
         "services": services,
         "jobs": jobs,
@@ -1576,7 +1630,8 @@ def main() -> int:
         "last_editorial_success_blob_sha": notified_editorial_blob,
     })
     print(json.dumps({"status": snapshot["status"], "issues": unique_issues}))
-    return 1 if unique_issues else 0
+    # Warnings are reported but do not mark the systemd unit as failed.
+    return 1 if health_status(unique_issues) == "error" else 0
 
 
 if __name__ == "__main__":

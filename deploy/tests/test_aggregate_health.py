@@ -362,6 +362,7 @@ def test_timetable_delivery_health_accepts_recent_skip_and_warns_on_token(tmp_pa
     }), encoding="utf-8")
     monkeypatch.setattr(aggregate_health, "STATE", monitoring)
     monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_STATE", delivery_state)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_ENV", tmp_path / "absent.env")
     monkeypatch.setattr(
         aggregate_health.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0))
@@ -369,7 +370,71 @@ def test_timetable_delivery_health_accepts_recent_skip_and_warns_on_token(tmp_pa
     check, issues = aggregate_health.timetable_delivery_check()
     assert check["job"]["result"] == "skipped"
     assert "job:timetable-shadow" not in issues
+    assert "credential:timetable-token-renewal-due" in issues
+    assert "credential:timetable-token-expiry" not in issues
+    assert check["token"]["source"] == "delivery_state"
+    assert aggregate_health.health_status(issues) == "warning"
+
+
+def _delivery_fixture(tmp_path, monkeypatch, state_days):
+    monitoring = tmp_path / "monitoring"
+    jobs = monitoring / "jobs"
+    jobs.mkdir(parents=True)
+    now = datetime.now(timezone.utc)
+    (jobs / "timetable-shadow.json").write_text(json.dumps({
+        "last_result": "skipped",
+        "last_skipped_at": now.isoformat(),
+    }), encoding="utf-8")
+    delivery_state = tmp_path / "delivery-state.json"
+    delivery_state.write_text(json.dumps({
+        "token_expires_utc": (now + timedelta(days=state_days)).isoformat(),
+        "last_shadow_attempt": {"outcome": "success"},
+    }), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", monitoring)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_STATE", delivery_state)
+    monkeypatch.setattr(
+        aggregate_health.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    return now
+
+
+def test_renewed_token_clears_warning_before_the_next_daily_check(tmp_path, monkeypatch):
+    now = _delivery_fixture(tmp_path, monkeypatch, state_days=10)
+    installed = tmp_path / "timetable-delivery.env"
+    renewed = (now + timedelta(days=180)).date().isoformat()
+    installed.write_text(f"BBB_GITHUB_TOKEN_EXPIRES_UTC={renewed}T00:00:00Z\n",
+                         encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_ENV", installed)
+
+    check, issues = aggregate_health.timetable_delivery_check()
+    assert check["token"]["source"] == "installed"
+    assert check["token"]["days_remaining"] > 170
+    assert not [issue for issue in issues if issue.startswith("credential:")]
+
+
+def test_token_close_to_expiry_or_missing_is_an_error(tmp_path, monkeypatch):
+    _delivery_fixture(tmp_path, monkeypatch, state_days=3)
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_ENV", tmp_path / "absent.env")
+    _, issues = aggregate_health.timetable_delivery_check()
     assert "credential:timetable-token-expiry" in issues
+    assert aggregate_health.health_status(issues) == "error"
+
+    broken = tmp_path / "broken.env"
+    broken.write_text("BBB_GITHUB_TOKEN_EXPIRES_UTC=not-a-date\n", encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "TIMETABLE_DELIVERY_ENV", broken)
+    _, issues = aggregate_health.timetable_delivery_check()
+    assert "credential:timetable-token-expiry" in issues
+
+
+def test_only_warnings_do_not_fail_the_health_unit():
+    status = aggregate_health.health_status
+    assert status([]) == "ok"
+    assert status(["credential:timetable-token-renewal-due"]) == "warning"
+    assert status(["timetable:provisional-holiday-due",
+                   "credential:timetable-token-renewal-due"]) == "warning"
+    assert status(["credential:timetable-token-renewal-due", "endpoint:site"]) == "error"
+    assert "renew" in aggregate_health.plain_issue_area(
+        "credential:timetable-token-renewal-due")
 
 
 def test_timetable_promotion_health_keeps_rejection_visible(tmp_path, monkeypatch):

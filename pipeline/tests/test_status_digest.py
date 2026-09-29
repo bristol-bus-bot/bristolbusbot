@@ -299,3 +299,14 @@ def test_daily_message_says_safe_timetable_rejection_did_not_break_live_bot(
     assert "current working timetable stayed live" in message
     assert "Pi will retry automatically" in message
     assert "needs attention" not in message
+
+
+def test_overall_line_calls_reminders_warnings_not_problems():
+    line = status_digest.overall_line({
+        "status": "warning",
+        "issues": ["credential:timetable-token-renewal-due"],
+    })
+    assert line.startswith(":large_yellow_circle:")
+    assert "Nothing is broken" in line
+    assert status_digest.overall_line({"status": "ok", "issues": []}).startswith(
+        ":white_check_mark:")
