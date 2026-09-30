@@ -445,7 +445,9 @@
                 for (let i = 0; i < scheduledDeps.length; i++) {
                     if (usedScheduled.has(i)) continue;
                     const sched = scheduledDeps[i];
-                    if (sched.line === live.line && Math.abs(sched.eta_mins - live.eta_mins) <= 5) {
+                    if (sched.line === live.line
+                        && (!sched.operator || !live.operator || sched.operator === live.operator)
+                        && Math.abs(sched.eta_mins - live.eta_mins) <= 5) {
                         usedScheduled.add(i);
                         matched = true;
                         break;

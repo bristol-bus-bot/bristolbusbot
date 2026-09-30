@@ -4,7 +4,7 @@ import json
 import math
 import sqlite3
 
-from audit_operators import SHOW_OPERATORS, NETWORK_LABEL
+from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, public_route
 from audit_geo import geo_for
 from audit_fleet import fleet_for
 
@@ -63,7 +63,10 @@ def write_day(c,day,geo_index,fleet_index=None):
                 scopes.extend((kind+'_route',json.dumps([place[kind],route or '']))
                               for kind in ['area','ward'] if place.get(kind))
             for label in [op,NETWORK_LABEL]:
-                for scope,key in scopes:cells[(label,scope,key)][identity].append(delay)
+                for scope,key in scopes:
+                    # The pooled rollup tags other operators' route numbers.
+                    if scope=='route':key=public_route(op,route,label==NETWORK_LABEL) or ''
+                    cells[(label,scope,key)][identity].append(delay)
     init_schema(c)
     c.execute('DELETE FROM daily_sample_support WHERE service_date=?',(day,))
     for (op,scope,key),groups in cells.items():

@@ -102,27 +102,82 @@ const GENERIC_LOCATION_WORDS = new Set([
     'street',
 ]);
 
-const OPERATOR_IDENTITIES: Record<string, { name: string; aliases: string[] }> = {
-    FBRI: { name: 'First Bristol', aliases: ['First Bristol', 'First Bus'] },
-    SCGL: { name: 'Stagecoach West', aliases: ['Stagecoach West', 'Stagecoach'] },
-    LEMB: { name: 'The Big Lemon', aliases: ['The Big Lemon', 'Big Lemon'] },
-    ABUS: { name: 'Abus', aliases: ['Abus'] },
-    CTCO: { name: 'CT Coaches', aliases: ['CT Coaches'] },
-    TYSW: { name: 'Taylors Travel', aliases: ['Taylors Travel'] },
+// Mirrors pipeline/audit_operators.py (a pipeline test checks the codes match).
+// "group" aliases (plain "Stagecoach", "First") are shared by sister companies,
+// so they never count as naming a *different* operator of the same group.
+export const OPERATOR_IDENTITIES: Record<string, {
+    name: string; aliases: string[]; group?: string; localBus: boolean;
+}> = {
+    FBRI: { name: 'First Bristol', aliases: ['First Bristol', 'First Bus', 'FirstGroup', 'First West of England'], group: 'First', localBus: true },
+    SSWL: { name: 'Stagecoach South Wales', aliases: ['Stagecoach South Wales', 'Stagecoach in South Wales'], group: 'Stagecoach', localBus: true },
+    SCGL: { name: 'Stagecoach West', aliases: ['Stagecoach West'], group: 'Stagecoach', localBus: true },
+    FSRV: { name: 'Faresaver', aliases: ['Faresaver'], localBus: true },
+    LEMB: { name: 'The Big Lemon', aliases: ['The Big Lemon', 'Big Lemon'], localBus: true },
+    KEMT: { name: 'Kempsford Transport', aliases: ['Kempsford Transport', 'Kempsford'], localBus: true },
+    ABUS: { name: 'Abus', aliases: ['Abus'], localBus: true },
+    CTCO: { name: 'CT Coaches', aliases: ['CT Coaches'], localBus: true },
+    TYSW: { name: 'Taylors Travel', aliases: ['Taylors Travel'], localBus: true },
+    LTRV: { name: 'Libra Travel', aliases: ['Libra Travel'], localBus: true },
+    FRMN: { name: 'FromeBus', aliases: ['FromeBus', 'Frome Bus'], localBus: true },
+    NWPT: { name: 'Newport Bus', aliases: ['Newport Bus', 'Newport Transport'], localBus: true },
+    TDTR: { name: "Swindon's Bus Company", aliases: ["Swindon's Bus Company", 'Swindon Bus Company'], group: 'Go-Ahead', localBus: true },
+    PULH: { name: 'Pulhams Coaches', aliases: ['Pulhams Coaches', 'Pulhams'], group: 'Go-Ahead', localBus: true },
+    COAC: { name: 'Coachstyle', aliases: ['Coachstyle'], localBus: true },
+    EUTX: { name: 'Eurocoaches', aliases: ['Eurocoaches'], localBus: true },
+    BDOL: { name: 'Bakers Dolphin', aliases: ['Bakers Dolphin'], localBus: true },
+    NATX: { name: 'National Express', aliases: ['National Express'], localBus: false },
+    FLIX: { name: 'FlixBus', aliases: ['FlixBus'], localBus: false },
+    SDVN: { name: 'Stagecoach South West', aliases: ['Stagecoach South West'], group: 'Stagecoach', localBus: false },
 };
+
+/** Operators the bot writes about by default: local bus, not coaches or ferries. */
+export const LOCAL_BUS_OPERATORS = Object.entries(OPERATOR_IDENTITIES)
+    .filter(([, identity]) => identity.localBus).map(([code]) => code);
 
 export function operatorDisplayName(operatorRef?: string): string | null {
     if (!operatorRef) return null;
     return OPERATOR_IDENTITIES[operatorRef.trim().toUpperCase()]?.name || null;
 }
 
-function namesAnotherOperator(post: string, operatorRef?: string): boolean {
+/**
+ * Route facts for this bus. route_details.json holds First's routes keyed by
+ * route number only; entries may name their operator in "operator_ref" or the
+ * long "operator" name. Anything we cannot tie to this bus's operator is ignored.
+ */
+export function routeDetailsFor<T extends { operator?: string; operator_ref?: string }>(
+    details: Record<string, T> | undefined, line: string, operatorRef?: string): T | null {
+    const info = details?.[line];
     const expected = operatorRef?.trim().toUpperCase();
-    if (!expected || !OPERATOR_IDENTITIES[expected]) return false;
-    const normalisedPost = normalise(post);
-    return Object.entries(OPERATOR_IDENTITIES).some(([code, identity]) => code !== expected
-        && identity.aliases.some(alias => new RegExp(`\\b${escapeRegExp(normalise(alias))}\\b`)
-            .test(normalisedPost)));
+    if (!info || !expected) return null;
+    if (info.operator_ref) return info.operator_ref.trim().toUpperCase() === expected ? info : null;
+    const name = normalise(info.operator || '');
+    const own = OPERATOR_IDENTITIES[expected];
+    if (!own || !name) return null;
+    return [own.name, ...own.aliases].some(alias => name.startsWith(normalise(alias))) ? info : null;
+}
+
+function mentions(text: string, alias: string): boolean {
+    return new RegExp(`\\b${escapeRegExp(normalise(alias))}\\b`).test(normalise(text));
+}
+
+/**
+ * True when the text names an operator other than this bus's own. A group name
+ * ("Stagecoach", "First") counts only when the bus belongs to a different group,
+ * so "Stagecoach" is fine on a Stagecoach West bus but not on a First one.
+ * With no known operator for the bus, naming any operator counts.
+ */
+export function namesAnotherOperator(text: string, operatorRef?: string): boolean {
+    const expected = operatorRef?.trim().toUpperCase() || '';
+    const own = OPERATOR_IDENTITIES[expected];
+    return Object.entries(OPERATOR_IDENTITIES).some(([code, identity]) => {
+        if (code === expected) return false;
+        const specific = identity.aliases
+            .filter(alias => !own?.aliases.some(a => normalise(a) === normalise(alias)))
+            .some(alias => mentions(text, alias));
+        const group = !!identity.group && identity.group !== own?.group
+            && mentions(text, identity.group === 'First' ? 'First Bus' : identity.group);
+        return specific || group;
+    });
 }
 
 function requireObject(value: unknown, name: string): Record<string, unknown> {
@@ -312,7 +367,9 @@ export function validateCommentaryCandidate(
     if (!hasRoute(post, event.line)) issues.push(`post is missing route ${event.line}`);
     const operatorName = operatorDisplayName(event.operatorRef);
     if (!hookUsed && namesAnotherOperator(post, event.operatorRef)) {
-        issues.push(`post names another operator; this bus belongs to ${operatorName}`);
+        issues.push(operatorName
+            ? `post names another operator; this bus belongs to ${operatorName}`
+            : 'post names an operator, but this bus\'s operator is not known');
     }
     const opposite = event.direction === 'inbound' ? 'outbound'
         : event.direction === 'outbound' ? 'inbound' : null;

@@ -2,9 +2,19 @@
 
 An independent measurement of bus punctuality across the West of England,
 built only from operators' own public open data and compared against WECA's
-published punctuality targets. It covers the local registered bus operators
-in the WECA area (First Bristol, Stagecoach West, The Big Lemon, Abus, CT Coaches
-and others), not long-distance coaches or ferries. This page sets out exactly how
+published punctuality targets. It covers every local registered bus operator
+with timetabled services at West of England stops: First Bristol, Stagecoach
+South Wales, Stagecoach West, Faresaver, The Big Lemon, Kempsford Transport,
+Abus, CT Coaches, Taylors Travel, Libra Travel, FromeBus, Newport Bus,
+Swindon's Bus Company, Pulhams Coaches, Coachstyle, Eurocoaches and Bakers
+Dolphin. Express coaches (National Express, FlixBus and Stagecoach's Falcon)
+and ferries are not local bus services and are not audited, although they
+appear on the live map and departure boards.
+
+Two operators are included but not yet measurable. The regional timetable we
+build from holds almost none of Taylors Travel's or Bakers Dolphin's
+journeys, so their buses cannot be matched to a scheduled trip. They will
+appear once their own timetable files are added to the build. This page sets out exactly how
 the figures are produced and where they can be wrong.
 
 ## Data sources
@@ -166,6 +176,13 @@ Vehicles are assigned to routes operationally and change day to day, so by-model
 punctuality is indicative of how a vehicle type performs on the work it happened
 to do, not a verdict on the vehicle itself.
 
+## Route numbers shared by operators
+
+Route numbers are not unique: First's 13 runs in Bath, Stagecoach's 13 in
+Bristol. Each operator's own figures use its route numbers as printed. In the
+combined network view every operator except First is tagged, so the two appear
+as "13" and "13 Stagecoach" rather than being added together.
+
 ## Frequent services
 
 A route's frequency label is a schedule proxy: at least six departures in its
@@ -191,6 +208,17 @@ quality did not collapse. If the collector started late, stopped early, had a
 long gap or failed those quality checks, the day's coverage is withheld rather
 than making a collector fault look like hundreds of missing buses. Punctuality
 readings that were actually observed remain measurable.
+
+### Routes with duplicate timetable entries
+
+Operators sometimes publish the same journey twice with identical times, most
+often when a new timetable edition is issued before the old one expires. Such
+twins would count one bus as two scheduled trips. Where the audit cannot prove
+from the operator's own files which copy is real, it withholds coverage for
+that route on that day only. Every other route, and the operator and network
+totals without that route, still publish. Punctuality on the affected route
+still counts, because it is measured from the buses actually observed. The
+page names the routes withheld each day.
 
 ## Honest limitations
 
@@ -220,6 +248,19 @@ or regulator measurement that uses different sampling.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**30 September 2026 - every local bus operator published.** Stagecoach
+South Wales, Faresaver, Kempsford Transport, Libra Travel, FromeBus, Newport
+Bus, Swindon's Bus Company, Pulhams Coaches, Coachstyle, Eurocoaches and
+Bakers Dolphin joined the six operators already published. Network figures
+from this date cover all of them, so they are not directly comparable with
+earlier network figures. Earlier days were recomputed only as far back as the
+retained raw readings allow; before that, the network covers the original six.
+For recomputed days whose scheduled-trip snapshot predates the change, the new
+operators show punctuality without coverage. In the network view, other
+operators' route numbers are now tagged with the operator name, so "X1
+Taylors" is no longer merged with First's X1. Coverage withholding for
+duplicate timetable entries moved from the whole day to the affected route.
 
 **23 August 2026 - dated local evidence packs added.** This did not alter any
 punctuality result. It added a route-by-area/ward daily rollup for future local

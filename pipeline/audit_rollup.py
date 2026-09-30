@@ -17,7 +17,7 @@ Run from the bristol-live-buses folder:
 """
 
 import os
-from snapshot_quality import denominator_reasons
+from snapshot_quality import denominator_reasons, withheld_routes
 from sample_quality import write_day as write_sample_support
 import sys
 import json
@@ -26,7 +26,7 @@ import statistics
 from datetime import datetime, timedelta, timezone
 from dateutil import tz
 
-from audit_operators import SHOW_OPERATORS, NETWORK_LABEL
+from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, public_route
 from audit_publication import day_consistency_reasons
 from audit_geo import load_geo_index, geo_for
 from audit_fleet import load_fleet_index, fleet_for, fleet_number
@@ -318,6 +318,19 @@ def init_summary_tables(conn):
                    REFERENCES daily_trip_coverage_days(service_date)
            )"""
     )
+    # Routes left out of a day's coverage because their scheduled-trip count
+    # is in doubt. Their trips are in neither the day nor the route totals.
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_trip_coverage_withheld (
+               service_date     TEXT NOT NULL,
+               operator         TEXT NOT NULL,
+               route            TEXT NOT NULL,
+               scheduled_trips  INTEGER NOT NULL,
+               observed_trips   INTEGER NOT NULL,
+               reasons_json     TEXT NOT NULL,
+               PRIMARY KEY (service_date, operator, route)
+           )"""
+    )
     cur.execute(
         """CREATE VIEW IF NOT EXISTS valid_daily_trip_coverage AS
                SELECT coverage.*
@@ -560,15 +573,32 @@ def load_trip_coverage_rows(conn, date_str, operators):
     ]
 
 
+def withheld_key(row):
+    """The (operator, route) key snapshot_quality uses for a coverage row."""
+    return (row["operator"], "" if row["route"] == UNKNOWN_ROUTE else row["route"])
+
+
 def route_trip_counts(conn, date_str, operators):
+    """Scheduled and observed trips per route label, without withheld routes.
+
+    Returns (expected, observed, withheld_labels). A withheld route's trips are
+    left out of both counts and its label is returned so its coverage prints
+    as withheld rather than as a gap."""
+    pooled = len(operators) > 1
+    withheld = withheld_routes(conn, date_str)
     expected = {}
     observed = {}
+    withheld_labels = set()
     for row in load_trip_coverage_rows(conn, date_str, operators):
         route = None if row["route"] == UNKNOWN_ROUTE else row["route"]
-        expected[route] = expected.get(route, 0) + 1
+        label = public_route(row["operator"], route, pooled)
+        if withheld_key(row) in withheld:
+            withheld_labels.add(label)
+            continue
+        expected[label] = expected.get(label, 0) + 1
         if row["observed"]:
-            observed[route] = observed.get(route, 0) + 1
-    return expected, observed
+            observed[label] = observed.get(label, 0) + 1
+    return expected, observed, withheld_labels
 
 
 def scheduled_poll_window(date_str, rows):
@@ -694,15 +724,30 @@ def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
         reasons.append("no_valid_departure_times")
     reasons = sorted(set(reasons))
 
+    # Routes whose denominator is in doubt (identical twin schedules) are
+    # counted separately; every other route keeps its coverage.
+    withheld = withheld_routes(conn, date_str)
+    withheld_counts = {}
+    counted = []
+    for row in rows:
+        key = withheld_key(row)
+        if key in withheld:
+            entry = withheld_counts.setdefault(key, {"scheduled": 0, "observed": 0})
+            entry["scheduled"] += 1
+            entry["observed"] += int(row["observed"])
+        else:
+            counted.append(row)
+
     groups = {}
     totals = {
-        "scheduled": len(rows), "observed": 0, "exact": 0,
+        "scheduled": len(counted), "observed": 0, "exact": 0,
         "fuzzy": 0, "unknown": 0,
     }
-    for row in rows:
+    for row in counted:
         band = trip_time_band_for(row["first_departure"])
         for label in (row["operator"], NETWORK_LABEL):
-            key = (label, row["route"], row["direction"], band)
+            route = public_route(row["operator"], row["route"], label == NETWORK_LABEL)
+            key = (label, route, row["direction"], band)
             group = groups.setdefault(key, {
                 "scheduled": 0, "observed": 0, "exact": 0,
                 "fuzzy": 0, "unknown": 0,
@@ -734,6 +779,17 @@ def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
             (date_str,),
         )
         conn.execute(
+            "DELETE FROM daily_trip_coverage_withheld WHERE service_date = ?",
+            (date_str,),
+        )
+        for (operator, route), counts in sorted(withheld_counts.items()):
+            conn.execute(
+                "INSERT INTO daily_trip_coverage_withheld VALUES (?,?,?,?,?,?)",
+                (date_str, operator, route, counts["scheduled"],
+                 counts["observed"],
+                 json.dumps(withheld[(operator, route)], separators=(",", ":"))),
+            )
+        conn.execute(
             """INSERT OR REPLACE INTO daily_trip_coverage_days VALUES
                    (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             day_values,
@@ -756,6 +812,12 @@ def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
         **totals,
         "unobserved": totals["scheduled"] - totals["observed"],
         "groups": len(groups),
+        "withheld_routes": [
+            {"operator": operator, "route": route, **counts,
+             "reasons": withheld[(operator, route)]}
+            for (operator, route), counts in sorted(withheld_counts.items())
+        ],
+        "withheld_trips": sum(c["scheduled"] for c in withheld_counts.values()),
     }
 
 
@@ -789,6 +851,12 @@ def print_trip_coverage_report(result):
         f"{result['successful_poll_coverage_pct']}% of expected poll slots; "
         f"match rate {result['match_rate_pct']}%."
     )
+    for item in result.get("withheld_routes", []):
+        print(
+            f"    coverage withheld for {item['operator']} route "
+            f"{item['route'] or '(unknown)'}: {item['scheduled']} scheduled trips "
+            f"({', '.join(item['reasons'])})."
+        )
 
 
 def gtfs_hhmm_ref(value):
@@ -1162,8 +1230,9 @@ def rollup(
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
 
+    pooled = len(operators) > 1
     cur.execute(
-        f"""SELECT route, observed_delay_s, gps_distance_m, scheduled_local
+        f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local
            FROM timepoint_observations
            WHERE service_date = ? AND operator IN ({op_ph})
              AND COALESCE(is_origin, 0) = 0""",
@@ -1199,8 +1268,9 @@ def rollup(
             )
 
     per_route = {}
-    for route, delay_s, dist_m, scheduled_local in observations:
-        stats = per_route.setdefault(route, new_accumulator())
+    for operator, route, delay_s, dist_m, scheduled_local in observations:
+        stats = per_route.setdefault(
+            public_route(operator, route, pooled), new_accumulator())
         stats["readings_total"] += 1
         if dist_m is None or dist_m > DISTANCE_GATE_M:
             stats["excluded_distance"] += 1
@@ -1214,7 +1284,7 @@ def rollup(
         band_stats["delays"].append(delay_s)
         band_stats[band] += 1
 
-    expected_by_route, observed_by_route = route_trip_counts(
+    expected_by_route, observed_by_route, withheld_labels = route_trip_counts(
         conn, date_str, operators)
 
     all_routes = set(per_route) | set(expected_by_route) | set(observed_by_route)
@@ -1257,11 +1327,12 @@ def rollup(
         summary = punctuality_stats(stats)
         expected_count = expected_by_route.get(route, 0)
         observed_count = observed_by_route.get(route, 0)
+        route_valid = coverage_valid and route not in withheld_labels
         coverage = (
             round(100.0 * observed_count / expected_count, 1)
-            if coverage_valid and expected_count else None)
-        expected = expected_count if coverage_valid else None
-        observed = observed_count if coverage_valid else None
+            if route_valid and expected_count else None)
+        expected = expected_count if route_valid else None
+        observed = observed_count if route_valid else None
 
         cur.execute(
             "INSERT INTO daily_route_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1528,7 +1599,8 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
         if fn:
             m["vehicles"].add(fn)
         if route:
-            m["routes"][route] = m["routes"].get(route, 0) + 1
+            label = public_route(op, route, len(operators) > 1)
+            m["routes"][label] = m["routes"].get(label, 0) + 1
 
     cur.execute(
         "DELETE FROM daily_fleet_summary WHERE service_date = ? AND operator = ?",
@@ -1588,13 +1660,21 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
         (date_str, label),
     )
     frequent_count = 0
+    pooled = len(operators) > 1
+    # Twin schedules double a route's departures, so a withheld route cannot
+    # be classed as frequent or not.
+    withheld = withheld_routes(conn, date_str)
     by_route = {}
-    for (route,_,_,_), hours in hourly.items():
-        by_route.setdefault(route,[]).append(max(hours.values()))
+    doubtful = set()
+    for (route,operator,_,_), hours in hourly.items():
+        label = public_route(operator, route, pooled)
+        by_route.setdefault(label,[]).append(max(hours.values()))
+        if route in unknown_routes or (operator, route or "") in withheld:
+            doubtful.add(label)
     for route, peaks in by_route.items():
         classifications = {peak>=6 for peak in peaks}
         frequent = (int(next(iter(classifications)))
-                    if len(classifications)==1 and route not in unknown_routes else None)
+                    if len(classifications)==1 and route not in doubtful else None)
         peak = max(peaks)
         frequent_count += int(frequent == 1)
         cur.execute(

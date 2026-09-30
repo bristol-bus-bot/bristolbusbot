@@ -265,6 +265,7 @@ function renderRouteDetail() {
       <span class="badge" style="color:${colour};background:${tint(colour)}">${format.percent(row.on_time_pct)} on-time</span>
       ${freqNote}${lowNote}
     </div>
+    ${row.coverage_withheld ? '<p class="faint audit-small">Journey coverage withheld: the timetable lists some of this route\'s journeys twice with identical times.</p>' : ""}
     <div class="rd-stats">
       <div class="rd-stat"><span class="k">Median</span><span class="v">${format.delaySeconds(row.median_delay_s)}</span></div>
       <div class="rd-stat"><span class="k">Mean</span><span class="v">${format.delaySeconds(row.mean_delay_s)}</span></div>
@@ -441,6 +442,8 @@ function renderHeadline(opData) {
   explanation.textContent = evidenceText(overall, day.operator_composition, state.operator);
   const excluded = data.excluded_service_days || [];
   if (excluded.length) explanation.textContent += ` Excluded historical days: ${excluded.map(x=>format.serviceDate(x.service_date)).join('; ')}.`;
+  const withheld = opData.coverage_withheld_routes || [];
+  if (withheld.length) explanation.textContent += ` Journey coverage is withheld for route${withheld.length === 1 ? "" : "s"} ${withheld.join(", ")}: the timetable lists some of their journeys twice with identical times, so the number of scheduled journeys is uncertain. Their punctuality still counts.`;
   const groups = opData.frequency_adherence?.groups;
   if (groups) explanation.textContent += " " + [
     ["frequent", "Frequent services"], ["non_frequent", "Non-frequent services"],

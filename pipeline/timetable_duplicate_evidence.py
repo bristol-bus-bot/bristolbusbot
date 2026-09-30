@@ -151,7 +151,8 @@ def lineage_duplicate_proof(day, old_key, new_key, index):
       (First withdrew that edition), while the survivor has single-scope
       lineage in an edition that has started;
     * superseded: both copies have single-scope lineage in the same scope and
-      the survivor's newest edition is later and has started.
+      the survivor's latest started edition is later than the old copy's
+      newest edition.
 
     Returns ``(basis, witnesses)`` or ``(None, [])``.
     """
@@ -159,9 +160,14 @@ def lineage_duplicate_proof(day, old_key, new_key, index):
     new = single_scope_lineage(index, new_key)
     if new is None:
         return None, []
-    scope, new_start, new_witnesses = new
-    if new_start > day:
+    scope, _, new_witnesses = new
+    # The survivor's edition in force is its latest edition that has started.
+    # First publishes editions ahead of their start date, so the newest one is
+    # often still in the future; that must not block retiring an orphan.
+    started = [item.start for item in new_witnesses if item.start <= day]
+    if not started:
         return None, []
+    new_start = max(started)
     survivor = [item for item in new_witnesses if item.start == new_start]
     if not index.exact(old_key):
         return 'orphan_duplicate', survivor

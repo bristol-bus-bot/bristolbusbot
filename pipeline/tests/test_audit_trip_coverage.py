@@ -122,8 +122,9 @@ def test_healthy_day_is_durable_reconciled_and_idempotent(monkeypatch):
         ("pm_peak", 0, 1, 1, 0),
     ]
 
-    expected, observed = audit_rollup.route_trip_counts(
+    expected, observed, withheld = audit_rollup.route_trip_counts(
         connection, DAY, OPERATORS)
+    assert withheld == set()
     assert expected == {"75": 4}
     assert observed == {"75": 3}
     public = audit_rollup.rollup(
@@ -239,3 +240,52 @@ def test_raw_pruning_keeps_permanent_trip_coverage():
     assert connection.execute(
         "SELECT COUNT(*) FROM daily_trip_coverage"
     ).fetchone()[0] == 1
+
+
+def test_twin_schedules_withhold_one_route_not_the_day(monkeypatch):
+    """First's 13 (Bath) has twin entries; Stagecoach's 13 and First's 75 publish."""
+    connection = database()
+    # The snapshot found a collision on First 13 only.
+    record_quality(connection, DAY, 'a'*64, dict(
+        snapshot_sha256='b'*64, trip_count=6, collision_groups=1,
+        reasons=['unresolved_identical_schedules'],
+        collision_routes=[['FBRI', '13', 2]]))
+    trips = [
+        ("FBRI", "13", "f13a", "08:00:00"), ("FBRI", "13", "f13b", "08:00:00"),
+        ("SSWL", "13", "s13a", "09:00:00"), ("SSWL", "13", "s13b", "10:00:00"),
+        ("FBRI", "75", "f75a", "11:00:00"), ("FBRI", "75", "f75b", "12:00:00"),
+    ]
+    for operator, route, trip, departure in trips:
+        connection.execute("INSERT INTO expected_trips VALUES (?,?,?,?,?,?)",
+                           (DAY, operator, route, trip, 0, departure))
+    for operator, route, trip, departure in trips[::2]:
+        connection.execute(
+            """INSERT INTO timepoint_observations VALUES
+                   (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (DAY, operator, route, trip, 1, "STOP-1",
+             f"2026-08-20T{departure}+01:00", 0, 1, 10,
+             f"2026-08-20T{departure}+01:00", f"{operator}-1", 0, "fuzzy"))
+    operators = ["FBRI", "SSWL"]
+    rows = audit_rollup.load_trip_coverage_rows(connection, DAY, operators)
+    add_healthy_polls(connection, rows, monkeypatch)
+
+    result = audit_rollup.rollup_trip_coverage(connection, DAY, operators)
+    assert result["valid"] is True
+    assert result["withheld_trips"] == 2
+    assert (result["scheduled"], result["observed"]) == (4, 2)
+    assert connection.execute(
+        "SELECT operator, route, scheduled_trips FROM daily_trip_coverage_withheld"
+    ).fetchall() == [("FBRI", "13", 2)]
+
+    first = audit_rollup.rollup(connection, DAY, ["FBRI"], "FBRI")
+    stagecoach = audit_rollup.rollup(connection, DAY, ["SSWL"], "SSWL")
+    pooled = audit_rollup.rollup(connection, DAY, operators, "ALL")
+    assert (first["expected"], first["observed"]) == (2, 1)
+    assert (stagecoach["expected"], stagecoach["observed"]) == (2, 1)
+    assert (pooled["expected"], pooled["observed"]) == (4, 2)
+    routes = {row[0]: row[1:] for row in connection.execute(
+        """SELECT route, expected_trips, observed_trips, coverage_pct
+             FROM daily_route_summary WHERE operator='ALL'""")}
+    # Same number, different operators: kept apart, First's withheld.
+    assert routes == {"13": (None, None, None), "13 Stagecoach": (2, 1, 50.0),
+                      "75": (2, 1, 50.0)}

@@ -264,4 +264,6 @@ def test_stops_with_locality_keeps_legacy_rollback_compatibility(client, app):
 
     data = client.get("/api/stops-with-locality").get_json()
     stops = {item["stop_code"]: item for item in data["stops"]}
-    assert stops["0100C"]["routes"] == ["75"]
+    # Derived from the schedule, so the fixture's National Express coach (040)
+    # that calls here is listed too.
+    assert stops["0100C"]["routes"] == ["040", "75"]

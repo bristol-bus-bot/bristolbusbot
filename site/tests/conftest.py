@@ -111,6 +111,18 @@ def app(tmp_path):
     g.execute("INSERT INTO calendar VALUES ('EXC',0,0,0,0,0,0,0,'20260701','20260731')")
     g.execute("INSERT INTO calendar_dates VALUES ('EXC','20260701',1)")
     g.execute("INSERT INTO stop_times VALUES ('T_EXC','22:20:00','22:20:00','S3',1,1)")
+    # An express coach at the same stop, published twice (as FlixBus does per
+    # dataset): the board shows it once, with its operator.
+    g.execute("INSERT INTO agency VALUES ('OP2','NATX')")
+    g.execute("INSERT INTO routes VALUES ('R040','OP2','040')")
+    g.executemany("INSERT INTO trips VALUES (?,?,?,?,?,?)", [
+        ("T_COACH", "R040", "WK", "London Victoria", 0, None),
+        ("T_COACH_COPY", "R040", "WK", "London Victoria", 0, None),
+    ])
+    g.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", [
+        ("T_COACH", "22:30:00", "22:30:00", "S3", 1, 1),
+        ("T_COACH_COPY", "22:30:00", "22:30:00", "S3", 1, 1),
+    ])
     g.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", [
         ("T_NIGHT", "24:10:00", "24:10:00", "S1", 1, 1),
         ("T_NIGHT", "24:20:00", "24:20:00", "S3", 2, 1),

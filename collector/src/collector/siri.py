@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 import re as _re
 
+from .operator_registry import canonical_operator
 from .timeparse import parse_iso_utc
 
 
@@ -110,7 +111,8 @@ def extract_snapshot(activity: dict) -> VehicleSnapshot | None:
     mvj = get_nested_value(activity, "MonitoredVehicleJourney")
     if not mvj:
         return None
-    operator_ref = str(get_nested_value(mvj, "OperatorRef") or "").strip()
+    # Live feeds sometimes use a different code from the timetable.
+    operator_ref = canonical_operator(str(get_nested_value(mvj, "OperatorRef") or ""))
     line = str(get_nested_value(mvj, "PublishedLineName")
                or get_nested_value(mvj, "LineRef") or "").strip().rstrip("_")
     if not operator_ref or not line:
