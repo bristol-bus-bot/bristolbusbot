@@ -1599,8 +1599,8 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
         if fn:
             m["vehicles"].add(fn)
         if route:
-            label = public_route(op, route, len(operators) > 1)
-            m["routes"][label] = m["routes"].get(label, 0) + 1
+            route_label = public_route(op, route, len(operators) > 1)
+            m["routes"][route_label] = m["routes"].get(route_label, 0) + 1
 
     cur.execute(
         "DELETE FROM daily_fleet_summary WHERE service_date = ? AND operator = ?",
@@ -1667,10 +1667,10 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
     by_route = {}
     doubtful = set()
     for (route,operator,_,_), hours in hourly.items():
-        label = public_route(operator, route, pooled)
-        by_route.setdefault(label,[]).append(max(hours.values()))
+        route_label = public_route(operator, route, pooled)
+        by_route.setdefault(route_label,[]).append(max(hours.values()))
         if route in unknown_routes or (operator, route or "") in withheld:
-            doubtful.add(label)
+            doubtful.add(route_label)
     for route, peaks in by_route.items():
         classifications = {peak>=6 for peak in peaks}
         frequent = (int(next(iter(classifications)))
