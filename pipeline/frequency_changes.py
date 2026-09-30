@@ -367,6 +367,18 @@ def prepare_period(
         else:
             weekly_counts[key] = weekly
 
+    # A route whose scheduled trips include unresolved identical twins cannot
+    # show a real frequency change, so it is reported and left out.
+    from snapshot_quality import withheld_routes
+    doubtful = set()
+    for day in usable:
+        doubtful |= set(withheld_routes(connection, compact(day)))
+    for key in sorted(all_keys):
+        if any((key.operator, label) in doubtful for label in labels.get(key, ())):
+            weekly_counts.pop(key, None)
+            unstable.setdefault(
+                key, "identical twin schedules on this route; count withheld")
+
     return PreparedPeriod(
         period=period,
         usable_dates=usable,

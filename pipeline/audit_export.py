@@ -17,9 +17,9 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
-from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, operator_name
+from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, operator_name, public_route
 from audit_publication import publication_exclusions
-from snapshot_quality import denominator_reasons
+from snapshot_quality import denominator_reasons, withheld_routes
 from sample_quality import qualify_row
 from audit_scope import operator_composition, frequency_adherence
 from audit_targets import target_metadata
@@ -97,6 +97,18 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
         withhold_coverage(overall)
         for route in routes:
             withhold_coverage(route)
+    # Routes withheld on their own (identical twin schedules): their coverage
+    # is blank and their trips are outside this operator's coverage totals.
+    pooled = operator == NETWORK_LABEL
+    withheld_labels = {
+        public_route(op, route or None, pooled): reasons
+        for (op, route), reasons in withheld_routes(cur.connection, service_date).items()
+        if pooled or op == operator
+    }
+    for route in routes:
+        route["coverage_withheld"] = withheld_labels.get(route["route"]) or None
+        if route["coverage_withheld"]:
+            withhold_coverage(route)
 
     try:
         freq = {
@@ -164,7 +176,7 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
                 coverage_verified=coverage_valid)
     for item in routes:
         qualify_row(cur.connection,[service_date],operator,item,'route',item['route'],
-                    coverage_verified=coverage_valid)
+                    coverage_verified=coverage_valid and not item['coverage_withheld'])
     for scope,items in geography.items():
         for item in items:
             qualify_row(cur.connection,[service_date],operator,item,scope,item['key'],
@@ -173,6 +185,7 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
         qualify_row(cur.connection,[service_date],operator,item,'fleet',item['model'],
                     coverage_verified=coverage_valid)
     return {"overall": overall, "routes": routes, "geography": geography, "fleet": fleet,
+            "coverage_withheld_routes": sorted(withheld_labels),
             "frequency_adherence": frequency_adherence(routes)}
 
 
@@ -189,7 +202,11 @@ def build_day(cur, service_date):
             [row for op,values in by_operator.items() if op != NETWORK_LABEL
              for row in values['routes']])
     day = {"service_date": service_date, "by_operator": by_operator,
-           "denominator_reasons": denominator_reasons(cur.connection, service_date)}
+           "denominator_reasons": denominator_reasons(cur.connection, service_date),
+           "withheld_routes": [
+               {"operator": op, "operator_name": operator_name(op),
+                "route": route, "reasons": reasons}
+               for (op, route), reasons in withheld_routes(cur.connection, service_date).items()]}
     day['operator_composition'] = operator_composition({
         op: values['overall']['readings_in_gate'] for op, values in by_operator.items()
         if op != NETWORK_LABEL})

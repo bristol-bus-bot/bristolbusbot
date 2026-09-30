@@ -24,6 +24,7 @@ import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
 import { SystemdWatchdog } from './services/systemd-watchdog.js';
+import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
 
 /**
  * Coordinates the bot services and their lifecycle.
@@ -256,8 +257,10 @@ class BristolBusBot {
             if (ingestMode === 'events') {
                 const liveDbPath = process.env.LIVE_DB_PATH
                     || '/var/lib/bristolbusbot/collector/live.db';
-                const operators = (process.env.INGEST_OPERATORS || 'FBRI')
-                    .split(',').map(o => o.trim()).filter(Boolean);
+                // Every local bus operator by default (coaches and ferries are
+                // excluded); INGEST_OPERATORS=FBRI restores First-only posting.
+                const operators = (process.env.INGEST_OPERATORS || LOCAL_BUS_OPERATORS.join(','))
+                    .split(',').map(o => o.trim().toUpperCase()).filter(Boolean);
                 const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
                 this.eventReader = new EventReader(
                     liveDbPath, this.appState, this.delayAnalyzer, operators,

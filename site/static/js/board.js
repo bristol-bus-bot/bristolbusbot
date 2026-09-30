@@ -1,6 +1,14 @@
 /** Render live and scheduled departures with DOM nodes. */
 import { el, replaceContent, replaceContents } from "./util.js";
 
+// Route numbers are reused by different operators (First's 13 and
+// Stagecoach's 13), so a live bus only replaces a scheduled row of its own
+// operator. Rows without an operator code still match on the line alone.
+export function sameService(sched, live) {
+    return sched.line === live.line
+        && (!sched.operator || !live.operator || sched.operator === live.operator);
+}
+
 function mergeDepartures(liveDeps, schedDeps) {
     // Live rows win; scheduled rows that look like
     // the same bus (same line, ETA within 5 min) are suppressed
@@ -9,7 +17,7 @@ function mergeDepartures(liveDeps, schedDeps) {
     liveDeps.forEach(live => {
         for (let i = 0; i < schedDeps.length; i++) {
             if (used.has(i)) continue;
-            if (schedDeps[i].line === live.line
+            if (sameService(schedDeps[i], live)
                 && Math.abs(schedDeps[i].eta_mins - live.eta_mins) <= 5) {
                 used.add(i);
                 break;

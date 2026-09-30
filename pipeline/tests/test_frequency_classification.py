@@ -19,4 +19,6 @@ def test_frequency_does_not_pool_directions_operators_or_mixed_patterns():
                       ('20260907',op,'shared-number',f'08:{n*20:02}:00',op,0))
     rollup_frequency(c,'20260907',['FBRI','ABUS'],'ALL')
     actual=dict(c.execute('SELECT route,frequent FROM daily_route_class'))
-    assert actual=={'half-hourly':0,'frequent':1,'mixed':None,'shared-number':0}
+    # The pooled view keeps each operator's route 'shared-number' apart.
+    assert actual=={'half-hourly':0,'frequent':1,'mixed':None,'shared-number':0,
+                    'shared-number Abus':0}

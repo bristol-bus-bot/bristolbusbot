@@ -10,7 +10,10 @@ import {
 import {
   cleanEditorialPost,
   missingEditorialRequirements,
+  LOCAL_BUS_OPERATORS,
+  namesAnotherOperator,
   operatorDisplayName,
+  routeDetailsFor,
   parseEditorialVerifierOutput,
   parseEditorialWriterOutput,
   validateCommentaryCandidate,
@@ -185,6 +188,37 @@ test('operator identities distinguish First Bristol from Stagecoach West', () =>
     ).join(' '),
     /another operator/,
   );
+});
+
+test('a Stagecoach South Wales bus is never described as First', () => {
+  assert.equal(operatorDisplayName('SSWL'), 'Stagecoach South Wales');
+  const bus = { ...EVENT, operatorRef: 'SSWL' };
+  const valid = 'Stagecoach South Wales’s outbound 21 reaches Newbridge five minutes early.';
+  assert.deepEqual(validateCommentaryCandidate(valid, bus, null, false), []);
+  // Plain "Stagecoach" is the same group, so it is fine on either Stagecoach company.
+  assert.equal(namesAnotherOperator('Stagecoach’s 21 is early.', 'SSWL'), false);
+  assert.equal(namesAnotherOperator('Stagecoach’s 21 is early.', 'SCGL'), false);
+  assert.equal(namesAnotherOperator('Stagecoach’s 21 is early.', 'FBRI'), true);
+  assert.equal(namesAnotherOperator('First Bus revenue rose 25%.', 'SSWL'), true);
+  assert.equal(namesAnotherOperator('FirstGroup revenue rose 25%.', 'FBRI'), false);
+  assert.equal(namesAnotherOperator('Stagecoach West runs the 620.', 'SSWL'), true);
+  assert.equal(namesAnotherOperator('The 21 is early.', 'SSWL'), false);
+  assert.match(validateCommentaryCandidate(
+    'First Bristol’s outbound 21 reaches Newbridge five minutes early.', bus, null, false,
+  ).join(' '), /Stagecoach South Wales/);
+});
+
+test('route facts from First are not used for another operator reusing the number', () => {
+  const details = { '13': { operator: 'First Bristol, Bath & the West', route_name: 'Batheaston - Elmhurst' } };
+  assert.equal(routeDetailsFor(details, '13', 'FBRI')?.route_name, 'Batheaston - Elmhurst');
+  assert.equal(routeDetailsFor(details, '13', 'SSWL'), null);
+  assert.equal(routeDetailsFor(details, '13', undefined), null);
+  assert.equal(routeDetailsFor({ '10': { operator_ref: 'SSWL', route_name: 'x' } }, '10', 'SSWL')?.route_name, 'x');
+});
+
+test('the bot covers local bus operators but not coaches', () => {
+  for (const code of ['FBRI', 'SSWL', 'SCGL', 'FSRV', 'LEMB', 'TYSW']) assert.ok(LOCAL_BUS_OPERATORS.includes(code));
+  for (const code of ['NATX', 'FLIX', 'SDVN']) assert.ok(!LOCAL_BUS_OPERATORS.includes(code));
 });
 
 test('observation clock times use British local time, not raw UTC', () => {

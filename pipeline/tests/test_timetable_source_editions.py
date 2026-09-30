@@ -301,3 +301,38 @@ def test_duplicate_writes_never_delete_calendar_dates_one_date_at_a_time(tmp_pat
     assert db.execute('SELECT date,exception_type FROM calendar_dates WHERE service_id=? '
                       'ORDER BY date', (clone,)).fetchall() == [
         ('20261123', 2), ('20261124', 2), ('20261125', 2)]
+
+
+def test_orphan_is_retired_before_the_survivors_next_edition_starts(tmp_path):
+    # First publishes editions ahead of their start. The survivor is declared
+    # in the edition in force (27 Sep) and in one starting after the window
+    # (30 Nov). The orphan must still be retired on days the 27 Sep edition
+    # is in force (the 1s VJ2315/VJ2997 case of 29 September 2026).
+    future = date(2026, 11, 30)
+    index = index_of(journey('VJ2997', SEP27), journey('VJ2997', future))
+    db = duplicate_db(tmp_path / 'd.db', [('orphan', 'old', 'VJ2315', CALLS),
+                                          ('lineage', 'new', 'VJ2997', CALLS)])
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result == {'trips_corrected': 1, 'dates_excluded': 3}
+    rows = db.execute('SELECT trip_id,evidence_json FROM duplicate_source_corrections').fetchall()
+    assert {r[0] for r in rows} == {'orphan'}
+    assert all(json.loads(r[1])['basis'] == 'orphan_duplicate' for r in rows)
+    witness_starts = {w['start'] for r in rows for w in json.loads(r[1])['witnesses']}
+    assert witness_starts == {'2026-09-27'}
+
+
+def test_twin_declared_only_in_a_future_edition_is_not_proof(tmp_path):
+    future = date(2026, 11, 30)
+    index = index_of(journey('VJ2997', future))
+    duplicate_db(tmp_path / 'd.db', [('orphan', 'old', 'VJ2315', CALLS),
+                                     ('lineage', 'new', 'VJ2997', CALLS)])
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result == {'trips_corrected': 0, 'dates_excluded': 0}
+
+
+def test_two_journeys_in_the_edition_in_force_are_both_kept(tmp_path):
+    index = index_of(journey('VJ390', SEP27), journey('VJ391', SEP27))
+    result_db = duplicate_db(tmp_path / 'd.db', [('a', 'x', 'VJ390', CALLS),
+                                                 ('b', 'y', 'VJ391', CALLS)])
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result == {'trips_corrected': 0, 'dates_excluded': 0}

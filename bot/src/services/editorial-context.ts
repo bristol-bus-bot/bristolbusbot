@@ -11,6 +11,7 @@ import { dirname } from 'path';
 import { DateTime } from 'luxon';
 import { logger } from '../utils/logging.js';
 import type { BusEvent } from '../types/bus-types.js';
+import { namesAnotherOperator } from './editorial-commentary-policy.js';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,79}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -282,8 +283,8 @@ function validateRelevance(item: Record<string, unknown>, name: string): Editori
 export function editorialApplies(item: EditorialRelevance & { claim?: string }, today: string,
     event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>): boolean {
     if (item.review_due && today > item.review_due) return false;
-    if (event && /FirstGroup|First Bus|First Bristol/i.test(item.claim || '')
-        && event.operatorRef !== 'FBRI') return false;
+    // A claim about one operator's company must never be told about another's bus.
+    if (event && namesAnotherOperator(item.claim || '', event.operatorRef)) return false;
     if (!item.scope) return true;
     if (!event) return false;
     const equal = (values: string[], value?: string) => !!value

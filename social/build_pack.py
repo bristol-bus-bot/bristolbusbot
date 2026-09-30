@@ -38,9 +38,25 @@ DELAY_BIN_EDGES_S = (
     240, 300, 360, 480, 600, 900, 1200,
 )
 
+# Mirrors pipeline/audit_operators.py SHOW_OPERATORS (checked by a pipeline test).
 DEFAULT_OPERATOR_NAMES = {
     "FBRI": "First Bristol",
+    "SSWL": "Stagecoach South Wales",
     "SCGL": "Stagecoach West",
+    "FSRV": "Faresaver",
+    "LEMB": "The Big Lemon",
+    "KEMT": "Kempsford Transport",
+    "ABUS": "Abus",
+    "CTCO": "CT Coaches",
+    "TYSW": "Taylors Travel",
+    "LTRV": "Libra Travel",
+    "FRMN": "FromeBus",
+    "NWPT": "Newport Bus",
+    "TDTR": "Swindon's Bus Company",
+    "PULH": "Pulhams Coaches",
+    "COAC": "Coachstyle",
+    "EUTX": "Eurocoaches",
+    "BDOL": "Bakers Dolphin",
 }
 
 DELAY_BUCKETS = (
