@@ -82,6 +82,10 @@ class SourceIndex:
         return [journey for journey in self._schedule.get((line, direction, tuple(calls)), ())
                 if journey.scope == scope and journey.start == start]
 
+    def schedule_journeys(self, line: str, direction: int, calls: tuple) -> list[SourceJourney]:
+        """Every source journey with these exact calls, under any journey code."""
+        return list(self._schedule.get((line, direction, tuple(calls)), ()))
+
     def in_force(self, scope, day: date) -> date | None:
         starts = [start for start in self.editions.get(scope, ()) if start <= day]
         if not starts:

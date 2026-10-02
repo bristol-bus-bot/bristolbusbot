@@ -336,3 +336,84 @@ def test_two_journeys_in_the_edition_in_force_are_both_kept(tmp_path):
                                                  ('b', 'y', 'VJ391', CALLS)])
     result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
     assert result == {'trips_corrected': 0, 'dates_excluded': 0}
+
+
+# --- Journeys from withdrawn editions (2 October 2026 build) ---------------
+
+SUNDAY = profile('Sunday')
+
+
+def test_withdrawn_edition_journey_is_retired_where_its_current_twin_does_not_run(tmp_path):
+    # BODS kept a 30 Aug journey (VJ2933, Monday calendar) after First withdrew
+    # that edition. The current edition has the same calls as VJ4175, which
+    # runs on Sundays only, so the Monday copy is retired on Mondays.
+    index = index_of(journey('VJ4175', SEP13, SUNDAY))
+    db = duplicate_db(tmp_path / 'd.db', [('withdrawn', 'mon', 'VJ2933', CALLS)],
+                      weekdays=(1, 0, 0, 0, 0, 0, 0))
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result == {'trips_corrected': 1, 'dates_excluded': 1}
+    rows = db.execute('SELECT trip_id,date,evidence_json FROM calendar_nonoperation_corrections').fetchall()
+    assert [(r[0], r[1]) for r in rows] == [('withdrawn', '20261123')]
+    assert json.loads(rows[0][2])['reason'] == 'withdrawn_edition_nonoperation'
+
+
+def test_withdrawn_edition_journey_is_kept_where_its_current_twin_runs(tmp_path):
+    index = index_of(journey('VJ4175', SEP13, MONDAY))
+    duplicate_db(tmp_path / 'd.db', [('withdrawn', 'mon', 'VJ2933', CALLS)],
+                 weekdays=(1, 0, 0, 0, 0, 0, 0))
+    assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index) == {
+        'trips_corrected': 0, 'dates_excluded': 0}
+
+
+def test_withdrawn_journey_without_a_current_twin_is_left_alone(tmp_path):
+    index = index_of(journey('VJ4175', SEP13, SUNDAY, calls=OTHER))
+    duplicate_db(tmp_path / 'd.db', [('withdrawn', 'mon', 'VJ2933', CALLS)],
+                 weekdays=(1, 0, 0, 0, 0, 0, 0))
+    assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)['trips_corrected'] == 0
+
+
+def test_journey_absent_from_the_current_edition_carried_by_gtfs_is_retired(tmp_path):
+    # Route 77: GTFS carries First's current edition (VJ1, represented) and a
+    # leftover journey from a withdrawn edition from the same first stop.
+    index = index_of(journey('VJ1', SEP13, calls=OTHER))
+    db = duplicate_db(tmp_path / 'd.db', [('current', 'x', 'VJ1', OTHER),
+                                          ('leftover', 'y', 'VJ5863', CALLS)])
+    result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert result == {'trips_corrected': 1, 'dates_excluded': 3}
+    rows = db.execute('SELECT trip_id,evidence_json FROM calendar_nonoperation_corrections').fetchall()
+    assert {r[0] for r in rows} == {'leftover'}
+    assert json.loads(rows[0][1])['reason'] == 'absent_from_current_edition'
+
+
+def test_absent_journey_is_kept_when_gtfs_does_not_carry_the_current_edition(tmp_path):
+    index = index_of(journey('VJ1', SEP13, calls=OTHER))
+    duplicate_db(tmp_path / 'd.db', [('leftover', 'y', 'VJ5863', CALLS)])
+    assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)['trips_corrected'] == 0
+
+
+def test_unsourced_rule_never_overrides_a_sourced_copy(tmp_path):
+    # One copy is declared by First, so only the existing orphan rule may act,
+    # and it keeps the sourced copy.
+    index = index_of(journey('VJ1259', SEP27, MON_WED))
+    db = duplicate_db(tmp_path / 'd.db', [('a_orphan', 'old', 'VJ739', CALLS),
+                                          ('b_sourced', 'new', 'VJ1259', CALLS)])
+    duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
+    assert {r[0] for r in db.execute('SELECT trip_id FROM duplicate_source_corrections')} == {'a_orphan'}
+
+
+def test_leftover_from_another_first_stop_uses_the_routes_only_scope(tmp_path):
+    later = (('C', '07:10:00', '07:10:00'), ('B', '07:40:00', '07:40:00'))
+    index = index_of(journey('VJ1', SEP13, calls=OTHER))
+    db = duplicate_db(tmp_path / 'd.db', [('current', 'x', 'VJ1', OTHER),
+                                          ('leftover', 'y', 'VJ5863', later)])
+    assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)['trips_corrected'] == 1
+    assert [r[0] for r in db.execute('SELECT DISTINCT trip_id FROM calendar_nonoperation_corrections')] == ['leftover']
+
+
+def test_leftover_on_a_route_number_shared_by_two_first_scopes_is_kept(tmp_path):
+    later = (('C', '07:10:00', '07:10:00'), ('B', '07:40:00', '07:40:00'))
+    index = index_of(journey('VJ1', SEP13, calls=OTHER),
+                     journey('VJ2', SEP13, calls=CALLS, scope=('PH0000132:99', 'D1x')))
+    duplicate_db(tmp_path / 'd.db', [('current', 'x', 'VJ1', OTHER), ('other', 'z', 'VJ2', CALLS),
+                                     ('leftover', 'y', 'VJ5863', later)])
+    assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)['trips_corrected'] == 0
