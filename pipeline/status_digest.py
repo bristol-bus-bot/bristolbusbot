@@ -503,7 +503,37 @@ def today_lines(snapshot: dict) -> list[str]:
     return lines
 
 
-def action_line(snapshot: dict) -> str:
+def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str], list[str]]:
+    today = today or datetime.now(timezone.utc).date()
+    backup = _dict(_dict(snapshot.get('jobs')).get('backup'))
+    accepted = _dict(_dict(snapshot.get('timetable_automation')).get('last_accepted'))
+    warnings, freshness = [], []
+    for label, timestamp, maximum_days in (
+        ('Backup', backup.get('last_success_at'), 2),
+        ('Timetable update', accepted.get('accepted_at'), 7),
+    ):
+        try:
+            days = max(0, (today - datetime.fromisoformat(
+                str(timestamp).replace('Z', '+00:00')).date()).days)
+        except (ValueError, TypeError):
+            freshness.append(f'{label}: last success unknown.')
+            continue
+        text = f'{label}: last success {days} days ago ({str(timestamp)[:10]}).'
+        freshness.append(text)
+        if days > maximum_days:
+            warnings.append(text)
+    if backup.get('result') == 'interrupted':
+        warnings.append('Backup was interrupted by a Pi restart.'
+                        if backup.get('failure_code') != 'interrupted_without_result'
+                        else 'Backup stopped without recording a result.')
+    elif backup.get('result') == 'failure':
+        warnings.append('The latest backup failed.')
+    return warnings, freshness
+
+
+def action_line(snapshot: dict, today: date | None = None) -> str:
+    if recovery_status(snapshot, today)[0]:
+        return '*You need to do:* Investigate the backup or timetable failure above; automatic retries have not restored freshness.'
     blurbs = _dict(snapshot.get("blurb_generation"))
     if blurbs.get("status") == "pending_review":
         pending = _dict(blurbs.get("pending_review"))
@@ -534,10 +564,13 @@ def action_line(snapshot: dict) -> str:
 def daily_message(snapshot: dict, previous_state: dict | None = None,
                   today: date | None = None) -> str:
     heading, progress = progress_lines(snapshot, previous_state or {}, today)
+    warnings, freshness = recovery_status(snapshot, today)
     lines = [
         ":bus: *Bristol Bus Bot - daily update*",
         "",
-        overall_line(snapshot),
+        *(['*Needs attention*', *(f'- {line}' for line in warnings), ''] if warnings else []),
+        ('Backup or timetable freshness needs attention; see above.'
+         if warnings else overall_line(snapshot)),
         "",
         f"*{heading}*",
         *(f"- {line}" for line in progress),
@@ -553,9 +586,10 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         "core work.",
         "",
         "*Today's checks*",
+        *(f"- {line}" for line in freshness),
         *(f"- {line}" for line in today_lines(snapshot)),
         "",
-        action_line(snapshot),
+        action_line(snapshot, today),
     ]
     return "\n".join(lines)
 

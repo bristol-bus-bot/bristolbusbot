@@ -163,21 +163,64 @@ def sqlite_value(path: Path, query: str):
         connection.close()
 
 
+def boot_started_at() -> datetime | None:
+    try:
+        for line in Path('/proc/stat').read_text().splitlines():
+            if line.startswith('btime '):
+                return datetime.fromtimestamp(int(line.split()[1]), timezone.utc)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def job_checks() -> tuple[dict, list[str]]:
     checks, issues = {}, []
+    boot = boot_started_at()
     for name, maximum_hours in JOB_MAX_AGE_HOURS.items():
         path = STATE / "jobs" / f"{name}.json"
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
+            result = payload.get('last_result')
+            interrupted = False
+            started = payload.get('last_started_at')
+            if result == 'running' and started and boot:
+                started_at = datetime.fromisoformat(started.replace('Z', '+00:00'))
+                interrupted = started_at.tzinfo is not None and started_at < boot
+                if interrupted:
+                    result = 'interrupted'
+            ended_without_result = False
+            if result == 'running':
+                try:
+                    unit = subprocess.run(
+                        ['systemctl', 'show', f'bbb-{name}.service',
+                         '-p', 'LoadState', '-p', 'ActiveState'],
+                        capture_output=True, text=True, check=False, timeout=5)
+                    props = dict(line.split('=', 1) for line in unit.stdout.splitlines()
+                                 if '=' in line)
+                    ended_without_result = (props.get('LoadState') == 'loaded' and
+                                            props.get('ActiveState') in {'inactive', 'failed'})
+                    if ended_without_result:
+                        result = 'interrupted'
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
             success = payload.get("last_success_at")
             age_h = age_seconds(success) / 3600 if success else None
-            healthy = (payload.get("last_result") != "failure" and
+            healthy = (result not in {"failure", "interrupted"} and
                        age_h is not None and age_h <= maximum_hours)
             checks[name] = {
-                "result": payload.get("last_result"),
+                "result": result,
                 "last_success_at": success,
                 "age_hours": round(age_h, 2) if age_h is not None else None,
             }
+            if interrupted:
+                checks[name].update(
+                    failure_code='interrupted_by_restart',
+                    interrupted_at=boot.isoformat(),
+                    summary='Job was interrupted by a Pi restart')
+            elif ended_without_result:
+                checks[name].update(
+                    failure_code='interrupted_without_result',
+                    summary='Job stopped without recording a result')
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             healthy = False
             checks[name] = {"result": "missing", "error": str(exc)}
