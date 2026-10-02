@@ -634,7 +634,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     datetime.strptime(args.through, "%Y%m%d")
     conn = sqlite3.connect(args.audit_db)
-    conn.execute("PRAGMA busy_timeout=10000")
+    # The collector writes to this database all day; wait for it rather than
+    # failing the nightly job on a busy moment.
+    conn.execute("PRAGMA busy_timeout=120000")
     try:
         payload = build_payload(conn, args.through, bot_db=args.bot_db)
     finally:
