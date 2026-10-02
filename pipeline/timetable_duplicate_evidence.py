@@ -249,7 +249,7 @@ def reconcile_database(database: Path, directory: Path, index=None) -> dict:
             for trip in stale:
                 keys.setdefault(trip, all_keys[trip])
             targets = targets | stale
-        if not targets:
+        if not targets and index is None:
             return {'trips_corrected':0,'dates_excluded':0}
         if index is None:
             evidence,editions=source_evidence(directory,set(keys.values()))
@@ -278,6 +278,70 @@ def reconcile_database(database: Path, directory: Path, index=None) -> dict:
                     excluded_by_source[trip][day.strftime('%Y%m%d')]=dict(
                         reason='exact_source_nonoperation', witnesses=[w.record() for w in proof])
         if index is not None:
+            # Journeys from an edition First has since withdrawn: BODS GTFS can
+            # keep carrying them after the TXC that declared them is gone, so
+            # they have no lineage. When the exact same calls appear (under a
+            # renumbered code) in First's current editions and every such
+            # declaration says the journey does not run that day, retire it
+            # that day. This is the same strict non-operation test, applied to
+            # the identical journey rather than the identical code.
+            for trip,key in all_keys.items():
+                if trip in stale or index.exact(key):
+                    continue
+                same=[journey.evidence for journey in index.schedule_journeys(key[0],key[1],key[3])]
+                if not same:
+                    continue
+                for day in sorted(days.get(trips[trip]['service_id'], set())):
+                    text=day.strftime('%Y%m%d')
+                    if text in excluded_by_source[trip]:
+                        continue
+                    proof=nonoperation_witnesses(day, same)
+                    if proof:
+                        excluded_by_source[trip][text]=dict(
+                            reason='withdrawn_edition_nonoperation',
+                            witnesses=[w.record() for w in proof])
+            # Journeys absent from the edition of their route that the GTFS
+            # itself carries (proven by exact matches, see represented_editions):
+            # leftovers of a withdrawn edition. Only where one unambiguous First
+            # scope serves the journey's first stop in that direction, or the
+            # route has only one First scope. The witnesses are that edition's
+            # journeys from the same stop (or on the same route).
+            by_first_stop=defaultdict(list)
+            by_line_direction=defaultdict(list)
+            for journey in index.journeys:
+                by_first_stop[(journey.line,journey.direction,journey.calls[0][0])].append(journey)
+                by_line_direction[(journey.line,journey.direction)].append(journey)
+            for trip,key in all_keys.items():
+                if trip in stale or index.exact(key) or index.schedule_journeys(key[0],key[1],key[3]):
+                    continue
+                serving=by_first_stop.get((key[0],key[1],key[3][0][0]),[])
+                if not serving:
+                    # A leftover can start at a stop the current edition no
+                    # longer starts from; then only a route with a single First
+                    # scope identifies the edition.
+                    line_scopes={scope for scope in index.editions if scope[1]==key[0]}
+                    if len(line_scopes)==1:
+                        serving=[journey for journey in by_line_direction[(key[0],key[1])]]
+                scopes={journey.scope for journey in serving}
+                if len(scopes)!=1:
+                    continue
+                scope=next(iter(scopes))
+                for day in sorted(days.get(trips[trip]['service_id'], set())):
+                    text=day.strftime('%Y%m%d')
+                    if text in excluded_by_source[trip]:
+                        continue
+                    # The newest edition the GTFS carries that has started:
+                    # later editions First has published ahead are not in the
+                    # GTFS yet, so they say nothing about this copy.
+                    carried=[start for start in represented.get(scope, ()) if start<=day]
+                    if not carried:
+                        continue
+                    current=[journey for journey in serving if journey.start==max(carried)]
+                    if not current:
+                        continue
+                    excluded_by_source[trip][text]=dict(
+                        reason='absent_from_current_edition',
+                        witnesses=[journey.evidence.record() for journey in current[:3]])
             for trip in stale:
                 for day in sorted(days.get(trips[trip]['service_id'], set())):
                     text=day.strftime('%Y%m%d')
