@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {TrafficService,segmentDistance} from '../dist/services/traffic-service.js';
-import {chooseSubject,availableSubjects} from '../dist/services/story-subject.js';
+import {chooseSubject,availableSubjects,isRushHour} from '../dist/services/story-subject.js';
 import {buildStoryPrompt} from '../dist/services/story-brief.js';
 import {SubjectHistory} from '../dist/services/subject-history.js';
 import {AICommentary} from '../dist/services/ai-commentary.js';
@@ -173,7 +173,7 @@ test('the traffic subject and source reach the actual writer and exact final ver
 });
 
 test('traffic subjects require notable slow conditions and preserve freshness/fallback',()=>{
-  const bus=event();
+  const bus={...event(),eventType:'punctual',delayMinutes:0};
   for (const condition of ['moving freely','a little slower than on a clear road','unknown']) {
     const traffic={condition,checkedAt:new Date().toISOString(),key:'scenario',scope:'one nearby segment'};
     assert.ok(!availableSubjects(bus,null,null,traffic).some(s=>s.kind==='traffic'));
@@ -184,4 +184,20 @@ test('traffic subjects require notable slow conditions and preserve freshness/fa
     assert.equal(chooseSubject(bus,null,null,7,[],[],traffic).kind,'traffic');
     assert.ok(!availableSubjects(bus,null,null,{...traffic,checkedAt:new Date(Date.now()-180000).toISOString()}).some(s=>s.kind==='traffic'));
   }
+});
+
+
+test('a late bus on a clear road counts as a traffic story only in the weekday rush hour',()=>{
+  assert.equal(isRushHour('2026-10-05T07:30:00Z'),true);   // Monday 08:30 BST
+  assert.equal(isRushHour('2026-10-05T16:30:00Z'),true);   // Monday 17:30 BST
+  assert.equal(isRushHour('2026-10-05T11:00:00Z'),false);  // Monday 12:00 BST
+  assert.equal(isRushHour('2026-10-04T07:30:00Z'),false);  // Sunday
+  assert.equal(isRushHour('2026-12-07T08:30:00Z'),true);   // Monday 08:30 GMT
+  assert.equal(isRushHour('nonsense'),false);
+  const now=new Date().toISOString();
+  const traffic={condition:'moving freely',checkedAt:now,key:'scenario',scope:'one nearby segment'};
+  const late={...event(),eventType:'delay',delayMinutes:9};
+  assert.equal(availableSubjects(late,null,null,traffic).some(s=>s.kind==='traffic'),isRushHour(now));
+  assert.ok(!availableSubjects({...late,delayMinutes:3},null,null,traffic).some(s=>s.kind==='traffic'));
+  assert.ok(!availableSubjects({...late,eventType:'punctual',delayMinutes:0},null,null,traffic).some(s=>s.kind==='traffic'));
 });

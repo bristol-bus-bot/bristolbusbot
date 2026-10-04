@@ -44,6 +44,25 @@ test('rotation selects available subjects and repeated details fall back without
   assert.notEqual(chooseSubject(event,null,null,1,[],['A South Glos Lynx bus.']).kind,'livery');
 });
 
+test('livery cannot take every spare slot when depot, wider and traffic are unavailable', () => {
+  const noDepot={...event,depotContext:undefined};
+  const history=[];
+  const counts={};
+  for (let n=0;n<64;n++) {
+    // A different livery and weather each time, so only the rotation limits repetition.
+    const bus={...noDepot,busDetails:{...noDepot.busDetails,livery:{name:`Livery ${n}`}}};
+    const skies=['clear sky','light rain','overcast clouds','scattered clouds','broken clouds','mist','few clouds','moderate rain'];
+    const choice=chooseSubject(bus,weather.replace('clear sky',skies[n%skies.length]),null,n,history);
+    counts[choice.kind]=(counts[choice.kind]||0)+1;
+    history.push({kind:choice.kind,key:choice.key,postHash:String(n).padStart(64,'0')});
+    if (history.length>20) history.shift();
+  }
+  // The cycle plans livery 2 in 8 (16 of 64, allowing for the empty start).
+  assert.ok(counts.livery<=18, JSON.stringify(counts));
+  assert.ok(counts.weather>=5, JSON.stringify(counts));
+  assert.ok(counts.service>=counts.livery, JSON.stringify(counts));
+});
+
 test('same weather conditions remain on cooldown despite a new observation timestamp', () => {
   const selected=chooseSubject(event,weather,null,3);
   const later=weather.replace('20:00','20:10').replace('18°C','19°C');
