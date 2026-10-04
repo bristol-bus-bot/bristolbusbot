@@ -93,7 +93,7 @@ test('the checked-in editorial context is valid and contains no Bee Network clai
   const raw = readFileSync(path, 'utf8');
   assert.doesNotMatch(raw, /Bee Network/i);
   const document = validateEditorialDocument(JSON.parse(raw));
-  assert.equal(document.facts.length, 9);
+  assert.equal(document.facts.length, 11);
   assert.equal(document.occasions.length, 8);
   assert.equal(document.news.length, 1);
 });

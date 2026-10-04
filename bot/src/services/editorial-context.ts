@@ -22,6 +22,7 @@ const ALLOWED_SOURCE_HOSTS = [
     'bususers.org',
     'firstbus.co.uk',
     'firstgroupplc.com',
+    'stagecoachbus.com',
     'gov.uk',
     'legislation.gov.uk',
     'mobilityweek.eu',

@@ -26,6 +26,18 @@ export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     service: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. Make the supplied timing the point of this post. Give substantial lateness a pointed observation and treat a small discrepancy proportionately. For an on-time bus, be quietly pleased and matter-of-fact: a good moment without thanking, congratulating or praising the operator for basic competence. Keep that positivity free of a cynical final sting. Be concise and specific. Your readers depend on these buses; your criticism belongs with the service and its management, while drivers and passengers remain on your side.`,
     wider: `You are the Bristol Bus Bot, a dogged little Raspberry Pi with a dry eye for the gap between corporate announcements and the buses people use. Write a wry observation that connects this bus report to the supplied verified development: make the comparison or opinion explicit, with a small, pointed payoff. Two factual sentences placed side by side are not finished commentary. Keep the fact's scope, figures and qualifications intact; one bus cannot establish a company-wide trend or explain its cause. Be concise, specific and on the passenger's side. If no worthwhile connection fits, omit the claim and write about the bus alone, with hook_used false.`,
 };
+/** Weekday 07:00-09:59 and 16:00-18:59, UK time. */
+export function isRushHour(iso: string): boolean {
+    const when = new Date(iso);
+    if (Number.isNaN(when.getTime())) return false;
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23', weekday: 'short' })
+        .formatToParts(when);
+    const hour = Number(parts.find(p => p.type === 'hour')?.value);
+    const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+    if (['Sat', 'Sun'].includes(weekday)) return false;
+    return (hour >= 7 && hour < 10) || (hour >= 16 && hour < 19);
+}
+
 export function availableSubjects(event: BusEvent, weather?: string | null, hook?: EditorialSelection | null, traffic?: TrafficContext | null): SubjectChoice[] {
     const journey = event.journeyContext;
     const service: SubjectChoice = { kind: 'service', key: '', context: {} };
@@ -35,7 +47,11 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     }
     const choices = [service];
     const trafficAge = traffic ? Date.now() - Date.parse(traffic.checkedAt) : Infinity;
-    const notableTraffic = traffic && ['moving slowly', 'moving very slowly'].includes(traffic.condition);
+    // Slow traffic is a story; so is a late bus on a clear road in the rush hour.
+    const rushHour = traffic ? isRushHour(traffic.checkedAt) : false;
+    const lateOnClearRoad = !!traffic && traffic.condition === 'moving freely' && rushHour
+        && event.eventType === 'delay' && Number(event.delayMinutes) >= 5;
+    const notableTraffic = traffic && (['moving slowly', 'moving very slowly'].includes(traffic.condition) || lateOnClearRoad);
     if (traffic && notableTraffic && trafficAge >= -30_000 && trafficAge <= 2 * 60_000) {
         choices.push({ kind: 'traffic', key: `traffic:${traffic.key}`, context: {
             nearbyTraffic: { source: 'local traffic reports', checkedAt: traffic.checkedAt, condition: traffic.condition, scope: traffic.scope },
@@ -75,9 +91,21 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     ));
     // An eligible editorial hook gets its own turn, never priority over other subjects.
     const preferred = SUBJECT_CYCLE[publishedCount % SUBJECT_CYCLE.length];
-    return eligible.find(choice => choice.kind === preferred)
-        || (preferred === 'traffic' ? eligible.find(choice => choice.kind === 'weather') : undefined)
-        || eligible.find(choice => !['service', 'wider', 'traffic'].includes(choice.kind)) || choices[0];
+    const exact = eligible.find(choice => choice.kind === preferred);
+    if (exact) return exact;
+    // When the planned subject is unavailable (depot, wider and traffic often
+    // are), fill the slot with the colour subject furthest below its share of
+    // the last full cycle. Livery is available for almost every bus, so
+    // "first available" used to hand it most spare slots. A subject that has
+    // already had its share waits; the bus's timing is the default.
+    const recentKinds = history.slice(-SUBJECT_CYCLE.length).map(item => item.kind);
+    const share = (kind: StorySubject) => SUBJECT_CYCLE.filter(item => item === kind).length;
+    const used = (kind: StorySubject) => recentKinds.filter(item => item === kind).length;
+    const spare = eligible
+        .filter(choice => !['service', 'wider', 'traffic'].includes(choice.kind)
+            && used(choice.kind) < share(choice.kind))
+        .sort((a, b) => used(a.kind) / share(a.kind) - used(b.kind) / share(b.kind));
+    return spare[0] || choices[0];
 }
 
 export function repetitionHints(posts: string[]): string[] {
