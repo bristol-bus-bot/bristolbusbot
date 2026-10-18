@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 MAX_BYTES = 256 * 1024
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,79}")
 ALLOWED_SOURCE_HOSTS = {
+    "wikipedia.org", "bbc.co.uk", "bbc.com", "theguardian.com", "bristol247.com",
+    "bristolpost.co.uk", "route-one.net", "cbwmagazine.com", "travelwest.info",
     "bristolmuseums.org.uk",
     "bususers.org",
     "firstbus.co.uk",
