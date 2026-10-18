@@ -101,3 +101,48 @@ def test_clean_destination():
     assert clean_destination("Cribbs_Causeway_Bus_Station__D_") == "Cribbs Causeway Bus Station"
     assert clean_destination("Hengrove_Park A") == "Hengrove Park"
     assert clean_destination(None) == ""
+
+
+def _night_mvj(origin, ref):
+    acts = activities_from_xmltodict(parsed())
+    mvj = dict(get_nested_value(acts[0], "MonitoredVehicleJourney"))
+    if origin is None:
+        mvj.pop("OriginAimedDepartureTime")
+    else:
+        mvj["OriginAimedDepartureTime"] = origin
+    mvj["FramedVehicleJourneyRef"] = {"DatedVehicleJourneyRef": ref}
+    return mvj
+
+
+def test_first_post_midnight_stamp_a_day_early_is_moved_forward():
+    # Real reading, 18 Oct 2026 01:25 BST: route 76, ref 2442, stamped
+    # 00:42 on the 17th although the journey started 00:42 on the 18th.
+    now_local = datetime(2026, 10, 18, 1, 25, tzinfo=LDN)
+    anchor, src = anchor_departure_local(
+        _night_mvj("2026-10-16T23:42:00+00:00", "2442"), LDN, now_local)
+    assert src == "origin"
+    assert anchor == datetime(2026, 10, 18, 0, 42, tzinfo=LDN)
+
+
+def test_correct_post_midnight_stamp_is_left_alone():
+    now_local = datetime(2026, 10, 18, 1, 25, tzinfo=LDN)
+    anchor, _ = anchor_departure_local(
+        _night_mvj("2026-10-17T23:42:00+00:00", "2442"), LDN, now_local)
+    assert anchor == datetime(2026, 10, 18, 0, 42, tzinfo=LDN)
+
+
+def test_day_old_stamp_without_a_matching_ref_is_not_rewritten():
+    now_local = datetime(2026, 10, 18, 1, 25, tzinfo=LDN)
+    for ref in ("2443", "0042", "VJ123"):
+        anchor, _ = anchor_departure_local(
+            _night_mvj("2026-10-16T23:42:00+00:00", ref), LDN, now_local)
+        assert anchor == datetime(2026, 10, 17, 0, 42, tzinfo=LDN)
+
+
+def test_ref_past_midnight_is_used_when_no_origin_is_published():
+    # Real reading: route 74, ref 2510 (25:10), no origin time, seen 01:25.
+    now_local = datetime(2026, 10, 18, 1, 25, tzinfo=LDN)
+    anchor, src = anchor_departure_local(_night_mvj(None, "2510"), LDN, now_local)
+    assert src == "ref"
+    assert anchor == datetime(2026, 10, 18, 1, 10, tzinfo=LDN)
+    assert anchor_departure_local(_night_mvj(None, "3010"), LDN, now_local) == (None, None)
