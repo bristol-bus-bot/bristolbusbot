@@ -178,7 +178,42 @@ def witnesses_for(day: date, candidates: list[Evidence], editions: dict) -> list
     return active
 
 
-def reconcile_database(database: Path, directory: Path) -> dict:
+def successor_witness(day: date, key, index, represented):
+    """Carry an exact older-edition journey into a newer edition not yet in GTFS.
+
+    First renumbers journey codes in every edition, and BODS GTFS can lag behind
+    a newly published edition. The exact-code rule then finds the GTFS journey
+    only in the edition immediately before the one in force on ``day``. That is
+    accepted only when: the journey's lineage has one scope; the edition in force
+    is the very next edition and is not carried by the GTFS; and in that edition
+    exactly one journey with identical complete calls positively operates on
+    this ordinary day while every other identical-schedule journey there
+    explicitly does not. Returns ``(predecessor_witnesses, successor_journey)``
+    or None. Claim uniqueness is enforced by the caller.
+    """
+    from timetable_operating_days import operating_day
+    from timetable_source_index import single_scope_lineage
+    found = single_scope_lineage(index, key)
+    if found is None:
+        return None
+    scope, newest, witnesses = found
+    in_force = index.in_force(scope, day)
+    if in_force is None or in_force <= newest or in_force in represented.get(scope, ()):
+        return None
+    if index.predecessor(scope, in_force) != newest:
+        return None  # an intermediate edition exists: no single proven step
+    same = index.same_schedule(key[0], key[1], key[3], scope, in_force)
+    positive = [journey for journey in same if ordinary_operating_day(journey.evidence.profile, day)]
+    if len(positive) != 1:
+        return None
+    if any(operating_day(journey.evidence.profile, day) is not False
+           for journey in same if journey is not positive[0]):
+        return None
+    predecessors = [witness for witness in witnesses if witness.start == newest]
+    return predecessors, positive[0]
+
+
+def reconcile_database(database: Path, directory: Path, index=None) -> dict:
     """Clone only proven trips' calendars; retain every unrelated exception."""
     with sqlite3.connect(database) as connection:
         connection.row_factory = sqlite3.Row
@@ -209,14 +244,21 @@ def reconcile_database(database: Path, directory: Path) -> dict:
                 schedules[trip].append((stop, arrival, departure))
         keys = {trip: (r['route_short_name'], r['direction_id'], r['vehicle_journey_code'],
                        tuple(schedules[trip])) for trip, r in targets.items()}
-        evidence, editions = source_evidence(directory, set(keys.values()))
+        if index is None:
+            evidence, editions = source_evidence(directory, set(keys.values()))
+        else:
+            evidence = {key: index.exact(key) for key in set(keys.values())}
+            editions = index.editions
         corrections = {}
         for trip, key in keys.items():
-            proven = {day: witnesses_for(day, evidence.get(key, []), editions)
+            proven = {day: [item.record() for item in witnesses_for(day, evidence.get(key, []), editions)]
                       for day in dates[trip]}
             proven = {day: items for day, items in proven.items() if items}
             if proven:
                 corrections[trip] = proven
+        successors = 0
+        if index is not None:
+            successors = _successor_corrections(connection, index, keys, dates, corrections)
         connection.execute("""CREATE TABLE IF NOT EXISTS calendar_source_corrections (
             trip_id TEXT NOT NULL, date TEXT NOT NULL, original_service_id TEXT NOT NULL,
             corrected_service_id TEXT NOT NULL, evidence_json TEXT NOT NULL,
@@ -243,6 +285,60 @@ def reconcile_database(database: Path, directory: Path) -> dict:
             for day, items in proven.items():
                 connection.execute('INSERT INTO calendar_source_corrections VALUES (?,?,?,?,?)',
                                    (trip, day.strftime('%Y%m%d'), original, clone,
-                                    json.dumps([item.record() for item in items], sort_keys=True)))
-        return {'trips_corrected': len(corrections),
-                'exclusions_corrected': sum(map(len, corrections.values()))}
+                                    json.dumps(items, sort_keys=True)))
+        result = {'trips_corrected': len(corrections),
+                  'exclusions_corrected': sum(map(len, corrections.values()))}
+        if index is not None:
+            result['successor_exclusions_corrected'] = successors
+        return result
+
+
+def _successor_corrections(connection, index, keys, dates, corrections) -> int:
+    """Add unique successor-edition proofs; ambiguous claims prove nothing."""
+    from timetable_source_index import represented_editions
+    all_keys = []
+    current, calls, head = None, [], {}
+    for trip, route, direction, code in connection.execute('''
+            SELECT t.trip_id, r.route_short_name, t.direction_id, t.vehicle_journey_code
+            FROM trips t JOIN routes r USING(route_id) JOIN agency a USING(agency_id)
+            WHERE a.agency_noc='FBRI' '''):
+        head[trip] = (route, direction, code)
+    for trip, stop, arrival, departure in connection.execute(
+            'SELECT trip_id,stop_id,arrival_time,departure_time FROM stop_times '
+            'ORDER BY trip_id,stop_sequence'):
+        if trip != current:
+            if current in head:
+                all_keys.append((*head[current], tuple(calls)))
+            current, calls = trip, []
+        calls.append((stop, arrival, departure))
+    if current in head:
+        all_keys.append((*head[current], tuple(calls)))
+    represented = represented_editions(index, all_keys)
+    claims = defaultdict(list)
+    for trip, key in keys.items():
+        for day in dates[trip]:
+            if day in corrections.get(trip, {}):
+                continue
+            found = successor_witness(day, key, index, represented)
+            if found:
+                predecessors, successor = found
+                claims[(successor.scope, successor.start, successor.code, day)].append(
+                    (trip, predecessors, successor))
+    # A successor journey already claimed by an exact correction is also taken.
+    exact_claims = set()
+    for trip, proven in corrections.items():
+        for day in proven:
+            for journey in index.exact_journeys(keys[trip]):
+                exact_claims.add((journey.scope, journey.start, journey.code, day))
+    added = 0
+    for claim, holders in claims.items():
+        if len(holders) != 1 or claim in exact_claims:
+            continue
+        trip, predecessors, successor = holders[0]
+        day = claim[3]
+        records = [dict(item.record(), role='predecessor') for item in predecessors]
+        records.append(dict(successor.evidence.record(), role='successor',
+                            journey_code=successor.code, basis='successor_edition'))
+        corrections.setdefault(trip, {})[day] = records
+        added += 1
+    return added

@@ -16,21 +16,14 @@ from dotenv import load_dotenv
 
 from .cancellations import parse_cancellation_journeys, summarise_cancellations
 from .secret_filter import redact_query_secrets
+from .operator_registry import CANCELLATION_OPERATORS
 from .siri import get_nested_value
 
 
 CANCELLATIONS_URL = (
     "https://data.bus-data.dft.gov.uk/api/v1/siri-sx/cancellations/"
 )
-DEFAULT_OPERATORS = [
-    "FBRI",
-    "FSAV",  # Ceased historical identity for First West of England's licence.
-    "SCGL",
-    "LEMB",
-    "ABUS",
-    "CTCO",
-    "TYSW",
-]
+DEFAULT_OPERATORS = list(CANCELLATION_OPERATORS)
 WECA_STOP_PREFIXES_4 = ["0100", "0170", "0180", "0190"]
 
 

@@ -14,7 +14,7 @@ MAX_RESULTS = 10
 # Select calls that are still ahead of each matched vehicle. GTFS times are
 # handled in Python to support values beyond 24:00.
 _QUERY = """
-SELECT v.vehicle_ref, v.line, v.destination, v.delay_seconds,
+SELECT v.vehicle_ref, v.operator_ref, v.line, v.destination, v.delay_seconds,
        v.origin_aimed_departure, v.stop_code AS current_stop_code,
        v.stop_sequence AS current_seq, v.distance_m,
        st.arrival_time, st.departure_time, st.stop_sequence AS target_seq
@@ -70,6 +70,7 @@ def departures_for_stop(live_conn, gtfs_conn, stop_code: str,
             "distance_from_route": r["distance_m"],
             "source": "live",
             "vehicleRef": r["vehicle_ref"],
+            "operator": r["operator_ref"] or "",
         })
 
     departures.sort(key=lambda d: d["eta_dt_iso"])

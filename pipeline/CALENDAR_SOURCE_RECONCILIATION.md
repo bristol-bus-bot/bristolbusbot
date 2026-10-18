@@ -101,3 +101,47 @@ Supplemental journey IDs include the line and source edition start as well as
 the operator journey code. Reusing a code in a later source file must not cause
 that later timetable to be skipped; all editions reach the existing window
 normalizer before duplicate/calendar reconciliation.
+
+## Source editions from First's TXC, not GTFS dates (September 2026)
+
+BODS regional GTFS rewrites calendars: once a newer edition has started, every
+edition's `start_date` becomes the feed date and open-ended editions receive a
+synthetic end about nine months later. On 28 September 2026 this collapsed
+superseded route editions from 86 to 3. It left 2,596 identical First journeys
+active twice every Monday to Thursday and a withdrawn bank-holiday-week
+edition running every Monday. First also renumbers every journey code in each
+edition, so the exact-code repair above stopped working as soon as First
+published a 4 October edition that the GTFS did not yet carry.
+
+`timetable_source_index.py` parses First's TXC once. A GTFS trip's lineage is
+every edition declaring its exact line, direction, code and complete calls. An
+edition is *represented* in the GTFS when trips matching it (and not also its
+predecessor) cover at least a quarter of its journeys. Three rules use this, and
+only when the build supplies the index:
+
+* **Successor edition** (`successor_witness`, calendar repair). When the edition
+  in force on the day is the very next edition after the trip's lineage and is
+  not yet represented, exactly one journey there with identical complete calls
+  must positively operate under `ordinary_operating_day`. Every other
+  identical-schedule journey there must return `operating_day() is False`. Each
+  successor journey may be claimed by one GTFS trip only; ambiguous claims prove
+  nothing. Receipts carry `role: predecessor` and `role: successor` witnesses.
+* **Duplicate lineage** (`lineage_duplicate_proof`, duplicate reconciliation).
+  Inside an identical-journey group, on days both copies are active, retire:
+  a copy no available edition declares (`basis: orphan_duplicate`), or a copy
+  whose lineage is older than its identical twin's in the same scope
+  (`basis: superseded_duplicate`). The survivor carries exactly the same stop
+  service, so no scheduled service is removed.
+* **Superseded non-operation** (`superseded_nonoperation`). A trip whose whole
+  lineage is older than the represented edition in force on the day is excluded
+  on that day only when that edition's identical-schedule journeys all
+  explicitly do not operate. A missing schedule, unknown or unsupported profiles
+  never count. Receipts use `reason: superseded_edition_nonoperation`.
+
+`timetable_quality_gates.py` refuses candidates in which more than 0.5% of a
+day's active First trips duplicate another active trip's complete schedule
+under a different service. It also refuses when the next 42 days of distinct
+First schedules fall outside 85%-110% of First's in-force TXC count (unknown
+profiles widen the upper bound). The Pi comparison adds `candidate_service_inflation`
+(policy `service-window-v3`) for operators growing more than 25% on three
+near-term days without new routes.

@@ -29,7 +29,7 @@ MAX_RECORDED_FAILURES = 100
 class AcceptancePolicy:
     """All acceptance thresholds live in one recorded policy."""
 
-    version: str = "service-window-v2"
+    version: str = "service-window-v3"
     near_term_days: int = 28
     minimum_forward_days: int = 180
     maximum_forward_days: int = 400
@@ -41,6 +41,10 @@ class AcceptancePolicy:
     forward_coverage_ratio: float = 0.75
     raw_catastrophic_ratio: float = 0.25
     provisional_holiday_lead_days: int = 56
+    # Shortfall gates cannot see duplicated or superseded service. A substantial
+    # operator growing this much on several near-term days needs explanation.
+    inflation_ratio: float = 1.25
+    inflation_days: int = 3
 
     def record(self) -> dict[str, object]:
         return {
@@ -56,6 +60,8 @@ class AcceptancePolicy:
             "forward_coverage_ratio": self.forward_coverage_ratio,
             "raw_catastrophic_ratio": self.raw_catastrophic_ratio,
             "provisional_holiday_lead_days": self.provisional_holiday_lead_days,
+            "inflation_ratio": self.inflation_ratio,
+            "inflation_days": self.inflation_days,
         }
 
 
@@ -676,6 +682,34 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
     if not route_gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
         failures.append(route_gate)
 
+    # Inflation: operators present in both profiles whose near-term daily trips
+    # exceed the live timetable by more than the ratio on several days. Days on
+    # which the candidate adds routes the live timetable lacks are not counted.
+    live_routes_by_operator = defaultdict(set)
+    for operator, route in live_routes:
+        live_routes_by_operator[operator].add(route)
+    inflation = []
+    for operator in sorted(current.operator_totals):
+        if int(current.operator_totals[operator]["stop_times"]) < substantial_minimum:
+            continue
+        days = []
+        for offset in range(policy.near_term_days):
+            live_trips = int(current.daily[offset]["operators"].get(operator, {}).get("trips", 0))
+            new_trips = int(candidate.daily[offset]["operators"].get(operator, {}).get("trips", 0))
+            new_routes = {route for op, route in candidate.daily[offset]["routes"]
+                          if op == operator} - live_routes_by_operator[operator]
+            if live_trips and not new_routes and new_trips > live_trips * policy.inflation_ratio:
+                days.append({"date": current.daily[offset]["date"],
+                             "current": live_trips, "candidate": new_trips})
+        gate = {"kind": "operator_inflation", "operator": operator,
+                "metric": "trips", "days": len(days),
+                "ratio_limit": policy.inflation_ratio, "examples": days[:5],
+                "passed": len(days) < policy.inflation_days}
+        inflation.append(gate)
+        if not gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
+            failures.append(dict(gate, date=days[0]["date"], current=days[0]["current"],
+                                 candidate=days[0]["candidate"]))
+
     forward: list[dict[str, object]] = []
     pending = {(item['date'], item['metric']): item for item in provisional_requirements}
     provisional = {}
@@ -727,7 +761,9 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
     if failures:
         first = failures[0]
         kind = str(first.get("kind"))
-        if kind == "operator":
+        if kind == "operator_inflation":
+            code = "candidate_service_inflation"
+        elif kind == "operator":
             code = "candidate_operator_collapse"
         elif kind == "forward_coverage":
             code = "candidate_future_coverage_cliff"
@@ -742,7 +778,9 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         }
         context["policy_version"] = policy.version
         raise ServiceProfileError(
-            code, "candidate usable service is below the safe minimum", context)
+            code, "candidate usable service is inflated beyond the live timetable"
+            if code == "candidate_service_inflation"
+            else "candidate usable service is below the safe minimum", context)
 
     worst_forward = sorted(
         forward,
@@ -757,6 +795,7 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         "near_term_totals": totals,
         "route_coverage": route_gate,
         "operators": operators,
+        "inflation": inflation,
         "forward_worst": worst_forward,
         "warnings": warnings,
         "status": "pass",

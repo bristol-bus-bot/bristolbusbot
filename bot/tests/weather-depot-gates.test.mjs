@@ -25,3 +25,24 @@ test('depot distance requires exact reviewed yard and stop identity and never im
  assert.equal(availableSubjects(event).some(s=>s.kind==='depot'),false);
  assert.equal(availableSubjects({...event,depotContext:far}).some(s=>s.kind==='depot'),true);
 });
+
+
+test('fleet garage names reach their reviewed yard or garage town, and the threshold is 8 km',()=>{
+ // Fleet data says "Bath"; the reviewed yard is "Bath (Weston Island)".
+ const bath={lastStopCode:'stop',operatorRef:'FBRI',busDetails:{garage:{name:'Bath'}}};
+ const bristol=depotGeography(bath,{stop_code:'stop',lat:51.4545,lon:-2.5879});
+ assert.ok(bristol && bristol.distanceKm>=15 && bristol.name==='Bath');
+ assert.match(bristol.scope,/reviewed yard centre/);
+ assert.equal(depotGeography(bath,{stop_code:'stop',lat:51.38,lon:-2.36}),undefined);
+ // About 10 km from Lawrence Hill now qualifies; under 8 km does not.
+ const lh={lastStopCode:'stop',busDetails:{garage:{name:'Lawrence Hill'}}};
+ assert.ok(depotGeography(lh,{stop_code:'stop',lat:51.5390,lon:-2.6370}));
+ assert.equal(depotGeography(lh,{stop_code:'stop',lat:51.4800,lon:-2.6000}),undefined);
+ // A Stagecoach West bus from Gloucester in Bristol: town-level, said so in scope.
+ const glos={lastStopCode:'stop',operatorRef:'SCGL',busDetails:{garage:{name:'Gloucester'}}};
+ const far=depotGeography(glos,{stop_code:'stop',lat:51.4545,lon:-2.5879});
+ assert.ok(far.distanceKm>40); assert.match(far.scope,/Gloucester, where the garage is/);
+ // Same garage name under another operator has no mapping.
+ assert.equal(depotGeography({...glos,operatorRef:'FBRI'},{stop_code:'stop',lat:51.4545,lon:-2.5879}),undefined);
+ assert.equal(availableSubjects({...glos,depotContext:far}).some(s=>s.kind==='depot'),true);
+});

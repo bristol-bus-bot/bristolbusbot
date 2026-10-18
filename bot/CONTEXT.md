@@ -11,9 +11,17 @@ checker receives that exact brief, including any targeted repair instructions.
   and scheduled stop position. This includes loops and short workings; it is not
   evidence of actual arrivals, departures or timing elsewhere on the journey.
   Public direction still follows the dedicated `towards` eligibility rules.
-- Missing, mismatched or low-confidence context is omitted. Local-flavour prose,
-  bounding-box neighbourhood guesses and legacy vehicle-model blurbs are not
-  promoted into factual evidence.
+- Missing, mismatched or low-confidence context is omitted. Local-flavour prose
+  and bounding-box neighbourhood guesses are not promoted into factual evidence.
+- Two slots in eight are about the bus itself. Each turn takes the next aspect
+  after the last one published, in the order livery, model, power, age,
+  features, skipping any the bus has no material for. Each aspect's brief holds
+  only its own facts: the livery name; the model name and its note in
+  `bus-model-commentary.ts` (checked against sources on 2026-10-18; a model with
+  no note gets no model post); a non-diesel fuel and body type; first
+  registration dated from the plate's age identifier (never the registration
+  itself); or the fleet file's on-board features (not when USB-A is the only
+  one).
 
 The production social posting path calls `generatePost(event)` without pattern
 or history. Although `buildAIContext` accepts those optional inputs, wiring them

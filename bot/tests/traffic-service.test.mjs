@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {TrafficService,segmentDistance} from '../dist/services/traffic-service.js';
-import {chooseSubject,availableSubjects} from '../dist/services/story-subject.js';
+import {chooseSubject,availableSubjects,isRushHour,isDaytime} from '../dist/services/story-subject.js';
 import {buildStoryPrompt} from '../dist/services/story-brief.js';
 import {SubjectHistory} from '../dist/services/subject-history.js';
 import {AICommentary} from '../dist/services/ai-commentary.js';
@@ -95,13 +95,13 @@ test('traffic cannot hold up posting when a response body hangs',async t=>{
   assert.equal(await pending,null);
 });
 
-test('traffic gets only its own turn, keeps evidence scoped, and survives publication-history reload',async t=>{
+test('traffic gets its own turn and spare slots, keeps evidence scoped, and survives publication-history reload',async t=>{
   const {service,config}=setup(t);
   const bus=event(), traffic=await service.getTraffic(bus);
   const chosen=chooseSubject(bus,null,null,7,[],[],traffic);
   assert.equal(chosen.kind,'traffic');
   assert.equal(chooseSubject(bus,null,null,0,[],[],traffic).kind,'service');
-  assert.equal(chooseSubject(bus,null,null,1,[],[],traffic).kind,'service','not a fallback subject');
+  assert.equal(chooseSubject(bus,null,null,1,[],[],traffic).kind,'traffic','notable traffic may fill a spare slot');
   assert.equal(chooseSubject(bus,null,null,7,[chosen],[],traffic).kind,'service');
   assert.equal(chooseSubject(bus,'OpenWeather area observation near Bath at 2026-09-27 12:00 BST: 12°C, with clear sky',null,7).kind,'weather','preserve weather turn when traffic is unavailable');
   assert.equal(chooseSubject(bus,null,null,7,[],[],{...traffic,checkedAt:'2000-01-01'}).kind,'service');
@@ -116,7 +116,7 @@ test('traffic gets only its own turn, keeps evidence scoped, and survives public
   assert.equal(new SubjectHistory(config.usagePath+'.subjects').history[0].kind,'traffic');
 });
 
-test('the live context builder fetches traffic only on its scheduled turn and never substitutes a locality centre',async()=>{
+test('the live context builder fetches traffic on its turn and in the daytime, and never substitutes a locality centre',async()=>{
   const ai=Object.create(AICommentary.prototype);
   ai.aiConfig={pipeline:'single'};
   ai.appState={getNetworkStatus:()=>({})};
@@ -125,8 +125,9 @@ test('the live context builder fetches traffic only on its scheduled turn and ne
   ai.trafficService={getTraffic:async e=>{calls.push(e);return null;}};
   for(const count of [0,1,3,7]){
     ai.subjectHistory={publishedCount:count,history:[]};
-    await ai.buildAIContext(event());
+    await ai.buildAIContext({...event(),eventType:'punctual',delayMinutes:0});
   }
+  // A punctual bus gets no off-turn optional lookup.
   assert.equal(calls.length,1);
   assert.deepEqual(calls[0].location,point);
 });
@@ -173,7 +174,7 @@ test('the traffic subject and source reach the actual writer and exact final ver
 });
 
 test('traffic subjects require notable slow conditions and preserve freshness/fallback',()=>{
-  const bus=event();
+  const bus={...event(),eventType:'punctual',delayMinutes:0};
   for (const condition of ['moving freely','a little slower than on a clear road','unknown']) {
     const traffic={condition,checkedAt:new Date().toISOString(),key:'scenario',scope:'one nearby segment'};
     assert.ok(!availableSubjects(bus,null,null,traffic).some(s=>s.kind==='traffic'));
@@ -184,4 +185,80 @@ test('traffic subjects require notable slow conditions and preserve freshness/fa
     assert.equal(chooseSubject(bus,null,null,7,[],[],traffic).kind,'traffic');
     assert.ok(!availableSubjects(bus,null,null,{...traffic,checkedAt:new Date(Date.now()-180000).toISOString()}).some(s=>s.kind==='traffic'));
   }
+});
+
+
+test('a late bus on a clear road counts as a traffic story in the daytime on any day',()=>{
+  assert.equal(isRushHour('2026-10-05T07:30:00Z'),true);   // Monday 08:30 BST
+  assert.equal(isRushHour('2026-10-05T16:30:00Z'),true);   // Monday 17:30 BST
+  assert.equal(isRushHour('2026-10-05T11:00:00Z'),false);  // Monday 12:00 BST
+  assert.equal(isRushHour('2026-10-04T07:30:00Z'),false);  // Sunday
+  assert.equal(isRushHour('2026-12-07T08:30:00Z'),true);   // Monday 08:30 GMT
+  assert.equal(isRushHour('nonsense'),false);
+  const now=new Date().toISOString();
+  const traffic={condition:'moving freely',checkedAt:now,key:'scenario',scope:'one nearby segment'};
+  const late={...event(),eventType:'delay',delayMinutes:9};
+  assert.equal(availableSubjects(late,null,null,traffic).some(s=>s.kind==='traffic'),isDaytime(now));
+  assert.ok(!availableSubjects({...late,delayMinutes:3},null,null,traffic).some(s=>s.kind==='traffic'));
+  assert.ok(!availableSubjects({...late,eventType:'punctual',delayMinutes:0},null,null,traffic).some(s=>s.kind==='traffic'));
+});
+
+test('daytime covers weekends but not the evening',()=>{
+  assert.equal(isDaytime('2026-10-18T11:00:00Z'),true);   // Sunday 12:00 BST
+  assert.equal(isDaytime('2026-10-05T05:30:00Z'),false);  // Monday 06:30 BST
+  assert.equal(isDaytime('2026-10-05T18:30:00Z'),false);  // Monday 19:30 BST
+  assert.equal(isDaytime('nonsense'),false);
+});
+
+test('slightly slower traffic is a story only when the bus is a few minutes late',()=>{
+  const traffic={condition:'a little slower than on a clear road',checkedAt:new Date().toISOString(),key:'slight',scope:'one nearby segment'};
+  const late={...event(),eventType:'delay',delayMinutes:4};
+  assert.ok(availableSubjects(late,null,null,traffic).some(s=>s.kind==='traffic'));
+  assert.ok(!availableSubjects({...late,delayMinutes:2},null,null,traffic).some(s=>s.kind==='traffic'));
+  assert.ok(!availableSubjects({...late,eventType:'early',delayMinutes:-4},null,null,traffic).some(s=>s.kind==='traffic'));
+});
+
+test('notable traffic can take a spare slot ahead of livery, but not twice running',()=>{
+  const traffic={condition:'moving slowly',checkedAt:new Date().toISOString(),key:'spare',scope:'one nearby segment'};
+  const bus={...event(),eventType:'delay',delayMinutes:6,busDetails:{livery:{name:'Test Livery'}}};
+  // Slot 4 prefers depot; none is available, so the spare goes to traffic.
+  assert.equal(chooseSubject(bus,null,null,4,[],[],traffic).kind,'traffic');
+  const after=[{kind:'traffic',key:'traffic:other',postHash:'x'}];
+  assert.notEqual(chooseSubject(bus,null,null,4,after,[],traffic).kind,'traffic');
+});
+
+test('off-turn traffic lookups are paced against the monthly allowance; scheduled turns are not',async t=>{
+  const {config}=setup(t);
+  // 1st of the month just after midnight: the even spread allows no optional lookups yet.
+  const realNow=Date.now; t.after(()=>{Date.now=realNow;});
+  const at=Date.UTC(2026,9,1,0,5); Date.now=()=>at;
+  const bus={...event(),timestamp:new Date(at).toISOString()};
+  const fetches=[];
+  const service=new TrafficService(config,async(...a)=>{fetches.push(a);return response();});
+  await service.getTraffic(bus,{optional:true});
+  assert.equal(fetches.length,0,'optional lookup refused at the start of the month');
+  await service.getTraffic(bus);
+  assert.equal(fetches.length,1,'scheduled lookup still allowed');
+  // Mid-month with usage well under the spread, an optional lookup goes ahead.
+  const mid=Date.UTC(2026,9,16,12,0); Date.now=()=>mid;
+  fs.writeFileSync(config.usagePath,JSON.stringify({day:'2026-10-16',month:'2026-10',daily:3,monthly:100,lastRequest:0}));
+  await service.getTraffic({...bus,timestamp:new Date(mid).toISOString()},{optional:true});
+  assert.equal(fetches.length,2,'optional lookup allowed under the spread');
+  // Ahead of the spread, optional lookups stop.
+  fs.writeFileSync(config.usagePath,JSON.stringify({day:'2026-10-16',month:'2026-10',daily:3,monthly:300,lastRequest:0}));
+  await service.getTraffic({...bus,timestamp:new Date(mid).toISOString()},{optional:true});
+  assert.equal(fetches.length,2,'optional lookup refused ahead of the spread');
+});
+
+test('the live context builder adds an optional lookup for a late daytime bus',async()=>{
+  const ai=Object.create(AICommentary.prototype);
+  ai.aiConfig={pipeline:'single'};
+  ai.appState={getNetworkStatus:()=>({})};
+  ai.weatherService={getCurrentWeather:async()=>null};
+  const calls=[];
+  ai.trafficService={getTraffic:async(e,o)=>{calls.push(o);return null;}};
+  ai.subjectHistory={publishedCount:0,history:[]};
+  await ai.buildAIContext({...event(),eventType:'delay',delayMinutes:6});
+  if (isDaytime(new Date().toISOString())) assert.deepEqual(calls,[{optional:true}]);
+  else assert.equal(calls.length,0);
 });

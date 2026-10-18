@@ -3,8 +3,8 @@ import test from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { availableSubjects, chooseSubject } from '../dist/services/story-subject.js';
-import { buildStoryPrompt } from '../dist/services/story-brief.js';
+import { availableSubjects, chooseSubject, SUBJECT_PERSONAS } from '../dist/services/story-subject.js';
+import { buildStoryPrompt, BOT_VOICE } from '../dist/services/story-brief.js';
 import { SubjectHistory } from '../dist/services/subject-history.js';
 import { AICommentary } from '../dist/services/ai-commentary.js';
 import { isBareEditorialPair } from '../dist/services/editorial-commentary-policy.js';
@@ -28,8 +28,9 @@ test('each subject receives only its relevant supporting facts, never previous p
     assert.equal('areaWeather' in evidence,choice.kind==='weather');
     assert.equal('editorial' in evidence,choice.kind==='wider');
     assert.doesNotMatch(prompt,/Scania|Never supplied|Made-up Town|TODAY'S VOICE|STYLE EXAMPLES/);
-    assert.equal((prompt.match(/You are the Bristol Bus Bot/g)||[]).length,1);
-    assert.ok(prompt.split(/\s+/).length<400);
+    assert.ok(prompt.startsWith(BOT_VOICE + '\n\n' + SUBJECT_PERSONAS[choice.kind]));
+    assert.equal(prompt.split(BOT_VOICE).length - 1, 1);
+    assert.equal(prompt.split(SUBJECT_PERSONAS[choice.kind]).length - 1, 1);
   }
 });
 
@@ -41,6 +42,25 @@ test('rotation selects available subjects and repeated details fall back without
   assert.equal(chooseSubject(event,weather,null,1,seen).kind,'service');
   assert.equal(chooseSubject({ ...event,busDetails:undefined },null,null,3).kind,'service');
   assert.notEqual(chooseSubject(event,null,null,1,[],['A South Glos Lynx bus.']).kind,'livery');
+});
+
+test('livery cannot take every spare slot when depot, wider and traffic are unavailable', () => {
+  const noDepot={...event,depotContext:undefined};
+  const history=[];
+  const counts={};
+  for (let n=0;n<64;n++) {
+    // A different livery and weather each time, so only the rotation limits repetition.
+    const bus={...noDepot,busDetails:{...noDepot.busDetails,livery:{name:`Livery ${n}`}}};
+    const skies=['clear sky','light rain','overcast clouds','scattered clouds','broken clouds','mist','few clouds','moderate rain'];
+    const choice=chooseSubject(bus,weather.replace('clear sky',skies[n%skies.length]),null,n,history);
+    counts[choice.kind]=(counts[choice.kind]||0)+1;
+    history.push({kind:choice.kind,key:choice.key,postHash:String(n).padStart(64,'0')});
+    if (history.length>20) history.shift();
+  }
+  // The cycle plans livery 2 in 8 (16 of 64, allowing for the empty start).
+  assert.ok(counts.livery<=18, JSON.stringify(counts));
+  assert.ok(counts.weather>=5, JSON.stringify(counts));
+  assert.ok(counts.service>=counts.livery, JSON.stringify(counts));
 });
 
 test('same weather conditions remain on cooldown despite a new observation timestamp', () => {

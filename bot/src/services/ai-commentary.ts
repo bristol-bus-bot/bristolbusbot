@@ -4,7 +4,7 @@
 
 import { BOT_VOICE, buildStoryPrompt, factualStoryIssues, observationIssue, openingIssues } from './story-brief.js';
 import { spokenDestination, destinationMentioned } from './journey-context.js';
-import { chooseSubject, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
+import { chooseSubject, isDaytime, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
 import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
 import { depotGeography } from './depot-geography.js';
@@ -33,6 +33,8 @@ import {
     parseEditorialVerifierOutput,
     parseEditorialWriterOutput,
     operatorDisplayName,
+    namesAnotherOperator,
+    routeDetailsFor,
     validateCommentaryCandidate,
     isBareEditorialPair,
     type EditorialWriterOutput,
@@ -351,11 +353,17 @@ export class AICommentary {
         const locality = stopLocalities[busEvent.lastStopCode];
         const weatherLocation = busEvent.location || (locality
             ? { latitude: locality.lat, longitude: locality.lon } : undefined);
+        // Look up traffic on its own turn. In the daytime, a late bus also gets an
+        // optional lookup so notable traffic can take a spare slot; TrafficService
+        // paces those against the monthly allowance.
+        const scheduledTraffic = SUBJECT_CYCLE[this.getSubjectHistory().publishedCount % SUBJECT_CYCLE.length] === 'traffic';
+        const optionalTraffic = !scheduledTraffic && isDaytime(new Date().toISOString())
+            && busEvent.eventType === 'delay' && Number(busEvent.delayMinutes) >= 3;
         const trafficTurn = this.trafficService && this.aiConfig.pipeline !== 'legacy'
-            && SUBJECT_CYCLE[this.getSubjectHistory().publishedCount % SUBJECT_CYCLE.length] === 'traffic';
+            && (scheduledTraffic || optionalTraffic);
         const [weatherData, trafficData] = await Promise.all([
             this.weatherService.getCurrentWeather(weatherLocation),
-            trafficTurn ? this.trafficService!.getTraffic(busEvent) : Promise.resolve(null),
+            trafficTurn ? this.trafficService!.getTraffic(busEvent, { optional: !scheduledTraffic }) : Promise.resolve(null),
         ]);
         const neighbourhood = locality ? findNeighbourhood(locality.lat, locality.lon) : null;
         return {
@@ -424,8 +432,8 @@ export class AICommentary {
         try {
             const recentPosts = await this.getRecentPostsForWriter();
             // Company-specific hooks cannot be paired with another operator.
-            const relevantHook = hook && /FirstGroup|First Bus|First Bristol/i.test(hook.claim || '')
-                && context.event.operatorRef !== 'FBRI' ? null : hook;
+            const relevantHook = hook && namesAnotherOperator(hook.claim || '',
+                context.event.operatorRef) ? null : hook;
             const history = this.getSubjectHistory();
             let subject = chooseSubject(context.event, context.weatherContext, relevantHook,
                 history.publishedCount, history.history, recentPosts, context.trafficContext);
@@ -847,7 +855,11 @@ Make no other historical claim. Weave in a restrained reference only if it fits 
 
             // Build route context from route_details.json with origin/destination
             let routeContext = '';
-            const routeInfo = this.appState.routeDetails[context.event.line];
+            // route_details.json is First's route list keyed by route number alone.
+            // Stagecoach and others reuse numbers (9, 10, 13...), so only use it
+            // when it describes this bus's own operator.
+            const routeInfo = routeDetailsFor(this.appState.routeDetails,
+                context.event.line, context.event.operatorRef);
             if (routeInfo) {
                 // Get route endpoints from headsigns
                 const headsigns = routeInfo.headsigns || [];

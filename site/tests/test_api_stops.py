@@ -30,5 +30,17 @@ def test_scheduled_departures_with_calendar_exception(client):
     assert deps == sorted(deps, key=lambda d: d["eta_mins"])
 
 
+def test_board_shows_every_operator_once_with_its_code(client):
+    with patch("app.services.stops.datetime") as dt:
+        dt.now.return_value = NOW_LOCAL
+        data = client.get("/api/scheduled-departures/0100C").get_json()
+    deps = data["scheduled_departures"]
+    coach = [d for d in deps if d["line"] == "040"]
+    assert len(coach) == 1
+    assert coach[0]["operator"] == "NATX"
+    assert coach[0]["destination"] == "London Victoria"
+    assert {d["operator"] for d in deps if d["line"] == "75"} == {"FBRI"}
+
+
 def test_scheduled_unknown_stop_404(client):
     assert client.get("/api/scheduled-departures/nope").status_code == 404

@@ -54,20 +54,21 @@ def validate_target(path: Path, *, replace: bool) -> None:
             raise ConfigurationError("existing credential is not a regular file")
 
 
-def private_write(path: Path, content: str, *, replace: bool) -> None:
+def private_write(path: Path, content: str, *, replace: bool,
+                  mode: int = 0o600) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     validate_target(path, replace=replace)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", dir=path.parent, text=True)
     temporary = Path(temporary_name)
     try:
-        os.fchmod(descriptor, 0o600)
+        os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
-        os.chmod(path, 0o600)
+        os.chmod(path, mode)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -93,7 +94,8 @@ def main() -> int:
             "Fine-grained GitHub token for Actions read/write (hidden): "))
         expiry = validate_expiry(input("Token expiry date shown by GitHub (YYYY-MM-DD): "))
         private_write(args.token, token + "\n", replace=args.replace)
-        private_write(args.env, render_env(expiry), replace=args.replace)
+        # The expiry file holds no secret; health monitoring (not root) reads it.
+        private_write(args.env, render_env(expiry), replace=args.replace, mode=0o644)
     except (OSError, ConfigurationError) as exc:
         raise SystemExit(f"configuration failed: {exc}") from exc
     print("Timetable-delivery credential written root-only; no token was displayed.")

@@ -42,8 +42,11 @@ Optional traffic commentary uses TomTom Flow Segment Data. Set `TOMTOM_API_KEY`
 and `TRAFFIC_ENABLED=true` in the private bot environment after checking the
 account's allowance. `TRAFFIC_USAGE_PATH` must point to durable writable state
 (normally `/var/lib/bristolbusbot/bot/traffic-usage.json`). No key belongs in Git.
-Traffic has one slot in the eight-post subject rotation; absent or unsuitable
-data falls back to another subject. Requests have a five-second overall wait,
+Traffic has one slot in the eight-post subject rotation, and notable traffic may
+also fill a spare slot. Between 07:00 and 19:00 UK time a bus at least three
+minutes late gets an optional lookup outside the traffic turn; optional lookups
+are paced to stay under 450 a month. Absent or unsuitable data falls back to
+another subject. Requests have a five-second overall wait,
 no retries, at least ten minutes between lookups, and persisted limits of 50
 per UTC day and 500 per UTC month. Counts include failures. Provider responses
 are not cached or archived by the traffic service. Public posts refer to local

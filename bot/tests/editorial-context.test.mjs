@@ -93,7 +93,7 @@ test('the checked-in editorial context is valid and contains no Bee Network clai
   const raw = readFileSync(path, 'utf8');
   assert.doesNotMatch(raw, /Bee Network/i);
   const document = validateEditorialDocument(JSON.parse(raw));
-  assert.equal(document.facts.length, 9);
+  assert.equal(document.facts.length, 11);
   assert.equal(document.occasions.length, 8);
   assert.equal(document.news.length, 1);
 });
@@ -281,4 +281,16 @@ test('a deferred hook is not consumed and becomes eligible after its short sleep
   );
   assert.equal(reloaded.select(now.plus({ hours: 5 }), []), null);
   assert.equal(reloaded.select(now.plus({ hours: 7 }), [])?.id, fact.id);
+});
+
+
+test('a First company fact is never offered for a Stagecoach bus, even unscoped', () => {
+  const today = '2026-09-30';
+  const claim = { claim: 'First Bus adjusted operating profit rose 7% to £102.8 million.' };
+  assert.equal(editorialApplies(claim, today, { operatorRef: 'FBRI', line: '72' }), true);
+  assert.equal(editorialApplies(claim, today, { operatorRef: 'SSWL', line: '10' }), false);
+  assert.equal(editorialApplies(claim, today, { operatorRef: 'SCGL', line: '620' }), false);
+  const stagecoach = { claim: 'Stagecoach reported rising passenger numbers.' };
+  assert.equal(editorialApplies(stagecoach, today, { operatorRef: 'SSWL', line: '10' }), true);
+  assert.equal(editorialApplies(stagecoach, today, { operatorRef: 'FBRI', line: '72' }), false);
 });

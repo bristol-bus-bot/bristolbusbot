@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 import re as _re
 
+from .operator_registry import canonical_operator
 from .timeparse import parse_iso_utc
 
 
@@ -61,24 +62,38 @@ def anchor_departure_local(mvj: dict, target_tz, now_local: datetime):
 
     Prefers OriginAimedDepartureTime; falls back to DatedVehicleJourneyRef
     read as HHMM on the nearest calendar day (several operators publish only
-    the HHMM ref). Nearest-day selection keeps a 23:50 run observed at 00:20
-    anchored to yesterday instead of almost 24 hours in the future.
+    the HHMM ref, and First's runs past 24:00 after midnight). Nearest-day
+    selection keeps a 23:50 run observed at 00:20 anchored to yesterday
+    instead of almost 24 hours in the future.
     Returns (aware datetime | None, 'origin'|'ref'|None).
     """
-    origin = parse_iso_utc(get_nested_value(mvj, "OriginAimedDepartureTime"))
-    if origin:
-        return origin.astimezone(target_tz), "origin"
     ref = str(get_nested_value(
         mvj, "FramedVehicleJourneyRef/DatedVehicleJourneyRef") or "").strip()
+    hhmm = None
     if len(ref) == 4 and ref.isdigit():
         hh, mm = int(ref[:2]), int(ref[2:])
-        if hh < 24 and mm < 60:
-            today = now_local.replace(hour=hh, minute=mm, second=0,
-                                      microsecond=0)
-            candidates = (today - timedelta(days=1), today,
-                          today + timedelta(days=1))
-            return min(candidates,
-                       key=lambda candidate: abs(candidate - now_local)), "ref"
+        if hh < 30 and mm < 60:
+            hhmm = (hh, mm)
+    origin = parse_iso_utc(get_nested_value(mvj, "OriginAimedDepartureTime"))
+    if origin:
+        local = origin.astimezone(target_tz)
+        # After midnight First stamps a journey timetabled at 24:42 (ref
+        # "2442") with the service date and 00:42, a whole day early. Only
+        # move it when the ref confirms that and the stamp is about a day old.
+        if (hhmm and hhmm[0] >= 24
+                and (local.hour, local.minute) == (hhmm[0] - 24, hhmm[1])
+                and timedelta(hours=12) < now_local - local < timedelta(hours=36)):
+            local += timedelta(days=1)
+        return local, "origin"
+    if hhmm:
+        hh, mm = hhmm
+        # A ref past 23:59 (e.g. "2510") is 01:10 on the next calendar day.
+        today = now_local.replace(hour=hh % 24, minute=mm, second=0,
+                                  microsecond=0)
+        candidates = (today - timedelta(days=1), today,
+                      today + timedelta(days=1))
+        return min(candidates,
+                   key=lambda candidate: abs(candidate - now_local)), "ref"
     return None, None
 
 
@@ -110,7 +125,8 @@ def extract_snapshot(activity: dict) -> VehicleSnapshot | None:
     mvj = get_nested_value(activity, "MonitoredVehicleJourney")
     if not mvj:
         return None
-    operator_ref = str(get_nested_value(mvj, "OperatorRef") or "").strip()
+    # Live feeds sometimes use a different code from the timetable.
+    operator_ref = canonical_operator(str(get_nested_value(mvj, "OperatorRef") or ""))
     line = str(get_nested_value(mvj, "PublishedLineName")
                or get_nested_value(mvj, "LineRef") or "").strip().rstrip("_")
     if not operator_ref or not line:

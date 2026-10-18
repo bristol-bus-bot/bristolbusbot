@@ -16,6 +16,8 @@ from timetable_editions import normalize_database as normalize_route_editions
 from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
 from timetable_duplicate_evidence import reconcile_database as reconcile_duplicate_sources
 from timetable_evidence_storage import compact_evidence
+from timetable_source_index import build_source_index
+from timetable_quality_gates import check_candidate_quality
 
 HERE = Path(__file__).parent
 PY = sys.executable
@@ -24,6 +26,7 @@ TMP = Path(tempfile.gettempdir())
 GTFS_DIR = TMP / "busaudit_gtfs"
 WECA_DB = TMP / "busaudit_timetable_weca.db"
 SOURCE_STATUS = TMP / "busaudit_timetable_source_status.json"
+QUALITY_STATUS = TMP / "busaudit_timetable_quality.json"
 # BBB_TIMETABLE_DB selects the finished local database path.
 TIMETABLE_DB = Path(os.getenv("BBB_TIMETABLE_DB", str(HERE / "timetable.db")))
 # An existing timetable may supply stop coordinates missing from source data.
@@ -243,9 +246,18 @@ def main():
         write_source_status(
             tnds_status="not_needed", missing_before_tnds=[])
 
+    # One parse of First's TXC identifies source editions for every later step.
+    # GTFS calendar dates cannot: BODS clips them once a new edition starts.
+    logger.info("Indexing First TransXChange journeys and editions...")
+    try:
+        source_index = build_source_index(txc_dir)
+    except Exception:
+        logger.exception("First source index failed - refusing the candidate")
+        return 2
+
     logger.info("Checking removal exceptions against exact First source journeys...")
     try:
-        calendar_result = reconcile_calendar_sources(WECA_DB, txc_dir)
+        calendar_result = reconcile_calendar_sources(WECA_DB, txc_dir, source_index)
     except Exception:
         logger.exception("Calendar source verification failed - refusing the candidate")
         return 2
@@ -268,7 +280,7 @@ def main():
         edition_result["trips_rewindowed"],
     )
     try:
-        duplicate_result = reconcile_duplicate_sources(WECA_DB, txc_dir)
+        duplicate_result = reconcile_duplicate_sources(WECA_DB, txc_dir, source_index)
     except Exception:
         logger.exception('Duplicate source verification failed - refusing the candidate')
         return 2
@@ -298,6 +310,21 @@ def main():
         diagnose_missing(GTFS_DIR, validation["missing"])
         return 2
     logger.info("Validation passed: integrity, freshness and expected routes are good.")
+
+    # Shortfall gates cannot see duplicated or superseded service; refuse it here.
+    try:
+        quality = check_candidate_quality(WECA_DB, source_index, date.today())
+    except Exception:
+        logger.exception("Candidate quality checks failed to run - refusing the candidate")
+        return 2
+    QUALITY_STATUS.write_text(json.dumps(quality, indent=2, sort_keys=True) + "\n",
+                              encoding="utf-8")
+    if not quality["passed"]:
+        logger.error("VALIDATION FAILED: candidate contains duplicated or source-inconsistent "
+                     "First service: %s", json.dumps(quality, sort_keys=True)[:2000])
+        return 2
+    logger.info("Quality checks passed: %s", json.dumps(
+        {"duplicates": quality["duplicate_active_schedules"]["worst"]}, sort_keys=True))
 
     # Complete every remaining mutation on a sibling staging file. Readers
     # continue using the old timetable until one atomic os.replace at the end.
