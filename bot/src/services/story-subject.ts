@@ -38,6 +38,15 @@ export function isRushHour(iso: string): boolean {
     return (hour >= 7 && hour < 10) || (hour >= 16 && hour < 19);
 }
 
+/** Any day 07:00-18:59, UK time: when road conditions are worth a lookup. */
+export function isDaytime(iso: string): boolean {
+    const when = new Date(iso);
+    if (Number.isNaN(when.getTime())) return false;
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' })
+        .formatToParts(when).find(p => p.type === 'hour')?.value);
+    return hour >= 7 && hour < 19;
+}
+
 export function availableSubjects(event: BusEvent, weather?: string | null, hook?: EditorialSelection | null, traffic?: TrafficContext | null): SubjectChoice[] {
     const journey = event.journeyContext;
     const service: SubjectChoice = { kind: 'service', key: '', context: {} };
@@ -47,11 +56,15 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     }
     const choices = [service];
     const trafficAge = traffic ? Date.now() - Date.parse(traffic.checkedAt) : Infinity;
-    // Slow traffic is a story; so is a late bus on a clear road in the rush hour.
-    const rushHour = traffic ? isRushHour(traffic.checkedAt) : false;
-    const lateOnClearRoad = !!traffic && traffic.condition === 'moving freely' && rushHour
-        && event.eventType === 'delay' && Number(event.delayMinutes) >= 5;
-    const notableTraffic = traffic && (['moving slowly', 'moving very slowly'].includes(traffic.condition) || lateOnClearRoad);
+    // Slow traffic is a story on its own. Slightly slower traffic is one when the
+    // bus is a few minutes late, and a clear road is one when a daytime bus is
+    // clearly late anyway (the contrast is the joke).
+    const late = event.eventType === 'delay' ? Number(event.delayMinutes) : 0;
+    const daytime = traffic ? isDaytime(traffic.checkedAt) : false;
+    const slightlySlowAndLate = !!traffic && traffic.condition === 'a little slower than on a clear road' && late >= 3;
+    const lateOnClearRoad = !!traffic && traffic.condition === 'moving freely' && daytime && late >= 5;
+    const notableTraffic = traffic && (['moving slowly', 'moving very slowly'].includes(traffic.condition)
+        || slightlySlowAndLate || lateOnClearRoad);
     if (traffic && notableTraffic && trafficAge >= -30_000 && trafficAge <= 2 * 60_000) {
         choices.push({ kind: 'traffic', key: `traffic:${traffic.key}`, context: {
             nearbyTraffic: { source: 'local traffic reports', checkedAt: traffic.checkedAt, condition: traffic.condition, scope: traffic.scope },
@@ -97,12 +110,13 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // are), fill the slot with the colour subject furthest below its share of
     // the last full cycle. Livery is available for almost every bus, so
     // "first available" used to hand it most spare slots. A subject that has
-    // already had its share waits; the bus's timing is the default.
+    // already had its share waits; the bus's timing is the default. Notable
+    // traffic is rare and time-sensitive, so it may also take a spare slot.
     const recentKinds = history.slice(-SUBJECT_CYCLE.length).map(item => item.kind);
     const share = (kind: StorySubject) => SUBJECT_CYCLE.filter(item => item === kind).length;
     const used = (kind: StorySubject) => recentKinds.filter(item => item === kind).length;
     const spare = eligible
-        .filter(choice => !['service', 'wider', 'traffic'].includes(choice.kind)
+        .filter(choice => !['service', 'wider'].includes(choice.kind)
             && used(choice.kind) < share(choice.kind))
         .sort((a, b) => used(a.kind) / share(a.kind) - used(b.kind) / share(b.kind));
     return spare[0] || choices[0];
