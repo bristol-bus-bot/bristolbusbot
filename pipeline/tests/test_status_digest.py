@@ -240,6 +240,21 @@ def test_daily_message_explains_recent_work_and_plan_in_plain_english(monkeypatc
         assert jargon not in message
 
 
+def test_stale_backup_and_timetable_are_prominent_and_need_action(monkeypatch):
+    monkeypatch.setattr(status_digest, '_current_release_fingerprints', lambda: {})
+    snapshot = plain_daily_snapshot()
+    snapshot['jobs']['backup'] = {'last_success_at': '2026-09-04T01:20:33Z',
+                                  'result': 'interrupted'}
+    snapshot['timetable_automation']['last_accepted'] = {'accepted_at': '2026-09-09T12:00:00Z'}
+    message = status_digest.daily_message(snapshot, today=date(2026, 9, 27))
+    assert message.index('Needs attention') < message.index('Where the plan stands')
+    assert 'Backup: last success 23 days ago' in message
+    assert 'Timetable update: last success 18 days ago' in message
+    assert 'interrupted by a Pi restart' in message
+    assert 'Investigate the backup or timetable failure' in message
+    assert 'Nothing today' not in message
+
+
 def test_daily_message_reports_only_changes_since_previous_summary(monkeypatch):
     monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {
         "collector": "release-new",

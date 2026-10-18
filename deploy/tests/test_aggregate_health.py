@@ -7,6 +7,35 @@ from types import SimpleNamespace
 from deploy import aggregate_health
 
 
+def test_previous_boot_running_job_is_interrupted_even_with_recent_success(tmp_path, monkeypatch):
+    boot = datetime.now(timezone.utc)
+    (tmp_path / 'jobs').mkdir()
+    path = tmp_path / 'jobs/backup.json'
+    payload = {'last_result': 'running',
+               'last_started_at': (boot - timedelta(minutes=10)).isoformat(),
+               'last_success_at': (boot - timedelta(hours=1)).isoformat()}
+    path.write_text(json.dumps(payload))
+    monkeypatch.setattr(aggregate_health, 'STATE', tmp_path)
+    monkeypatch.setattr(aggregate_health, 'JOB_MAX_AGE_HOURS', {'backup': 30})
+    monkeypatch.setattr(aggregate_health, 'boot_started_at', lambda: boot)
+    monkeypatch.setattr(aggregate_health.subprocess, 'run', lambda *a, **k:
+                        SimpleNamespace(stdout='LoadState=loaded\nActiveState=activating\n'))
+    checks, issues = aggregate_health.job_checks()
+    assert checks['backup']['result'] == 'interrupted'
+    assert checks['backup']['failure_code'] == 'interrupted_by_restart'
+    assert issues == ['job:backup']
+    # The observer must not race with or overwrite the job wrapper's file.
+    assert json.loads(path.read_text()) == payload
+    payload['last_started_at'] = (boot + timedelta(seconds=1)).isoformat()
+    path.write_text(json.dumps(payload))
+    assert aggregate_health.job_checks()[0]['backup']['result'] == 'running'
+    monkeypatch.setattr(aggregate_health.subprocess, 'run', lambda *a, **k:
+                        SimpleNamespace(stdout='LoadState=loaded\nActiveState=failed\n'))
+    checks, issues = aggregate_health.job_checks()
+    assert checks['backup']['failure_code'] == 'interrupted_without_result'
+    assert issues == ['job:backup']
+
+
 def test_data_health_findings_remain_report_only(tmp_path, monkeypatch):
     report = tmp_path / "data-health.json"
     report.write_text(json.dumps({
