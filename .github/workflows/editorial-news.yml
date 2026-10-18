@@ -1,9 +1,9 @@
 name: Propose official bus news
 
 on:
+  # Scheduled proposals are switched off (Tom, 18 Oct 2026): none were being
+  # approved. Run it by hand from the Actions tab if a story is wanted.
   workflow_dispatch:
-  schedule:
-    - cron: "23 */6 * * *"
 
 permissions:
   contents: write

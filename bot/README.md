@@ -87,7 +87,8 @@ Campaigns are limited per day; news has expiry, lifetime-use and cooldown
 limits. Sources remain in the approved data for verification but are never
 included in public posts. Usage survives restarts.
 
-GitHub may open a PR for a recent official Department for Transport bus story.
+A recent official Department for Transport bus story can be proposed as a PR by
+running the "Propose official bus news" workflow by hand (its schedule is off).
 Merging approves its exact wording; closing rejects it. The Pi checks merged
 content on `main`, validates it again and accepts it only if the restarted bot
 reports the exact promoted SHA-256. See `deploy/README.md`.
