@@ -33,7 +33,9 @@ export class TrafficService {
 
     // Persist only request counts, never the provider's traffic response. Reserve before
     // networking, counting failures too. Bad/unwritable state disables optional traffic.
-    private reserveRequest(now: number): boolean {
+    // Optional (off-turn) lookups are paced to stay under 450 of the 500 monthly
+    // allowance: they stop whenever this month's count is ahead of an even spread.
+    private reserveRequest(now: number, optional = false): boolean {
         if (!this.config.usagePath) return false;
         try {
             const day = new Date(now).toISOString().slice(0, 10), month = day.slice(0, 7);
@@ -49,6 +51,12 @@ export class TrafficService {
             if (usage.month !== month) { usage.month = month; usage.monthly = 0; }
             if (usage.day !== day) { usage.day = day; usage.daily = 0; }
             if (usage.daily >= 50 || usage.monthly >= 500) return false;
+            if (optional) {
+                const at = new Date(now);
+                const start = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1);
+                const end = Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1);
+                if (usage.monthly >= Math.floor(450 * (now - start) / (end - start))) return false;
+            }
             usage.daily++; usage.monthly++; usage.lastRequest = now;
             mkdirSync(dirname(this.config.usagePath), { recursive: true });
             const temporary = `${this.config.usagePath}.new-${process.pid}`;
@@ -61,14 +69,14 @@ export class TrafficService {
         }
     }
 
-    async getTraffic(event: BusEvent): Promise<TrafficContext | null> {
+    async getTraffic(event: BusEvent, options: { optional?: boolean } = {}): Promise<TrafficContext | null> {
         const now = Date.now(), position = event.location;
         const age = now - Date.parse(event.timestamp);
         if (!this.config.enabled || !this.config.apiKey || this.busy || !validPoint(position)
             || !Number.isFinite(age) || age < -30_000 || age > 90_000) return null;
         // Regional bot: do not accidentally query a default (0,0) or an unrelated location.
         if (position.latitude < 50.9 || position.latitude > 51.85 || position.longitude < -3.2 || position.longitude > -2.0) return null;
-        if (!this.reserveRequest(now)) return null;
+        if (!this.reserveRequest(now, options.optional === true)) return null;
         this.busy = true;
         let deadline: ReturnType<typeof setTimeout> | undefined;
         try {
