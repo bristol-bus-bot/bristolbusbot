@@ -84,7 +84,7 @@ test('power needs a non-diesel fuel, features need more than USB-A, model needs 
   assert.deepEqual(only({ vehicle_type: { fuel: 'gas' } }), ['power']);
   assert.deepEqual(only({ special_features: ['USB-A'] }), []);
   assert.deepEqual(only({ special_features: ['USB-A', 'open top'] }), ['features']);
-  assert.deepEqual(only({ vehicle_type: { name: 'Scania N230UD ADL Enviro400' } }), [], 'no checked note, no model post');
+  assert.deepEqual(only({ vehicle_type: { name: 'Neoplan Tourliner' } }), [], 'no checked note, no model post');
   assert.equal(BUS_MODEL_BLURBS.Unknown, undefined);
 });
 

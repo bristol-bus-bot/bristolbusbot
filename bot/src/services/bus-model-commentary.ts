@@ -22,7 +22,7 @@ export const BUS_MODEL_BLURBS: Record<string, string> = {
   "Volvo B7RLE Wright Eclipse Urban": "Wrightbus's Eclipse Urban body on Volvo's B7RLE low-entry chassis was launched in 2003. It was followed by the Eclipse 2 in 2008.",
   "Volvo B9TL Wright Eclipse Gemini 2": "The second-generation Wright Gemini double-deck body appeared in 2008-09 on Volvo's B9TL and hybrid B5LH chassis, with a low-roof version added in 2012. Lothian Buses and First West Yorkshire were among its UK buyers.",
   "Optare Solo SR": "Optare unveiled the Solo SR midibus in 2007, a restyled Solo with curved side windows. After a 2012 facelift it came in lengths from 7.2 m to 9.6 m, with a battery-electric version from 2012.",
-  "Yutong E12": "Yutong's 12-metre battery-electric single-decker. Yutong lists a 422 kWh battery, and early UK examples were built on ZF axles.",
+  "Yutong E12": "Yutong's 12-metre battery-electric single-decker. Yutong lists a 422 kWh battery, and Newport Transport put its first E12s into service in 2019.",
   "ADL Enviro400 City": "Alexander Dennis launched the Enviro400 City in late 2015 as a premium version of the Enviro400 MMC, with a restyled front and a glass staircase as standard.",
   "Volvo B9R Plaxton Panther": "Plaxton launched the second-generation Panther coach body in 2010. On Volvo's B9R chassis it typically seats 53.",
   "Volvo B7TL Wright Eclipse Gemini": "The first-generation Wright Eclipse Gemini double-deck body, introduced in 2001 on Volvo's B7TL chassis.",
@@ -35,5 +35,16 @@ export const BUS_MODEL_BLURBS: Record<string, string> = {
   "Yutong GT12": "A 12.2-metre Yutong coach with 53 seats, a 450 bhp DAF MX-11 engine and a ZF automatic gearbox. USB charging points are provided for every passenger.",
   "Scania N230UD OmniCity": "Scania's integral OmniCity double-decker, announced in 2004 and built in Slupsk, Poland, with a five-cylinder 9-litre engine. London operators took 462 of them.",
   "Scania CN230UD OmniCity": "Scania's integral OmniCity double-decker, announced in 2004 and built in Slupsk, Poland, with a five-cylinder 9-litre engine.",
-  "Volvo B5TL MCV EvoSeti": "MCV's EvoSeti double-deck body was unveiled in 2015. On Volvo's B5TL chassis, with its D5K engine, it seats 75 to 82 passengers."
+  "Volvo B5TL MCV EvoSeti": "MCV's EvoSeti double-deck body was unveiled in 2015. On Volvo's B5TL chassis, with its D5K engine, it seats 75 to 82 passengers.",
+  "Scania K410CB6 Caetano Levante 3A": "A coach with Caetano's Levante III body, which National Express unveiled in 2017. Caetano builds it in Portugal on Volvo and, as here, Scania chassis.",
+  "Scania K410EB6 Caetano Levante 3": "A coach with Caetano's Levante III body, which National Express unveiled in 2017. Caetano builds it in Portugal on Volvo and, as here, Scania chassis.",
+  "Scania N230UD ADL Enviro400": "An original Alexander Dennis Enviro400 body on Scania's N230UD chassis, the chassis that most standalone Enviro400 bodies were built on. The Enviro400 was built from 2005 to 2018.",
+  "ADL/TransBus Enviro300": "TransBus launched the Enviro300 single-decker in 2001 as the first model in the Enviro range. Alexander Dennis took it over after TransBus collapsed in 2004 and built it until 2015.",
+  "Scania K230UB ADL Enviro300": "An Alexander Dennis Enviro300 body on Scania's K230UB chassis, one of the chassis offered for the second-generation Enviro300, built from 2007 to 2015.",
+  "ADL Enviro400EV": "Alexander Dennis's battery-electric double-decker, first launched with BYD in 2018. A second generation with a Voith drive followed, starting with 55 for Stagecoach West's Oxford depot in 2024.",
+  "Optare Solo": "Optare's original Solo midibus, with its front wheels ahead of the door. The first production Solos entered service in 1998 with Wilts & Dorset in Poole.",
+  "Mercedes-Benz Tourismo M/2": "Mercedes-Benz has built the Tourismo coach since 1994, with a revised version from 2006. By 2014, 21,000 had been sold.",
+  "Mercedes-Benz Tourismo M/3": "Mercedes-Benz has built the Tourismo coach since 1994, with a revised version from 2006. By 2014, 21,000 had been sold.",
+  "Yutong E10": "Yutong's 10.9-metre battery-electric single-decker. The first UK examples entered service with Go North East in 2020, and Newport Transport added E10s from 2022.",
+  "Volvo B11RT Plaxton Elite i": "Plaxton's Elite i is a 15-metre interdeck coach on Volvo's B11RT chassis, with the passenger deck running over the driver's cab. Stagecoach first commissioned it for Megabus in 2012."
 };
