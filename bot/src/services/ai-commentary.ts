@@ -28,6 +28,7 @@ import {
     WRITER_RESPONSE_SCHEMA,
     VERIFIER_RESPONSE_SCHEMA,
     cleanEditorialPost,
+    jargonIssues,
     containsSourceReference,
     containsWebLink,
     parseEditorialVerifierOutput,
@@ -616,6 +617,8 @@ export class AICommentary {
                     ? [`post is missing the supplied ${context.event.direction} direction`] : []),
                 ...factualStoryIssues(post, context.event),
                 ...openingIssues(post, recentPosts),
+                ...jargonIssues(post, subject?.kind === 'features' && Array.isArray(subject.context.onBoardFeatures)
+                    ? subject.context.onBoardFeatures as string[] : []),
                 ...(subject?.kind === 'traffic' && /\btom\s*tom\b/i.test(post)
                     ? ['refer to local traffic reports without naming the data supplier'] : []),
                 ...(hook && writer.hookUsed && isBareEditorialPair(post, context.event, hook)

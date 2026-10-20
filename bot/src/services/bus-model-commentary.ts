@@ -38,7 +38,7 @@ export const BUS_MODEL_BLURBS: Record<string, string> = {
   "Volvo B5TL MCV EvoSeti": "MCV's EvoSeti double-deck body was unveiled in 2015. On Volvo's B5TL chassis, with its D5K engine, it seats 75 to 82 passengers.",
   "Scania K410CB6 Caetano Levante 3A": "A coach with Caetano's Levante III body, which National Express unveiled in 2017. Caetano builds it in Portugal on Volvo and, as here, Scania chassis.",
   "Scania K410EB6 Caetano Levante 3": "A coach with Caetano's Levante III body, which National Express unveiled in 2017. Caetano builds it in Portugal on Volvo and, as here, Scania chassis.",
-  "Scania N230UD ADL Enviro400": "An original Alexander Dennis Enviro400 body on Scania's N230UD chassis, the chassis that most standalone Enviro400 bodies were built on. The Enviro400 was built from 2005 to 2018.",
+  "Scania N230UD ADL Enviro400": "An original Alexander Dennis Enviro400 body on a Scania N230UD chassis. The Enviro400 was built from 2005 to 2018, and when it was sold as a body alone, the N230UD was the chassis it most often went on.",
   "ADL/TransBus Enviro300": "TransBus launched the Enviro300 single-decker in 2001 as the first model in the Enviro range. Alexander Dennis took it over after TransBus collapsed in 2004 and built it until 2015.",
   "Scania K230UB ADL Enviro300": "An Alexander Dennis Enviro300 body on Scania's K230UB chassis, one of the chassis offered for the second-generation Enviro300, built from 2007 to 2015.",
   "ADL Enviro400EV": "Alexander Dennis's battery-electric double-decker, first launched with BYD in 2018. A second generation with a Voith drive followed, starting with 55 for Stagecoach West's Oxford depot in 2024.",
