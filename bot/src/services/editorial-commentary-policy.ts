@@ -234,6 +234,27 @@ export function containsSourceReference(value: string): boolean {
     return containsWebLink(value) || /(?:^|\s)Source\s*:/i.test(value);
 }
 
+const COMPUTER_JARGON = /\b(usb(?:-[ac])?|ports?|sockets?|kernel|stack|modem|ram|cpu|gpu|cache|firmware|ethernet|wi[- ]?fi|bluetooth)\b/gi;
+
+/**
+ * The persona is a Raspberry Pi, but computer jargon makes poor bus posts. It is
+ * sent back for a rewrite rather than deleted, which used to leave broken text
+ * ("complete with -C sockets"). Words describing the bus's own supplied
+ * on-board features (USB charging, power sockets, wi-fi) are allowed.
+ */
+export function jargonIssues(post: string, suppliedFeatures: string[] = []): string[] {
+    const features = suppliedFeatures.join(' ').toLowerCase();
+    const allowed = (word: string) => {
+        const w = word.toLowerCase();
+        if (/^usb/.test(w)) return features.includes('usb');
+        if (/^sockets?$/.test(w)) return /usb|socket/.test(features);
+        if (/^wi[- ]?fi$/.test(w)) return /wi[- ]?fi/.test(features);
+        return false;
+    };
+    const found = [...new Set((post.match(COMPUTER_JARGON) || []).filter(word => !allowed(word)).map(w => w.toLowerCase()))];
+    return found.length ? [`avoid computer jargon (${found.join(', ')}); describe the bus, not a computer`] : [];
+}
+
 export function cleanEditorialPost(value: string): string | null {
     let result = value
         .trim()
@@ -247,10 +268,6 @@ export function cleanEditorialPost(value: string): string | null {
     result = result
         .replace(/#[\p{L}\p{N}_]+/gu, '')
         .replace(/\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu, '')
-        .replace(
-            /\b(usb|port|socket|kernel|stack|modem|ram|cpu|gpu|cache|firmware|io|ethernet|wi[- ]?fi|bluetooth)\b/gi,
-            '',
-        )
         .replace(/\s{2,}/g, ' ')
         .trim();
     return result || null;

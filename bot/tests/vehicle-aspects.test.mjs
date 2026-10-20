@@ -115,3 +115,28 @@ test('available subjects still include the bus aspects alongside the others', ()
   const kinds = availableSubjects(bus, null, null).map(c => c.kind);
   assert.deepEqual(kinds, ['service', 'livery', 'model', 'power', 'age', 'features']);
 });
+
+import { cleanEditorialPost, jargonIssues } from '../dist/services/editorial-commentary-policy.js';
+import { spokenStopName } from '../dist/utils/stop-name-cleaner.js';
+
+test('words are never silently deleted from a post', () => {
+  const post = 'The 76 towards Hengrove Depot was on time at West Street, complete with USB-C sockets.';
+  assert.equal(cleanEditorialPost(post), post);
+});
+
+test('computer jargon is sent back for a rewrite unless it is a supplied feature', () => {
+  assert.equal(jargonIssues('The 76 was on time, with USB-C sockets.', ['USB-A', 'USB-C']).length, 0);
+  assert.equal(jargonIssues('Wi-fi on board, and the 2 was on time.', ['wifi', 'USB-A']).length, 0);
+  assert.match(jargonIssues('My CPU is warm and the 2 was late.', ['USB-C'])[0], /cpu/);
+  assert.match(jargonIssues('The 76 was on time, with USB-C sockets.')[0], /usb-c/);
+  // Other subjects get no allowance: a livery post about sockets goes back for a rewrite.
+  assert.equal(jargonIssues('The WESTbus livery and its sockets.', []).length, 1);
+});
+
+test('two-letter Bath stand codes are dropped from spoken stop names', () => {
+  assert.equal(spokenStopName('Dorchester Street - Bk'), 'Dorchester Street');
+  assert.equal(spokenStopName('Grand Parade - Ci'), 'Grand Parade');
+  assert.equal(spokenStopName('Bath Bus Station - Ce'), 'Bath Bus Station');
+  assert.equal(spokenStopName('Broadmead - B10'), 'Broadmead');
+  for (const kept of ['Hill Road - Top', 'Southmead Hospital - A&E', 'Station Road - West']) assert.equal(spokenStopName(kept), kept);
+});
