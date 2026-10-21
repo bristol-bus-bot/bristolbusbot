@@ -18,6 +18,22 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const MAX_CONTEXT_BYTES = 256 * 1024;
 const ALLOWED_SOURCE_HOSTS = [
+    // Reputable news and reference sites (Tom, 27 Sep 2026, PV-11). Each claim
+    // is still checked individually; an allowed host is not evidence.
+    'wikipedia.org',
+    'bbc.co.uk',
+    'bbc.com',
+    'theguardian.com',
+    'bristol247.com',
+    'bristolpost.co.uk',
+    'route-one.net',
+    'cbwmagazine.com',
+    'travelwest.info',
+    'transportxtra.com',
+    'hellorayo.co.uk',
+    'thebristolcable.org',
+    'bristol.ac.uk',
+    'moderngov.co.uk',
     'bristolmuseums.org.uk',
     'bususers.org',
     'firstbus.co.uk',

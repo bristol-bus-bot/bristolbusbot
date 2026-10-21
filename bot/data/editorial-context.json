@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-04T00:00:00Z",
+  "updated_at": "2026-10-21T23:30:00Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -607,6 +607,480 @@
         "url": "https://www.stagecoachbus.com/promos-and-offers/west/Fare-changes",
         "published_on": "2026-09-01",
         "verified_on": "2026-10-04"
+      }
+    },
+    {
+      "id": "weca-mayor-franchising-not-priority-2026",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "In March 2026, West of England mayor Helen Godwin said bringing buses under public control was not a priority, and that it would need a region-wide council tax precept to pay for it.",
+      "prompt_hint": "Attribute the position to the mayor in March 2026; she did not rule out franchising in future.",
+      "requirements": [
+        {
+          "label": "not a priority",
+          "alternatives": [
+            "not a priority"
+          ]
+        },
+        {
+          "label": "public control",
+          "alternatives": [
+            "public control",
+            "franchising"
+          ]
+        }
+      ],
+      "active_from": "2026-03-05",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "TransportXtra",
+        "title": "West of England mayor: bringing buses under public control not a priority",
+        "url": "https://www.transportxtra.com/publications/transit/news/80408/west-of-england-mayor--bringing-buses-under-public-control-not-a-priority-/",
+        "published_on": "2026-03-05",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-mayor-priorities-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "When she took office in May 2025, West of England mayor Helen Godwin named reliable buses and trains among her three main priorities.",
+      "prompt_hint": "A stated priority, not a measure of delivery.",
+      "requirements": [
+        {
+          "label": "reliable buses",
+          "alternatives": [
+            "reliable buses"
+          ]
+        }
+      ],
+      "active_from": "2025-05-07",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Helen Godwin",
+        "url": "https://en.wikipedia.org/wiki/Helen_Godwin",
+        "published_on": "2025-05-07",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-bus-funding-2025-2029",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "In December 2025 the West of England was allocated £42.4 million of government bus funding over three years to 2028/29, more than £14 million a year, which it can spend as it chooses.",
+      "prompt_hint": "Excludes North Somerset, which has its own allocation.",
+      "requirements": [
+        {
+          "label": "£42.4 million",
+          "alternatives": [
+            "£42.4 million",
+            "£42.4m"
+          ]
+        }
+      ],
+      "active_from": "2025-12-05",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "West of England Combined Authority",
+        "title": "Mayor welcomes £42 million for buses",
+        "url": "https://www.westofengland-ca.gov.uk/news/mayor-welcomes-42-million-for-buses/",
+        "published_on": "2025-12-05",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-radical-rethink-2024",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "A September 2024 West of England Combined Authority paper said 'a radical rethink is needed on how bus services are funded and operated', and proposed a £500,000 study of options including franchising and municipal ownership.",
+      "prompt_hint": "Quote the paper, not a decision; the study was to report in 2025/26.",
+      "requirements": [
+        {
+          "label": "radical rethink",
+          "alternatives": [
+            "radical rethink"
+          ]
+        }
+      ],
+      "active_from": "2024-09-16",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Bristol24/7",
+        "title": "Radical rethink needed on how bus services funded and operated",
+        "url": "https://www.bristol247.com/news-and-features/news/radical-rethink-needed-bus-services-funded-operated/",
+        "published_on": "2024-09-16",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-supported-services-cut-2023",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "In January 2023 the West of England Combined Authority signed off ending funding for about 42 subsidised bus services from April 2023, after a row with the councils over the transport levy.",
+      "prompt_hint": "The authority's own figures were unclear at the time; say about 42.",
+      "requirements": [
+        {
+          "label": "about 42",
+          "alternatives": [
+            "about 42",
+            "around 42",
+            "42"
+          ]
+        }
+      ],
+      "active_from": "2023-01-18",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "The Bristol Cable",
+        "title": "West of England bus passengers face more cuts as dozens of services to be axed in April",
+        "url": "https://thebristolcable.org/2023/01/west-of-england-bus-passengers-face-more-cuts-as-dozens-of-services-to-be-axed-in-april",
+        "published_on": "2023-01-18",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-kids-go-free-summer-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Under-16s travelled free on West of England buses in summer 2025, making almost 520,000 free journeys in the first four weeks.",
+      "prompt_hint": "Summer 2025 holiday scheme, 19 July to 5 September.",
+      "requirements": [
+        {
+          "label": "520,000",
+          "alternatives": [
+            "520,000",
+            "half a million"
+          ]
+        }
+      ],
+      "active_from": "2025-08-15",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Travelwest",
+        "title": "Over half a million free kids bus journeys in first month",
+        "url": "https://travelwest.info/?p=28944",
+        "published_on": "2025-08-15",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-kids-go-free-christmas-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Children aged 5 to 15 travelled free on Bristol and Bath area buses from 20 December 2025 to 4 January 2026, paid for from the West of England's £13.5 million Bus Grant.",
+      "prompt_hint": "A past holiday scheme; describe it in the past tense.",
+      "requirements": [
+        {
+          "label": "free",
+          "alternatives": [
+            "free"
+          ]
+        }
+      ],
+      "active_from": "2025-12-02",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Bristol24/7",
+        "title": "Under-16s get free bus travel during Christmas holidays",
+        "url": "https://www.bristol247.com/news-and-features/news/under-16s-get-free-bus-travel-during-christmas-holidays/",
+        "published_on": "2025-12-02",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-kids-go-free-easter-2026",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Over 310,000 free bus trips were made by children and young people in the West of England during the 2026 Easter holidays, with 54% more travelling than a year earlier.",
+      "prompt_hint": "Figures reported by the combined authority.",
+      "requirements": [
+        {
+          "label": "310,000",
+          "alternatives": [
+            "310,000"
+          ]
+        }
+      ],
+      "active_from": "2026-05-15",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "University of Bristol",
+        "title": "Free school summer holidays bus travel scheme boosts young people, research finds",
+        "url": "https://www.bristol.ac.uk/news/2026/may/free-school-summer-holidays-bus-travel-scheme-boosts-young-people.html",
+        "published_on": "2026-05-15",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "bus-services-act-2025-franchising",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Since the Bus Services Act 2025 became law on 27 October 2025, any local transport authority in England can franchise its buses.",
+      "prompt_hint": "A power, not a requirement; the West of England has not used it.",
+      "requirements": [
+        {
+          "label": "Bus Services Act",
+          "alternatives": [
+            "Bus Services Act"
+          ]
+        }
+      ],
+      "active_from": "2025-10-27",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "legislation.gov.uk",
+        "title": "Bus Services Act 2025",
+        "url": "https://www.legislation.gov.uk/ukpga/2025/24",
+        "published_on": "2025-10-27",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "bus-services-act-2025-council-companies",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "The Bus Services Act 2025 lifted the ban on councils in England setting up new bus companies.",
+      "prompt_hint": "Law since 27 October 2025.",
+      "requirements": [
+        {
+          "label": "council",
+          "alternatives": [
+            "council",
+            "councils"
+          ]
+        }
+      ],
+      "active_from": "2025-10-27",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "legislation.gov.uk",
+        "title": "Bus Services Act 2025",
+        "url": "https://www.legislation.gov.uk/ukpga/2025/24",
+        "published_on": "2025-10-27",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "liverpool-metro-franchising-2026",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Liverpool City Region is bringing its buses under public control as Metro, with St Helens and Wirral due from October 2026 and the rest of the region to follow.",
+      "prompt_hint": "Comparison with another region; check the start before saying it has happened.",
+      "requirements": [
+        {
+          "label": "Liverpool",
+          "alternatives": [
+            "Liverpool"
+          ]
+        }
+      ],
+      "active_from": "2026-04-02",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Metro (Liverpool City Region)",
+        "url": "https://en.wikipedia.org/wiki/Metro_(Liverpool_City_Region)",
+        "published_on": "2026-04-02",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "england-bus-journeys-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Bus journeys in England outside London reached 93% of pre-pandemic levels in the year to March 2025.",
+      "prompt_hint": "National figure, not this region's.",
+      "requirements": [
+        {
+          "label": "93%",
+          "alternatives": [
+            "93%",
+            "93 per cent"
+          ]
+        }
+      ],
+      "active_from": "2026-03-01",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Department for Transport",
+        "title": "Annual bus statistics: year ending March 2025",
+        "url": "https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025",
+        "published_on": "2026-03-01",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "england-bus-punctuality-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Government statistics say 80% of non-frequent bus services in England ran on time in the year to March 2025, where on time means from 1 minute early to under 6 minutes late.",
+      "prompt_hint": "National figure using the official definition; one bus is not a comparison.",
+      "requirements": [
+        {
+          "label": "80%",
+          "alternatives": [
+            "80%",
+            "80 per cent"
+          ]
+        }
+      ],
+      "active_from": "2026-03-01",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Department for Transport",
+        "title": "Annual bus statistics: year ending March 2025",
+        "url": "https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025",
+        "published_on": "2026-03-01",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-mayor-elected-2025",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Helen Godwin was elected the West of England's mayor on 1 May 2025 with 25.0% of the vote.",
+      "prompt_hint": "First-round vote share as reported.",
+      "requirements": [
+        {
+          "label": "25",
+          "alternatives": [
+            "25%",
+            "25.0%",
+            "a quarter"
+          ]
+        }
+      ],
+      "active_from": "2025-05-07",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Helen Godwin",
+        "url": "https://en.wikipedia.org/wiki/Helen_Godwin",
+        "published_on": "2025-05-07",
+        "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "weca-westbus-electric-funding-2025",
+      "scope": {
+        "operators": [
+          "FBRI"
+        ],
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "In March 2025 the West of England Combined Authority put £6.6 million towards 74 new electric WESTbus buses, alongside £37 million from First Bus.",
+      "prompt_hint": "Public money towards an operator's fleet; keep both figures and the March 2025 date.",
+      "requirements": [
+        {
+          "label": "£6.6 million",
+          "alternatives": [
+            "£6.6 million",
+            "£6.6m"
+          ]
+        }
+      ],
+      "active_from": "2025-03-24",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Hello Rayo (Greatest Hits Radio)",
+        "title": "New electric buses for Bristol",
+        "url": "https://hellorayo.co.uk/greatest-hits/bristol/news/electric-buses-bristol",
+        "published_on": "2025-03-24",
+        "verified_on": "2026-10-21"
       }
     }
   ],
