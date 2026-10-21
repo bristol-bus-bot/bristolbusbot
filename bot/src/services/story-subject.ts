@@ -9,8 +9,30 @@ import { LIVERY_FACTS } from './livery-facts.js';
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
 export type VehicleAspect = typeof VEHICLE_ASPECTS[number];
 export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic';
-/** A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS order. */
-export type CycleSlot = Exclude<StorySubject, VehicleAspect> | 'vehicle';
+/**
+ * A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS
+ * order. "wider?" is a second facts turn, used only when the fact library for the
+ * bus's area is big enough (WIDER_LIBRARY_MINIMUM); otherwise it is a timing post.
+ */
+export type CycleSlot = Exclude<StorySubject, VehicleAspect> | 'vehicle' | 'wider?';
+export const CYCLE_SLOTS: readonly CycleSlot[] = ['service', 'vehicle', 'weather', 'depot', 'wider', 'wider?', 'traffic'];
+export const WIDER_LIBRARY_MINIMUM = 20;
+export const DEFAULT_SUBJECT_CYCLE: CycleSlot[] = ['service', 'vehicle', 'wider?', 'weather', 'depot', 'wider', 'vehicle', 'traffic'];
+
+/**
+ * The cycle can be changed on the Pi without a code change, e.g.
+ * BBB_SUBJECT_CYCLE=service,vehicle,wider?,weather,depot,wider,vehicle,traffic
+ * An invalid value is ignored (with a warning) so posting never stops.
+ */
+export function parseSubjectCycle(value: string | undefined): { cycle: CycleSlot[]; error?: string } {
+    if (!value?.trim()) return { cycle: [...DEFAULT_SUBJECT_CYCLE] };
+    const slots = value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+    const bad = slots.filter(item => !(CYCLE_SLOTS as readonly string[]).includes(item));
+    if (bad.length) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: `unknown slot(s): ${bad.join(', ')}` };
+    if (slots.length < 4 || slots.length > 16) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: 'needs 4 to 16 slots' };
+    if (!slots.includes('service')) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: 'needs at least one service slot' };
+    return { cycle: slots as CycleSlot[] };
+}
 export function isVehicleAspect(kind: string): kind is VehicleAspect {
     return (VEHICLE_ASPECTS as readonly string[]).includes(kind);
 }
@@ -26,7 +48,9 @@ export interface PublishedSubject {
 }
 
 // Desired spacing, not a promise to use unavailable or repeatedly identical material.
-export const SUBJECT_CYCLE: CycleSlot[] = ['service', 'vehicle', 'service', 'weather', 'depot', 'wider', 'vehicle', 'traffic'];
+const parsedCycle = parseSubjectCycle(process.env.BBB_SUBJECT_CYCLE);
+if (parsedCycle.error) console.warn(`[SUBJECT_CYCLE] BBB_SUBJECT_CYCLE ignored (${parsedCycle.error}); using the default`);
+export const SUBJECT_CYCLE: CycleSlot[] = parsedCycle.cycle;
 
 export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     traffic: `You are the Bristol Bus Bot, keeping a dry eye on the buses and the traffic around them. Weave the supplied nearby road conditions into a short, wry bus observation. Use ordinary language: traffic moving slowly or freely, not technical speed ratios. Refer naturally to local traffic reports without naming the data supplier. It describes one nearby road segment, not necessarily this bus's road or direction; never claim the bus is stuck in it, that it caused the delay, or that the whole area is clear or congested. Lateness does not tell you the bus's speed or establish a detour. Keep the affection for the bus and the humour in the contrast.`,
@@ -197,7 +221,9 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
 }
 
 export function chooseSubject(event: BusEvent, weather: string | null | undefined, hook: EditorialSelection | null,
-    publishedCount = 0, history: PublishedSubject[] = [], recentPosts: string[] = [], traffic?: TrafficContext | null): SubjectChoice {
+    publishedCount = 0, history: PublishedSubject[] = [], recentPosts: string[] = [], traffic?: TrafficContext | null,
+    options: { widerLibrarySize?: number; cycle?: CycleSlot[] } = {}): SubjectChoice {
+    const cycle = options.cycle || SUBJECT_CYCLE;
     const choices = availableSubjects(event, weather, hook, traffic);
     const recent = recentPosts.slice(0, 6).join(' ').toLowerCase();
     const eligible = choices.filter(choice => choice.kind === 'service' || (
@@ -212,7 +238,10 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     const vehicleNext = nextVehicleAspect(eligible, history);
     const pool = eligible.filter(choice => !isVehicleAspect(choice.kind) || choice === vehicleNext);
     // An eligible editorial hook gets its own turn, never priority over other subjects.
-    const preferred = SUBJECT_CYCLE[publishedCount % SUBJECT_CYCLE.length];
+    const slot = cycle[publishedCount % cycle.length];
+    // The second facts turn only exists while the library can sustain it.
+    const preferred = slot === 'wider?'
+        ? ((options.widerLibrarySize || 0) >= WIDER_LIBRARY_MINIMUM ? 'wider' : 'service') : slot;
     const exact = preferred === 'vehicle' ? vehicleNext : pool.find(choice => choice.kind === preferred);
     if (exact) return exact;
     // When the planned subject is unavailable (depot, wider and traffic often
@@ -221,9 +250,9 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // "first available" used to hand it most spare slots. A subject that has
     // already had its share waits; the bus's timing is the default. Notable
     // traffic is rare and time-sensitive, so it may also take a spare slot.
-    const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind;
-    const recentSlots = history.slice(-SUBJECT_CYCLE.length).map(item => slotOf(item.kind));
-    const share = (kind: StorySubject) => SUBJECT_CYCLE.filter(item => item === slotOf(kind)).length;
+    const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind === 'wider?' ? 'wider' : kind;
+    const recentSlots = history.slice(-cycle.length).map(item => slotOf(item.kind));
+    const share = (kind: StorySubject) => cycle.filter(item => slotOf(item) === slotOf(kind)).length;
     const used = (kind: StorySubject) => recentSlots.filter(item => item === slotOf(kind)).length;
     const spare = pool
         .filter(choice => !['service', 'wider'].includes(choice.kind)

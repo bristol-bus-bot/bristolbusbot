@@ -4,7 +4,7 @@
 
 import { BOT_VOICE, buildStoryPrompt, factualStoryIssues, observationIssue, openingIssues } from './story-brief.js';
 import { spokenDestination, destinationMentioned } from './journey-context.js';
-import { chooseSubject, isDaytime, SUBJECT_CYCLE, type SubjectChoice } from './story-subject.js';
+import { chooseSubject, isDaytime, SUBJECT_CYCLE, WIDER_LIBRARY_MINIMUM, type SubjectChoice } from './story-subject.js';
 import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
 import { depotGeography } from './depot-geography.js';
@@ -405,8 +405,12 @@ export class AICommentary {
     ): Promise<AICommentaryResult | null> {
         const timer = new PerformanceTimer('ai_api_call', logger);
         const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
+        // On a facts turn, offer a fact whenever one is eligible (not the 20% extra).
+        const slot = SUBJECT_CYCLE[this.getSubjectHistory().publishedCount % SUBJECT_CYCLE.length];
+        const librarySize = this.editorialContext?.factLibrarySize?.(currentTime, context.event) ?? 0;
+        const factsTurn = slot === 'wider' || (slot === 'wider?' && librarySize >= WIDER_LIBRARY_MINIMUM);
         const hook = selectedHook === undefined
-            ? this.editorialContext.select(currentTime, this.appState.recentPosts, context.event)
+            ? this.editorialContext.select(currentTime, this.appState.recentPosts, context.event, { factsTurn })
             : selectedHook;
 
         // One transient retry across the whole story, never a restart of the pipeline.
@@ -437,7 +441,8 @@ export class AICommentary {
                 context.event.operatorRef) ? null : hook;
             const history = this.getSubjectHistory();
             let subject = chooseSubject(context.event, context.weatherContext, relevantHook,
-                history.publishedCount, history.history, recentPosts, context.trafficContext);
+                history.publishedCount, history.history, recentPosts, context.trafficContext,
+                { widerLibrarySize: librarySize });
             let writerHook = subject.kind === 'wider' ? relevantHook : null;
             let corrections: string[] = [];
             let previousDraft: string | undefined;
@@ -470,7 +475,8 @@ export class AICommentary {
                 if (subject.kind === 'wider' && prepared.issues.length) {
                     // Retain the existing escape from forced or mechanically invalid facts.
                     subject = chooseSubject(context.event, context.weatherContext, null,
-                        history.publishedCount, history.history, recentPosts, context.trafficContext);
+                        history.publishedCount, history.history, recentPosts, context.trafficContext,
+                        { widerLibrarySize: librarySize });
                     writerHook = null;
                     corrections = [];
                     previousDraft = undefined;

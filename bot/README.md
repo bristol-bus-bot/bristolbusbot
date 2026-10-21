@@ -36,6 +36,20 @@ BBB_LOCAL_FLAVOUR_JSON=/var/lib/bristolbusbot/enrichment/local_flavour.json
 BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_details.json
 ```
 
+## Post subject cycle
+
+Posts rotate through an eight-slot cycle. The default is
+`service, vehicle, wider?, weather, depot, wider, vehicle, traffic`.
+`vehicle` takes the next bus aspect (livery, model, power, age, features).
+`wider` is the facts turn: a checked fact is offered whenever one applies.
+`wider?` is a second facts turn, used only when at least 20 facts apply to
+the bus's area; otherwise it is a timing post. Unavailable material falls back
+to another subject, never the same one twice in a row.
+
+Change it without a code change by setting `BBB_SUBJECT_CYCLE` in
+`/etc/bristolbusbot/bot.env` (comma-separated, 4 to 16 slots, at least one
+`service`) and restarting the bot. An invalid value is ignored with a warning.
+
 ## Production
 
 Optional traffic commentary uses TomTom Flow Segment Data. Set `TOMTOM_API_KEY`
