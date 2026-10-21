@@ -551,7 +551,16 @@ export class EditorialContextStore {
         return { ...this.status, counts: { ...this.status.counts } };
     }
 
-    select(now: DateTime, recentPosts: string[], event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>): EditorialSelection | null {
+    /** Facts that could apply to this bus today, ignoring per-fact cooldowns. */
+    factLibrarySize(now: DateTime, event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>): number {
+        const today = now.toISODate();
+        if (!this.status.loaded || !today) return 0;
+        return this.document.facts.filter(item => editorialApplies(item, today, event)
+            && activeOnDate(item.active_from, item.active_until, today) && !this.isDeferred(item.id, now)).length;
+    }
+
+    select(now: DateTime, recentPosts: string[], event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>,
+        options: { factsTurn?: boolean } = {}): EditorialSelection | null {
         if (!this.status.loaded || this.usage.last_post_was_special) return null;
         const today = now.toISODate();
         const nowIso = now.toUTC().toISO();
@@ -608,7 +617,8 @@ export class EditorialContextStore {
         const recentFinancial = recentPosts.slice(-1).some(post =>
             /shareholder|dividend|£\d+(?:\.\d+)?\s*(?:m|million|bn|billion)|CEO|bonus|profit/i.test(post)
         );
-        if (recentFinancial || this.random() >= 0.20) return null;
+        // Off the facts turn a fact is a rare extra; on it, offer one whenever eligible.
+        if (recentFinancial || (!options.factsTurn && this.random() >= 0.20)) return null;
         const facts = this.document.facts.filter(item => {
             if (!editorialApplies(item, today, event)) return false;
             if (!activeOnDate(item.active_from, item.active_until, today)) return false;
