@@ -138,5 +138,9 @@ test('two-letter Bath stand codes are dropped from spoken stop names', () => {
   assert.equal(spokenStopName('Grand Parade - Ci'), 'Grand Parade');
   assert.equal(spokenStopName('Bath Bus Station - Ce'), 'Bath Bus Station');
   assert.equal(spokenStopName('Broadmead - B10'), 'Broadmead');
+  assert.equal(spokenStopName('Down Lane - o/s'), 'Down Lane');
+  assert.equal(spokenStopName('Church Road - nr'), 'Church Road');
+  assert.equal(spokenStopName('High Street - opp'), 'High Street');
+  assert.equal(spokenStopName('Mill Lane - adj'), 'Mill Lane');
   for (const kept of ['Hill Road - Top', 'Southmead Hospital - A&E', 'Station Road - West']) assert.equal(spokenStopName(kept), kept);
 });
