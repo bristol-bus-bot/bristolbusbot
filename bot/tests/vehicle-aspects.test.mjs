@@ -12,7 +12,7 @@ import { BUS_MODEL_BLURBS } from '../dist/services/bus-model-commentary.js';
 // A real-looking First Bristol Yutong: every aspect has material.
 const bus = { line: '76', direction: 'outbound', operatorRef: 'FBRI', vehicleRef: 'FBRI-30023',
   timestamp: '2026-10-18T14:00:00Z', eventType: 'delay', delayMinutes: 6, lastStopName: 'Nine Tree Hill', lastStopCode: 'stop',
-  busDetails: { reg: 'YK25OJO', livery: { name: 'WESTbus' }, garage: { name: 'Hengrove' },
+  busDetails: { reg: 'YK25OJO', livery: { id: 3463, name: 'WESTbus' }, garage: { name: 'Hengrove' },
     vehicle_type: { name: 'Yutong U11DD', fuel: 'electric', electric: true, double_decker: true },
     special_features: ['USB-A', 'USB-C'] } };
 const at = slot => SUBJECT_CYCLE.indexOf(slot);
@@ -139,4 +139,40 @@ test('two-letter Bath stand codes are dropped from spoken stop names', () => {
   assert.equal(spokenStopName('Bath Bus Station - Ce'), 'Bath Bus Station');
   assert.equal(spokenStopName('Broadmead - B10'), 'Broadmead');
   for (const kept of ['Hill Road - Top', 'Southmead Hospital - A&E', 'Station Road - West']) assert.equal(spokenStopName(kept), kept);
+});
+
+import { liveryFact } from '../dist/services/story-subject.js';
+import { LIVERY_FACTS } from '../dist/services/livery-facts.js';
+
+test('a livery post carries one checked fact about the livery, scoped away from this bus', () => {
+  const choice = vehicleSubjects(bus).find(c => c.kind === 'livery');
+  assert.match(choice.context.liveryFact.claim, /WESTbus/);
+  assert.match(choice.context.liveryFact.scope, /not this particular bus/);
+  const evidence = evidenceOf(buildStoryPrompt(bus, bus.timestamp, null, [], [], null, choice));
+  assert.ok(evidence.liveryFact);
+  for (const other of vehicleSubjects(bus).filter(c => c.kind !== 'livery')) {
+    assert.ok(!('liveryFact' in evidenceOf(buildStoryPrompt(bus, bus.timestamp, null, [], [], null, other))), other.kind);
+  }
+});
+
+test('livery facts need a matching ID and name, and rotate by day', () => {
+  assert.equal(liveryFact(3463, 'Some Other Livery'), undefined, 'reused ID with a different name');
+  assert.equal(liveryFact(undefined, 'WESTbus'), undefined);
+  assert.equal(vehicleSubjects({ ...bus, busDetails: { ...bus.busDetails, livery: { name: 'WESTbus' } } })
+    .find(c => c.kind === 'livery').context.liveryFact, undefined, 'no ID, no fact');
+  const a = liveryFact(600, 'Stagecoach Local', '2026-10-21T12:00:00Z').claim;
+  const b = liveryFact(600, 'Stagecoach Local', '2026-10-22T12:00:00Z').claim;
+  assert.notEqual(a, b);
+});
+
+test('every livery fact has a claim, qualification and https source', () => {
+  for (const [id, entry] of Object.entries(LIVERY_FACTS)) {
+    assert.match(id, /^\d+$/);
+    for (const fact of entry.facts) {
+      assert.ok(fact.claim.length > 20 && fact.claim.length <= 320, id);
+      assert.ok(fact.qualification.length > 3, id);
+      assert.match(fact.source, /^https:\/\//, id);
+      assert.doesNotMatch(fact.source, /fandom|flickr/, id);
+    }
+  }
 });

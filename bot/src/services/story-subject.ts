@@ -3,6 +3,7 @@ import type { EditorialSelection } from './editorial-context.js';
 import { scheduledJourney } from './story-context.js';
 import { weatherDescription } from './weather-description.js';
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
+import { LIVERY_FACTS } from './livery-facts.js';
 
 /** The bus itself: each aspect gets its own prompt and only its own facts. */
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
@@ -91,7 +92,13 @@ export function vehicleSubjects(event: BusEvent): SubjectChoice[] {
     if (!bus) return [];
     const choices: SubjectChoice[] = [];
     const livery = bus.livery?.name?.trim();
-    if (livery) choices.push({ kind: 'livery', key: `livery:${livery.toLowerCase()}`, context: { livery } });
+    if (livery) {
+        const context: Record<string, unknown> = { livery };
+        const fact = liveryFact(bus.livery?.id, livery, event.timestamp);
+        if (fact) context.liveryFact = { claim: fact.claim, qualification: fact.qualification,
+            scope: 'About the livery or its operator, not this particular bus or where it has been.' };
+        choices.push({ kind: 'livery', key: `livery:${livery.toLowerCase()}`, context });
+    }
     const model = String(bus.vehicle_type?.name || '').trim();
     const notes = model ? BUS_MODEL_BLURBS[model] : undefined;
     if (model && notes) choices.push({ kind: 'model', key: `model:${model.toLowerCase()}`, context: { busModel: { name: model, notes } } });
@@ -113,6 +120,15 @@ export function vehicleSubjects(event: BusEvent): SubjectChoice[] {
         choices.push({ kind: 'features', key: `features:${[...features].sort().join(',').toLowerCase()}`, context: { onBoardFeatures: features } });
     }
     return choices;
+}
+
+/** One checked fact for this livery, if any. Rotates daily between a livery's facts. */
+export function liveryFact(id: unknown, name: string, observedIso?: string) {
+    const entry = id === undefined || id === null ? undefined : LIVERY_FACTS[String(id)];
+    // Guard against a fleet-file ID being reused for a different livery.
+    if (!entry || entry.name.trim().toLowerCase() !== name.trim().toLowerCase()) return undefined;
+    const day = Math.floor((observedIso ? Date.parse(observedIso) : Date.now()) / 86_400_000);
+    return entry.facts[(Number.isFinite(day) ? day : 0) % entry.facts.length];
 }
 
 /** The next bus aspect after the last one published, skipping any this bus cannot support. */
