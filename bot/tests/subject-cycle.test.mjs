@@ -58,3 +58,21 @@ test('a simulated 200 posts follow the configured cycle where material exists', 
   assert.ok(Math.abs(counts.wider / 200 - 0.25) <= 0.05, JSON.stringify(counts));
   assert.ok(!counts.depot && !counts.traffic);
 });
+
+import { availableSubjects as allSubjects, SUBJECT_PERSONAS } from '../dist/services/story-subject.js';
+import { PLACE_CARDS, placeFact } from '../dist/services/place-cards.js';
+
+test('place cards stay unused until approved, and are keyed by authority and locality', () => {
+  const event = { ...bus, lastStopCode: 's', placeContext: { sourceStopCode: 's', locality: 'Hanham', localAuthority: 'South Gloucestershire' } };
+  assert.ok(!allSubjects(event, null, null).some(c => c.kind === 'place'), 'draft cards are never used');
+  assert.equal(placeFact('South Gloucestershire', 'Hanham'), undefined);
+  const approved = { ...PLACE_CARDS, 'South Gloucestershire|Hanham': { ...PLACE_CARDS['South Gloucestershire|Hanham'], status: 'approved' } };
+  assert.match(placeFact('South Gloucestershire', 'Hanham', '2026-10-22T12:00:00Z', approved).fact.claim, /Hanham/);
+  assert.equal(placeFact('Bristol, City of', 'Hanham', undefined, approved), undefined, 'same name elsewhere does not match');
+  assert.ok(SUBJECT_PERSONAS.place.includes('never say the bus visited'));
+  assert.doesNotThrow(() => allSubjects({ ...bus, lastStopCode: undefined }, null, null), 'no stop code, no place data');
+  for (const entry of Object.values(PLACE_CARDS)) {
+    assert.ok(entry.facts.length >= 1);
+    for (const f of entry.facts) assert.match(f.source, /^https:\/\/en\.wikipedia\.org\//);
+  }
+});
