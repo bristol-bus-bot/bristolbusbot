@@ -16,7 +16,8 @@ checker receives that exact brief, including any targeted repair instructions.
 - Two slots in eight are about the bus itself. Each turn takes the next aspect
   after the last one published, in the order livery, model, power, age,
   features, skipping any the bus has no material for. Each aspect's brief holds
-  only its own facts: the livery name; the model name and its note in
+  only its own facts: the livery name, plus one checked fact from
+  `livery-facts.ts` when the livery's ID and name match (re-checked 2026-10-21); the model name and its note in
   `bus-model-commentary.ts` (checked against sources on 2026-10-18; a model with
   no note gets no model post); a non-diesel fuel and body type; first
   registration dated from the plate's age identifier (never the registration
