@@ -4,6 +4,7 @@ import { storyStatus } from './story-brief.js';
 import { spokenStopName } from '../utils/stop-name-cleaner.js';
 import { spokenDestination } from './journey-context.js';
 import { logger } from '../utils/logging.js';
+import { isSmallHours } from './story-subject.js';
 
 // Timeless editorial observations: no invented live service, passenger or delay claims.
 export const EDITORIAL_RESERVE = [
@@ -49,11 +50,31 @@ export const EDITORIAL_RESERVE = [
     'Public transport should expand your options. That is a fairly practical sort of freedom.',
 ];
 
+// Night shift lines (00:00-04:59), used first overnight while any is unused this week.
+export const NIGHT_RESERVE = [
+    'Night buses carry cleaners, carers, bakers and the odd reveller. A city that works around the clock needs buses that do too.',
+    'At this hour the timetable is mostly a promise to the morning.',
+    'A quiet network is still a network. Somewhere, someone is relying on the last bus or the first one.',
+    'The first bus of the day is a small, unglamorous triumph of planning.',
+    'Night shifts and early starts deserve public transport as much as the nine-to-five does.',
+    'Empty roads, lit shelters and a timetable waiting for the morning. The small hours have their own kind of service.',
+    'Every early bus is a quiet argument that public transport is for everyone, not just office hours.',
+    'Somebody is up before dawn so the first buses can run. That deserves a mention more often than it gets one.',
+    'The night bus is where a city admits it never entirely goes to sleep.',
+    'I keep watch overnight so the morning has a fair record. Raspberry Pis do not need sleep, just a steady supply of electricity.',
+    'Getting home safely at three in the morning is a transport policy, whether or not anyone writes it down.',
+    'The small hours are when a bus service shows who it was designed for.',
+];
+
 export function reservePost(now = Date.now(), history: Array<{ text: string; publishedAt: string }> = []): string {
     const used = new Map<string, number>();
     for (const r of history) {
         const time = Date.parse(r.publishedAt);
         if (time <= now && now - time < 7 * 86400_000) used.set(r.text, Math.max(used.get(r.text) || 0, time));
+    }
+    if (isSmallHours(now)) {
+        const night = NIGHT_RESERVE.find(text => !used.has(text));
+        if (night) return night;
     }
     const unused = EDITORIAL_RESERVE.find(text => !used.has(text));
     if (unused) return unused;
