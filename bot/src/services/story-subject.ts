@@ -4,6 +4,7 @@ import { scheduledJourney } from './story-context.js';
 import { weatherDescription } from './weather-description.js';
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { LIVERY_FACTS } from './livery-facts.js';
+import { depotFact } from './depot-facts.js';
 
 /** The bus itself: each aspect gets its own prompt and only its own facts. */
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
@@ -203,8 +204,12 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
     const depot = event.busDetails?.garage?.name?.trim();
     const geography = event.depotContext;
     if (depot && !event.lowConfidence && geography?.name === depot && geography.sourceStopCode === event.lastStopCode
-        && Number.isFinite(geography.distanceKm) && geography.distanceKm >= 15) choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`,
-        context: { depot: { name: depot, distanceFromReportedStopKm: geography.distanceKm, scope: geography.scope } } });
+        && Number.isFinite(geography.distanceKm) && geography.distanceKm >= 15) {
+        const fact = depotFact(event.operatorRef, depot, event.timestamp);
+        choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`,
+            context: { depot: { name: depot, distanceFromReportedStopKm: geography.distanceKm, scope: geography.scope,
+                ...(fact ? { depotFact: { claim: fact.claim, qualification: fact.qualification } } : {}) } } });
+    }
     if (weather?.trim()) {
         // WeatherService already enforces observation freshness. Keep its area and date,
         // but humidity is rarely a useful story and creates a stream of measurements.
