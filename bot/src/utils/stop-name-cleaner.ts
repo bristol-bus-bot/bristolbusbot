@@ -10,6 +10,8 @@ import { BOT_DATA_PATHS } from '../config/data-paths.js';
 export function spokenStopName(raw: string): string {
     return raw.trim()
         .replace(/\s+[-–—]\s+(?:(?:Stop|Stand|Bay)\s+[A-Za-z0-9]{1,4}|[A-Z]\d{0,2}|[A-Z][a-z])\s*$/, '')
+        // NaPTAN position indicators such as "Down Lane - o/s" (outside) or "- nr".
+        .replace(/\s+[-–—]\s+(?:o\/s|opp|nr|adj|o\/p)\.?\s*$/i, '')
         .replace(/\bStn\b/g, 'Station')
         .replace(/\bRd\b/g, 'Road')
         .replace(/\bUtd\b/g, 'United')
