@@ -52,6 +52,15 @@ export function isRushHour(iso: string): boolean {
     return (hour >= 7 && hour < 10) || (hour >= 16 && hour < 19);
 }
 
+/** 00:00-04:59 UK time: the night shift. */
+export function isSmallHours(iso: string | number): boolean {
+    const when = new Date(iso);
+    if (Number.isNaN(when.getTime())) return false;
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' })
+        .formatToParts(when).find(p => p.type === 'hour')?.value);
+    return hour >= 0 && hour < 5;
+}
+
 /** Any day 07:00-18:59, UK time: when road conditions are worth a lookup. */
 export function isDaytime(iso: string): boolean {
     const when = new Date(iso);
