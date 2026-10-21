@@ -5,18 +5,19 @@ import { weatherDescription } from './weather-description.js';
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { LIVERY_FACTS } from './livery-facts.js';
 import { depotFact } from './depot-facts.js';
+import { placeFact } from './place-cards.js';
 
 /** The bus itself: each aspect gets its own prompt and only its own facts. */
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
 export type VehicleAspect = typeof VEHICLE_ASPECTS[number];
-export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic';
+export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic' | 'place';
 /**
  * A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS
  * order. "wider?" is a second facts turn, used only when the fact library for the
  * bus's area is big enough (WIDER_LIBRARY_MINIMUM); otherwise it is a timing post.
  */
 export type CycleSlot = Exclude<StorySubject, VehicleAspect> | 'vehicle' | 'wider?';
-export const CYCLE_SLOTS: readonly CycleSlot[] = ['service', 'vehicle', 'weather', 'depot', 'wider', 'wider?', 'traffic'];
+export const CYCLE_SLOTS: readonly CycleSlot[] = ['service', 'vehicle', 'weather', 'depot', 'wider', 'wider?', 'traffic', 'place'];
 export const WIDER_LIBRARY_MINIMUM = 20;
 export const DEFAULT_SUBJECT_CYCLE: CycleSlot[] = ['service', 'vehicle', 'wider?', 'weather', 'depot', 'wider', 'vehicle', 'traffic'];
 
@@ -60,6 +61,7 @@ export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     power: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around how this bus is powered, weaving the bus's timing into it. The supplied fuel and body type are the only facts about it: do not describe its noise, smoothness, emissions, range or charging, and never suggest the power source explains its timing. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
     age: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around this bus's age, weaving the bus's timing into it. Its age comes only from the age identifier on its number plate, which dates its first registration, so keep it approximate (a 2019 bus, about six years old). Do not quote the registration, and do not guess the bus's history, mileage or condition from its age. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
     features: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around one of this bus's supplied on-board features, weaving the bus's timing into it. Mention only supplied features, and do not claim they were working, in use or appreciated today. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
+    place: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation that connects this bus's timing with the place it was reported in, using only the supplied place fact and keeping its qualification. The fact is about the place, not the bus: never say the bus visited, passed or served anything in it. Any tone hint is colour you may use, not a fact. Never make a joke at the expense of the people who live there.`,
     weather: `You are the Bristol Bus Bot, watching the region's buses with dry humour and a distinctly local interest in the weather. Write a small weather-and-bus vignette: let the supplied conditions set the scene, then work the bus observation naturally into it. Sound like a Bristolian noticing the day, rather than a weather bulletin reading out measurements. Find humour in the combination without pretending the weather caused the bus's timing or inventing what passengers experienced.`,
     depot: `You are the Bristol Bus Bot, a quietly enthusiastic observer of the region's bus network and the garages behind it. Write about this bus through its connection to its listed home depot. Make that connection the subject of the post, with its route and timing woven in, rather than tacking depot-assigned onto a routine report. Your voice is familiar, curious and gently funny. A home garage is an assignment, not evidence that the bus has just left it or is heading back.`,
     service: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. Make the supplied timing the point of this post. Give substantial lateness a pointed observation and treat a small discrepancy proportionately. For an on-time bus, be quietly pleased and matter-of-fact: a good moment without thanking, congratulating or praising the operator for basic competence. Keep that positivity free of a cynical final sting. Be concise and specific. Your readers depend on these buses; your criticism belongs with the service and its management, while drivers and passengers remain on your side.`,
@@ -201,6 +203,16 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
         } });
     }
     choices.push(...vehicleSubjects(event));
+    // Only an approved place card, and only when the stop geography is trusted.
+    const place = event.placeContext;
+    if (place && event.lastStopCode && !event.lowConfidence && place.sourceStopCode === event.lastStopCode) {
+        const found = placeFact(place.localAuthority, place.locality, event.timestamp);
+        if (found) choices.push({ kind: 'place', key: `place:${String(place.locality).toLowerCase()}`, context: { place: {
+            locality: place.locality, fact: { claim: found.fact.claim, qualification: found.fact.qualification },
+            ...(found.toneHint ? { toneHint: found.toneHint } : {}),
+            scope: 'About the place where the reported stop is; not proof of where the bus is now.',
+        } } });
+    }
     const depot = event.busDetails?.garage?.name?.trim();
     const geography = event.depotContext;
     if (depot && !event.lowConfidence && geography?.name === depot && geography.sourceStopCode === event.lastStopCode
@@ -257,7 +269,8 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // traffic is rare and time-sensitive, so it may also take a spare slot.
     const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind === 'wider?' ? 'wider' : kind;
     const recentSlots = history.slice(-cycle.length).map(item => slotOf(item.kind));
-    const share = (kind: StorySubject) => cycle.filter(item => slotOf(item) === slotOf(kind)).length;
+    const share = (kind: StorySubject) => Math.max(kind === 'place' ? 1 : 0,
+        cycle.filter(item => slotOf(item) === slotOf(kind)).length);
     const used = (kind: StorySubject) => recentSlots.filter(item => item === slotOf(kind)).length;
     const spare = pool
         .filter(choice => !['service', 'wider'].includes(choice.kind)
