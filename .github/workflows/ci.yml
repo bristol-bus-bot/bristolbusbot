@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: bot/package-lock.json
       - run: npm ci
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
       - run: npm test
         working-directory: site
 
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: social/package-lock.json
       - run: npm ci
