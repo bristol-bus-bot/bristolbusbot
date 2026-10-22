@@ -1,6 +1,8 @@
 // Bristol Bus Bot - Application State Management
 
 import { DateTime } from 'luxon';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { logger, TARGET_TIMEZONE } from '../utils/logging.js';
 import type { BusEvent, DelayHistory, NetworkStatus, SystemMetrics, SIRIVehicleActivity } from '../types/bus-types.js';
 import { emptyFleetIdentityIndex, type FleetIdentityIndex } from './vehicle-identity.js';
@@ -29,6 +31,8 @@ export class ApplicationState {
     public aiCallsToday: number = 0;
     public lastAIResetDate: string;
     public summariesPosted: number = 0;
+    // Optional file that keeps today's counters across restarts.
+    private counterFile?: string;
     
     // Data loading state
     public dbIsReloading: boolean = false;
@@ -136,6 +140,47 @@ export class ApplicationState {
     }
     
     /**
+     * Keep today's counters in a small file so a restart doesn't reset the
+     * daily post and AI caps. Counters from an earlier date are ignored.
+     */
+    public attachCounterStore(file: string | undefined): void {
+        this.counterFile = file;
+        if (!file || !existsSync(file)) return;
+        try {
+            const data = JSON.parse(readFileSync(file, 'utf8'));
+            const today = DateTime.now().setZone(TARGET_TIMEZONE).toISODate();
+            if (!today || data?.version !== 1 || data.date !== today) return;
+            const count = (v: unknown): number => (Number.isSafeInteger(v) && (v as number) >= 0 ? (v as number) : 0);
+            this.postsTodayCount = count(data.postsToday);
+            this.aiCallsToday = count(data.aiCallsToday);
+            this.summariesPosted = count(data.summariesPosted);
+            this.lastResetDate = today;
+            this.lastAIResetDate = today;
+            logger.info(`[STATE_CHANGE] Restored today's counters: Posts ${this.postsTodayCount}, AI calls ${this.aiCallsToday}, Summaries ${this.summariesPosted}`);
+        } catch {
+            logger.warn('Daily counter file unreadable; starting today from zero');
+        }
+    }
+
+    private saveCounters(): void {
+        const file = this.counterFile;
+        if (!file) return;
+        try {
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(`${file}.new`, JSON.stringify({
+                version: 1,
+                date: this.lastResetDate,
+                postsToday: this.postsTodayCount,
+                aiCallsToday: this.aiCallsToday,
+                summariesPosted: this.summariesPosted,
+            }), { mode: 0o600 });
+            renameSync(`${file}.new`, file);
+        } catch {
+            logger.warn('Daily counter write failed; counters are kept in memory only');
+        }
+    }
+
+    /**
      * Get singleton instance
      */
     public static getInstance(): ApplicationState {
@@ -226,6 +271,7 @@ export class ApplicationState {
     public incrementPostCount(): void {
         const previousCount = this.postsTodayCount;
         this.postsTodayCount++;
+        this.saveCounters();
         logger.info(`[STATE_CHANGE] Daily posts: ${previousCount} → ${this.postsTodayCount}`);
     }
     
@@ -235,6 +281,7 @@ export class ApplicationState {
     public incrementAICallCount(): void {
         const previousCount = this.aiCallsToday;
         this.aiCallsToday++;
+        this.saveCounters();
         logger.info(`[AI_QUOTA] Daily usage: ${this.aiCallsToday}`);
     }
 
@@ -243,6 +290,7 @@ export class ApplicationState {
      */
     public incrementSummaryCount(): void {
         this.summariesPosted++;
+        this.saveCounters();
         logger.info(`[STATE_CHANGE] Summaries posted: ${this.summariesPosted}`);
     }
 
@@ -309,6 +357,7 @@ export class ApplicationState {
             // Update date tracking (single field for both counters)
             this.lastResetDate = currentDate;
             this.lastAIResetDate = currentDate;
+            this.saveCounters();
 
             logger.info('[STATE_CHANGE] All daily counters reset to 0');
         }

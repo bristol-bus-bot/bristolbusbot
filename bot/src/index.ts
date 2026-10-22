@@ -87,6 +87,9 @@ class BristolBusBot {
         
         // Initialize application state (singleton)
         this.appState = ApplicationState.getInstance();
+        // Keep today's counters next to the other editorial state files.
+        this.appState.attachCounterStore(this.config.ai.editorialUsagePath
+            ? `${this.config.ai.editorialUsagePath}.daily-counters.json` : undefined);
         
         // Initialize all services with dependency injection
         this.initializeServices();
