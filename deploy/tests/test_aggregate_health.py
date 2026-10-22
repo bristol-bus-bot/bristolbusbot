@@ -982,3 +982,174 @@ def test_provisional_holiday_deadline_surfaces_without_a_new_build(tmp_path, mon
     assert 'timetable:provisional-holiday-due' in aggregate_health.timetable_promotion_check()[1]
     monkeypatch.setattr(aggregate_health,'timetable_delivery_check',lambda: ({'status':'disabled'},[]))
     assert 'timetable:provisional-holiday-due' in aggregate_health.timetable_automation_check()[1]
+
+
+def _timetable_health_harness(tmp_path, monkeypatch, automation, incidents,
+                              issues=("job:timetable-automation",)):
+    """Run aggregate_health.main() with only the timetable state varying."""
+    state = tmp_path / "monitoring"
+    state.mkdir(exist_ok=True)
+    (state / "resource-samples.csv").write_text("sample\n", encoding="utf-8")
+    published = tmp_path / "audit_data.json"
+    published.write_text("{}\n", encoding="utf-8")
+    (state / "incidents.json").write_text(json.dumps(incidents), encoding="utf-8")
+    now = datetime.now(timezone.utc).isoformat()
+    messages = []
+    monkeypatch.setattr(aggregate_health, "STATE", state)
+    monkeypatch.setattr(aggregate_health, "PUBLISHED", published)
+    monkeypatch.setattr(aggregate_health, "service_checks", lambda: ({}, []))
+    monkeypatch.setattr(aggregate_health, "job_checks", lambda: ({}, []))
+    monkeypatch.setattr(aggregate_health, "timetable_automation_check",
+                        lambda: (automation, list(issues)))
+    monkeypatch.setattr(aggregate_health, "editorial_refresh_check",
+                        lambda: ({"status": "disabled"}, []))
+    monkeypatch.setattr(aggregate_health, "social_curation_check",
+                        lambda: ({"status": "not_configured", "mode": "shadow"}, []))
+    monkeypatch.setattr(aggregate_health, "http_ok", lambda _url: True)
+    monkeypatch.setattr(aggregate_health, "notify",
+                        lambda message: messages.append(message) or True)
+    monkeypatch.setattr(aggregate_health.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(aggregate_health.shutil, "disk_usage",
+                        lambda _path: SimpleNamespace(total=100, used=10, free=90))
+    monkeypatch.setattr(aggregate_health, "sqlite_value",
+                        lambda _path, query: now if "poller_status" in query else "20260716")
+    return state, messages
+
+
+def _days_ago(days, hours=0):
+    return (datetime.now(timezone.utc) - timedelta(days=days, hours=hours)).isoformat()
+
+
+def _inflation_failure(finished_at):
+    attempt = {"outcome": "failure", "finished_at": finished_at, "run_id": "39720227318",
+               "failure_code": "candidate_service_inflation",
+               "context": {"operator": "FLIX", "date": "2026-10-26",
+                           "current": 584, "candidate": 732}}
+    return {"status": "failed", "phase": "shadow",
+            "delivery": {"status": "enabled", "job": {"last_ok_at": _days_ago(19)}},
+            "promotion": {"status": "enabled"}, "last_attempt": attempt}
+
+
+def test_stuck_timetable_reminds_daily_and_stops_saying_nothing_to_do(
+        tmp_path, monkeypatch):
+    """October 2026: one 'You need to do: Nothing' a day for 19 days."""
+    automation = _inflation_failure(_days_ago(0, 2))
+    fingerprint = "|".join(("shadow", "39720227318", automation["last_attempt"]["finished_at"],
+                            "candidate_service_inflation", ""))
+    state, messages = _timetable_health_harness(tmp_path, monkeypatch, automation, {
+        "active": ["job:timetable-automation"],
+        "notified_timetable_failure_fingerprints": [fingerprint],
+        "timetable_failure_reminded_at": _days_ago(1, 1),
+    })
+
+    aggregate_health.main()
+
+    assert len(messages) == 1
+    assert "failing for 19 days" in messages[0]
+    assert "Ask Claude to investigate" in messages[0]
+    assert "FLIX" in messages[0]
+    assert "Nothing" not in messages[0]
+    aggregate_health.main()
+    assert len(messages) == 1  # at most one reminder a day
+
+
+def test_failure_streak_survives_the_incident_reopening_around_each_run(
+        tmp_path, monkeypatch):
+    automation = _inflation_failure(_days_ago(0))
+    state, messages = _timetable_health_harness(tmp_path, monkeypatch, automation, {
+        "active": [],  # cleared while the morning check was running
+        "timetable_failing_since": _days_ago(5),
+        "timetable_failure_reminded_at": _days_ago(0, 20),
+    })
+
+    aggregate_health.main()
+
+    assert len(messages) == 1
+    assert "failing for 5 days" in messages[0]
+    incidents = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
+    assert incidents["timetable_failing_since"].startswith(_days_ago(5)[:10])
+
+
+def test_first_failure_day_keeps_the_calm_message(tmp_path, monkeypatch):
+    automation = _inflation_failure(_days_ago(0))
+    automation["delivery"]["job"]["last_ok_at"] = _days_ago(0, 20)
+    state, messages = _timetable_health_harness(
+        tmp_path, monkeypatch, automation, {"active": []})
+
+    aggregate_health.main()
+
+    assert len(messages) == 1
+    assert "If this repeats tomorrow, ask Claude" in messages[0]
+    assert "failing for" not in messages[0]
+
+
+def test_success_ends_the_failure_streak(tmp_path, monkeypatch):
+    automation = {"status": "healthy", "phase": "complete",
+                  "delivery": {"status": "enabled"}, "promotion": {"status": "enabled"},
+                  "last_attempt": {"outcome": "accepted", "run_id": "1",
+                                   "finished_at": _days_ago(0)},
+                  "last_accepted": {"run_id": "1", "accepted_at": _days_ago(0)}}
+    state, _ = _timetable_health_harness(tmp_path, monkeypatch, automation, {
+        "active": [], "timetable_failing_since": _days_ago(9),
+        "timetable_failure_reminded_at": _days_ago(0, 3)}, issues=())
+
+    aggregate_health.main()
+
+    incidents = json.loads((state / "incidents.json").read_text(encoding="utf-8"))
+    assert incidents["timetable_failing_since"] == ""
+    assert incidents["timetable_failure_reminded_at"] == ""
+
+
+def test_missing_operator_is_named_in_its_own_alert(tmp_path, monkeypatch):
+    automation = {"status": "healthy", "phase": "complete",
+                  "delivery": {"status": "enabled"},
+                  "promotion": {"status": "enabled", "missing_operators": [
+                      {"code": "operator_missing", "operator": "SDVN", "current": 1064,
+                       "candidate": 0, "metric": "trips", "routes": ["FAL"]}]},
+                  "last_attempt": {"outcome": "accepted", "finished_at": _days_ago(0)},
+                  "last_accepted": {"accepted_at": _days_ago(0)}}
+    _, messages = _timetable_health_harness(
+        tmp_path, monkeypatch, automation, {"active": []},
+        issues=("timetable:operator-missing",))
+
+    assert aggregate_health.main() == 0  # a warning, not a failed health unit
+
+    assert len(messages) == 1
+    assert "SDVN (routes FAL; 1064 journeys" in messages[0]
+    assert "public performance report" in messages[0]
+
+
+def test_missing_operator_in_accepted_release_raises_a_warning(tmp_path, monkeypatch):
+    jobs = tmp_path/'jobs'
+    jobs.mkdir()
+    marker = SimpleNamespace(
+        exists=lambda: True, is_symlink=lambda: False, is_file=lambda: True,
+        lstat=lambda: SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o644))
+    state = tmp_path/'timetable-promotion.json'
+    missing = [{'code': 'operator_missing', 'operator': 'SDVN', 'routes': ['FAL']}]
+    state.write_text(json.dumps({'last_attempt': {'outcome': 'accepted'},
+                                 'last_accepted': {'missing_operators': missing}}))
+    (jobs/'timetable-promote.json').write_text(json.dumps({'last_result': 'success'}))
+    monkeypatch.setattr(aggregate_health, 'STATE', tmp_path)
+    monkeypatch.setattr(aggregate_health, 'TIMETABLE_PROMOTION_STATE', state)
+    monkeypatch.setattr(aggregate_health, 'TIMETABLE_PROMOTION_MARKER', marker)
+    result, issues = aggregate_health.timetable_promotion_check()
+    assert result['missing_operators'] == missing
+    assert 'timetable:operator-missing' in issues
+    monkeypatch.setattr(aggregate_health, 'timetable_delivery_check', lambda: ({'status': 'disabled'}, []))
+    assert 'timetable:operator-missing' in aggregate_health.timetable_automation_check()[1]
+    assert aggregate_health.health_status(['timetable:operator-missing']) == 'warning'
+
+
+def test_streak_starts_after_the_latest_routine_skip_not_the_last_full_success(
+        tmp_path, monkeypatch):
+    """Refreshes run six days apart; skips in between mean the check worked."""
+    automation = _inflation_failure(_days_ago(0))
+    automation["delivery"]["job"] = {"last_ok_at": _days_ago(6),
+                                     "last_success_at": _days_ago(6),
+                                     "last_skipped_at": _days_ago(0, 20)}
+    _, messages = _timetable_health_harness(
+        tmp_path, monkeypatch, automation, {"active": []})
+    aggregate_health.main()
+    assert "failing for" not in messages[0]

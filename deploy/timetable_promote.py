@@ -311,6 +311,10 @@ class TimetablePromoter:
                 "provisional_coverage": [w for w in
                     (attempt.get('comparison') or {}).get('service', {}).get('warnings', [])
                     if w.get('code') == 'provisional_holiday_coverage'],
+                # Operators the live timetable had but this release lacks.
+                "missing_operators": [w for w in
+                    (attempt.get('comparison') or {}).get('service', {}).get('warnings', [])
+                    if w.get('code') == 'operator_missing'],
             }
         elif attempt.get("outcome") == "no_change" and accepted is None:
             accepted = {

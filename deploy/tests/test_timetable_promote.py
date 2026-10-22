@@ -230,6 +230,18 @@ def test_provisional_coverage_survives_later_failed_attempt(tmp_path):
     assert pending_holiday_coverage(promoter.state_document()) == [warning]
 
 
+def test_accepted_release_records_operators_it_lacks(tmp_path):
+    promoter, *_ = promotion_case(tmp_path)
+    missing = {'code': 'operator_missing', 'operator': 'SDVN', 'current': 1064,
+               'candidate': 0, 'metric': 'trips', 'routes': ['FAL']}
+    promoter.write_state({'outcome': 'accepted', 'run_id': '1',
+                          'comparison': {'service': {'warnings': [missing]}}})
+    assert promoter.state_document()['last_accepted']['missing_operators'] == [missing]
+    promoter.write_state({'outcome': 'accepted', 'run_id': '2',
+                          'comparison': {'service': {'warnings': []}}})
+    assert promoter.state_document()['last_accepted']['missing_operators'] == []
+
+
 def attended(candidate: Path) -> str:
     return f"{RUN_ID}-{hashlib.sha256(candidate.read_bytes()).hexdigest()}"
 

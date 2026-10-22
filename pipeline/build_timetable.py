@@ -15,6 +15,7 @@ from datetime import date
 from timetable_editions import normalize_database as normalize_route_editions
 from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
 from timetable_duplicate_evidence import reconcile_database as reconcile_duplicate_sources
+from timetable_journey_dedupe import collapse_same_day_copies
 from timetable_evidence_storage import compact_evidence
 from timetable_source_index import build_source_index
 from timetable_quality_gates import check_candidate_quality
@@ -285,6 +286,17 @@ def main():
         logger.exception('Duplicate source verification failed - refusing the candidate')
         return 2
     logger.info('Exact source-backed duplicate corrections: %s', duplicate_result)
+
+    # The steps above need First's own source files. Every other operator only
+    # reaches us through BODS GTFS, where one journey can arrive under several
+    # overlapping calendars. List each journey once per day for all operators;
+    # the Pi refuses any candidate that still has same-day copies.
+    try:
+        copy_result = collapse_same_day_copies(WECA_DB)
+    except (OSError, sqlite3.Error, RuntimeError) as exc:
+        logger.error("Same-day journey copy removal failed - refusing the candidate: %s", exc)
+        return 2
+    logger.info("Same-day journey copies removed: %s", json.dumps(copy_result, sort_keys=True))
 
     validation = validate(WECA_DB)
     logger.info(

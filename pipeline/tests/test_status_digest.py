@@ -193,7 +193,9 @@ def plain_daily_snapshot():
         "status": "ok",
         "issues": [],
         "timetable_automation": {
-            "last_accepted": {"run_id": "31070121269"},
+            "last_accepted": {"run_id": "31070121269",
+                              "accepted_at": "2026-08-10T04:20:00Z"},
+            "delivery": {"job": {"last_ok_at": "2026-08-10T04:20:00Z"}},
         },
         "fleet_automation": {
             "last_attempt": {"finished_at": "2026-08-10T23:20:18Z"},
@@ -207,6 +209,8 @@ def plain_daily_snapshot():
         },
         "jobs": {
             "audit-publish": {"last_success_at": "2026-08-12T04:45:16Z"},
+            "backup": {"last_success_at": "2026-08-12T01:27:19Z",
+                       "result": "success"},
         },
         "data_health": {
             "summary": {
@@ -251,7 +255,7 @@ def test_stale_backup_and_timetable_are_prominent_and_need_action(monkeypatch):
     assert 'Backup: last success 23 days ago' in message
     assert 'Timetable update: last success 18 days ago' in message
     assert 'interrupted by a Pi restart' in message
-    assert 'Investigate the backup or timetable failure' in message
+    assert 'Ask Claude to investigate the backup or timetable problem' in message
     assert 'Nothing today' not in message
 
 
@@ -298,7 +302,9 @@ def test_daily_message_says_safe_timetable_rejection_did_not_break_live_bot(
         "issues": ["job:timetable-automation"],
         "timetable_automation": {
             "status": "failed",
-            "last_accepted": {"run_id": "31070121269"},
+            "last_accepted": {"run_id": "31070121269",
+                              "accepted_at": "2026-08-10T04:20:00Z"},
+            "delivery": {"job": {"last_ok_at": "2026-08-13T04:20:00Z"}},
             "last_attempt": {
                 "outcome": "failure",
                 "failure_code": "candidate_operator_collapse",
@@ -310,10 +316,44 @@ def test_daily_message_says_safe_timetable_rejection_did_not_break_live_bot(
         snapshot, today=date(2026, 8, 14))
 
     assert "live bot and website are working" in message
-    assert "proposed timetable update looked incomplete" in message
+    assert "proposed timetable update was rejected" in message
     assert "current working timetable stayed live" in message
-    assert "Pi will retry automatically" in message
+    assert "Pi will retry at the next check" in message
     assert "needs attention" not in message
+
+
+def test_timetable_stuck_for_days_needs_attention_not_reassurance(monkeypatch):
+    """October 2026: 19 days of "Nothing today. The Pi will retry" while every
+    retry failed the same way. Two failed days must become an action."""
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = plain_daily_snapshot()
+    snapshot.update({
+        "status": "error",
+        "issues": ["job:timetable-automation"],
+        "timetable_automation": {
+            "status": "failed",
+            "last_accepted": {"accepted_at": "2026-10-03T00:12:44Z"},
+            "delivery": {"job": {"last_ok_at": "2026-10-03T00:12:44Z"}},
+            "last_attempt": {"outcome": "failure",
+                             "failure_code": "candidate_service_inflation"},
+        },
+    })
+
+    message = status_digest.daily_message(snapshot, today=date(2026, 10, 22))
+
+    assert message.index("Needs attention") < message.index("Where the plan stands")
+    assert "Timetable updates have failed every check for 19 days" in message
+    assert "Ask Claude to investigate" in message
+    assert "Nothing today" not in message
+    assert "will retry automatically" not in message
+
+
+def test_unknown_timetable_success_is_a_warning(monkeypatch):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = plain_daily_snapshot()
+    snapshot["timetable_automation"]["last_accepted"] = {}
+    message = status_digest.daily_message(snapshot, today=date(2026, 8, 13))
+    assert "*Needs attention*\n- Timetable update: last success unknown." in message
 
 
 def test_overall_line_calls_reminders_warnings_not_problems():
@@ -325,3 +365,10 @@ def test_overall_line_calls_reminders_warnings_not_problems():
     assert "Nothing is broken" in line
     assert status_digest.overall_line({"status": "ok", "issues": []}).startswith(
         ":white_check_mark:")
+
+
+def test_routine_skip_resets_the_stuck_count():
+    snapshot = {"timetable_automation": {"status": "failed", "delivery": {"job": {
+        "last_ok_at": "2026-10-16T04:00:00Z", "last_success_at": "2026-10-16T04:00:00Z",
+        "last_skipped_at": "2026-10-21T04:00:00Z"}}}}
+    assert status_digest.timetable_failing_days(snapshot, date(2026, 10, 22)) == 1
