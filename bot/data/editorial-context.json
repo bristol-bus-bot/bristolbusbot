@@ -610,7 +610,7 @@
       }
     },
     {
-      "id": "weca-mayor-franchising-not-priority-2026",
+      "id": "weca-franchising-not-priority-2026",
       "scope": {
         "local_authorities": [
           "Bristol, City of",
@@ -619,8 +619,8 @@
         ]
       },
       "review_due": "2027-01-31",
-      "claim": "In March 2026, West of England mayor Helen Godwin said bringing buses under public control was not a priority, and that it would need a region-wide council tax precept to pay for it.",
-      "prompt_hint": "Attribute the position to the mayor in March 2026; she did not rule out franchising in future.",
+      "claim": "As of March 2026, bringing the West of England's buses under public control was not a priority for the combined authority's leadership, which said it would need a region-wide council tax precept to pay for it.",
+      "prompt_hint": "About the institution's position and the funding model; do not name, single out or criticise the mayor personally.",
       "requirements": [
         {
           "label": "not a priority",
@@ -647,47 +647,18 @@
       }
     },
     {
-      "id": "weca-mayor-priorities-2025",
-      "scope": {
-        "local_authorities": [
-          "Bristol, City of",
-          "Bath and North East Somerset",
-          "South Gloucestershire"
-        ]
-      },
-      "review_due": "2027-01-31",
-      "claim": "When she took office in May 2025, West of England mayor Helen Godwin named reliable buses and trains among her three main priorities.",
-      "prompt_hint": "A stated priority, not a measure of delivery.",
-      "requirements": [
-        {
-          "label": "reliable buses",
-          "alternatives": [
-            "reliable buses"
-          ]
-        }
-      ],
-      "active_from": "2025-05-07",
-      "active_until": "2027-10-21",
-      "source": {
-        "publisher": "Wikipedia",
-        "title": "Helen Godwin",
-        "url": "https://en.wikipedia.org/wiki/Helen_Godwin",
-        "published_on": "2025-05-07",
-        "verified_on": "2026-10-21"
-      }
-    },
-    {
       "id": "weca-bus-funding-2025-2029",
       "scope": {
         "local_authorities": [
           "Bristol, City of",
           "Bath and North East Somerset",
-          "South Gloucestershire"
+          "South Gloucestershire",
+          "North Somerset"
         ]
       },
       "review_due": "2027-01-31",
-      "claim": "In December 2025 the West of England was allocated £42.4 million of government bus funding over three years to 2028/29, more than £14 million a year, which it can spend as it chooses.",
-      "prompt_hint": "Excludes North Somerset, which has its own allocation.",
+      "claim": "In December 2025 the government's three-year bus funding to 2028/29 came in separate pots: £42.4 million for the West of England Combined Authority's three councils, and a separate allocation for North Somerset.",
+      "prompt_hint": "The split shows the region's divided bus funding; keep the £42.4 million figure.",
       "requirements": [
         {
           "label": "£42.4 million",
@@ -1018,38 +989,6 @@
       }
     },
     {
-      "id": "weca-mayor-elected-2025",
-      "scope": {
-        "local_authorities": [
-          "Bristol, City of",
-          "Bath and North East Somerset",
-          "South Gloucestershire"
-        ]
-      },
-      "review_due": "2027-01-31",
-      "claim": "Helen Godwin was elected the West of England's mayor on 1 May 2025 with 25.0% of the vote.",
-      "prompt_hint": "First-round vote share as reported.",
-      "requirements": [
-        {
-          "label": "25",
-          "alternatives": [
-            "25%",
-            "25.0%",
-            "a quarter"
-          ]
-        }
-      ],
-      "active_from": "2025-05-07",
-      "active_until": "2027-10-21",
-      "source": {
-        "publisher": "Wikipedia",
-        "title": "Helen Godwin",
-        "url": "https://en.wikipedia.org/wiki/Helen_Godwin",
-        "published_on": "2025-05-07",
-        "verified_on": "2026-10-21"
-      }
-    },
-    {
       "id": "weca-westbus-electric-funding-2025",
       "scope": {
         "operators": [
@@ -1081,6 +1020,106 @@
         "url": "https://hellorayo.co.uk/greatest-hits/bristol/news/electric-buses-bristol",
         "published_on": "2025-03-24",
         "verified_on": "2026-10-21"
+      }
+    },
+    {
+      "id": "bus-deregulation-1986",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "Outside London, buses have been deregulated since 26 October 1986: operators set fares, routes and frequencies, and councils can only pay for loss-making routes they judge socially necessary.",
+      "prompt_hint": "The national model behind local services; criticise the model, not individuals.",
+      "requirements": [
+        {
+          "label": "1986",
+          "alternatives": [
+            "1986"
+          ]
+        },
+        {
+          "label": "deregulated",
+          "alternatives": [
+            "deregulated",
+            "deregulation"
+          ]
+        }
+      ],
+      "active_from": "1986-10-26",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Bus deregulation in Great Britain",
+        "url": "https://en.wikipedia.org/wiki/Bus_deregulation_in_Great_Britain",
+        "published_on": "1986-10-26",
+        "verified_on": "2026-10-22"
+      }
+    },
+    {
+      "id": "weca-three-of-four-councils",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire",
+          "North Somerset"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "The West of England Combined Authority covers only Bristol, South Gloucestershire and Bath & North East Somerset; North Somerset rejected the 2016 devolution deal and is still not a member.",
+      "prompt_hint": "In April 2026 North Somerset residents backed joining in a consultation; membership needs ministers' approval. Check before saying it has joined.",
+      "requirements": [
+        {
+          "label": "North Somerset",
+          "alternatives": [
+            "North Somerset"
+          ]
+        }
+      ],
+      "active_from": "2026-04-30",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "West of England Combined Authority",
+        "url": "https://en.wikipedia.org/wiki/West_of_England_Combined_Authority",
+        "published_on": "2026-04-30",
+        "verified_on": "2026-10-22"
+      }
+    },
+    {
+      "id": "weca-no-transport-executive-2024",
+      "scope": {
+        "local_authorities": [
+          "Bristol, City of",
+          "Bath and North East Somerset",
+          "South Gloucestershire"
+        ]
+      },
+      "review_due": "2027-01-31",
+      "claim": "A 2024 West of England Combined Authority paper noted the region has no passenger transport executive to run a franchised network, and no mass transit system whose income could help pay for buses.",
+      "prompt_hint": "Obstacles named in the authority's own paper, September 2024.",
+      "requirements": [
+        {
+          "label": "transport executive",
+          "alternatives": [
+            "transport executive",
+            "mass transit"
+          ]
+        }
+      ],
+      "active_from": "2024-09-16",
+      "active_until": "2027-10-21",
+      "source": {
+        "publisher": "Bristol24/7",
+        "title": "Radical rethink needed on how bus services funded and operated",
+        "url": "https://www.bristol247.com/news-and-features/news/radical-rethink-needed-bus-services-funded-operated/",
+        "published_on": "2024-09-16",
+        "verified_on": "2026-10-22"
       }
     }
   ],
