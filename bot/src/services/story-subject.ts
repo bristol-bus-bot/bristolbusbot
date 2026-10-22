@@ -4,13 +4,37 @@ import { scheduledJourney } from './story-context.js';
 import { weatherDescription } from './weather-description.js';
 import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { LIVERY_FACTS } from './livery-facts.js';
+import { depotFact } from './depot-facts.js';
+import { placeFact } from './place-cards.js';
 
 /** The bus itself: each aspect gets its own prompt and only its own facts. */
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
 export type VehicleAspect = typeof VEHICLE_ASPECTS[number];
-export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic';
-/** A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS order. */
-export type CycleSlot = Exclude<StorySubject, VehicleAspect> | 'vehicle';
+export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic' | 'place';
+/**
+ * A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS
+ * order. "wider?" is a second facts turn, used only when the fact library for the
+ * bus's area is big enough (WIDER_LIBRARY_MINIMUM); otherwise it is a timing post.
+ */
+export type CycleSlot = Exclude<StorySubject, VehicleAspect> | 'vehicle' | 'wider?';
+export const CYCLE_SLOTS: readonly CycleSlot[] = ['service', 'vehicle', 'weather', 'depot', 'wider', 'wider?', 'traffic', 'place'];
+export const WIDER_LIBRARY_MINIMUM = 20;
+export const DEFAULT_SUBJECT_CYCLE: CycleSlot[] = ['service', 'vehicle', 'wider?', 'weather', 'depot', 'wider', 'vehicle', 'traffic'];
+
+/**
+ * The cycle can be changed on the Pi without a code change, e.g.
+ * BBB_SUBJECT_CYCLE=service,vehicle,wider?,weather,depot,wider,vehicle,traffic
+ * An invalid value is ignored (with a warning) so posting never stops.
+ */
+export function parseSubjectCycle(value: string | undefined): { cycle: CycleSlot[]; error?: string } {
+    if (!value?.trim()) return { cycle: [...DEFAULT_SUBJECT_CYCLE] };
+    const slots = value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+    const bad = slots.filter(item => !(CYCLE_SLOTS as readonly string[]).includes(item));
+    if (bad.length) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: `unknown slot(s): ${bad.join(', ')}` };
+    if (slots.length < 4 || slots.length > 16) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: 'needs 4 to 16 slots' };
+    if (!slots.includes('service')) return { cycle: [...DEFAULT_SUBJECT_CYCLE], error: 'needs at least one service slot' };
+    return { cycle: slots as CycleSlot[] };
+}
 export function isVehicleAspect(kind: string): kind is VehicleAspect {
     return (VEHICLE_ASPECTS as readonly string[]).includes(kind);
 }
@@ -26,7 +50,9 @@ export interface PublishedSubject {
 }
 
 // Desired spacing, not a promise to use unavailable or repeatedly identical material.
-export const SUBJECT_CYCLE: CycleSlot[] = ['service', 'vehicle', 'service', 'weather', 'depot', 'wider', 'vehicle', 'traffic'];
+const parsedCycle = parseSubjectCycle(process.env.BBB_SUBJECT_CYCLE);
+if (parsedCycle.error) console.warn(`[SUBJECT_CYCLE] BBB_SUBJECT_CYCLE ignored (${parsedCycle.error}); using the default`);
+export const SUBJECT_CYCLE: CycleSlot[] = parsedCycle.cycle;
 
 export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     traffic: `You are the Bristol Bus Bot, keeping a dry eye on the buses and the traffic around them. Weave the supplied nearby road conditions into a short, wry bus observation. Use ordinary language: traffic moving slowly or freely, not technical speed ratios. Refer naturally to local traffic reports without naming the data supplier. It describes one nearby road segment, not necessarily this bus's road or direction; never claim the bus is stuck in it, that it caused the delay, or that the whole area is clear or congested. Lateness does not tell you the bus's speed or establish a detour. Keep the affection for the bus and the humour in the contrast.`,
@@ -35,6 +61,7 @@ export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     power: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around how this bus is powered, weaving the bus's timing into it. The supplied fuel and body type are the only facts about it: do not describe its noise, smoothness, emissions, range or charging, and never suggest the power source explains its timing. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
     age: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around this bus's age, weaving the bus's timing into it. Its age comes only from the age identifier on its number plate, which dates its first registration, so keep it approximate (a 2019 bus, about six years old). Do not quote the registration, and do not guess the bus's history, mileage or condition from its age. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
     features: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation built around one of this bus's supplied on-board features, weaving the bus's timing into it. Mention only supplied features, and do not claim they were working, in use or appreciated today. Your affection is for the bus and the people who use it; its operator still has to earn your approval.`,
+    place: `You are the Bristol Bus Bot, a civic-minded Raspberry Pi with a soft spot for the buses of Bristol, Bath, Weston-super-Mare and South Gloucestershire. Write a short, wry observation that connects this bus's timing with the place it was reported in, using only the supplied place fact and keeping its qualification. The fact is about the place, not the bus: never say the bus visited, passed or served anything in it. Any tone hint is colour you may use, not a fact. Never make a joke at the expense of the people who live there.`,
     weather: `You are the Bristol Bus Bot, watching the region's buses with dry humour and a distinctly local interest in the weather. Write a small weather-and-bus vignette: let the supplied conditions set the scene, then work the bus observation naturally into it. Sound like a Bristolian noticing the day, rather than a weather bulletin reading out measurements. Find humour in the combination without pretending the weather caused the bus's timing or inventing what passengers experienced.`,
     depot: `You are the Bristol Bus Bot, a quietly enthusiastic observer of the region's bus network and the garages behind it. Write about this bus through its connection to its listed home depot. Make that connection the subject of the post, with its route and timing woven in, rather than tacking depot-assigned onto a routine report. Your voice is familiar, curious and gently funny. A home garage is an assignment, not evidence that the bus has just left it or is heading back.`,
     service: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. Make the supplied timing the point of this post. Give substantial lateness a pointed observation and treat a small discrepancy proportionately. For an on-time bus, be quietly pleased and matter-of-fact: a good moment without thanking, congratulating or praising the operator for basic competence. Keep that positivity free of a cynical final sting. Be concise and specific. Your readers depend on these buses; your criticism belongs with the service and its management, while drivers and passengers remain on your side.`,
@@ -50,6 +77,15 @@ export function isRushHour(iso: string): boolean {
     const weekday = parts.find(p => p.type === 'weekday')?.value || '';
     if (['Sat', 'Sun'].includes(weekday)) return false;
     return (hour >= 7 && hour < 10) || (hour >= 16 && hour < 19);
+}
+
+/** 00:00-04:59 UK time: the night shift. */
+export function isSmallHours(iso: string | number): boolean {
+    const when = new Date(iso);
+    if (Number.isNaN(when.getTime())) return false;
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' })
+        .formatToParts(when).find(p => p.type === 'hour')?.value);
+    return hour >= 0 && hour < 5;
 }
 
 /** Any day 07:00-18:59, UK time: when road conditions are worth a lookup. */
@@ -167,11 +203,25 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
         } });
     }
     choices.push(...vehicleSubjects(event));
+    // Only an approved place card, and only when the stop geography is trusted.
+    const place = event.placeContext;
+    if (place && event.lastStopCode && !event.lowConfidence && place.sourceStopCode === event.lastStopCode) {
+        const found = placeFact(place.localAuthority, place.locality, event.timestamp);
+        if (found) choices.push({ kind: 'place', key: `place:${String(place.locality).toLowerCase()}`, context: { place: {
+            locality: place.locality, fact: { claim: found.fact.claim, qualification: found.fact.qualification },
+            ...(found.toneHint ? { toneHint: found.toneHint } : {}),
+            scope: 'About the place where the reported stop is; not proof of where the bus is now.',
+        } } });
+    }
     const depot = event.busDetails?.garage?.name?.trim();
     const geography = event.depotContext;
     if (depot && !event.lowConfidence && geography?.name === depot && geography.sourceStopCode === event.lastStopCode
-        && Number.isFinite(geography.distanceKm) && geography.distanceKm >= 15) choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`,
-        context: { depot: { name: depot, distanceFromReportedStopKm: geography.distanceKm, scope: geography.scope } } });
+        && Number.isFinite(geography.distanceKm) && geography.distanceKm >= 15) {
+        const fact = depotFact(event.operatorRef, depot, event.timestamp);
+        choices.push({ kind: 'depot', key: `depot:${depot.toLowerCase()}`,
+            context: { depot: { name: depot, distanceFromReportedStopKm: geography.distanceKm, scope: geography.scope,
+                ...(fact ? { depotFact: { claim: fact.claim, qualification: fact.qualification } } : {}) } } });
+    }
     if (weather?.trim()) {
         // WeatherService already enforces observation freshness. Keep its area and date,
         // but humidity is rarely a useful story and creates a stream of measurements.
@@ -188,7 +238,9 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
 }
 
 export function chooseSubject(event: BusEvent, weather: string | null | undefined, hook: EditorialSelection | null,
-    publishedCount = 0, history: PublishedSubject[] = [], recentPosts: string[] = [], traffic?: TrafficContext | null): SubjectChoice {
+    publishedCount = 0, history: PublishedSubject[] = [], recentPosts: string[] = [], traffic?: TrafficContext | null,
+    options: { widerLibrarySize?: number; cycle?: CycleSlot[] } = {}): SubjectChoice {
+    const cycle = options.cycle || SUBJECT_CYCLE;
     const choices = availableSubjects(event, weather, hook, traffic);
     const recent = recentPosts.slice(0, 6).join(' ').toLowerCase();
     const eligible = choices.filter(choice => choice.kind === 'service' || (
@@ -203,7 +255,10 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     const vehicleNext = nextVehicleAspect(eligible, history);
     const pool = eligible.filter(choice => !isVehicleAspect(choice.kind) || choice === vehicleNext);
     // An eligible editorial hook gets its own turn, never priority over other subjects.
-    const preferred = SUBJECT_CYCLE[publishedCount % SUBJECT_CYCLE.length];
+    const slot = cycle[publishedCount % cycle.length];
+    // The second facts turn only exists while the library can sustain it.
+    const preferred = slot === 'wider?'
+        ? ((options.widerLibrarySize || 0) >= WIDER_LIBRARY_MINIMUM ? 'wider' : 'service') : slot;
     const exact = preferred === 'vehicle' ? vehicleNext : pool.find(choice => choice.kind === preferred);
     if (exact) return exact;
     // When the planned subject is unavailable (depot, wider and traffic often
@@ -212,9 +267,10 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // "first available" used to hand it most spare slots. A subject that has
     // already had its share waits; the bus's timing is the default. Notable
     // traffic is rare and time-sensitive, so it may also take a spare slot.
-    const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind;
-    const recentSlots = history.slice(-SUBJECT_CYCLE.length).map(item => slotOf(item.kind));
-    const share = (kind: StorySubject) => SUBJECT_CYCLE.filter(item => item === slotOf(kind)).length;
+    const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind === 'wider?' ? 'wider' : kind;
+    const recentSlots = history.slice(-cycle.length).map(item => slotOf(item.kind));
+    const share = (kind: StorySubject) => Math.max(kind === 'place' ? 1 : 0,
+        cycle.filter(item => slotOf(item) === slotOf(kind)).length);
     const used = (kind: StorySubject) => recentSlots.filter(item => item === slotOf(kind)).length;
     const spare = pool
         .filter(choice => !['service', 'wider'].includes(choice.kind)

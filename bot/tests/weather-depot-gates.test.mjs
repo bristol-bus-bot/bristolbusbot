@@ -46,3 +46,20 @@ test('fleet garage names reach their reviewed yard or garage town, and the thres
  assert.equal(depotGeography({...glos,operatorRef:'FBRI'},{stop_code:'stop',lat:51.4545,lon:-2.5879}),undefined);
  assert.equal(availableSubjects({...glos,depotContext:far}).some(s=>s.kind==='depot'),true);
 });
+
+import { availableSubjects as subjectsWithDepot } from '../dist/services/story-subject.js';
+import { DEPOT_FACTS, depotFact } from '../dist/services/depot-facts.js';
+
+test('a depot story carries one checked fact for that operator\'s garage, when there is one', () => {
+  const event = { line: 'X1', direction: 'outbound', operatorRef: 'FBRI', vehicleRef: 'v', timestamp: '2026-10-22T12:00:00Z',
+    eventType: 'delay', delayMinutes: 6, lastStopName: 'Stop', lastStopCode: 'stop',
+    busDetails: { garage: { name: 'Hengrove' } },
+    depotContext: { name: 'Hengrove', distanceKm: 20, sourceStopCode: 'stop', scope: 'Reported stop to reviewed yard.' } };
+  const depot = subjectsWithDepot(event, null, null).find(c => c.kind === 'depot');
+  assert.match(depot.context.depot.depotFact.claim, /first electrified bus depot/);
+  const lh = subjectsWithDepot({ ...event, busDetails: { garage: { name: 'Lawrence Hill' } },
+    depotContext: { ...event.depotContext, name: 'Lawrence Hill' } }, null, null).find(c => c.kind === 'depot');
+  assert.equal(lh.context.depot.depotFact, undefined, 'no checked fact, depot story without one');
+  assert.equal(depotFact('SSWL', 'Hengrove'), undefined, 'keyed by operator');
+  for (const facts of Object.values(DEPOT_FACTS)) for (const f of facts) assert.match(f.source, /^https:\/\//);
+});
