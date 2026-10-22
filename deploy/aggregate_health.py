@@ -78,6 +78,7 @@ TIMETABLE_DELIVERY_ENV = Path("/etc/bristolbusbot/timetable-delivery.env")
 WARNING_ISSUES = frozenset({
     "credential:timetable-token-renewal-due",
     "timetable:provisional-holiday-due",
+    "timetable:operator-missing",
 })
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
@@ -248,6 +249,8 @@ def timetable_delivery_check() -> tuple[dict, list[str]]:
         result["job"] = {
             "result": last_result,
             "last_ok_at": last_ok,
+            "last_success_at": job.get("last_success_at"),
+            "last_skipped_at": job.get("last_skipped_at"),
             "age_hours": round(age_h, 2) if age_h is not None else None,
             "failure_code": job.get("failure_code"),
             "last_finished_at": job.get("last_finished_at"),
@@ -324,6 +327,8 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
         result["job"] = {
             "result": last_result,
             "last_ok_at": last_ok,
+            "last_success_at": job.get("last_success_at"),
+            "last_skipped_at": job.get("last_skipped_at"),
             "age_hours": round(age_h, 2) if age_h is not None else None,
             "failure_code": job.get("failure_code"),
             "last_finished_at": job.get("last_finished_at"),
@@ -370,6 +375,12 @@ def timetable_promotion_check() -> tuple[dict, list[str]]:
             today = utcnow().astimezone(ZoneInfo('Europe/London')).date().isoformat()
             if any(item.get('review_by', '0000') <= today for item in provisional):
                 issues.append('timetable:provisional-holiday-due')
+            missing = accepted.get('missing_operators', [])
+            missing = [item for item in missing if isinstance(item, dict)] \
+                if isinstance(missing, list) else []
+            result['missing_operators'] = missing
+            if missing:
+                issues.append('timetable:operator-missing')
         elif document.get("last_accepted_run_id"):
             result["last_accepted"] = {
                 "run_id": document.get("last_accepted_run_id"),
@@ -415,7 +426,8 @@ def timetable_automation_check() -> tuple[dict, list[str]]:
     delivery, delivery_issues = timetable_delivery_check()
     promotion, promotion_issues = timetable_promotion_check()
     provisional_issues = [item for item in promotion_issues
-                          if item == 'timetable:provisional-holiday-due']
+                          if item in {'timetable:provisional-holiday-due',
+                                      'timetable:operator-missing'}]
     result: dict[str, object] = {
         "status": "idle",
         "delivery": delivery,
@@ -1250,11 +1262,79 @@ def timetable_success_message(attempt: dict[str, object]) -> str:
     ))
 
 
+def last_good_check(job: dict) -> str:
+    """Newest successful or nothing-due check; either means it was not stuck."""
+    values = [str(job.get(key) or "") for key in (
+        "last_success_at", "last_skipped_at", "last_ok_at")]
+    values = [value for value in values if value]
+    try:
+        return max(values, key=lambda value: datetime.fromisoformat(
+            value.replace("Z", "+00:00")).astimezone(timezone.utc)) if values else ""
+    except ValueError:
+        return ""
+
+
+TIMETABLE_REMINDER_HOURS = 24
+TIMETABLE_ESCALATE_DAYS = 2  # a second consecutive daily failure
+
+
+def _failing_line(failing_days: int) -> str:
+    """How long the timetable has been stuck, and what that means for Tom."""
+    if failing_days >= TIMETABLE_ESCALATE_DAYS:
+        return (f"*Timetable updates have been failing for {failing_days} days.* "
+                "Automatic retries are not fixing it, so the live timetable is "
+                "getting older. *You need to do:* Ask Claude to investigate the "
+                "timetable check, pasting this message.")
+    return ""
+
+
 def timetable_failure_message(kind: str,
-                              attempt: dict[str, object]) -> str:
+                              attempt: dict[str, object],
+                              failing_days: int = 0) -> str:
+    message = _timetable_failure_message(kind, attempt)
+    escalation = _failing_line(failing_days)
+    if not escalation:
+        return message
+    # The persistent-failure instruction replaces any "nothing to do" line.
+    lines = [line for line in message.split("\n")
+             if not line.startswith("*You need to do:*")]
+    return "\n".join((*lines, escalation))
+
+
+def _timetable_failure_message(kind: str,
+                               attempt: dict[str, object]) -> str:
     code = str(attempt.get("failure_code") or "unknown_failure")
     context = attempt.get("context")
     context = context if isinstance(context, dict) else {}
+    operator = str(context.get("operator") or "one operator")
+    day = str(context.get("date") or "")
+    if code == "candidate_duplicate_journeys":
+        return "\n".join((
+            ":warning: *A new timetable was rejected: duplicated journeys*",
+            f"What happened: The new download lists some {operator} journeys "
+            f"more than once on the same day ({context.get('candidate', '?')} "
+            f"extra copies on {day or 'one day'}, {context.get('days', '?')} days "
+            "affected). The builder should have removed these, so the source "
+            "data has changed shape.",
+            "What the bot did: Kept the current working timetable. The map, "
+            "website and bot are still running.",
+            "*You need to do:* Ask Claude to look at the duplicate check for "
+            f"{operator}.",
+        ))
+    if code == "candidate_service_inflation":
+        return "\n".join((
+            ":warning: *A new timetable was rejected: too much extra service*",
+            f"What happened: {operator} has over 25% more journeys than the "
+            f"current timetable on several days ({context.get('candidate', '?')} "
+            f"against {context.get('current', '?')} on {day or 'one day'}). "
+            "That is usually duplicated data rather than real new service.",
+            "What the bot did: Kept the current working timetable. The map, "
+            "website and bot are still running.",
+            "What happens next: The Pi tries again at the next daily check, but "
+            "the same source data will usually fail the same way.",
+            "*You need to do:* Nothing today. If this repeats tomorrow, ask Claude "
+            "to investigate.",
+        ))
     if code == "candidate_operator_collapse":
         return "\n".join((
             ":warning: *A new timetable was rejected safely*",
@@ -1327,6 +1407,23 @@ def timetable_failure_message(kind: str,
     ))
 
 
+def missing_operator_message(missing: list[dict[str, object]]) -> str:
+    names = []
+    for item in missing[:10]:
+        routes = ", ".join(str(route) for route in (item.get("routes") or [])[:6])
+        names.append(f"{item.get('operator', '?')} (routes {routes or 'unknown'}; "
+                     f"{item.get('current', '?')} journeys in the previous timetable)")
+    return "\n".join((
+        ":large_yellow_circle: *An operator is missing from the timetable*",
+        "What happened: The latest accepted timetable has no journeys for "
+        + "; ".join(names) + ". The source publisher stopped including them.",
+        "What it means: Their buses are not matched to a schedule, so they are "
+        "missing from the map's timetable data and the public performance report.",
+        "*You need to do:* Check whether the operator still runs the service. If "
+        "it does, ask Claude to find out why its data disappeared.",
+    ))
+
+
 def editorial_success_message(attempt: dict[str, object]) -> str:
     content = attempt.get("content")
     counts = content if isinstance(content, dict) else {}
@@ -1396,6 +1493,7 @@ def plain_issue_area(issue: str) -> str:
         "feed:stale": "fresh live bus information",
         "disk:low": "Pi storage space",
         "timetable:provisional-holiday-due": "holiday timetables still incomplete within eight weeks",
+        "timetable:operator-missing": "an operator missing from the live timetable",
         "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
         "credential:timetable-token-expiry": "the GitHub timetable token (expiring within a week, or missing)",
     }
@@ -1594,6 +1692,8 @@ def main() -> int:
     notified_failures = [str(value) for value in notified_failures][-99:]
     pending_timetable_failure = str(
         previous.get("pending_timetable_failure_fingerprint") or "")
+    reminded_at = str(previous.get("timetable_failure_reminded_at") or "")
+    failing_since = str(previous.get("timetable_failing_since") or "")
     if timetable_automation.get("status") == "failed":
         phase = str(timetable_automation.get("phase") or "shadow")
         fingerprint = "|".join((
@@ -1606,23 +1706,61 @@ def main() -> int:
         incident_opened = "job:timetable-automation" in opened
         urgent_recovery_failure = (
             automation_attempt.get("outcome") == "rollback_failed")
+        now = utcnow()
+        # The incident closes and reopens around every scheduled run, so the
+        # streak start is kept until a check genuinely succeeds. Weeks of daily
+        # "nothing to do" messages were the failure this escalation prevents.
+        if not failing_since:
+            # Start the streak at the last good check when one is recorded, so
+            # a failure already running when this is installed is counted.
+            delivery = timetable_automation.get("delivery")
+            delivery = delivery if isinstance(delivery, dict) else {}
+            job = delivery.get("job")
+            job = job if isinstance(job, dict) else {}
+            failing_since = last_good_check(job) \
+                or str(automation_attempt.get("finished_at") or "") \
+                or now.isoformat()
+        try:
+            failing_days = max(0, int(age_seconds(failing_since) // 86400))
+        except ValueError:
+            failing_since, failing_days = now.isoformat(), 0
+        reminder_due = bool(reminded_at) and \
+            age_seconds(reminded_at) >= TIMETABLE_REMINDER_HOURS * 3600
         should_notify = (
             incident_opened or bool(pending_timetable_failure)
             or urgent_recovery_failure)
+        message = timetable_failure_message(
+            phase, automation_attempt, failing_days)
         if should_notify and fingerprint not in notified_failures:
-            if notify(timetable_failure_message(phase, automation_attempt)):
+            if notify(message):
                 notified_failures.append(fingerprint)
                 pending_timetable_failure = ""
+                reminded_at = now.isoformat()
             else:
                 # Retry a failed Slack send, but do not re-alert for every new
                 # safe candidate while the same incident remains open.
                 pending_timetable_failure = fingerprint
+        elif reminder_due or not reminded_at:
+            if notify(message):
+                reminded_at = now.isoformat()
+            if fingerprint in notified_failures:
+                pending_timetable_failure = ""
         elif fingerprint in notified_failures:
             pending_timetable_failure = ""
         if "job:timetable-automation" in remaining_opened:
             remaining_opened.remove("job:timetable-automation")
+    elif timetable_automation.get("status") in {"healthy", "idle", "disabled"}:
+        pending_timetable_failure = ""
+        reminded_at = ""
+        failing_since = ""
     else:
         pending_timetable_failure = ""
+    if "timetable:operator-missing" in remaining_opened:
+        promotion = timetable_automation.get("promotion")
+        promotion = promotion if isinstance(promotion, dict) else {}
+        notify(missing_operator_message(
+            list(promotion.get("missing_operators") or [])))
+        remaining_opened.remove("timetable:operator-missing")
     editorial_issues = {
         "job:editorial-refresh",
         "job:editorial-fetch",
@@ -1670,6 +1808,8 @@ def main() -> int:
         "notified_timetable_failure_fingerprints": notified_failures,
         "pending_timetable_failure_fingerprint": pending_timetable_failure,
         "timetable_recovery_pending": recovery_pending,
+        "timetable_failure_reminded_at": reminded_at,
+        "timetable_failing_since": failing_since,
         "last_editorial_success_blob_sha": notified_editorial_blob,
     })
     print(json.dumps({"status": snapshot["status"], "issues": unique_issues}))

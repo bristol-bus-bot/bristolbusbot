@@ -465,14 +465,17 @@ def overall_line(snapshot: dict) -> str:
     )
 
 
-def today_lines(snapshot: dict) -> list[str]:
+def today_lines(snapshot: dict, today: date | None = None) -> list[str]:
     lines = ["Live bus information and the public website are current."]
     timetable = _dict(snapshot.get("timetable_automation"))
     if timetable.get("status") == "failed":
+        stuck = timetable_failing_days(snapshot, today) or 0
         lines.append(
-            "A proposed timetable update looked incomplete and was rejected. "
-            "The current working timetable stayed live and the Pi will retry "
-            "automatically."
+            "A proposed timetable update was rejected. The current working "
+            "timetable stayed live"
+            + (f", but updates have now failed for {stuck} days."
+               if stuck >= TIMETABLE_STUCK_DAYS
+               else " and the Pi will retry at the next check.")
         )
     data = _dict(snapshot.get("data_health"))
     summary = _dict(data.get("summary"))
@@ -503,11 +506,37 @@ def today_lines(snapshot: dict) -> list[str]:
     return lines
 
 
+def timetable_failing_days(snapshot: dict, today: date | None = None) -> int | None:
+    """Days since the timetable check last succeeded, while it is failing."""
+    timetable = _dict(snapshot.get('timetable_automation'))
+    if timetable.get('status') != 'failed':
+        return None
+    today = today or datetime.now(timezone.utc).date()
+    job = _dict(_dict(timetable.get('delivery')).get('job'))
+    days = []
+    # A routine "nothing due yet" skip also means the check was working.
+    for key in ('last_success_at', 'last_skipped_at', 'last_ok_at'):
+        try:
+            days.append(max(0, (today - datetime.fromisoformat(
+                str(job.get(key)).replace('Z', '+00:00')).date()).days))
+        except (ValueError, TypeError):
+            continue
+    return min(days) if days else None  # unknown is reported separately
+
+
+TIMETABLE_STUCK_DAYS = 2
+
+
 def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str], list[str]]:
     today = today or datetime.now(timezone.utc).date()
     backup = _dict(_dict(snapshot.get('jobs')).get('backup'))
     accepted = _dict(_dict(snapshot.get('timetable_automation')).get('last_accepted'))
     warnings, freshness = [], []
+    stuck = timetable_failing_days(snapshot, today)
+    if stuck is not None and stuck >= TIMETABLE_STUCK_DAYS:
+        warnings.append(
+            f'Timetable updates have failed every check for {stuck} days. '
+            'Automatic retries are not fixing it.')
     for label, timestamp, maximum_days in (
         ('Backup', backup.get('last_success_at'), 2),
         ('Timetable update', accepted.get('accepted_at'), 7),
@@ -516,7 +545,10 @@ def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str
             days = max(0, (today - datetime.fromisoformat(
                 str(timestamp).replace('Z', '+00:00')).date()).days)
         except (ValueError, TypeError):
-            freshness.append(f'{label}: last success unknown.')
+            text = f'{label}: last success unknown.'
+            freshness.append(text)
+            # Not knowing when the timetable last updated is itself a problem.
+            warnings.append(text)
             continue
         text = f'{label}: last success {days} days ago ({str(timestamp)[:10]}).'
         freshness.append(text)
@@ -533,7 +565,7 @@ def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str
 
 def action_line(snapshot: dict, today: date | None = None) -> str:
     if recovery_status(snapshot, today)[0]:
-        return '*You need to do:* Investigate the backup or timetable failure above; automatic retries have not restored freshness.'
+        return '*You need to do:* Ask Claude to investigate the backup or timetable problem above; automatic retries have not fixed it.'
     blurbs = _dict(snapshot.get("blurb_generation"))
     if blurbs.get("status") == "pending_review":
         pending = _dict(blurbs.get("pending_review"))
@@ -587,7 +619,7 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         "",
         "*Today's checks*",
         *(f"- {line}" for line in freshness),
-        *(f"- {line}" for line in today_lines(snapshot)),
+        *(f"- {line}" for line in today_lines(snapshot, today)),
         "",
         action_line(snapshot, today),
     ]
