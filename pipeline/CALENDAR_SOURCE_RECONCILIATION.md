@@ -143,5 +143,23 @@ day's active First trips duplicate another active trip's complete schedule
 under a different service. It also refuses when the next 42 days of distinct
 First schedules fall outside 85%-110% of First's in-force TXC count (unknown
 profiles widen the upper bound). The Pi comparison adds `candidate_service_inflation`
-(policy `service-window-v3`) for operators growing more than 25% on three
-near-term days without new routes.
+for operators growing more than 25% on three near-term days without new routes.
+
+## Every operator: one listing per journey per day
+
+The First-specific steps above need First's own TransXChange. Every other
+operator reaches the build only through BODS GTFS, where one journey can arrive
+under several overlapping calendars (October 2026: FlixBus listed each coach
+journey under up to nine "daily except" calendars, 3.8 listings per journey).
+`timetable_journey_dedupe.py` runs after them for all operators. Where the same
+journey (operator, public route, direction, headsign, every stop and time) is
+active under more than one calendar on a date, later copies get a private
+calendar clone without the dates an earlier copy covers. No trip, stop-time or
+vehicle-journey code is removed and the union of operating dates is unchanged.
+
+The Pi comparison (policy `service-window-v4`) counts each public journey once
+per day on both sides, so a cleaned candidate is not mistaken for a collapse
+against a duplicated live timetable. It refuses a candidate that still lists a
+journey more than once on a day (`candidate_duplicate_journeys`, naming the
+operator), and warns with `operator_missing` when an operator present in the
+live timetable has no journeys at all in the candidate.

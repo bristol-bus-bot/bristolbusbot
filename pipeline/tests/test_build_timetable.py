@@ -117,6 +117,8 @@ def configure_shadow_paths(tmp_path, monkeypatch):
     })
     monkeypatch.setattr(builder, "reconcile_calendar_sources", lambda *_: {
         "trips_corrected": 0, "exclusions_corrected": 0})
+    monkeypatch.setattr(builder, "collapse_same_day_copies", lambda _path: {
+        "trips_given_private_calendars": 0})
     return scratch
 
 
