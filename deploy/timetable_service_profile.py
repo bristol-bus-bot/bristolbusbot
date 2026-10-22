@@ -29,7 +29,7 @@ MAX_RECORDED_FAILURES = 100
 class AcceptancePolicy:
     """All acceptance thresholds live in one recorded policy."""
 
-    version: str = "service-window-v3"
+    version: str = "service-window-v4"
     near_term_days: int = 28
     minimum_forward_days: int = 180
     maximum_forward_days: int = 400
@@ -137,6 +137,9 @@ class TripVolume:
     trips: int
     stop_times: int
     duplicate_trips: int = 0
+    # Stable identity of one public journey across every calendar. None for
+    # old schemas without schedule detail, where rows are counted as they are.
+    journey: int | None = None
 
 
 @dataclass
@@ -152,6 +155,7 @@ class ServiceProfile:
     peak_query_seconds: float
     duplicate_trips_removed: int = 0
     journey_identity: str = "database_rows"
+    cross_calendar_duplicates: int = 0
 
     def summary(self) -> dict[str, object]:
         last_service = next((
@@ -166,6 +170,7 @@ class ServiceProfile:
             "peak_query_seconds": round(self.peak_query_seconds, 3),
             "journey_identity": self.journey_identity,
             "duplicate_trips_removed": self.duplicate_trips_removed,
+            "cross_calendar_duplicates": self.cross_calendar_duplicates,
         }
 
 
@@ -219,19 +224,29 @@ WITH trip_schedules AS (
     JOIN agency AS a ON a.agency_id = r.agency_id
     JOIN trip_schedules AS schedule ON schedule.trip_id = t.trip_id
 ), unique_trips AS (
-    SELECT service_id, operator, route, direction_id, trip_headsign,
-           stop_signature, stop_times, COUNT(*) AS source_rows
+    SELECT service_id, operator, route, direction_id,
+           bbb_journey(operator, route, direction_id, trip_headsign,
+                       stop_signature) AS journey,
+           stop_times, COUNT(*) AS source_rows
     FROM trip_details
     GROUP BY service_id, operator, route, direction_id, trip_headsign,
              stop_signature, stop_times
 )
-SELECT service_id, operator, route, direction_id,
-       COUNT(*) AS trips, SUM(stop_times) AS stop_times,
-       SUM(source_rows - 1) AS duplicate_trips
+SELECT service_id, operator, route, direction_id, journey,
+       1 AS trips, stop_times, source_rows - 1 AS duplicate_trips
 FROM unique_trips
-GROUP BY service_id, operator, route, direction_id
-ORDER BY service_id, operator, route, direction_id
+ORDER BY service_id, operator, route, direction_id, journey
 """
+
+
+def _journey_identity(operator: object, route: object, direction: object,
+                      headsign: object, signature: object) -> int:
+    """64-bit identity of one public journey, independent of its calendar."""
+    text = "\x1f".join(str(value) for value in (
+        operator, route, direction, headsign, signature))
+    return int.from_bytes(
+        hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest(),
+        "big", signed=True)
 
 CALENDAR_SQL = """
 SELECT service_id, monday, tuesday, wednesday, thursday,
@@ -292,6 +307,8 @@ def _open_database(path: Path, deadline: float,
         connection.execute("PRAGMA busy_timeout=5000")
         connection.set_progress_handler(
             lambda: 1 if monotonic() >= deadline else 0, 10_000)
+        connection.create_function(
+            "bbb_journey", 5, _journey_identity, deterministic=True)
         return connection
     except sqlite3.Error as exc:
         raise ServiceProfileError(
@@ -400,6 +417,9 @@ def build_service_profile(path: Path, *, start_date: date,
             trips=int(row["trips"]),
             stop_times=int(row["stop_times"]),
             duplicate_trips=int(row["duplicate_trips"] or 0),
+            journey=(int(row["journey"])
+                     if "journey" in row.keys() and row["journey"] is not None
+                     else None),
         ))
 
     exceptions: dict[date, dict[str, int]] = defaultdict(dict)
@@ -464,8 +484,18 @@ def build_service_profile(path: Path, *, start_date: date,
         routes: set[tuple[str, str]] = set()
         day_operators: dict[str, dict[str, int]] = defaultdict(
             lambda: {"trips": 0, "stop_times": 0})
-        for service_id in active:
+        # The same public journey can be listed under several calendars that
+        # are all active today. It runs once, so it is counted once; the
+        # surplus is recorded so duplicated candidates are refused explicitly.
+        seen_journeys: set[int] = set()
+        day_duplicates: dict[str, int] = defaultdict(int)
+        for service_id in sorted(active):
             for volume in volumes.get(service_id, ()):
+                if volume.journey is not None:
+                    if volume.journey in seen_journeys:
+                        day_duplicates[volume.operator] += 1
+                        continue
+                    seen_journeys.add(volume.journey)
                 trips += volume.trips
                 stop_times += volume.stop_times
                 routes.add((volume.operator, volume.route))
@@ -487,6 +517,7 @@ def build_service_profile(path: Path, *, start_date: date,
             "stop_times": stop_times,
             "routes": routes,
             "operators": dict(day_operators),
+            "duplicates": dict(day_duplicates),
             "active_service_ids": len(active),
         })
     return ServiceProfile(
@@ -505,6 +536,9 @@ def build_service_profile(path: Path, *, start_date: date,
             for volume in service_volumes
         ),
         journey_identity=journey_identity,
+        cross_calendar_duplicates=sum(
+            sum(day["duplicates"].values())
+            for day in daily[:policy.near_term_days]),
     )
 
 
@@ -679,8 +713,48 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
             warnings.extend(transfer_warnings)
         operators.append(operator_result)
 
+    # An operator vanishing entirely is invisible to the share-based gates when
+    # it is small, yet every local operator must stay in the public audit.
+    # Report it as a warning so it is alerted, without stalling every other
+    # operator's update behind one publisher's upstream gap.
+    for operator, live_volume in sorted(current.operator_totals.items()):
+        if int(live_volume["trips"]) <= 0:
+            continue
+        if int(candidate.operator_totals.get(operator, {}).get("trips", 0)) > 0:
+            continue
+        routes = sorted(route for op, route in live_routes if op == operator)
+        transferred = all(
+            (operator, route) in covered_routes for route in routes) and routes
+        if transferred:
+            continue
+        warnings.append({
+            "code": "operator_missing", "operator": operator,
+            "current": int(live_volume["trips"]), "candidate": 0,
+            "metric": "trips", "routes": routes[:20],
+        })
+
     if not route_gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
         failures.append(route_gate)
+
+    # A journey listed more than once on the same day is duplicated data, not
+    # extra service. The builder removes these for every operator, so any left
+    # in a candidate means the source changed shape and needs a human look.
+    duplicate_gates = []
+    by_operator: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for day in candidate.daily:
+        for operator, count in sorted(day.get("duplicates", {}).items()):
+            if count:
+                by_operator[operator].append({"date": day["date"], "candidate": count})
+    for operator, days in sorted(by_operator.items()):
+        gate = {"kind": "duplicate_journeys", "operator": operator,
+                "metric": "duplicate_trips", "days": len(days),
+                "examples": days[:5], "passed": False}
+        duplicate_gates.append(gate)
+    if duplicate_gates:
+        worst = max(duplicate_gates, key=lambda gate: sum(
+            int(day["candidate"]) for day in gate["examples"]))
+        failures.insert(0, dict(worst, date=worst["examples"][0]["date"],
+                                candidate=worst["examples"][0]["candidate"]))
 
     # Inflation: operators present in both profiles whose near-term daily trips
     # exceed the live timetable by more than the ratio on several days. Days on
@@ -761,7 +835,9 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
     if failures:
         first = failures[0]
         kind = str(first.get("kind"))
-        if kind == "operator_inflation":
+        if kind == "duplicate_journeys":
+            code = "candidate_duplicate_journeys"
+        elif kind == "operator_inflation":
             code = "candidate_service_inflation"
         elif kind == "operator":
             code = "candidate_operator_collapse"
@@ -777,10 +853,17 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
             ) if key in first
         }
         context["policy_version"] = policy.version
+        context["days"] = first.get("days")
+        context = {key: value for key, value in context.items() if value is not None}
+        messages = {
+            "candidate_duplicate_journeys":
+                "candidate lists the same journey more than once on one day",
+            "candidate_service_inflation":
+                "candidate usable service is inflated beyond the live timetable",
+        }
         raise ServiceProfileError(
-            code, "candidate usable service is inflated beyond the live timetable"
-            if code == "candidate_service_inflation"
-            else "candidate usable service is below the safe minimum", context)
+            code, messages.get(code, "candidate usable service is below the safe minimum"),
+            context)
 
     worst_forward = sorted(
         forward,
@@ -796,6 +879,7 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         "route_coverage": route_gate,
         "operators": operators,
         "inflation": inflation,
+        "duplicates": duplicate_gates,
         "forward_worst": worst_forward,
         "warnings": warnings,
         "status": "pass",

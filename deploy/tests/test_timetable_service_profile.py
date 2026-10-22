@@ -454,3 +454,103 @@ def test_small_growth_is_not_inflation(tmp_path):
     base = [{"operator": "FBRI", "route": "D1x", "trips": 20}]
     grown = [{"operator": "FBRI", "route": "D1x", "trips": 24}]
     assert compare(tmp_path, base, grown)["status"] == "pass"
+
+
+def make_calendar_copies_database(path: Path, operators: dict[str, list[str]],
+                                  journeys: dict[str, int] | None = None):
+    """Production-shaped data: each operator's journeys, each listed under the
+    given calendars. Listing one journey under several daily calendars is the
+    FlixBus shape seen in October 2026: removal-only exceptions, so most days
+    have several copies active at once."""
+    connection = sqlite3.connect(path)
+    connection.executescript("""
+        CREATE TABLE agency (agency_id TEXT PRIMARY KEY, agency_noc TEXT);
+        CREATE TABLE routes (route_id TEXT PRIMARY KEY, agency_id TEXT,
+                             route_short_name TEXT);
+        CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT,
+                            service_id TEXT, trip_headsign TEXT,
+                            direction_id INTEGER);
+        CREATE TABLE stop_times (trip_id TEXT, arrival_time TEXT,
+                                 departure_time TEXT, stop_id TEXT,
+                                 stop_sequence INTEGER);
+        CREATE TABLE calendar (service_id TEXT PRIMARY KEY, monday INTEGER,
+            tuesday INTEGER, wednesday INTEGER, thursday INTEGER,
+            friday INTEGER, saturday INTEGER, sunday INTEGER,
+            start_date TEXT, end_date TEXT);
+        CREATE TABLE calendar_dates (service_id TEXT, date TEXT,
+                                     exception_type INTEGER);
+        CREATE TABLE route_shapes (route_name TEXT, operator_noc TEXT,
+            direction_id INTEGER, variant INTEGER, points_json TEXT);
+    """)
+    services = set()
+    for index, (operator, calendars) in enumerate(sorted(operators.items())):
+        connection.execute("INSERT INTO agency VALUES (?, ?)", (f"A{index}", operator))
+        connection.execute("INSERT INTO routes VALUES (?, ?, ?)",
+                           (f"R{index}", f"A{index}", f"{operator}-1"))
+        connection.execute(
+            "INSERT INTO route_shapes VALUES (?, ?, 0, 0, '[[51.45,-2.59],[51.46,-2.58]]')",
+            (f"{operator}-1", operator))
+        for copy, service_id in enumerate(calendars):
+            services.add(service_id)
+            for hour in range(6, 6 + (journeys or {}).get(operator, 16)):
+                trip_id = f"{operator}-{service_id}-{hour}"
+                connection.execute(
+                    "INSERT INTO trips VALUES (?, ?, ?, 'Bristol', 0)",
+                    (trip_id, f"R{index}", service_id))
+                connection.executemany(
+                    "INSERT INTO stop_times VALUES (?, ?, ?, ?, ?)",
+                    [(trip_id, f"{hour:02d}:00:00", f"{hour:02d}:00:00", "START", 1),
+                     (trip_id, f"{hour:02d}:45:00", f"{hour:02d}:45:00", "END", 2)])
+    for service_id in sorted(services):
+        connection.execute(
+            "INSERT INTO calendar VALUES (?, 1, 1, 1, 1, 1, 1, 1, '20200101', '20271231')",
+            (service_id,))
+    connection.commit()
+    connection.close()
+
+
+def test_one_journey_under_several_calendars_is_refused_as_duplicated(tmp_path):
+    live, candidate = tmp_path / "live.db", tmp_path / "candidate.db"
+    make_calendar_copies_database(live, {"MAIN": ["M1"], "FLIX": ["F1"]})
+    make_calendar_copies_database(candidate, {"MAIN": ["M1"], "FLIX": ["F1", "F2", "F3"]})
+
+    with pytest.raises(ServiceProfileError) as error:
+        compare_databases(live, candidate, start_date=START)
+
+    assert error.value.code == "candidate_duplicate_journeys"
+    assert error.value.context["operator"] == "FLIX"
+    assert error.value.context["candidate"] == 32  # two surplus copies of 16 journeys
+
+
+def test_cleaned_candidate_is_not_a_collapse_against_duplicated_live(tmp_path):
+    """Once the builder removes copies, the live timetable still has them.
+    Counting each public journey once per day keeps that comparison honest."""
+    live, candidate = tmp_path / "live.db", tmp_path / "candidate.db"
+    make_calendar_copies_database(live, {"MAIN": ["M1"], "FLIX": ["F1", "F2", "F3", "F4"]})
+    make_calendar_copies_database(candidate, {"MAIN": ["M1"], "FLIX": ["F1"]})
+
+    result = compare_databases(live, candidate, start_date=START)
+
+    assert result["status"] == "pass"
+    assert result["current_profile"]["cross_calendar_duplicates"] == 28 * 16 * 3
+    assert result["candidate_profile"]["cross_calendar_duplicates"] == 0
+    flix = next(item for item in result["operators"] if item["operator"] == "FLIX")
+    assert all(gate["ratio"] == 1.0 for gate in flix["gates"])
+
+
+def test_vanished_operator_is_reported_without_blocking_everyone_else(tmp_path):
+    """Stagecoach South West's only local route vanished from BODS in October
+    2026. Too small for the share gates, so it must be named in a warning."""
+    live, candidate = tmp_path / "live.db", tmp_path / "candidate.db"
+    others = {f"OP{n}": ["C1"] for n in range(9)}
+    make_calendar_copies_database(live, {**others, "SDVN": ["S1"]},
+                                  journeys={"SDVN": 1})
+    make_calendar_copies_database(candidate, others)
+
+    result = compare_databases(live, candidate, start_date=START)
+
+    assert result["status"] == "pass"
+    missing = [w for w in result["warnings"] if w["code"] == "operator_missing"]
+    assert missing == [{"code": "operator_missing", "operator": "SDVN",
+                        "current": 28, "candidate": 0, "metric": "trips",
+                        "routes": ["SDVN-1"]}]
