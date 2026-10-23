@@ -67,6 +67,14 @@ body {
 
 #header-stats {
   min-width: 0;
+  margin-left: 6px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+#header-stats::-webkit-scrollbar {
+  display: none;
 }
 
 .stat-chip {
@@ -1507,6 +1515,45 @@ span.vs-stop-name {
   }
 }
 
+/* Narrow desktop and tablet ------------------------------------------- */
+
+/* The full header needs ~1420px. Drop the lowest-priority text first so the
+   status chips keep their room; whatever still doesn't fit scrolls. */
+@media (min-width: 769px) and (max-width: 1439px) {
+  .bsky-handle {
+    display: none;
+  }
+
+  .audit-headline-full {
+    display: none;
+  }
+
+  .audit-headline-compact {
+    display: inline;
+  }
+}
+
+/* Tablets and small laptops: layer toggles move to the map FABs, as on
+   mobile, and the sidebar narrows so the map isn't squeezed. */
+@media (min-width: 769px) and (max-width: 1199px) {
+  #header-toggles,
+  #last-updated {
+    display: none;
+  }
+
+  .mobile-layer-fab {
+    display: grid;
+  }
+
+  .sidebar-shell {
+    width: 340px;
+  }
+
+  #sidebar-content {
+    min-width: 340px;
+  }
+}
+
 /* Mobile --------------------------------------------------------------- */
 
 @media (max-width: 768px) {
@@ -1524,12 +1571,6 @@ span.vs-stop-name {
     gap: 6px !important;
     margin-left: 8px !important;
     padding-bottom: 2px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  #header-stats::-webkit-scrollbar {
-    display: none;
   }
 
   #header-stats .stat-label {
