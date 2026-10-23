@@ -622,7 +622,7 @@
                 sidebar.style.width = '20px';
                 icon.innerHTML = '<polyline points="15 18 9 12 15 6"/>'; // safe: static constant
             } else {
-                sidebar.style.width = '440px';
+                sidebar.style.width = ''; // back to the stylesheet width for this breakpoint
                 icon.innerHTML = '<polyline points="9 18 15 12 9 6"/>'; // safe: static constant
             }
             // Leaflet needs to know the map size changed
