@@ -45,6 +45,9 @@ class Config:
     audit_integration_json: str = field(default_factory=lambda: os.getenv(
         "BBB_AUDIT_INTEGRATION_JSON",
         "/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json"))
+    audit_hourly_dir: str = field(default_factory=lambda: os.getenv(
+        "BBB_AUDIT_HOURLY_DIR",
+        "/var/lib/bristolbusbot/pipeline/audit_site/hourly"))
     audit_max_age_seconds: int = field(default_factory=lambda: int(
         os.getenv("BBB_AUDIT_MAX_AGE_S", "172800")))
     stale_vehicle_seconds: int = field(default_factory=lambda: int(

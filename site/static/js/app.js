@@ -8,6 +8,11 @@
         let refreshInterval = null;
         let departureRefreshInterval = null;
         let noticeController = null;
+        let routeHoursController = null;
+        function routeHours() {
+            return routeHoursController ||= window.BBB.createRouteHoursController(
+                document.getElementById('route-hours'));
+        }
         function travelNotices() {
             return noticeController ||= window.BBB.createNoticeController(document.getElementById('travel-notices'));
         }
@@ -1424,6 +1429,7 @@
             const operator = parts[0];
             const line = parts.slice(1).join('_');
             travelNotices().show({ operator, line });
+            routeHours().show(operator, line);
             const variants = routeIndex[activeRouteLine] || [];
             const operatorName = OPERATOR_NAMES[operator] || operator;
 
@@ -1461,6 +1467,7 @@
 
         function clearRouteView(keepSidebar) {
             travelNotices().clear();
+            routeHours().clear();
             // Remove route polylines
             activeRouteLineLayers.forEach(l => map.removeLayer(l));
             activeRouteLineLayers = [];
