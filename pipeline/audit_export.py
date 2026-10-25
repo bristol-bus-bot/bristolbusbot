@@ -28,6 +28,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT_DB = os.getenv("BBB_AUDIT_DB", os.path.join(HERE, "audit.db"))
 OUT_DIR = os.getenv("BBB_AUDIT_SITE_DIR", os.path.join(HERE, "audit_site"))
 OUT_FILE = os.path.join(OUT_DIR, "audit_data.json")
+HOURLY_DIR = "hourly"
+# Hourly figures pool the most recent published days: one day gives most
+# route/hour cells only a handful of readings.
+HOURLY_WINDOW_DAYS = 28
+MIN_HOURLY_READINGS = 30
 
 AREA = "WECA"
 TARGET_PCT = 95
@@ -218,6 +223,72 @@ def build_day(cur, service_date):
     return day
 
 
+def day_type(service_date):
+    """Weekday or weekend by the service day the journey belongs to."""
+    return "weekend" if datetime.strptime(service_date, "%Y%m%d").weekday() >= 5 else "weekday"
+
+
+def build_hourly(cur, dates, operator):
+    """On-time, early and late counts by local hour, split weekday/weekend.
+
+    Hours are sparse ({"7": [on_time, early, late]}); an hour with no readings
+    is left out rather than shown as zero.
+    """
+    window = dates[-HOURLY_WINDOW_DAYS:]
+    result = {
+        "operator": operator,
+        "window": {
+            "from": window[0], "to": window[-1],
+            "days": {kind: sum(day_type(d) == kind for d in window)
+                     for kind in ("weekday", "weekend")},
+        },
+        "min_readings": MIN_HOURLY_READINGS,
+        "network": {"weekday": {}, "weekend": {}},
+        "routes": {},
+    }
+    placeholders = ",".join("?" for _ in window)
+    try:
+        rows = cur.execute(
+            f"""SELECT service_date, route, hour, on_time, early, late
+                  FROM daily_hour_summary
+                 WHERE operator = ? AND service_date IN ({placeholders})""",
+            (operator, *window)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    if not rows:
+        return None
+    for row in rows:
+        if row["route"] is None:
+            target = result["network"]
+        else:
+            target = result["routes"].setdefault(
+                row["route"], {"weekday": {}, "weekend": {}})
+        cell = target[day_type(row["service_date"])].setdefault(
+            str(row["hour"]), [0, 0, 0])
+        cell[0] += row["on_time"]
+        cell[1] += row["early"]
+        cell[2] += row["late"]
+    return result
+
+
+def write_hourly(cur, dates, operators):
+    """Write hourly/<operator>.json; return the index for audit_data.json."""
+    os.makedirs(os.path.join(OUT_DIR, HOURLY_DIR), exist_ok=True)
+    files = {}
+    for operator in operators:
+        payload = build_hourly(cur, dates, operator)
+        if payload is None:
+            continue
+        name = f"{HOURLY_DIR}/{operator}.json"
+        with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
+            json.dump(payload, out, separators=(",", ":"))
+        files[operator] = name
+    if not files:
+        return None
+    return {"window_days": HOURLY_WINDOW_DAYS,
+            "min_readings": MIN_HOURLY_READINGS, "files": files}
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"audit.db not found at {AUDIT_DB}")
@@ -280,6 +351,9 @@ def main():
     }
 
     os.makedirs(OUT_DIR, exist_ok=True)
+    hourly = write_hourly(cur, dates, [o["code"] for o in operators])
+    if hourly:
+        payload["hourly"] = hourly
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
     exclusion_text = (

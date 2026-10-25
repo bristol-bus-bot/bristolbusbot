@@ -114,6 +114,29 @@ clearly for a later service date until a newly published target is deliberately
 added. It does not silently carry 87% into a financial year for which the
 scheme provides no target.
 
+## Time of day
+
+Each reading is put in the hour of its **scheduled** time at that timing point,
+on the local clock (07:00-07:59 is "07:00"), not the time the journey started
+or the time the bus arrived. So a journey that starts at 07:50 can count in
+both the 07:00 and 08:00 hours. The same distance gate, origin exclusion and
+on-time definition apply as for the daily figures.
+
+Hours are pooled over the most recent 28 published service days, because one
+day gives most routes only a handful of readings in each hour. Weekdays and
+weekends are shown separately, because school runs and commuter traffic only
+happen on weekdays. The split follows the service day a journey belongs to:
+a bus at 00:30 on Saturday morning that is part of Friday's timetable counts
+as Friday (a weekday) in the 00:00 hour. Bank holidays count as the weekday
+they fall on. On the October clock-change day the 01:00 hour happens twice,
+and readings from both are counted together; in March there is no 01:00 hour.
+
+An hour with fewer than 30 readings is shown faded and is too small to rely
+on. The plain-English line above each chart only compares hours with at least
+30 readings, and says so when there aren't two such hours to compare. The
+hourly figures are published in separate files, loaded only when someone
+opens that view, so the main data file doesn't grow.
+
 ## Geography (area and ward)
 
 Each timing-point reading is tied to its stop's unitary authority (Bristol, Bath
@@ -248,6 +271,11 @@ or regulator measurement that uses different sampling.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**October 2026 - punctuality by time of day.** New hourly figures, split
+weekday and weekend, for each route and for the network (see "Time of day").
+They were backfilled from the retained raw readings, so they start about 95
+days before publication. The daily figures are unchanged.
 
 **30 September 2026 - every local bus operator published.** Stagecoach
 South Wales, Faresaver, Kempsford Transport, Libra Travel, FromeBus, Newport
