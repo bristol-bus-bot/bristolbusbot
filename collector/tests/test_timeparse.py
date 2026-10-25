@@ -4,7 +4,8 @@ import pytest
 from zoneinfo import ZoneInfo
 
 from collector.timeparse import (gtfs_seconds, parse_iso_utc, parse_schedule_time,
-                                 scheduled_local, service_midnight)
+                                 scheduled_local, service_day_origin_utc,
+                                 service_midnight)
 
 LDN = ZoneInfo("Europe/London")
 
@@ -72,7 +73,7 @@ def _utc(*args):
 
 
 # Clocks go back at 01:00 UTC on Sunday 25 October 2026 and forward at
-# 01:00 UTC on Sunday 29 March 2026. Timetable times are wall-clock.
+# 01:00 UTC on Sunday 29 March 2026. GTFS times count from noon minus 12h.
 
 @pytest.mark.parametrize("day,expected_utc", [
     ((2026, 10, 24), _utc(2026, 10, 24, 13, 0)),   # BST
@@ -82,7 +83,7 @@ def _utc(*args):
     ((2026, 3, 29), _utc(2026, 3, 29, 13, 0)),     # clocks went forward
     ((2026, 3, 30), _utc(2026, 3, 30, 13, 0)),     # BST
 ])
-def test_daytime_stop_is_wall_clock_on_and_around_both_changes(day, expected_utc):
+def test_daytime_stop_is_on_the_clock_on_and_around_both_changes(day, expected_utc):
     origin = datetime(*day, 14, 0, tzinfo=LDN)
     sm = service_midnight(origin, gtfs_seconds("14:00:00"))
     sched = scheduled_local(sm, gtfs_seconds("14:00:00"))
@@ -91,8 +92,9 @@ def test_daytime_stop_is_wall_clock_on_and_around_both_changes(day, expected_utc
 
 
 @pytest.mark.parametrize("day", [(2026, 10, 25), (2026, 3, 29)])
-def test_bus_on_time_by_the_clock_reads_zero_delay_on_change_day(day):
-    # The 25 October regression: an on-time bus read as 60 minutes late.
+def test_bus_on_time_by_the_clock_reads_its_real_delay_on_change_day(day):
+    # FBRI-30014 on route 75, 25 October 2026: 37 s late at Turtlegate
+    # Avenue (08:32:00). Production read this as 61 minutes late.
     origin = datetime(*day, 7, 22, tzinfo=LDN)
     sm = service_midnight(origin, gtfs_seconds("07:22:00"))
     sched = scheduled_local(sm, gtfs_seconds("08:32:00"))
@@ -100,13 +102,32 @@ def test_bus_on_time_by_the_clock_reads_zero_delay_on_change_day(day):
     assert int((recorded - sched).total_seconds()) == 37
 
 
-def test_previous_service_day_past_midnight_crosses_the_autumn_change():
-    # Saturday's service day continues past 24:00 into the changeover night.
-    sm = datetime(2026, 10, 24, 0, 0, tzinfo=LDN)
-    assert scheduled_local(sm, gtfs_seconds("24:30:00")).astimezone(
-        timezone.utc) == _utc(2026, 10, 24, 23, 30)            # 00:30 BST
-    assert scheduled_local(sm, gtfs_seconds("26:30:00")).astimezone(
-        timezone.utc) == _utc(2026, 10, 25, 2, 30)             # 02:30 GMT
+@pytest.mark.parametrize("day,origin_utc", [
+    ((2026, 6, 9), _utc(2026, 6, 8, 23, 0)),
+    ((2026, 10, 24), _utc(2026, 10, 23, 23, 0)),
+    ((2026, 10, 25), _utc(2026, 10, 25, 0, 0)),
+    ((2026, 3, 29), _utc(2026, 3, 28, 23, 0)),
+    ((2026, 12, 1), _utc(2026, 12, 1, 0, 0)),
+])
+def test_service_day_origin_is_noon_minus_twelve_hours(day, origin_utc):
+    assert service_day_origin_utc(datetime(*day, tzinfo=LDN)) == origin_utc
+
+
+def test_overnight_trip_through_the_autumn_change_keeps_its_running_time():
+    # Route 4, Saturday 24 October's service day, observed 1 s late at
+    # 03:23:01 UTC at a stop timetabled 28:23:00 (production data).
+    origin = datetime(2026, 10, 25, 2, 42, tzinfo=LDN)          # 27:42:00
+    sm = service_midnight(origin, gtfs_seconds("27:42:00"))
+    assert sm.date() == datetime(2026, 10, 24).date()
+    times = [scheduled_local(sm, gtfs_seconds(t)).astimezone(timezone.utc)
+             for t in ("24:50:00", "25:30:00", "26:10:00", "27:42:00",
+                       "28:23:00")]
+    assert times == [_utc(2026, 10, 24, 23, 50), _utc(2026, 10, 25, 0, 30),
+                     _utc(2026, 10, 25, 1, 10), _utc(2026, 10, 25, 2, 42),
+                     _utc(2026, 10, 25, 3, 23)]
+    assert times == sorted(times)
+    recorded = _utc(2026, 10, 25, 3, 23, 1)
+    assert int((recorded - times[-1]).total_seconds()) == 1
 
 
 def test_change_day_service_past_midnight_lands_on_monday_gmt():
@@ -115,58 +136,27 @@ def test_change_day_service_past_midnight_lands_on_monday_gmt():
     assert sched.astimezone(timezone.utc) == _utc(2026, 10, 26, 0, 30)
 
 
-def test_trip_leaving_before_the_autumn_change_keeps_bst_in_repeated_hour():
-    origin = datetime(2026, 10, 25, 0, 50, tzinfo=LDN)          # 23:50 UTC
-    origin_utc = origin.astimezone(timezone.utc)
-    sm = service_midnight(origin, gtfs_seconds("00:50:00"))
-    times = [scheduled_local(sm, gtfs_seconds(t), origin_utc).astimezone(
-        timezone.utc) for t in ("00:50:00", "01:30:00", "02:10:00")]
-    assert times == [_utc(2026, 10, 24, 23, 50), _utc(2026, 10, 25, 0, 30),
-                     _utc(2026, 10, 25, 2, 10)]
-
-
-def test_trip_leaving_in_the_second_repeated_hour_stays_after_departure():
-    origin = datetime(2026, 10, 25, 1, 40, fold=1, tzinfo=LDN)  # 01:40 GMT
-    origin_utc = origin.astimezone(timezone.utc)
-    assert origin_utc == _utc(2026, 10, 25, 1, 40)
-    sm = service_midnight(origin, gtfs_seconds("01:40:00"))
-    times = [scheduled_local(sm, gtfs_seconds(t), origin_utc).astimezone(
-        timezone.utc) for t in ("01:40:00", "01:55:00", "02:20:00")]
-    assert times == [_utc(2026, 10, 25, 1, 40), _utc(2026, 10, 25, 1, 55),
-                     _utc(2026, 10, 25, 2, 20)]
-    # Without the departure anchor the first occurrence (BST) is used.
-    assert scheduled_local(sm, gtfs_seconds("01:55:00")).astimezone(
-        timezone.utc) == _utc(2026, 10, 25, 0, 55)
-
-
-def test_trip_spanning_the_spring_change():
-    origin = datetime(2026, 3, 29, 0, 40, tzinfo=LDN)          # 00:40 GMT
-    origin_utc = origin.astimezone(timezone.utc)
-    sm = service_midnight(origin, gtfs_seconds("00:40:00"))
-    times = [scheduled_local(sm, gtfs_seconds(t), origin_utc).astimezone(
-        timezone.utc) for t in ("00:40:00", "00:55:00", "02:20:00")]
-    assert times == [_utc(2026, 3, 29, 0, 40), _utc(2026, 3, 29, 0, 55),
-                     _utc(2026, 3, 29, 1, 20)]
-
-
-def test_scheduled_local_skips_the_missing_spring_hour():
-    sm = datetime(2026, 3, 29, 0, 0, tzinfo=LDN)
-    scheduled = scheduled_local(sm, gtfs_seconds("01:30:00"))
-    assert scheduled == datetime(2026, 3, 29, 2, 30, tzinfo=LDN)
-
-
-def test_previous_service_day_past_midnight_crosses_the_spring_change():
+def test_overnight_trip_through_the_spring_change_keeps_its_running_time():
     sm = datetime(2026, 3, 28, 0, 0, tzinfo=LDN)
-    assert scheduled_local(sm, gtfs_seconds("24:30:00")).astimezone(
-        timezone.utc) == _utc(2026, 3, 29, 0, 30)              # 00:30 GMT
-    assert scheduled_local(sm, gtfs_seconds("26:30:00")).astimezone(
-        timezone.utc) == _utc(2026, 3, 29, 1, 30)              # 02:30 BST
+    times = [scheduled_local(sm, gtfs_seconds(t)).astimezone(timezone.utc)
+             for t in ("24:40:00", "25:30:00", "26:20:00")]
+    assert times == [_utc(2026, 3, 29, 0, 40), _utc(2026, 3, 29, 1, 30),
+                     _utc(2026, 3, 29, 2, 20)]
+    assert scheduled_local(sm, gtfs_seconds("25:30:00")) == datetime(
+        2026, 3, 29, 2, 30, tzinfo=LDN)
+
+
+def test_change_day_service_past_midnight_after_spring_change():
+    sm = datetime(2026, 3, 29, 0, 0, tzinfo=LDN)
+    sched = scheduled_local(sm, gtfs_seconds("24:30:00"))
+    assert sched == datetime(2026, 3, 30, 0, 30, tzinfo=LDN)
 
 
 @pytest.mark.parametrize("day,origin_hm,stop,expected_utc", [
     ((2026, 10, 25), (13, 0), "14:00:00", _utc(2026, 10, 25, 14, 0)),
     ((2026, 3, 29), (13, 0), "14:00:00", _utc(2026, 3, 29, 13, 0)),
     ((2026, 10, 24), (23, 50), "00:10:00", _utc(2026, 10, 24, 23, 10)),
+    ((2026, 6, 9), (23, 50), "00:10:00", _utc(2026, 6, 9, 23, 10)),
 ])
 def test_parse_schedule_time_on_change_days(day, origin_hm, stop, expected_utc):
     origin = datetime(*day, *origin_hm, tzinfo=LDN)

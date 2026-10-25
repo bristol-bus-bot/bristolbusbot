@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from collector.geo import haversine_m
-from collector.timeparse import gtfs_seconds, service_midnight, scheduled_local
+from collector.timeparse import (gtfs_seconds, scheduled_local,
+                                 service_day_origin_utc, service_midnight)
 
 LDN = ZoneInfo("Europe/London")
 
@@ -101,12 +102,10 @@ def display_timing(row, schedule, shapes, now):
             return {}
         if any(d > a for d, a in zip(departures, arrivals[1:])):
             return {}
-        # Timetable seconds are wall-clock, so compare on the local clock.
-        def clock_seconds(instant):
-            return (instant.astimezone(LDN).replace(tzinfo=None)
-                    - midnight.replace(tzinfo=None)).total_seconds()
-        elapsed = clock_seconds(recorded)
-        current = clock_seconds(now)
+        # GTFS seconds count from noon minus 12h, not midnight (clock changes).
+        day_origin = service_day_origin_utc(midnight)
+        elapsed = (recorded - day_origin).total_seconds()
+        current = (now - day_origin).total_seconds()
         distances = [haversine_m(row["lat"], row["lon"], s[3], s[4]) for s in schedule]
         waiting = []
         for i, distance in enumerate(distances):
@@ -122,9 +121,7 @@ def display_timing(row, schedule, shapes, now):
             return {"eventType": "waiting", "delayMinutes": None,
                     "waitingAtOrigin": i == 0, "waitingAtStop": i != 0,
                     "timingSource": "scheduled_wait",
-                    "scheduledDeparture": scheduled_local(
-                        midnight, departures[i],
-                        origin.astimezone(timezone.utc)).isoformat()}
+                    "scheduledDeparture": scheduled_local(midnight, departures[i]).isoformat()}
         if row["delay_seconds"] is not None or min(distances) <= 1000:
             return {}
         estimates = []
