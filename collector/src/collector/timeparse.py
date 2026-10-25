@@ -57,16 +57,29 @@ def service_midnight(origin_local: datetime, first_stop_secs: int) -> datetime:
     return datetime.combine(service_date, time.min, tzinfo=origin_local.tzinfo)
 
 
+def service_day_origin_utc(service_midnight_dt: datetime) -> datetime:
+    """The instant GTFS times on this service day count from: noon minus 12h.
+
+    This is local midnight except on a clock-change day. On 25 October it is
+    00:00 UTC (01:00 BST), so '14:00:00' is 14:00 GMT; on 29 March it is
+    23:00 UTC the day before, so '14:00:00' is 14:00 BST.
+    """
+    tz = service_midnight_dt.tzinfo
+    noon = datetime.combine(service_midnight_dt.date(), time(12), tzinfo=tz)
+    return noon.astimezone(timezone.utc) - timedelta(hours=12)
+
+
 def scheduled_local(service_midnight_dt: datetime, stop_secs: int) -> datetime:
     """Absolute aware local datetime of a GTFS service-day offset.
 
-    GTFS time is elapsed time from the service-day origin. Advancing on the UTC
-    timeline makes the repeated autumn hour unambiguous and skips the missing
-    spring hour instead of silently keeping midnight's UTC offset.
+    GTFS times are elapsed time from noon minus 12h on the service day, not
+    from local midnight. That keeps daytime times on the clock on a change
+    day, and keeps a journey that runs through the change at its real
+    running time ('28:23:00' on Saturday 24 October is 03:23 GMT).
     """
     if service_midnight_dt.tzinfo is None:
         return service_midnight_dt + timedelta(seconds=stop_secs)
-    return (service_midnight_dt.astimezone(timezone.utc)
+    return (service_day_origin_utc(service_midnight_dt)
             + timedelta(seconds=stop_secs)).astimezone(
                 service_midnight_dt.tzinfo)
 
@@ -81,20 +94,17 @@ def parse_schedule_time(schedule_time_str: str | None,
     EARLIER than the origin time is pushed to the next day (a bus cannot be
     scheduled at a stop before it left its origin).
     """
-    if not schedule_time_str or origin_departure_local is None \
-            or origin_departure_local.tzinfo is None:
+    if not schedule_time_str or origin_departure_local is None             or origin_departure_local.tzinfo is None:
         return None
     secs = gtfs_seconds(schedule_time_str)
     if secs is None:
         return None
-    day_offset, rem = divmod(secs, 86400)
-    hour, rem = divmod(rem, 3600)
-    minute, second = divmod(rem, 60)
-
-    from datetime import time as time_obj
-    naive_stop_time = time_obj(hour, minute, second)
-    if day_offset == 0 and naive_stop_time < origin_departure_local.time():
-        day_offset = 1
-
-    stop_date = origin_departure_local.date() + timedelta(days=day_offset)
-    return datetime.combine(stop_date, naive_stop_time, tzinfo=target_tz)
+    clock = secs % 86400
+    origin_clock = (origin_departure_local.hour * 3600
+                    + origin_departure_local.minute * 60
+                    + origin_departure_local.second)
+    if secs < 86400 and clock < origin_clock:
+        secs += 86400
+    service_day = datetime.combine(
+        origin_departure_local.date(), time.min, tzinfo=target_tz)
+    return scheduled_local(service_day, secs)

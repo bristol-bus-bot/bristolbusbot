@@ -107,3 +107,15 @@ def test_real_api_waiting_keeps_null_delay_and_does_not_change_database(app, cli
     assert bus['eventType'] == 'waiting' and bus['delayMinutes'] is None
     with sqlite3.connect(app.config['BBB'].live_db) as conn:
         assert conn.execute("SELECT delay_seconds FROM vehicles WHERE vehicle_ref='FBRI-30052'").fetchone()[0] is None
+
+
+def test_waiting_at_origin_uses_the_clock_on_the_autumn_change_day():
+    # 25 October 2026 is GMT after 01:00 UTC: 15:12 on the clock is 15:12 UTC.
+    def gmt(hour, minute):
+        return datetime(2026, 10, 25, hour, minute, tzinfo=timezone.utc)
+    row = vehicle(recorded_at=gmt(15, 12).isoformat(),
+                  origin_aimed_departure=gmt(15, 30).isoformat())
+    schedule = [stop(0, "15:30:00"), stop(1, "16:06:00")]
+    result = display_timing(row, schedule, [], gmt(15, 12))
+    assert result["eventType"] == "waiting"
+    assert result["scheduledDeparture"] == "2026-10-25T15:30:00+00:00"

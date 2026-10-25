@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from collector.geo import haversine_m
-from collector.timeparse import gtfs_seconds, service_midnight, scheduled_local
+from collector.timeparse import (gtfs_seconds, scheduled_local,
+                                 service_day_origin_utc, service_midnight)
 
 LDN = ZoneInfo("Europe/London")
 
@@ -101,8 +102,10 @@ def display_timing(row, schedule, shapes, now):
             return {}
         if any(d > a for d, a in zip(departures, arrivals[1:])):
             return {}
-        elapsed = (recorded - midnight.astimezone(timezone.utc)).total_seconds()
-        current = (now - midnight.astimezone(timezone.utc)).total_seconds()
+        # GTFS seconds count from noon minus 12h, not midnight (clock changes).
+        day_origin = service_day_origin_utc(midnight)
+        elapsed = (recorded - day_origin).total_seconds()
+        current = (now - day_origin).total_seconds()
         distances = [haversine_m(row["lat"], row["lon"], s[3], s[4]) for s in schedule]
         waiting = []
         for i, distance in enumerate(distances):
