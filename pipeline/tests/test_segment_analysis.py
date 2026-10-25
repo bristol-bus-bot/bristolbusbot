@@ -96,3 +96,51 @@ def test_bands_follow_the_scheduled_time_at_the_first_stop():
     assert segment_analysis.band_for(10) == "interpeak"
     assert segment_analysis.band_for(18) == "pm_peak"
     assert segment_analysis.band_for(19) == "evening"
+
+
+def test_rebuilt_timetable_falls_back_to_stop_codes_conservatively(tmp_path):
+    audit, tt = databases(tmp_path)
+    tt.execute("ALTER TABLE trips ADD COLUMN route_id TEXT")
+    tt.execute("ALTER TABLE stop_times ADD COLUMN stop_id TEXT")
+    tt.execute("CREATE TABLE routes (route_id TEXT, agency_id TEXT, route_short_name TEXT)")
+    tt.execute("CREATE TABLE agency (agency_id TEXT, agency_noc TEXT)")
+    tt.execute("CREATE TABLE stops (stop_id TEXT, stop_code TEXT, stop_name TEXT)")
+    tt.execute("INSERT INTO agency VALUES ('OP', 'FBRI')")
+    tt.execute("INSERT INTO routes VALUES ('R43', 'OP', '43')")
+    for code in ("S5", "S7", "S9", "S14"):
+        tt.execute("INSERT INTO stops VALUES (?,?,?)", (code, code, f"Stop {code}"))
+
+    def current(trip, codes, direction=0):
+        tt.execute("INSERT INTO trips (trip_id, direction_id, route_id) VALUES (?,?,'R43')", (trip, direction))
+        for seq, code in enumerate(codes, 1):
+            tt.execute("INSERT INTO stop_times VALUES (?,?,1,?)", (trip, seq, code))
+
+    current("NEW1", ["S5", "S9", "S14"])
+    current("NEW2", ["S5", "S9", "S14"])
+    current("NEW3", ["S5", "S7", "S14"])  # a variant with S7 between S5 and S14
+    # Old journey ids, gone from the rebuilt timetable.
+    for trip in ("OLD1", "OLD2"):
+        for seq, code, hhmm, delay in ((5, "S5", "08:00", 0), (9, "S9", "08:06", 120), (14, "S14", "08:15", 60)):
+            audit.execute(
+                "INSERT INTO timepoint_observations VALUES ('20261001','FBRI','43',?,?,?,?,?,20,0)",
+                (trip, seq, code, f"2026-10-01 {hhmm}:00+01:00", delay))
+        # and a journey that read S5 then S14 only: S7 or S9 lies between.
+        audit.execute(
+            "INSERT INTO timepoint_observations VALUES ('20261001','FBRI','43',?,5,'S5','2026-10-01 08:00:00+01:00',0,20,0)",
+            (trip + "x",))
+        audit.execute(
+            "INSERT INTO timepoint_observations VALUES ('20261001','FBRI','43',?,14,'S14','2026-10-01 08:15:00+01:00',0,20,0)",
+            (trip + "x",))
+    pairs, tally = run(tmp_path, audit, tt)
+    assert sorted({(p["from_stop"], p["to_stop"]) for p in pairs}) == [("S5", "S9"), ("S9", "S14")]
+    assert tally["by_stop_code"] == 4 and tally["by_trip"] == 0
+    assert tally["code_unconfirmed"] == 2
+
+
+def test_negative_running_time_is_excluded(tmp_path):
+    audit, tt = databases(tmp_path)
+    # 6 minutes timetabled, but 10 minutes "gained": the bus would arrive
+    # before it left, so the reading at S9 belongs to another visit.
+    journey(audit, tt, "A", "20261021", [(5, "08:00", 300), (9, "08:06", -300)])
+    pairs, tally = run(tmp_path, audit, tt)
+    assert pairs == [] and tally["impossible"] == 1

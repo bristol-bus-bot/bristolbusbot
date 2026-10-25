@@ -86,6 +86,67 @@ def timing_points(timetable, trip_ids):
     return result
 
 
+def has_tables(conn, *names):
+    present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    return set(names) <= present
+
+
+def route_adjacency(timetable, wanted):
+    """Judge (operator, route, from_code, to_code) stretches by stop code.
+
+    Journey ids change when the timetable is rebuilt, so older readings often
+    have no trip in the current timetable. A stretch from those journeys is
+    accepted only if every current journey on that route that serves both
+    timing points, in that order, has them next to each other, and they all
+    run in one direction. Returns key -> direction for accepted stretches.
+    """
+    if not wanted or not has_tables(timetable, "routes", "agency", "stops"):
+        return {}
+    by_route = defaultdict(list)
+    for key in wanted:
+        by_route[(key[0], key[1])].append(key)
+    verdicts = defaultdict(set)
+    rows = timetable.execute(
+        """SELECT a.agency_noc, r.route_short_name, t.trip_id, t.direction_id, s.stop_code
+             FROM trips t JOIN routes r ON r.route_id = t.route_id
+             JOIN agency a ON a.agency_id = r.agency_id
+             JOIN stop_times st ON st.trip_id = t.trip_id
+             JOIN stops s ON s.stop_id = st.stop_id
+            WHERE COALESCE(st.timepoint, 1) = 1
+            ORDER BY t.trip_id, st.stop_sequence""")
+
+    def judge(route, direction, codes):
+        if route not in by_route:
+            return
+        index = {}
+        for i, code in enumerate(codes):
+            index.setdefault(code, []).append(i)
+        for key in by_route[route]:
+            a, b = index.get(key[2]), index.get(key[3])
+            if not a or not b:
+                continue
+            if len(a) > 1 or len(b) > 1:
+                verdicts[key].add(("repeat", direction))
+            elif b[0] > a[0]:
+                verdicts[key].add((b[0] - a[0] == 1, direction))
+
+    current, codes = None, []
+    for noc, route, trip, direction, code in rows:
+        if current is None or trip != current[0]:
+            if current:
+                judge(current[1], current[2], codes)
+            current, codes = (trip, (noc, route), direction), []
+        codes.append(code)
+    if current:
+        judge(current[1], current[2], codes)
+    accepted = {}
+    for key, seen in verdicts.items():
+        directions = {d for _, d in seen}
+        if seen and all(v is True for v, _ in seen) and len(directions) == 1:
+            accepted[key] = directions.pop()
+    return accepted
+
+
 def segment_pairs(audit, timetable, date_from=None, date_to=None):
     """Return (one dict per measurable stretch of one journey, tally)."""
     where, args = ["COALESCE(is_origin, 0) = 0", "gps_distance_m <= ?"], [DISTANCE_GATE_M]
@@ -106,28 +167,48 @@ def segment_pairs(audit, timetable, date_from=None, date_to=None):
         if row["observed_delay_s"] is not None:
             journeys[(row["service_date"], row["trip_id"])].append(row)
     plan = timing_points(timetable, {trip for _, trip in journeys})
+    unmatched = [k for k in journeys if k[1] not in plan]
+    by_code = route_adjacency(timetable, {
+        (a["operator"], a["route"], a["stop_code"], b["stop_code"])
+        for k in unmatched for a, b in zip(journeys[k], journeys[k][1:])})
     tally = {"readings": len(rows), "journeys": len(journeys), "pairs": 0,
-             "no_timetable": 0, "gap_skipped": 0, "bad_times": 0}
+             "by_trip": 0, "by_stop_code": 0, "no_timetable": 0,
+             "gap_skipped": 0, "code_unconfirmed": 0, "bad_times": 0, "impossible": 0}
     pairs = []
     for (service_date, trip_id), readings in journeys.items():
-        if trip_id not in plan:
+        if trip_id in plan:
+            direction, seqs = plan[trip_id]
+            position = {seq: i for i, seq in enumerate(seqs)}
+        elif by_code:
+            position = None
+        else:
             tally["no_timetable"] += 1
             continue
-        direction, seqs = plan[trip_id]
-        position = {seq: i for i, seq in enumerate(seqs)}
         for a, b in zip(readings, readings[1:]):
-            if a["stop_sequence"] not in position or b["stop_sequence"] not in position:
+            if position is None:
+                key = (a["operator"], a["route"], a["stop_code"], b["stop_code"])
+                if key not in by_code:
+                    tally["code_unconfirmed"] += 1
+                    continue
+                direction = by_code[key]
+                tally["by_stop_code"] += 1
+            elif (a["stop_sequence"] not in position or b["stop_sequence"] not in position
+                    or position[b["stop_sequence"]] - position[a["stop_sequence"]] != 1):
                 tally["gap_skipped"] += 1
                 continue
-            if position[b["stop_sequence"]] - position[a["stop_sequence"]] != 1:
-                tally["gap_skipped"] += 1
-                continue
+            else:
+                tally["by_trip"] += 1
             start, end = parse_local(a["scheduled_local"]), parse_local(b["scheduled_local"])
             if not start or not end or end < start:
                 tally["bad_times"] += 1
                 continue
             planned_s = (end - start).total_seconds()
             change_s = b["observed_delay_s"] - a["observed_delay_s"]
+            # A bus can't arrive before it left. These are readings taken on
+            # the wrong visit to a stop or during a layover, not running time.
+            if planned_s + change_s < 0:
+                tally["impossible"] += 1
+                continue
             tally["pairs"] += 1
             pairs.append({
                 "operator": a["operator"], "route": a["route"], "direction": direction,
@@ -176,20 +257,27 @@ def main(argv=None):
     audit, timetable = read_only(args.audit_db), read_only(args.timetable_db)
     pairs, tally = segment_pairs(audit, timetable, args.date_from, args.date_to)
     groups = summarise(pairs, args.min_journeys)
+    if has_tables(timetable, "stops"):
+        names = dict(timetable.execute("SELECT stop_code, stop_name FROM stops"))
+        for g in groups:
+            g["from_name"], g["to_name"] = names.get(g["from_stop"], ""), names.get(g["to_stop"], "")
     print(f"{tally['readings']:,} readings in {tally['journeys']:,} journeys -> "
-          f"{tally['pairs']:,} measurable stretches "
+          f"{tally['pairs']:,} measurable stretches ({tally['by_trip']:,} by journey, "
+          f"{tally['by_stop_code']:,} by stop code) "
           f"({tally['gap_skipped']:,} pairs skipped across a missing timing point, "
+          f"{tally['code_unconfirmed']:,} older pairs the current timetable can't confirm, "
           f"{tally['no_timetable']:,} journeys not in this timetable, "
-          f"{tally['bad_times']:,} with unusable times).")
+          f"{tally['bad_times']:,} with unusable times, "
+          f"{tally['impossible']:,} implying negative running time).")
     print(f"{len(groups):,} groups with at least {args.min_journeys} journeys.\n")
-    header = ("route", "direction", "from_stop", "to_stop", "day_type", "band", "journeys",
+    header = ("route", "direction", "from_stop", "to_stop", "from_name", "to_name", "day_type", "band", "journeys",
               "timetable_min", "typical_actual_min", "median_change_s",
               "lost_over_2min_pct", "gained_over_1min_pct")
     for title, rows in (("Most time lost (timetable too tight)", groups[:args.top]),
                         ("Most time gained (timetable too slack)", groups[::-1][:args.top])):
         print(title)
         for g in rows:
-            print("  " + "  ".join(str(g[h]) for h in header))
+            print("  " + "  ".join(str(g.get(h, "")) for h in header))
         print()
     if args.out:
         with open(args.out, "w", newline="", encoding="utf-8") as handle:

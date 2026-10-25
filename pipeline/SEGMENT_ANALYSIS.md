@@ -40,10 +40,57 @@ running on copies of `audit.db` and the timetable database.
     weekday and won't reach 30 in any band in four weeks. Weekend bands are
     thinner still. These are estimates, not measurements. The first real run
     replaces them.
-- The only local copy of `audit.db` (1–4 July, about 7,800 readings, from
-  before most operators were added and with no matching timetable) is too
-  small and too old to show real results. The first real run needs fresh
-  copies of `audit.db` **and** the timetable from the Pi.
+- **Journey ids change when the timetable is rebuilt.** In the first run,
+  only journeys from 23 October onwards (after the 22 October rebuild), plus
+  about a third of Monday–Thursday journeys, were still in the timetable.
+  Fridays and weekends before then were almost all missing. So for older
+  journeys the script judges each stretch by stop code. It accepts a pair only
+  if every current journey on that route that serves both timing points has
+  them next to each other, in one direction. Pairs it can't confirm are
+  counted and left out.
+- **Some readings are impossible.** A pair that implies the bus arrived
+  before it left (negative running time) comes from a reading on the wrong
+  visit to a stop or during a layover. These are counted and left out.
+
+## First run: 27 September – 24 October 2026
+
+Laptop copies taken from the Pi on 25 October: the last four weeks of
+`timepoint_observations`, plus the timetable's timing points, stops and routes.
+
+- 713,611 readings in 169,286 journeys gave **524,595 measurable stretches**:
+  181,032 matched by journey and 344,134 confirmed by stop code. Left out:
+  3,775 pairs that skipped a missing timing point, 15,384 older pairs the
+  current timetable couldn't confirm, and 571 with negative running time.
+- **4,702 groups** reach 30 journeys, covering 129 of 179 routes (85 of 102
+  First routes). Weekday 07:00–10:00 has qualifying stretches on 102 routes;
+  weekend 07:00–10:00 on only 32. So the estimate above was about right for
+  weekdays, and weekends need a longer window.
+- **More stretches run slack than tight.** 309 groups lose more than 2
+  minutes at the median, and 1,069 gain more than 1 minute. The median group
+  is 6 seconds early. Gains are inflated by recovery time built in before
+  timing points (see below), so this doesn't yet mean timetables are
+  generally too generous.
+- **Examples for review (not checked against local knowledge yet):**
+  - Route 1, Temple Meads → The Centre: 7–8 minutes timetabled, typically
+    14. It loses more than 2 minutes on 96–99% of weekday journeys at every
+    time of day (434 journeys interpeak). Plausibly real: Victoria Street,
+    Redcliffe and dwell at the station.
+  - Route 13, Southmead Hospital → Charlton Road: 9 timetabled, 16 typical,
+    weekday interpeak.
+  - Route U3, Lyncombe Hill → St James Cemetery (Bath): 5 timetabled, 12
+    typical, weekday pm peak, 99% lose more than 2 minutes.
+  - Route X1, Interchange → Worle Interchange: 18–19 timetabled, 23–24
+    typical in both weekday peaks.
+  - Slack: route 74, Willow Brook Centre → Great Park Road. 17–19 timetabled,
+    9–11 typical, at every time and on both day types. That's more likely a
+    timing-point or layover quirk, or the "Stop closure: Willow Brook"
+    notice in the disruptions feed (planning #76), than a real 8-minute
+    cushion. X1/X5 Worle Interchange → Interchange and route 44 Bedminster
+    Parade → The Centre look like recovery time before a terminus.
+  - Artefact: route 228, Lambridge → Bailbrook House, "loses" 37 minutes
+    on a 2-minute stretch. The next stretch "gains" it back, so it's a
+    layover or a stop read on the wrong visit, not traffic. Stretches like
+    this should be removed in review rather than by a rule.
 
 ## What it can't support (limits to state publicly)
 
@@ -71,10 +118,8 @@ running on copies of `audit.db` and the timetable database.
 
 ## Proposed approach
 
-1. **First real run (laptop).** Copy `audit.db` and the timetable from the Pi
-   and run the script over the last 4 weeks. Check the tally: the share of
-   pairs skipped for gaps, and journeys missing from the timetable (expected
-   when the timetable was replaced mid-window).
+1. ~~**First real run (laptop).**~~ Done on 25 October (above). The full CSV of
+   4,702 groups stays on the laptop and isn't committed.
 2. **Review (Tom).** Look at the worst 20 "too tight" and worst 20 "too
    slack" stretches against local knowledge. Does a known pinch point lose
    minutes at 8am? Do a few by hand from raw readings to check the arithmetic.
@@ -92,8 +137,12 @@ running on copies of `audit.db` and the timetable database.
 
 ## Decisions needed
 
-- Is a 4-week window with a 30-journey minimum the right bar, or should the
-  public version need 8 weeks for weekend bands?
+- Is a 4-week window with a 30-journey minimum the right bar? The first run
+  says it works for weekdays but not weekends (32 routes at weekend
+  07:00–10:00), so weekends probably need 8 weeks.
+- Should stretches into a terminus or known layover point be left out, or
+  labelled as "recovery time"? They make up most of the biggest "slack"
+  results.
 - Band or hour? Bands (early, 07–10, 10–16, 16–19, evening) keep groups big
   enough. Hours would match #77 but would leave out most stretches.
 - Publish "too slack" as well as "too tight"? It's fair and answers the
