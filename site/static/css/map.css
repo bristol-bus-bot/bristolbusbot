@@ -50,6 +50,10 @@
 .sp-code { font-size: 11px; font-family: var(--font-mono); color: var(--uk-yellow);
            opacity: .7; margin-top: 2px; }
 .sp-body { padding: 10px 14px; }
+.sp-notice { margin: 0 0 8px; padding: 6px 8px; border-left: 3px solid #c88c20;
+             background: var(--amber-soft); color: var(--fg-1); font-size: 12px;
+             font-weight: 700; line-height: 1.35; border-radius: var(--r-sm); }
+.sp-notice--upcoming { font-weight: 600; }
 .sp-btn { width: 100%; padding: 7px; border-radius: var(--r-sm); font-size: 11px;
           font-weight: 600; cursor: pointer; background: var(--uk-blue);
           color: #fff; border: 2px solid var(--uk-grey); letter-spacing: .03em;
