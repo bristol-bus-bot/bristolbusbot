@@ -211,6 +211,7 @@ def segment_pairs(audit, timetable, date_from=None, date_to=None):
                 continue
             tally["pairs"] += 1
             pairs.append({
+                "service_date": service_date,
                 "operator": a["operator"], "route": a["route"], "direction": direction,
                 "from_stop": a["stop_code"], "to_stop": b["stop_code"],
                 "day_type": day_type(service_date), "band": band_for(start.hour),

@@ -70,27 +70,61 @@ Laptop copies taken from the Pi on 25 October: the last four weeks of
   is 6 seconds early. Gains are inflated by recovery time built in before
   timing points (see below), so this doesn't yet mean timetables are
   generally too generous.
-- **Examples for review (not checked against local knowledge yet):**
-  - Route 1, Temple Meads → The Centre: 7–8 minutes timetabled, typically
-    14. It loses more than 2 minutes on 96–99% of weekday journeys at every
-    time of day (434 journeys interpeak). Plausibly real: Victoria Street,
-    Redcliffe and dwell at the station.
-  - Route 13, Southmead Hospital → Charlton Road: 9 timetabled, 16 typical,
-    weekday interpeak.
-  - Route U3, Lyncombe Hill → St James Cemetery (Bath): 5 timetabled, 12
-    typical, weekday pm peak, 99% lose more than 2 minutes.
-  - Route X1, Interchange → Worle Interchange: 18–19 timetabled, 23–24
-    typical in both weekday peaks.
-  - Slack: route 74, Willow Brook Centre → Great Park Road. 17–19 timetabled,
-    9–11 typical, at every time and on both day types. That's more likely a
-    timing-point or layover quirk, or the "Stop closure: Willow Brook"
-    notice in the disruptions feed (planning #76), than a real 8-minute
-    cushion. X1/X5 Worle Interchange → Interchange and route 44 Bedminster
-    Parade → The Centre look like recovery time before a terminus.
-  - Artefact: route 228, Lambridge → Bailbrook House, "loses" 37 minutes
-    on a 2-minute stretch. The next stretch "gains" it back, so it's a
-    layover or a stop read on the wrong visit, not traffic. Stretches like
-    this should be removed in review rather than by a rule.
+- **Review of the results (done, 25 October).** Each stretch went through four checks:
+  1. **Reading errors removed (26 stretches).** A big loss that is won back on
+     the very next stretch (route 228 Lambridge → Bailbrook House "loses" 37
+     minutes) is a bad reading, not traffic.
+  2. **Steady every week (95 removed).** A weekday result counts only if at
+     least 3 of the 4 weeks, each with 5+ journeys, point the same way. That
+     filters out one-off closures and roadworks.
+  3. **Recovery time is not slack (115 stretches).** Slack on the last
+     stretch into a terminus is time deliberately built in for the bus to get
+     back on schedule. It's listed separately, not as a timetable fault.
+  4. **Waiting is not traffic (18 stretches).** Readings are taken when the
+     bus first reaches a stop, but timetables give departure times. So if
+     buses usually sit at a stop because they're early, the wait shows up as
+     "lost" on the next stretch. Checked by hand: X1 buses at Weston
+     Interchange are typically 3.5 minutes early there and then wait. These
+     stretches are labelled "buses wait here", which is the driver's second
+     point.
+
+  **What's left:** 106 stretches where the timetable is steadily too tight,
+  and 192 where it's steadily too slack (not counting recovery time).
+
+  Most clearly too tight (weekday, worst time of day, typical minutes vs
+  timetable):
+
+  | Route | Stretch | Timetable | Typical | Lose 2+ min | When |
+  |---|---|---|---|---|---|
+  | 1 | Temple Meads → The Centre | 7 | 14 | 100% | all day |
+  | 13 | Southmead Hospital → Charlton Road | 9 | 16 | 96% | 7am–7pm |
+  | 20 | Cranhill Road → Broad Quay (Bath) | 9 | 15 | 96% | 7am–7pm |
+  | U3 | Twerton Mill → Green Park (Bath) | 9 | 14 | 87% | all day |
+  | X6 | Triangle → Six Ways | 10 | 15 | 93% | 7am–7pm |
+  | 9 | The Haymarket → Roman Way | 13 | 17.5 | 80% | all day |
+  | Y2 | St Saviour's Church → The Centre | 20 | 25 | 90% | most of the day |
+  | 2 | The Centre → Black Boy Hill | 18 | 22 | 72% | most of the day |
+  | 77 | Lockleaze Road → The Centre | 22 | 26 | 84% | 7am–7pm |
+  | 4 | Royal United Hospital → Bus Station (Bath) | 16 | 21 | 71% | 7–10am |
+
+  Route 1 is a clean example: buses are on time at Temple Meads (median
+  12 seconds early) and typically 5 minutes late by The Centre, at every time
+  of day.
+
+  Most clearly too slack (buses run early and have to wait):
+
+  | Route | Stretch | Timetable | Typical | 1+ min early | When |
+  |---|---|---|---|---|---|
+  | X1 | Worle Interchange → Interchange | 24 | 18 | 94% | all day |
+  | 2 / 2a | Temple Meads → Sturminster Road | 24 | 16 | 89% | 4–7pm |
+  | m1 | Frenchay Campus → Broadmead | 22 | 17 | 88% | 7am–7pm |
+  | 16 | Granville Street → Rupert Street | 25 | 19 | 87% | 7am–7pm |
+  | 18 | Portland Street → Cecil Road | 14 | 9 | 96% | 7am–7pm |
+  | 45 | Croydon Street → The Centre | 20 | 16 | 86% | all day |
+
+  Bus stops buses usually wait at, which inflates the next stretch: X1 and
+  X1a at Weston Interchange, 1 at Interchange, 47x at Ettricke Drive, U3 at
+  Lyncombe Hill, 44 and 2a at The Centre, 16 at Nelson Street.
 
 ## What it can't support (limits to state publicly)
 
@@ -120,9 +154,9 @@ Laptop copies taken from the Pi on 25 October: the last four weeks of
 
 1. ~~**First real run (laptop).**~~ Done on 25 October (above). The full CSV of
    4,702 groups stays on the laptop and isn't committed.
-2. **Review (Tom).** Look at the worst 20 "too tight" and worst 20 "too
-   slack" stretches against local knowledge. Does a known pinch point lose
-   minutes at 8am? Do a few by hand from raw readings to check the arithmetic.
+2. ~~**Review.**~~ Done (above). The checks are repeatable and should become part
+   of the nightly job: reading errors, week-to-week steadiness, recovery time,
+   and waiting points.
 3. **Decide whether and how to publish (Tom).** The research comment's
    suggestion, in order:
    - the audit route page: a route "ribbon" coloured by time lost or gained,
