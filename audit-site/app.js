@@ -351,6 +351,49 @@ function hourStripHTML(byKind, hourly, title) {
       Hours are the scheduled time at each timing point. Faded hours have fewer than ${finiteNumber(hourly.min_readings)} readings.</p>`;
 }
 
+const JOURNEY_BAND_LABELS = {
+  am_peak: "7–10am", interpeak: "10am–4pm", pm_peak: "4–7pm",
+  evening: "evenings and early mornings",
+};
+
+function inHundred(part, whole) {
+  return `${Math.round((100 * part) / whole)} in 100`;
+}
+
+// Three honestly separate numbers, never added together into "cancelled".
+function journeysHTML(entry, dutyChecked, days) {
+  if (!entry) return "";
+  const [timetabled, seen, likely] = entry.total.map((v) => finiteNumber(v));
+  if (!timetabled) return "";
+  const unseen = Math.max(0, timetabled - seen - (dutyChecked ? likely : 0));
+  const lines = [
+    `<li><strong>${timetabled.toLocaleString()}</strong> journeys were timetabled.</li>`,
+    `<li>We saw <strong>${seen.toLocaleString()}</strong> of them running (${inHundred(seen, timetabled)}).</li>`,
+  ];
+  if (dutyChecked) {
+    lines.push(likely
+      ? `<li><strong>${likely.toLocaleString()}</strong> very likely didn't run: the same bus was tracked on the journey before and the journey after, but not on this one.</li>`
+      : "<li>None looked like a journey that didn't run (the same bus seen before and after, but not on it).</li>");
+  }
+  lines.push(`<li>We didn't see the other <strong>${unseen.toLocaleString()}</strong>. That could be a cancellation or a bus with its tracker switched off, so we don't count them as cancelled.</li>`);
+  const overallMissing = (timetabled - seen) / timetabled;
+  const worst = Object.entries(entry.bands || {})
+    .map(([band, v]) => ({ band, timetabled: finiteNumber(v[0]), seen: finiteNumber(v[1]) }))
+    .filter((b) => b.timetabled >= 50)
+    .map((b) => ({ ...b, missing: (b.timetabled - b.seen) / b.timetabled }))
+    .sort((a, b) => b.missing - a.missing)[0];
+  const worstLine = worst && worst.missing >= 0.03 && worst.missing >= 1.5 * overallMissing
+    ? `<p class="audit-small">Most often missing: <strong>${escapeHTML(JOURNEY_BAND_LABELS[worst.band] || worst.band)}</strong>, when ${inHundred(worst.timetabled - worst.seen, worst.timetabled)} journeys weren't seen.</p>`
+    : "";
+  return `
+    <div class="journeys">
+      <span class="k">Did the buses turn up?</span>
+      <ul class="journey-lines">${lines.join("")}</ul>
+      ${worstLine}
+      <p class="faint audit-small">Same ${finiteNumber(days)} days as above, weekdays and weekends together, counting only days when our tracking was working properly.</p>
+    </div>`;
+}
+
 function hourKindControls() {
   return ["weekday", "weekend"].map((kind) =>
     `<button type="button" class="hctl${state.hourKind === kind ? " active" : ""}" data-hour-kind="${kind}"
@@ -392,7 +435,9 @@ async function renderNetworkHours() {
   panel.innerHTML = `
     <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">By time of day</h3>
     <div class="controls">${hourKindControls()}</div>
-    ${hourStripHTML(hourly.network, hourly, `${operatorName(operator)} on time by hour`)}`;
+    ${hourStripHTML(hourly.network, hourly, `${operatorName(operator)} on time by hour`)}
+    ${journeysHTML(hourly.journeys?.network, hourly.journeys?.duty_checked,
+      finiteNumber(hourly.window.days.weekday) + finiteNumber(hourly.window.days.weekend))}`;
   wireHourControls(panel);
 }
 
@@ -403,13 +448,16 @@ async function renderRouteHours(route) {
   const hourly = await loadHourly(operator);
   if (operator !== state.operator || String(route) !== String(state.selectedRoute)) return;
   const byKind = hourly?.routes?.[route];
-  if (!byKind) {
+  const journeys = hourly?.journeys?.routes?.[route];
+  if (!byKind && !journeys) {
     box.innerHTML = "";
     return;
   }
-  box.innerHTML = `
+  const days = finiteNumber(hourly.window.days.weekday) + finiteNumber(hourly.window.days.weekend);
+  box.innerHTML = (byKind ? `
     <div class="rd-hours-head"><span class="k">By time of day</span><span class="controls">${hourKindControls()}</span></div>
-    ${hourStripHTML(byKind, hourly, `Route ${route} on time by hour`)}`;
+    ${hourStripHTML(byKind, hourly, `Route ${route} on time by hour`)}` : "")
+    + journeysHTML(journeys, hourly.journeys.duty_checked, days);
   wireHourControls(box);
 }
 

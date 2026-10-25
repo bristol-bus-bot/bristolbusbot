@@ -133,3 +133,41 @@ def test_export_without_hourly_rows_writes_nothing(tmp_path, monkeypatch):
     conn = database()
     monkeypatch.setattr(audit_export, "OUT_DIR", str(tmp_path))
     assert audit_export.write_hourly(conn.cursor(), ["20261023"], ["FBRI"]) is None
+
+
+def test_journeys_count_only_healthy_days_and_checked_duty_gaps():
+    conn = database()
+    days = ["20261020", "20261021", "20261022"]
+    for day, valid in zip(days, (1, 1, 0)):
+        conn.execute(
+            """INSERT INTO daily_trip_coverage_days VALUES
+                   (?,?,'[]',NULL,NULL,0,0,0,NULL,NULL,NULL,0,0,NULL,0,0,0,0,0,0,0)""",
+            (day, valid))
+        for band, scheduled, seen in (("am_peak", 10, 9), ("evening", 20, 18)):
+            conn.execute(
+                "INSERT INTO daily_trip_coverage VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (day, "FBRI", "43", 0, band, scheduled, seen, scheduled - seen, seen, 0, 0))
+    # Duty-gap check passed on the 20th only.
+    for day, valid in (("20261020", 1), ("20261021", 0)):
+        conn.execute(
+            """INSERT INTO daily_duty_gap_days VALUES (?,?,?,'[]',0,0,NULL,0,0,0,0,0,0,0)""",
+            (day, "FBRI", valid))
+    for day, trip, departure in (("20261020", "G1", "08:10:00"), ("20261020", "G2", "21:00:00"),
+                                 ("20261021", "G3", "08:10:00")):
+        conn.execute(
+            "INSERT INTO daily_duty_gap_candidates VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (day, "FBRI", "B1", trip, "43", 0, departure, departure, "V1", "P", "43",
+             "07:00:00", "0700", "N", "43", "09:00:00", "0900", 60, 60, 1, 1))
+    journeys = audit_export.build_journeys(conn.cursor(), days, "FBRI")
+    route = journeys["routes"]["43"]
+    # Only the two healthy coverage days count; the invalid 22nd is ignored.
+    assert route["total"] == [60, 54, 2]
+    assert route["bands"]["am_peak"] == [20, 18, 1]
+    assert route["bands"]["evening"] == [40, 36, 1]
+    assert journeys["network"]["total"] == [60, 54, 2]
+    assert journeys["duty_checked"] is True
+
+
+def test_journeys_absent_without_coverage():
+    conn = database()
+    assert audit_export.build_journeys(conn.cursor(), ["20261020"], "FBRI") is None

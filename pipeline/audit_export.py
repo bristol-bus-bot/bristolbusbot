@@ -271,6 +271,66 @@ def build_hourly(cur, dates, operator):
     return result
 
 
+JOURNEY_BANDS = ("am_peak", "interpeak", "pm_peak", "evening")
+
+
+def build_journeys(cur, window, operator):
+    """Timetabled, seen and very-likely-not-run journeys over the window.
+
+    Counts come only from days whose trip coverage passed its health check;
+    routes withheld for duplicate timetable entries are already left out of
+    daily_trip_coverage. "Very likely didn't run" counts only from operator
+    days whose duty-gap check passed. Each entry is [timetabled, seen,
+    very_likely_not_run], in total and by the band the journey starts in.
+    """
+    from audit_rollup import trip_time_band_for
+    pooled = operator == NETWORK_LABEL
+    ops = SHOW_OPERATORS if pooled else [operator]
+    placeholders = ",".join("?" for _ in window)
+    op_ph = ",".join("?" for _ in ops)
+    try:
+        coverage = cur.execute(
+            f"""SELECT operator, route, time_band,
+                       SUM(scheduled_trips) AS scheduled, SUM(observed_trips) AS seen
+                  FROM valid_daily_trip_coverage
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})
+                 GROUP BY operator, route, time_band""", (*window, *ops)).fetchall()
+        checked = {(r["operator"], r["service_date"]) for r in cur.execute(
+            f"""SELECT operator, service_date FROM valid_daily_duty_gap_days
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})""",
+            (*window, *ops))}
+        gaps = cur.execute(
+            f"""SELECT operator, service_date, route, first_departure
+                  FROM valid_daily_duty_gap_candidates
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})""",
+            (*window, *ops)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    if not coverage:
+        return None
+
+    def blank():
+        return {"total": [0, 0, 0], "bands": {band: [0, 0, 0] for band in JOURNEY_BANDS}}
+
+    result = {"duty_checked": bool(checked), "network": blank(), "routes": {}}
+
+    def add(route, band, index, value):
+        for target in (result["network"], result["routes"].setdefault(route, blank())):
+            target["total"][index] += value
+            if band in target["bands"]:
+                target["bands"][band][index] += value
+
+    for row in coverage:
+        route = public_route(row["operator"], row["route"], pooled)
+        add(route, row["time_band"], 0, int(row["scheduled"] or 0))
+        add(route, row["time_band"], 1, int(row["seen"] or 0))
+    for row in gaps:
+        if (row["operator"], row["service_date"]) in checked:
+            add(public_route(row["operator"], row["route"], pooled),
+                trip_time_band_for(row["first_departure"]), 2, 1)
+    return result
+
+
 def write_hourly(cur, dates, operators):
     """Write hourly/<operator>.json; return the index for audit_data.json."""
     os.makedirs(os.path.join(OUT_DIR, HOURLY_DIR), exist_ok=True)
@@ -279,6 +339,9 @@ def write_hourly(cur, dates, operators):
         payload = build_hourly(cur, dates, operator)
         if payload is None:
             continue
+        journeys = build_journeys(cur, dates[-HOURLY_WINDOW_DAYS:], operator)
+        if journeys:
+            payload["journeys"] = journeys
         name = f"{HOURLY_DIR}/{operator}.json"
         with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
             json.dump(payload, out, separators=(",", ":"))

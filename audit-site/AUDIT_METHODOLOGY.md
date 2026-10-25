@@ -137,6 +137,31 @@ on. The plain-English line above each chart only compares hours with at least
 hourly figures are published in separate files, loaded only when someone
 opens that view, so the main data file doesn't grow.
 
+## Did the buses turn up?
+
+Each route shows three separate numbers for the same 28 days. They are never
+added together into one "cancelled" figure.
+
+- **Timetabled and seen.** Journeys in the timetable, and how many of them we
+  tracked running. Only days when our collector was healthy for the whole
+  service day count (see "Coverage").
+- **Very likely didn't run.** In the timetable, buses work in blocks: one
+  bus does a set of journeys one after another. A journey counts here only
+  when all of these are true: the same bus (one identified vehicle) was
+  tracked on the journey before it in its block and on the journey after it;
+  each of those was matched unambiguously; the gaps either side are under an
+  hour; and the journey itself was never seen. The bus was clearly out in
+  service, so the journey very likely didn't run. We don't say "cancelled",
+  because a bus can still run a journey with its tracker off. Days when an
+  operator's timetable has block details for fewer than 95% of journeys
+  don't count at all.
+- **Not seen.** The rest of the journeys we didn't see. That could be a
+  cancellation, or a bus with its tracker switched off. We can't tell which,
+  so we don't count them either way.
+
+The audit also says when journeys go missing most often, by the time the
+journey starts: 7–10am, 10am–4pm, 4–7pm, or evenings and early mornings.
+
 ## Geography (area and ward)
 
 Each timing-point reading is tied to its stop's unitary authority (Bristol, Bath
