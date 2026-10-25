@@ -137,3 +137,21 @@ def test_classify_event_thresholds():
 def test_live_estimate_carries_stop_name():
     est = live_estimate(51.4550, -2.5890, utc(10, 20), SCHEDULE, SM)
     assert est.stop_name == "Middle"
+
+
+def test_live_estimate_on_the_autumn_change_day_matches_the_clock():
+    # FBRI-30014, route 75, 25 October 2026: 46 m from Turtlegate Avenue
+    # (08:32:00) at 08:32:37 GMT. Production read this as 61 minutes late.
+    schedule = [
+        (0, "07:22:00", 1, "ORIGIN", 51.4500, -2.5890, "Origin"),
+        (40, "08:32:00", 1, "TURTLE", 51.4120, -2.6261, "Turtlegate Avenue"),
+    ]
+    origin = datetime(2026, 10, 25, 7, 22, tzinfo=LDN)
+    sm = service_midnight(origin, gtfs_seconds("07:22:00"))
+    recorded = datetime(2026, 10, 25, 8, 32, 37, tzinfo=timezone.utc)
+    est = live_estimate(51.41215, -2.6261, recorded, schedule, sm,
+                        origin.astimezone(timezone.utc))
+    reading = settled_reading(51.41215, -2.6261, recorded, schedule, sm,
+                              origin.astimezone(timezone.utc))
+    assert est.delay_s == 37 and est.event_type == "punctual"
+    assert reading.observed_delay_s == 37 and reading.on_time

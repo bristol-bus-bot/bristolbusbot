@@ -6,7 +6,7 @@ text nodes produced by ``xmltodict``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import re as _re
 
@@ -57,6 +57,12 @@ def activities_from_xmltodict(parsed: dict) -> list:
     return acts or []
 
 
+def _elapsed(start: datetime, end: datetime) -> timedelta:
+    # Python subtracts two datetimes sharing a tzinfo as wall-clock times,
+    # ignoring a clock change between them; compare real instants instead.
+    return end.astimezone(timezone.utc) - start.astimezone(timezone.utc)
+
+
 def anchor_departure_local(mvj: dict, target_tz, now_local: datetime):
     """Best-effort scheduled first-departure anchor in local time.
 
@@ -82,7 +88,8 @@ def anchor_departure_local(mvj: dict, target_tz, now_local: datetime):
         # move it when the ref confirms that and the stamp is about a day old.
         if (hhmm and hhmm[0] >= 24
                 and (local.hour, local.minute) == (hhmm[0] - 24, hhmm[1])
-                and timedelta(hours=12) < now_local - local < timedelta(hours=36)):
+                and timedelta(hours=12) < _elapsed(local, now_local)
+                < timedelta(hours=36)):
             local += timedelta(days=1)
         return local, "origin"
     if hhmm:
@@ -93,7 +100,7 @@ def anchor_departure_local(mvj: dict, target_tz, now_local: datetime):
         candidates = (today - timedelta(days=1), today,
                       today + timedelta(days=1))
         return min(candidates,
-                   key=lambda candidate: abs(candidate - now_local)), "ref"
+                   key=lambda candidate: abs(_elapsed(now_local, candidate))), "ref"
     return None, None
 
 

@@ -57,18 +57,34 @@ def service_midnight(origin_local: datetime, first_stop_secs: int) -> datetime:
     return datetime.combine(service_date, time.min, tzinfo=origin_local.tzinfo)
 
 
-def scheduled_local(service_midnight_dt: datetime, stop_secs: int) -> datetime:
+def scheduled_local(service_midnight_dt: datetime, stop_secs: int,
+                    not_before_utc: datetime | None = None) -> datetime:
     """Absolute aware local datetime of a GTFS service-day offset.
 
-    GTFS time is elapsed time from the service-day origin. Advancing on the UTC
-    timeline makes the repeated autumn hour unambiguous and skips the missing
-    spring hour instead of silently keeping midnight's UTC offset.
+    Timetable times are wall-clock times on the service day ('14:00:00' is
+    14:00 on the clock whether it is BST or GMT; '25:30:00' is 01:30 the next
+    day). They are not elapsed time from local midnight: on a clock-change
+    day that reading shifts every stop by an hour.
+
+    The repeated autumn hour names two instants. The first is used unless it
+    falls before ``not_before_utc`` (the journey's own aimed departure), so a
+    journey that leaves in the second 01:xx keeps its stops after it. A time
+    inside the missing spring hour keeps the pre-change offset, landing an
+    hour later on the clock.
     """
-    if service_midnight_dt.tzinfo is None:
-        return service_midnight_dt + timedelta(seconds=stop_secs)
-    return (service_midnight_dt.astimezone(timezone.utc)
-            + timedelta(seconds=stop_secs)).astimezone(
-                service_midnight_dt.tzinfo)
+    tz = service_midnight_dt.tzinfo
+    day_offset, rem = divmod(stop_secs, 86400)
+    wall = datetime.combine(
+        service_midnight_dt.date() + timedelta(days=day_offset), time.min,
+        tzinfo=tz) + timedelta(seconds=rem)
+    if tz is None:
+        return wall
+    instant = wall.astimezone(timezone.utc)
+    later = wall.replace(fold=1).astimezone(timezone.utc)
+    if (not_before_utc is not None and later > instant
+            and instant < not_before_utc):
+        instant = later
+    return instant.astimezone(tz)
 
 
 def parse_schedule_time(schedule_time_str: str | None,
@@ -97,4 +113,7 @@ def parse_schedule_time(schedule_time_str: str | None,
         day_offset = 1
 
     stop_date = origin_departure_local.date() + timedelta(days=day_offset)
-    return datetime.combine(stop_date, naive_stop_time, tzinfo=target_tz)
+    service_day = datetime.combine(stop_date, time.min, tzinfo=target_tz)
+    return scheduled_local(
+        service_day, hour * 3600 + minute * 60 + second,
+        origin_departure_local.astimezone(timezone.utc))

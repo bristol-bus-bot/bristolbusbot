@@ -63,7 +63,8 @@ ON_TIME_HIGH_S = 359
 
 def closest_stop(lat: float, lon: float, schedule_rows: list,
                  recorded_utc: datetime | None = None,
-                 service_midnight_dt: datetime | None = None
+                 service_midnight_dt: datetime | None = None,
+                 origin_utc: datetime | None = None
                  ) -> ClosestStop | None:
     """Best schedule stop for the vehicle's position and, when known, time.
 
@@ -97,7 +98,7 @@ def closest_stop(lat: float, lon: float, schedule_rows: list,
         stop_secs = gtfs_seconds(candidate.row[1])
         if stop_secs is None:
             return (2, float("inf"), candidate.distance_m, candidate.index)
-        sched = scheduled_local(service_midnight_dt, stop_secs)
+        sched = scheduled_local(service_midnight_dt, stop_secs, origin_utc)
         delay = int(round((
             recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
         outside_sanity = not (SANITY_MIN_S <= delay <= SANITY_MAX_S)
@@ -116,7 +117,8 @@ def classify_event(delay_s: int) -> str:
 
 
 def ambiguous_visit(cs: ClosestStop, lat: float, lon: float, recorded_utc: datetime,
-                    schedule_rows: list, service_midnight_dt: datetime) -> bool:
+                    schedule_rows: list, service_midnight_dt: datetime,
+                    origin_utc: datetime | None = None) -> bool:
     """Do not certify one of two plausible passes through the same place.
 
     A closer scheduled time cannot distinguish an on-time return from a late
@@ -137,14 +139,15 @@ def ambiguous_visit(cs: ClosestStop, lat: float, lon: float, recorded_utc: datet
                 or separation > STOP_POSITION_TIE_M:
             continue
         delay = (recorded_utc - scheduled_local(
-            service_midnight_dt, seconds).astimezone(timezone.utc)).total_seconds()
+            service_midnight_dt, seconds, origin_utc).astimezone(timezone.utc)).total_seconds()
         if SANITY_MIN_S <= delay <= SANITY_MAX_S:
             plausible.append(index)
     return any(abs(left-right)>1 for left in plausible for right in plausible)
 
 
 def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
-                         schedule_rows: list, service_midnight_dt: datetime
+                         schedule_rows: list, service_midnight_dt: datetime,
+                         origin_utc: datetime | None = None
                          ) -> tuple[LiveEstimate | None, str | None]:
     """Return a nearest-stop estimate and a precise rejection reason.
 
@@ -153,7 +156,7 @@ def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
     implausible delay.
     """
     cs = closest_stop(
-        lat, lon, schedule_rows, recorded_utc, service_midnight_dt)
+        lat, lon, schedule_rows, recorded_utc, service_midnight_dt, origin_utc)
     if cs is None:
         return None, "no_stop_with_coordinates"
     if cs.distance_m > MAX_GPS_DISTANCE_M:
@@ -163,7 +166,7 @@ def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
     stop_secs = gtfs_seconds(dep_time)
     if stop_secs is None:
         return None, "invalid_schedule_time"
-    sched = scheduled_local(service_midnight_dt, stop_secs)
+    sched = scheduled_local(service_midnight_dt, stop_secs, origin_utc)
     delay_s = int(round((recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
     if not (SANITY_MIN_S <= delay_s <= SANITY_MAX_S):
         return None, "sanity_rejected"
@@ -180,15 +183,18 @@ def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
 
 
 def live_estimate(lat: float, lon: float, recorded_utc: datetime,
-                  schedule_rows: list, service_midnight_dt: datetime
+                  schedule_rows: list, service_midnight_dt: datetime,
+                  origin_utc: datetime | None = None
                   ) -> LiveEstimate | None:
     """Backward-compatible value-only live estimate."""
     return live_estimate_result(
-        lat, lon, recorded_utc, schedule_rows, service_midnight_dt)[0]
+        lat, lon, recorded_utc, schedule_rows, service_midnight_dt,
+        origin_utc)[0]
 
 
 def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
-                           schedule_rows: list, service_midnight_dt: datetime
+                           schedule_rows: list, service_midnight_dt: datetime,
+                           origin_utc: datetime | None = None
                            ) -> tuple[SettledReading | None, str | None]:
     """Return a timing-point observation and a precise rejection reason.
 
@@ -197,12 +203,13 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
     a stationary layover cannot be distinguished from a departure.
     """
     cs = closest_stop(
-        lat, lon, schedule_rows, recorded_utc, service_midnight_dt)
+        lat, lon, schedule_rows, recorded_utc, service_midnight_dt, origin_utc)
     if cs is None:
         return None, "no_stop_with_coordinates"
     if cs.distance_m > MAX_GPS_DISTANCE_M:
         return None, "outside_measurement_gate"
-    if ambiguous_visit(cs, lat, lon, recorded_utc, schedule_rows, service_midnight_dt):
+    if ambiguous_visit(cs, lat, lon, recorded_utc, schedule_rows,
+                       service_midnight_dt, origin_utc):
         return None, "ambiguous_stop_visit"
     seq, dep_time, timepoint, stop_code = cs.row[0], cs.row[1], cs.row[2], cs.row[3]
     if int(timepoint or 0) != 1:
@@ -210,7 +217,7 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
     stop_secs = gtfs_seconds(dep_time)
     if stop_secs is None:
         return None, "invalid_schedule_time"
-    sched = scheduled_local(service_midnight_dt, stop_secs)
+    sched = scheduled_local(service_midnight_dt, stop_secs, origin_utc)
     delay_s = int(round((recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
     if not (SANITY_MIN_S <= delay_s <= SANITY_MAX_S):
         return None, "sanity_rejected"
@@ -226,8 +233,10 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
 
 
 def settled_reading(lat: float, lon: float, recorded_utc: datetime,
-                    schedule_rows: list, service_midnight_dt: datetime
+                    schedule_rows: list, service_midnight_dt: datetime,
+                    origin_utc: datetime | None = None
                     ) -> SettledReading | None:
     """Backward-compatible value-only timing-point observation."""
     return settled_reading_result(
-        lat, lon, recorded_utc, schedule_rows, service_midnight_dt)[0]
+        lat, lon, recorded_utc, schedule_rows, service_midnight_dt,
+        origin_utc)[0]

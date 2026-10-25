@@ -94,8 +94,13 @@ def _eta(row, now_local: datetime):
     sched_local = parse_schedule_time(sched_str, origin_local, LDN)
     if sched_local is None:
         return None
-    eta_dt = sched_local + timedelta(seconds=row["delay_seconds"])
-    eta_mins = math.ceil((eta_dt - now_local).total_seconds() / 60.0)
+    # Add and subtract real instants: same-zone datetime arithmetic is
+    # wall-clock and loses an hour across a clock change.
+    eta_dt = (sched_local.astimezone(timezone.utc)
+              + timedelta(seconds=row["delay_seconds"])).astimezone(LDN)
+    eta_mins = math.ceil((eta_dt.astimezone(timezone.utc)
+                          - now_local.astimezone(timezone.utc)
+                          ).total_seconds() / 60.0)
     return eta_dt, eta_mins
 
 

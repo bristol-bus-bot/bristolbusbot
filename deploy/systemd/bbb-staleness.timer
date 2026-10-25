@@ -2,7 +2,9 @@
 Description=Check collector freshness hourly
 
 [Timer]
-OnCalendar=*-*-* *:15:00
+# UTC, not the Pi's Europe/London clock: a local *:15 fires once in the
+# repeated autumn hour, leaving a two-hour gap Healthchecks reports as down.
+OnCalendar=*-*-* *:15:00 UTC
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=60s

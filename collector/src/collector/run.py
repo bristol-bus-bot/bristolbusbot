@@ -54,11 +54,14 @@ def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
             or any(b < a for a, b in zip(times, times[1:]))):
         return False
     midnight = service_midnight(origin_local, times[0])
-    end = scheduled_local(midnight, times[-1]).astimezone(timezone.utc)
+    end = scheduled_local(midnight, times[-1],
+                          origin_local.astimezone(timezone.utc)
+                          ).astimezone(timezone.utc)
     return now_utc <= end + timedelta(seconds=SANITY_MAX_S)
 
 
-def _measurement_clues(snap, match, service_midnight_dt, est, reading) -> dict:
+def _measurement_clues(snap, match, service_midnight_dt, est, reading,
+                       origin_utc=None) -> dict:
     """Return the useful numbers even when the normal sanity gate rejected."""
     if est is not None:
         return {
@@ -77,13 +80,13 @@ def _measurement_clues(snap, match, service_midnight_dt, est, reading) -> dict:
         return {}
     nearest = closest_stop(
         snap.lat, snap.lon, match.schedule, snap.recorded_utc,
-        service_midnight_dt)
+        service_midnight_dt, origin_utc)
     if nearest is None:
         return {}
     stop_secs = gtfs_seconds(nearest.row[1])
     if stop_secs is None:
         return {"gps_distance_m": int(round(nearest.distance_m))}
-    expected = scheduled_local(service_midnight_dt, stop_secs)
+    expected = scheduled_local(service_midnight_dt, stop_secs, origin_utc)
     delay_s = int(round((
         snap.recorded_utc - expected.astimezone(timezone.utc)).total_seconds()))
     return {
@@ -192,12 +195,13 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
             if first_secs is not None:
                 service_midnight_dt = service_midnight(origin_local, first_secs)
                 service_date = service_midnight_dt.strftime("%Y%m%d")
+                origin_utc = origin_local.astimezone(timezone.utc)
                 est, estimate_reason = live_estimate_result(
                     snap.lat, snap.lon, snap.recorded_utc, match.schedule,
-                    service_midnight_dt)
+                    service_midnight_dt, origin_utc)
                 reading, reading_reason = settled_reading_result(
                     snap.lat, snap.lon, snap.recorded_utc, match.schedule,
-                    service_midnight_dt)
+                    service_midnight_dt, origin_utc)
                 if "sanity_rejected" in {estimate_reason, reading_reason}:
                     # One matched vehicle is counted once even when both the
                     # live and audit calculations reject the same timestamp.
@@ -247,7 +251,8 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                     tt_cur, match, snap.operator_ref, snap.line, snap.direction,
                     origin_local, (snap.lat, snap.lon), service_date)
                 clues = _measurement_clues(
-                    snap, match, service_midnight_dt, est, reading)
+                    snap, match, service_midnight_dt, est, reading,
+                    origin_local.astimezone(timezone.utc))
                 status = audit_db.write_matching_evidence(audit_conn, {
                     "captured_at": poll_at.isoformat(),
                     "service_date": service_date,

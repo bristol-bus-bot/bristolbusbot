@@ -101,8 +101,12 @@ def display_timing(row, schedule, shapes, now):
             return {}
         if any(d > a for d, a in zip(departures, arrivals[1:])):
             return {}
-        elapsed = (recorded - midnight.astimezone(timezone.utc)).total_seconds()
-        current = (now - midnight.astimezone(timezone.utc)).total_seconds()
+        # Timetable seconds are wall-clock, so compare on the local clock.
+        def clock_seconds(instant):
+            return (instant.astimezone(LDN).replace(tzinfo=None)
+                    - midnight.replace(tzinfo=None)).total_seconds()
+        elapsed = clock_seconds(recorded)
+        current = clock_seconds(now)
         distances = [haversine_m(row["lat"], row["lon"], s[3], s[4]) for s in schedule]
         waiting = []
         for i, distance in enumerate(distances):
@@ -118,7 +122,9 @@ def display_timing(row, schedule, shapes, now):
             return {"eventType": "waiting", "delayMinutes": None,
                     "waitingAtOrigin": i == 0, "waitingAtStop": i != 0,
                     "timingSource": "scheduled_wait",
-                    "scheduledDeparture": scheduled_local(midnight, departures[i]).isoformat()}
+                    "scheduledDeparture": scheduled_local(
+                        midnight, departures[i],
+                        origin.astimezone(timezone.utc)).isoformat()}
         if row["delay_seconds"] is not None or min(distances) <= 1000:
             return {}
         estimates = []
