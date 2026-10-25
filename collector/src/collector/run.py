@@ -12,6 +12,7 @@ import logging
 import json
 import signal
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -20,9 +21,11 @@ import requests
 import xmltodict
 
 from . import audit_db, live_db
+from .clock_change import ClockChangeTrips
 from .config import Config
 from .delay import (classify_event, closest_stop, live_estimate_result,
-                    settled_reading_result, SANITY_MAX_S)
+                    settled_reading_result, ON_TIME_HIGH_S, ON_TIME_LOW_S,
+                    SANITY_MAX_S, SANITY_MIN_S)
 from .geo import BoundaryFilter
 from .matching import explain_match, match_vehicle
 from .siri import (activities_from_xmltodict, anchor_departure_local,
@@ -38,6 +41,53 @@ SIRI_VM_URL = "https://data.bus-data.dft.gov.uk/api/v1/datafeed/"
 SIRI_SX_URL = "https://data.bus-data.dft.gov.uk/api/v1/siri-sx/"
 EVIDENCE_EXTREME_LATE_S = 45 * 60
 EVIDENCE_EXTREME_EARLY_S = -10 * 60
+CLOCK_CHANGE_TRIPS = ClockChangeTrips()
+
+
+def _shifted(moment: datetime, seconds: int) -> datetime:
+    return (moment.astimezone(timezone.utc)
+            + timedelta(seconds=seconds)).astimezone(moment.tzinfo)
+
+
+def _apply_clock_change(clock_trips, service_date, match, est, reading,
+                        estimate_reason, reading_reason, audit_cur, target_tz):
+    """Resolve change-night readings to the standard or the clock reading.
+
+    See clock_change. Off change nights every offset is zero and nothing
+    changes. Returns (est, reading, estimate_reason, reading_reason).
+    """
+    probe = None
+    if est is not None and est.clock_offset_s:
+        probe = (est.delay_s, est.clock_offset_s)
+    elif reading is not None and reading.clock_offset_s:
+        probe = (reading.observed_delay_s, reading.clock_offset_s)
+    before = clock_trips.decision(service_date, match.trip_id)
+    decision = (clock_trips.observe(service_date, match.trip_id, *probe)
+                if probe else before)
+    if decision == "clock" and before != "clock":
+        audit_db.apply_clock_reading(audit_cur, service_date, match.trip_id,
+                                     match.schedule, target_tz)
+    if est is not None and est.clock_offset_s:
+        shift = est.clock_offset_s if decision == "clock" else 0
+        delay = est.delay_s - shift
+        if decision == "pending":
+            est, estimate_reason = None, "clock_change_pending"
+        elif not SANITY_MIN_S <= delay <= SANITY_MAX_S:
+            est, estimate_reason = None, "sanity_rejected"
+        elif shift:
+            est = replace(est, delay_s=delay, event_type=classify_event(delay),
+                          scheduled_local=_shifted(est.scheduled_local, shift))
+    if reading is not None and reading.clock_offset_s:
+        shift = reading.clock_offset_s if decision == "clock" else 0
+        delay = reading.observed_delay_s - shift
+        if not SANITY_MIN_S <= delay <= SANITY_MAX_S:
+            reading, reading_reason = None, "sanity_rejected"
+        elif shift:
+            reading = replace(
+                reading, observed_delay_s=delay,
+                on_time=ON_TIME_LOW_S <= delay <= ON_TIME_HIGH_S,
+                scheduled_local=_shifted(reading.scheduled_local, shift))
+    return est, reading, estimate_reason, reading_reason
 
 
 def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
@@ -128,10 +178,12 @@ def fetch_sx(session: requests.Session, cfg: Config) -> bytes | None:
 
 
 def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
-             cfg: Config, target_tz, now_utc: datetime | None = None) -> dict:
+             cfg: Config, target_tz, now_utc: datetime | None = None,
+             clock_trips: ClockChangeTrips | None = None) -> dict:
     """One SIRI-VM poll. Returns counters (also written to both DBs).
     `now_utc` is injectable so tests are independent of the wall clock."""
     poll_at = now_utc or datetime.now(timezone.utc)
+    clock_trips = clock_trips or CLOCK_CHANGE_TRIPS
     xml = fetch()
     counters = {"vehicles_total": 0, "candidates": 0, "matched": 0,
                 "obs_written": 0, "dropped_insane": 0, "events": 0,
@@ -198,6 +250,10 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                 reading, reading_reason = settled_reading_result(
                     snap.lat, snap.lon, snap.recorded_utc, match.schedule,
                     service_midnight_dt)
+                est, reading, estimate_reason, reading_reason =                     _apply_clock_change(
+                        clock_trips, service_date, match, est, reading,
+                        estimate_reason, reading_reason, audit_conn.cursor(),
+                        target_tz)
                 if "sanity_rejected" in {estimate_reason, reading_reason}:
                     # One matched vehicle is counted once even when both the
                     # live and audit calculations reject the same timestamp.

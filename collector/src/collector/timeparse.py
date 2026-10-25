@@ -108,3 +108,22 @@ def parse_schedule_time(schedule_time_str: str | None,
     service_day = datetime.combine(
         origin_departure_local.date(), time.min, tzinfo=target_tz)
     return scheduled_local(service_day, secs)
+
+
+def clock_change_offset_s(service_midnight_dt: datetime, stop_secs: int) -> int:
+    """How far the clock reading of a GTFS time is from the standard one.
+
+    Zero except overnight on a clock-change service day, where some
+    journeys run to the printed clock time instead ('26:14:00' on Saturday
+    24 October is 01:14 UTC by the standard, 02:14 GMT on the clock).
+    """
+    tz = service_midnight_dt.tzinfo
+    if tz is None:
+        return 0
+    day_offset, rem = divmod(stop_secs, 86400)
+    clock = datetime.combine(
+        service_midnight_dt.date() + timedelta(days=day_offset), time.min,
+        tzinfo=tz) + timedelta(seconds=rem)
+    standard = scheduled_local(service_midnight_dt, stop_secs)
+    return int((clock.astimezone(timezone.utc)
+                - standard.astimezone(timezone.utc)).total_seconds())
