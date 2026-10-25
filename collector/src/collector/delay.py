@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .geo import haversine_m
-from .timeparse import gtfs_seconds, scheduled_local
+from .timeparse import clock_change_offset_s, gtfs_seconds, scheduled_local
 
 # Observation distance and classification thresholds.
 MAX_GPS_DISTANCE_M = 1000
@@ -43,6 +43,7 @@ class LiveEstimate:
     low_confidence: bool
     event_type: str          # 'delayed' | 'early' | 'punctual'
     scheduled_local: datetime
+    clock_offset_s: int = 0  # clock reading minus standard; see clock_change
 
 
 @dataclass
@@ -55,6 +56,7 @@ class SettledReading:
     on_time: bool
     gps_distance_m: int
     is_origin: bool
+    clock_offset_s: int = 0  # clock reading minus standard; see clock_change
 
 
 ON_TIME_LOW_S = -60
@@ -105,6 +107,12 @@ def closest_stop(lat: float, lon: float, schedule_rows: list,
                 candidate.distance_m, candidate.index)
 
     return min(nearby, key=time_score)
+
+
+def plausible_delay(delay_s: int, clock_offset_s: int = 0) -> bool:
+    """Within the sanity gate on the standard or, on a change night, the clock reading."""
+    return any(SANITY_MIN_S <= value <= SANITY_MAX_S
+               for value in {delay_s, delay_s - clock_offset_s})
 
 
 def classify_event(delay_s: int) -> str:
@@ -165,7 +173,8 @@ def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
         return None, "invalid_schedule_time"
     sched = scheduled_local(service_midnight_dt, stop_secs)
     delay_s = int(round((recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
-    if not (SANITY_MIN_S <= delay_s <= SANITY_MAX_S):
+    offset_s = clock_change_offset_s(service_midnight_dt, stop_secs)
+    if not plausible_delay(delay_s, offset_s):
         return None, "sanity_rejected"
     return LiveEstimate(
         delay_s=delay_s,
@@ -176,6 +185,7 @@ def live_estimate_result(lat: float, lon: float, recorded_utc: datetime,
         low_confidence=cs.distance_m > LOW_CONFIDENCE_DISTANCE_M,
         event_type=classify_event(delay_s),
         scheduled_local=sched,
+        clock_offset_s=offset_s,
     ), None
 
 
@@ -212,7 +222,8 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
         return None, "invalid_schedule_time"
     sched = scheduled_local(service_midnight_dt, stop_secs)
     delay_s = int(round((recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
-    if not (SANITY_MIN_S <= delay_s <= SANITY_MAX_S):
+    offset_s = clock_change_offset_s(service_midnight_dt, stop_secs)
+    if not plausible_delay(delay_s, offset_s):
         return None, "sanity_rejected"
     return SettledReading(
         stop_sequence=int(seq),
@@ -222,6 +233,7 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
         on_time=ON_TIME_LOW_S <= delay_s <= ON_TIME_HIGH_S,
         gps_distance_m=int(cs.distance_m),
         is_origin=cs.index == 0,
+        clock_offset_s=offset_s,
     ), None
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .operator_registry import SHOW_OPERATORS
@@ -149,6 +149,51 @@ def connect(path: str = ":memory:") -> sqlite3.Connection:
               (sampling_date, sampling_band, sampling_reason)""")
     conn.commit()
     return conn
+
+
+def apply_clock_reading(cur, service_date: str, trip_id: str,
+                        schedule_rows: list, target_tz) -> int:
+    """Move a journey's change-night readings to the clock reading.
+
+    Recomputed from the timetable and recorded time, so running it again
+    changes nothing. Readings the clock reading puts outside the sanity gate
+    are removed. Returns the number of readings changed or removed.
+    """
+    from .delay import ON_TIME_HIGH_S, ON_TIME_LOW_S, SANITY_MAX_S, SANITY_MIN_S
+    from .timeparse import clock_change_offset_s, gtfs_seconds, scheduled_local
+    midnight = datetime.strptime(service_date, "%Y%m%d").replace(tzinfo=target_tz)
+    stop_secs = {int(row[0]): gtfs_seconds(row[1]) for row in schedule_rows}
+    changed = 0
+    for seq, recorded_text, delay_s in cur.execute(
+            "SELECT stop_sequence, recorded_at, observed_delay_s "
+            "FROM timepoint_observations WHERE service_date=? AND trip_id=?",
+            (service_date, trip_id)).fetchall():
+        secs = stop_secs.get(int(seq))
+        if secs is None:
+            continue
+        offset = clock_change_offset_s(midnight, secs)
+        if not offset:
+            continue
+        clock = (scheduled_local(midnight, secs).astimezone(timezone.utc)
+                 + timedelta(seconds=offset))
+        new_delay = int(round((datetime.fromisoformat(recorded_text)
+                               - clock).total_seconds()))
+        if new_delay == delay_s:
+            continue
+        changed += 1
+        key = (service_date, trip_id, seq)
+        if SANITY_MIN_S <= new_delay <= SANITY_MAX_S:
+            cur.execute(
+                "UPDATE timepoint_observations SET scheduled_local=?, "
+                "observed_delay_s=?, on_time=? WHERE service_date=? AND "
+                "trip_id=? AND stop_sequence=?",
+                (clock.astimezone(target_tz).isoformat(), new_delay,
+                 int(ON_TIME_LOW_S <= new_delay <= ON_TIME_HIGH_S), *key))
+        else:
+            cur.execute(
+                "DELETE FROM timepoint_observations WHERE service_date=? "
+                "AND trip_id=? AND stop_sequence=?", key)
+    return changed
 
 
 def upsert_observation(cur, obs: tuple) -> None:
