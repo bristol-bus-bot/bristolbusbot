@@ -94,17 +94,30 @@ def _stored(audit):
         "timepoint_observations ORDER BY stop_sequence").fetchall()
 
 
+def _journey3(first, second, third):
+    return SimpleNamespace(trip_id="TRIP", schedule=[
+        (0, first, 1, "S0", 51.4500, -2.5800, "First"),
+        (10, second, 1, "S1", 51.4700, -2.5800, "Second"),
+        (20, third, 1, "S2", 51.4900, -2.5800, "Third"),
+    ])
+
+
 def test_clock_timed_journey_is_withheld_then_corrected_including_stored_readings():
     trips, audit = ClockChangeTrips(), audit_db.connect()
-    match = _journey("26:05:00", "26:30:00")
-    est, reason = _poll(match, (2026, 10, 24), 51.4500,
-                        _utc(2026, 10, 25, 2, 6), trips, audit)
-    assert est is None and reason == "clock_change_pending"
-    assert _stored(audit) == [(0, 3660, 0)]   # standard reading, for now
+    match = _journey3("26:05:00", "26:30:00", "26:50:00")    # A1, FBRI-30151
+    # Standing at the first stop 19 minutes before the clock departure tells
+    # us nothing either way, so it does not count towards the decision.
+    _poll(match, (2026, 10, 24), 51.4500, _utc(2026, 10, 25, 1, 46), trips, audit)
+    assert trips.decision("20261024", "TRIP") == "standard"
     est, reason = _poll(match, (2026, 10, 24), 51.4700,
                         _utc(2026, 10, 25, 2, 31), trips, audit)
+    assert est is None and reason == "clock_change_pending"
+    assert _stored(audit) == [(0, 2460, 0), (10, 3660, 0)]   # standard, for now
+    est, reason = _poll(match, (2026, 10, 24), 51.4900,
+                        _utc(2026, 10, 25, 2, 51), trips, audit)
     assert reason is None and est.delay_s == 60 and est.event_type == "punctual"
-    assert _stored(audit) == [(0, 60, 1), (10, 60, 1)]
+    # The origin reading is removed: -19 minutes fails the sanity gate.
+    assert _stored(audit) == [(10, 60, 1), (20, 60, 1)]
     # Correcting again (for example after a restart) changes nothing.
     assert audit_db.apply_clock_reading(
         audit.cursor(), "20261024", "TRIP", match.schedule, LDN) == 0
@@ -112,27 +125,29 @@ def test_clock_timed_journey_is_withheld_then_corrected_including_stored_reading
 
 def test_running_time_journey_keeps_the_standard_reading():
     trips, audit = ClockChangeTrips(), audit_db.connect()
-    match = _journey("27:42:00", "28:23:00")      # route 4, FBRI-39411
-    est, reason = _poll(match, (2026, 10, 24), 51.4500,
-                        _utc(2026, 10, 25, 2, 42, 30), trips, audit)
-    assert est is None and reason == "clock_change_pending"
+    match = _journey3("27:42:00", "28:00:00", "28:23:00")   # route 4, FBRI-39411
+    _poll(match, (2026, 10, 24), 51.4500, _utc(2026, 10, 25, 2, 42, 30), trips, audit)
     est, reason = _poll(match, (2026, 10, 24), 51.4700,
+                        _utc(2026, 10, 25, 3, 0, 20), trips, audit)
+    assert est is None and reason == "clock_change_pending"
+    est, reason = _poll(match, (2026, 10, 24), 51.4900,
                         _utc(2026, 10, 25, 3, 23, 1), trips, audit)
     assert est.delay_s == 1
-    assert _stored(audit) == [(0, 30, 1), (10, 1, 1)]
+    assert _stored(audit) == [(0, 30, 1), (10, 20, 1), (20, 1, 1)]
 
 
 def test_clock_timed_journey_through_the_spring_change():
     trips, audit = ClockChangeTrips(), audit_db.connect()
-    match = _journey("26:30:00", "26:50:00")      # 02:30 / 02:50 BST by the clock
-    est, reason = _poll(match, (2026, 3, 28), 51.4500,
+    match = _journey3("26:10:00", "26:30:00", "26:50:00")   # BST by the clock
+    _poll(match, (2026, 3, 28), 51.4500, _utc(2026, 3, 29, 1, 11), trips, audit)
+    est, reason = _poll(match, (2026, 3, 28), 51.4700,
                         _utc(2026, 3, 29, 1, 31), trips, audit)
     assert est is None and reason == "clock_change_pending"
     assert _stored(audit) == []                   # -59 min on the standard
-    est, reason = _poll(match, (2026, 3, 28), 51.4700,
+    est, reason = _poll(match, (2026, 3, 28), 51.4900,
                         _utc(2026, 3, 29, 1, 51), trips, audit)
     assert est.delay_s == 60
-    assert _stored(audit) == [(10, 60, 1)]
+    assert _stored(audit) == [(20, 60, 1)]
 
 
 def test_ordinary_day_is_untouched():

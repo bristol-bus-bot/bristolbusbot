@@ -56,10 +56,14 @@ def _apply_clock_change(clock_trips, service_date, match, est, reading,
     See clock_change. Off change nights every offset is zero and nothing
     changes. Returns (est, reading, estimate_reason, reading_reason).
     """
+    # A bus standing at its first stop cannot show which reading it runs to.
+    origin_seq = int(match.schedule[0][0])
     probe = None
-    if est is not None and est.clock_offset_s:
+    if est is not None and est.clock_offset_s \
+            and est.stop_sequence != origin_seq:
         probe = (est.delay_s, est.clock_offset_s)
-    elif reading is not None and reading.clock_offset_s:
+    elif reading is not None and reading.clock_offset_s \
+            and not reading.is_origin:
         probe = (reading.observed_delay_s, reading.clock_offset_s)
     before = clock_trips.decision(service_date, match.trip_id)
     decision = (clock_trips.observe(service_date, match.trip_id, *probe)
