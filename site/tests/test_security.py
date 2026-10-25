@@ -1,3 +1,4 @@
+import io
 import re
 import runpy
 from pathlib import Path
@@ -137,12 +138,28 @@ def test_https_enforcement_rejects_untrusted_forwarded_host(app, client):
     "bristolbuses.live:80.evil.example",
     "bristolbuses.live:443\\@evil.example",
 ])
-def test_https_redirect_rejects_deceptive_host_suffix(app, client, host):
+def test_https_redirect_rejects_deceptive_host_suffix(app, host):
     app.config["BBB"].enforce_https = True
-    response = client.get(
-        "/api/buses?test=1", headers={"Host": host, "X-Forwarded-Proto": "http"})
-    assert response.status_code == 400
-    assert "Location" not in response.headers
+    # Werkzeug's test client parses the Host as a URL (for cookies and the
+    # response URL), so "bristolbuses.live:80.evil.example" crashes the client
+    # before or after the hook runs. gunicorn passes it straight through, so
+    # call the WSGI app the way it does.
+    environ = {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/api/buses",
+        "QUERY_STRING": "test=1", "SERVER_NAME": "127.0.0.1",
+        "SERVER_PORT": "5002", "SERVER_PROTOCOL": "HTTP/1.1",
+        "HTTP_HOST": host, "HTTP_X_FORWARDED_PROTO": "http",
+        "wsgi.url_scheme": "http", "wsgi.input": io.BytesIO(),
+        "wsgi.errors": io.StringIO(),
+    }
+    started = {}
+
+    def start_response(status, headers, exc_info=None):
+        started.update(status=status, headers=dict(headers))
+
+    b"".join(app(environ, start_response))
+    assert started["status"].startswith("400")
+    assert "Location" not in started["headers"]
 
 
 @pytest.mark.parametrize("host", [
