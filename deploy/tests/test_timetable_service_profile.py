@@ -4,14 +4,18 @@ from datetime import date, datetime, timezone
 from datetime import timedelta
 from pathlib import Path
 
+import shutil
+
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy"
 sys.path.insert(0, str(DEPLOY))
+sys.path.insert(0, str(ROOT / "pipeline"))
 
 import timetable_service_profile as service_profile
+from timetable_journey_dedupe import collapse_same_day_copies
 from timetable_service_profile import (
     ServiceProfileError,
     bristol_today,
@@ -414,10 +418,22 @@ def test_bristol_local_date_handles_dst_instants():
     not EXACT_CURRENT.is_file() or not EXACT_CANDIDATE.is_file(),
     reason="exact seven-day GitHub artifacts are not available locally",
 )
-def test_exact_22_and_29_july_artifacts_pass_semantic_policy():
+def test_exact_22_and_29_july_artifacts_pass_semantic_policy(tmp_path):
+    # The 29 July candidate predates the build's duplicate-journey step
+    # (#202): FlixBus listed 951 journeys more than once a day, which policy
+    # service-window-v4 rightly refuses. Cleaned as a build now cleans it,
+    # the same artifacts must pass.
+    with pytest.raises(ServiceProfileError) as error:
+        compare_databases(EXACT_CURRENT, EXACT_CANDIDATE, start_date=START,
+                          deadline_seconds=10 * 60)
+    assert error.value.code == "candidate_duplicate_journeys"
+
+    candidate = tmp_path / "timetable.db"
+    shutil.copyfile(EXACT_CANDIDATE, candidate)
+    collapse_same_day_copies(candidate)
     result = compare_databases(
         EXACT_CURRENT,
-        EXACT_CANDIDATE,
+        candidate,
         start_date=START,
         deadline_seconds=10 * 60,
     )
