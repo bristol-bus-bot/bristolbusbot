@@ -31,6 +31,9 @@ cd "$REPO_DIR"
 git pull --ff-only origin main
 
 install -m 0644 "$AUDIT_SITE_DIR/audit_data.json" docs/audit_data.json
+if [ -f "$AUDIT_SITE_DIR/audit_summary.json" ]; then
+    install -m 0644 "$AUDIT_SITE_DIR/audit_summary.json" docs/audit_summary.json
+fi
 install -m 0644 "$ASSET_DIR/index.html" docs/index.html
 install -m 0644 "$ASSET_DIR/app.js" docs/app.js
 install -m 0644 "$ASSET_DIR/styles.css" docs/styles.css
@@ -67,6 +70,9 @@ CHANGED_PATHS=(
     docs/audit_data.json docs/index.html docs/app.js docs/styles.css
     docs/favicon.svg docs/fonts
 )
+if [ -f docs/audit_summary.json ]; then
+    CHANGED_PATHS+=(docs/audit_summary.json)
+fi
 if [ -d docs/packs ]; then
     CHANGED_PATHS+=(docs/packs)
 fi
@@ -79,6 +85,9 @@ fi
 
 if [ -n "$(git status --porcelain -- "${CHANGED_PATHS[@]}")" ]; then
     git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/fonts
+    if [ -f docs/audit_summary.json ]; then
+        git add docs/audit_summary.json
+    fi
     if [ -d docs/packs ]; then
         git add docs/packs
     fi

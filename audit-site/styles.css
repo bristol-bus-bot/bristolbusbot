@@ -1238,3 +1238,33 @@ details.detail[open] summary::before {
 .rd-fit:empty {
   display: none;
 }
+
+/* period switch: last 28 days or latest day */
+.view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.view-bar[hidden] {
+  display: none;
+}
+
+.vctl {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: 0.82rem;
+  padding: 5px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.vctl.active {
+  background: var(--surface-2);
+  color: var(--fg-1);
+  border-color: var(--amber);
+}
