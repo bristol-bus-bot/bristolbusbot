@@ -3,7 +3,7 @@ function limitedEvidence(row) {
     || row.qualification.reasons?.includes("wide_sampling_range") || false;
 }
 
-function evidenceText(overall, composition, operator) {
+function evidenceText(overall, composition, operator, isPeriod) {
   const q = overall.qualification;
   const parts = [];
   if (!q) parts.push("Historical result: journey-level sample checks are unavailable.");
@@ -19,7 +19,7 @@ function evidenceText(overall, composition, operator) {
   if (operator === "ALL" && composition) {
     const shares = composition.operators.filter(x => x.readings > 0)
       .map(x => `${x.name}: ${x.share_pct}%`).join("; ");
-    parts.push(shares ? `Share of this day's readings: ${shares}.` : "No eligible operator readings.");
+    parts.push(shares ? `Share of ${isPeriod ? "this period's" : "this day's"} readings: ${shares}.` : "No eligible operator readings.");
   }
   parts.push("Places and operators without observations are not represented. This is timetable adherence, not excess waiting time or a passenger survey.");
   return parts.join(" ");
@@ -685,12 +685,13 @@ function renderHeadline(opData) {
   const overall = opData.overall || {};
   const pct = overall.on_time_pct;
   const colour = verdict(pct, state.target);
-  const dayCount = data.days.length;
+  const dayCount = (data.days_index || data.days || []).length;
+  const when = day.period
+    ? `last ${day.period.days} days, ${shortDate(day.period.from)} to ${shortDate(day.period.to)}`
+    : `service day ${format.serviceDate(day.service_date)}`;
 
   document.getElementById("period-line").textContent =
-    operatorName(state.operator) +
-    " · service day " +
-    format.serviceDate(day.service_date) +
+    operatorName(state.operator) + " · " + when +
     (dayCount > 1 ? ` · ${dayCount} days collected` : " · 1 day collected");
 
   const pctEl = document.getElementById("ot-pct");
@@ -729,7 +730,7 @@ function renderHeadline(opData) {
   const status = overall.qualification?.status || 'Historical';
   evidence.querySelector('summary').textContent = `${status[0].toUpperCase()+status.slice(1)} observed sample · evidence and coverage`;
   const explanation = evidence.querySelector('p');
-  explanation.textContent = evidenceText(overall, day.operator_composition, state.operator);
+  explanation.textContent = evidenceText(overall, day.operator_composition, state.operator, Boolean(day.period));
   const excluded = data.excluded_service_days || [];
   if (excluded.length) explanation.textContent += ` Excluded historical days: ${excluded.map(x=>format.serviceDate(x.service_date)).join('; ')}.`;
   const withheld = opData.coverage_withheld_routes || [];
@@ -743,15 +744,67 @@ function renderHeadline(opData) {
   document.getElementById("genat").textContent = data.generated_at
     ? new Date(data.generated_at).toLocaleString("en-GB")
     : "–";
-  document.getElementById("genday").textContent = format.serviceDate(day.service_date);
+  document.getElementById("genday").textContent = day.period
+    ? `${shortDate(day.period.from)} to ${shortDate(day.period.to)}`
+    : format.serviceDate(day.service_date);
+}
+
+function shortDate(yyyymmdd) {
+  if (!yyyymmdd || yyyymmdd.length !== 8) return yyyymmdd || "–";
+  return new Date(`${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}T00:00:00`)
+    .toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+// The default view pools the last 28 days, so every route that ran in that
+// time shows with a solid sample; the latest single day is one tap away.
+function viewDay(view) {
+  const data = state.data;
+  if (view === "period" && data.period) {
+    return { service_date: data.period.to, by_operator: data.period.by_operator,
+      operator_composition: data.period.operator_composition, period: data.period };
+  }
+  return data.latest_day || (data.days && data.days[data.days.length - 1]);
+}
+
+function renderViewControls() {
+  const bar = document.getElementById("view-bar");
+  const box = document.getElementById("view-controls");
+  if (!bar || !box || !state.data.period) return;
+  const latest = state.data.latest_day;
+  const options = [
+    ["period", `Last ${state.data.period.days} days`],
+    ["day", `Latest day (${latest ? shortDate(latest.service_date) : "–"})`],
+  ];
+  box.innerHTML = options.map(([value, label]) =>
+    `<button type="button" class="vctl${state.view === value ? " active" : ""}" data-view="${value}"
+      aria-pressed="${state.view === value ? "true" : "false"}">${escapeHTML(label)}</button>`).join("");
+  box.querySelectorAll(".vctl").forEach((button) => {
+    button.addEventListener("click", () => selectView(button.dataset.view));
+  });
+  bar.hidden = false;
+}
+
+function selectView(view) {
+  state.view = view;
+  state.day = viewDay(view);
+  renderViewControls();
+  renderOperatorTabs();
+  const present = (state.data.operators || []).filter((o) => state.day.by_operator[o.code]);
+  const keep = present.find((o) => o.code === state.operator) || present[0];
+  if (keep) selectOperator(keep.code);
+}
+
+async function fetchJSON(name) {
+  const response = await fetch(name, { cache: "no-store" });
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  return response.json();
 }
 
 async function load() {
   let data;
   try {
-    const response = await fetch("audit_data.json", { cache: "no-store" });
-    if (!response.ok) throw new Error("HTTP " + response.status);
-    data = await response.json();
+    // The small summary first; the full daily history only as a fallback.
+    data = await fetchJSON("audit_summary.json").catch(() => fetchJSON("audit_data.json"));
   } catch (error) {
     showError(
       "Couldn't load audit_data.json (" +
@@ -770,7 +823,8 @@ async function load() {
   state.targetSourceUrl = String(data.current_target_source_url || "");
   renderTargetContext();
 
-  const day = data.days && data.days[data.days.length - 1];
+  state.view = data.period ? "period" : "day";
+  const day = viewDay(state.view);
   if (!day) {
     showError("No rollup days in the data yet.");
     return;
@@ -783,6 +837,7 @@ async function load() {
   }
 
   state.day = day;
+  renderViewControls();
 
   const present = (data.operators || []).filter((o) => day.by_operator[o.code]);
   if (!present.length) {

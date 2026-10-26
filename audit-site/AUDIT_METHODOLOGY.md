@@ -114,6 +114,19 @@ clearly for a later service date until a newly published target is deliberately
 added. It does not silently carry 87% into a financial year for which the
 scheme provides no target.
 
+## Last 28 days (the default view)
+
+The audit opens on the last 28 published service days pooled together, not a
+single day. One day leaves out every route that didn't run that day (on a
+Sunday about 75 of 175) and gives most routes too few readings to rely on.
+Counts are summed from the same daily figures as the single-day view.
+Medians come from the raw readings for exactly those days. Journey coverage
+counts only days whose collection passed its health check, and leaves out
+days when a route's coverage was withheld. Each route's evidence check uses
+only the days that route actually ran. The latest single day is still one
+tap away, and the full day-by-day history stays in `audit_data.json`; the
+page itself loads the much smaller `audit_summary.json`.
+
 ## Time of day
 
 Each reading is put in the hour of its **scheduled** time at that timing point,
@@ -343,6 +356,9 @@ management problem, and that is where the criticism belongs.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**26 October 2026 - the audit opens on the last 28 days.** Previously it showed
+only the latest service day. The figures for any single day are unchanged.
 
 **October 2026 - punctuality by time of day.** New hourly figures, split
 weekday and weekend, for each route and for the network (see "Time of day").

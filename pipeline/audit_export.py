@@ -28,6 +28,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT_DB = os.getenv("BBB_AUDIT_DB", os.path.join(HERE, "audit.db"))
 OUT_DIR = os.getenv("BBB_AUDIT_SITE_DIR", os.path.join(HERE, "audit_site"))
 OUT_FILE = os.path.join(OUT_DIR, "audit_data.json")
+# What the web page loads: the last 28 days pooled, the latest day, and a
+# one-line-per-day index. audit_data.json keeps the full daily history for
+# the health check, social pack and anyone who wants the detail.
+SUMMARY_NAME = "audit_summary.json"
 HOURLY_DIR = "hourly"
 # Hourly figures pool the most recent published days: one day gives most
 # route/hour cells only a handful of readings.
@@ -376,6 +380,22 @@ def write_hourly(cur, dates, operators):
             "min_readings": MIN_HOURLY_READINGS, "files": files}
 
 
+def build_summary(cur, payload, dates):
+    from audit_period import build_period
+    days = payload["days"]
+    summary = {key: value for key, value in payload.items() if key != "days"}
+    summary["full_history"] = "audit_data.json"
+    summary["period"] = build_period(cur, dates, coverage_is_valid)
+    summary["latest_day"] = days[-1]
+    summary["days_index"] = [
+        {"service_date": day["service_date"],
+         "operators": sorted(day["by_operator"]),
+         "network": {key: (day["by_operator"].get(NETWORK_LABEL) or {}).get("overall", {}).get(key)
+                     for key in ("on_time_pct", "readings_in_gate")}}
+        for day in days]
+    return summary
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"audit.db not found at {AUDIT_DB}")
@@ -446,6 +466,9 @@ def main():
         payload["segments"] = segments
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
+    summary = build_summary(cur, payload, dates)
+    with open(os.path.join(OUT_DIR, SUMMARY_NAME), "w", encoding="utf-8") as out:
+        json.dump(summary, out, separators=(',', ':'))
     exclusion_text = (
         f", excluded: {len(exclusions)}" if exclusions else "")
     print(
