@@ -339,7 +339,6 @@ function recordPanel(ctx) {
     const words = Array.isArray(profile.plain_english) ? profile.plain_english : [];
     const root = el("div", { class: "vs-history" }, [
         words.length ? el("div", { class: "vs-plain" }, [
-            el("strong", {}, ["In plain English"]),
             ...words.map(line => el("p", {}, [line])),
         ]) : null,
         delayFigure(profile),

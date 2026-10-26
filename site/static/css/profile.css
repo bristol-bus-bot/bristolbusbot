@@ -301,5 +301,5 @@
 }
 /* Plain-English reading of the record. */
 .profile-plain { margin: 16px 0; padding: 12px 14px; border-left: 3px solid var(--uk-green); background: var(--surface-2); border-radius: 4px; }
-.profile-plain strong { display: block; margin-bottom: 4px; }
-.profile-plain p { margin: 6px 0 0; line-height: 1.5; }
+.profile-plain p { margin: 0 0 6px; line-height: 1.5; }
+.profile-plain p:last-child { margin-bottom: 0; }

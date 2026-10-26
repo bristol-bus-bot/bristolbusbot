@@ -208,5 +208,5 @@
 }
 /* Plain-English reading of the record, above the chart. */
 .vs-plain { margin: 0 0 16px; padding: 12px; border-left: 3px solid var(--uk-green); background: var(--surface-2); border-radius: 4px; }
-.vs-plain strong { display: block; font-size: 0.8rem; margin-bottom: 4px; }
-.vs-plain p { margin: 6px 0 0; font-size: 0.85rem; line-height: 1.45; }
+.vs-plain p { margin: 0 0 6px; font-size: 0.85rem; line-height: 1.45; }
+.vs-plain p:last-child { margin-bottom: 0; }
