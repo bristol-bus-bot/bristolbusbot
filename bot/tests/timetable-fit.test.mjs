@@ -30,6 +30,7 @@ test('a bus five or more minutes late at the end of a known tight stretch gets t
   const fact = fit.factFor(event);
   assert.equal(fact.from, 'Temple Meads Stn');
   assert.equal(fact.timetableMinutes, 7);
+  assert.equal(new TimetableFit(segments([{ ...tight, timetable_min: 21.5 }]), true).factFor(event).timetableMinutes, 22);
   assert.equal(fact.typicalMinutes, 14);
   assert.equal(fact.when, 'weekdays 10am-4pm');
   assert.match(fact.scope, /does not prove why this bus is late/);
@@ -59,6 +60,8 @@ test('it takes a service turn, stays about the bus, and is never repeated back t
   assert.match(prompt, /never on the driver/);
   assert.match(prompt, /"timetableFit"/);
   assert.match(SUBJECT_PERSONAS.timetable, /this one bus/);
+  assert.match(SUBJECT_PERSONAS.timetable, /open with the bus/);
+  assert.match(SUBJECT_PERSONAS.timetable, /never lead with the statistic/);
 });
 
 test('subject history accepts the new kind', () => {
