@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 import pytest
-from app.services.notices import for_context, _window_status
+from app.services.notices import for_context, stop_summary, _window_status
 
 NOW = datetime(2026, 9, 15, 10, tzinfo=timezone.utc)
 PERIODS = [
@@ -65,3 +65,47 @@ def test_api_requires_unambiguous_context(client):
     response = client.get('/api/notices?stop=0100B')
     assert response.status_code == 200
     assert response.get_json()['available'] is False
+
+
+def _situation(live, number, periods, stops, participant='WestofEngland', at=NOW):
+    live.execute('''INSERT INTO situations (situation_number,participant,progress,summary,description,
+        versioned_at,affected_json,updated_at,link) VALUES (?,?,'open','Stop closed','',?,?,?,'')''',
+        (number, participant, at.isoformat(),
+         json.dumps({'validity_periods': periods, 'stops': [{'stop_ref': s} for s in stops]}),
+         at.isoformat()))
+
+
+def test_stop_summary_badges_match_the_cards(app):
+    live = sqlite3.connect(app.config['BBB'].live_db)
+    live.row_factory = sqlite3.Row
+    tt = sqlite3.connect(app.config['BBB'].timetable_db)
+    tt.row_factory = sqlite3.Row
+    live.execute("INSERT INTO poller_status VALUES ('siri_sx', ?, ?, 0, 'ok')", (NOW.isoformat(), NOW.isoformat()))
+    summary = lambda: stop_summary(live, tt, now=NOW)
+    # No notices: available, nothing badged.
+    assert summary() == {'stops': {}, 'available': True, 'checked_at': NOW.isoformat()}
+    # An upcoming notice is reported as upcoming...
+    _situation(live, 'later', [{'StartTime': '2026-09-17T08:00:00Z', 'EndTime': '2026-09-17T18:00:00Z'}], ['S2'])
+    assert summary()['stops'] == {'0100B': 'upcoming'}
+    # ...and a current one on the same stop outranks it.
+    _situation(live, 'now', PERIODS, ['S2', 'UNKNOWN_REF'])
+    assert summary()['stops'] == {'0100B': 'current'}
+    assert [n['status'] for n in for_context(live, tt, stop='0100B', now=NOW)['notices']] == ['current', 'upcoming']
+    # Operator-published notices stay out, as on the stop panel.
+    _situation(live, 'first', PERIODS, ['S1'], participant='FirstBristol')
+    assert '0100A' not in summary()['stops']
+    # Uncertain dates are flagged, not asserted as current.
+    _situation(live, 'vague', [], ['S1'])
+    assert summary()['stops']['0100A'] == 'uncertain'
+    # An out-of-date feed badges nothing.
+    live.execute("UPDATE poller_status SET last_success_at='2026-09-15T09:00:00Z' WHERE name='siri_sx'")
+    stale = summary()
+    assert stale['available'] is False and stale['stops'] == {}
+    live.close(); tt.close()
+
+
+def test_stop_summary_api(client):
+    response = client.get('/api/notices/stops')
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert response.get_json() == {'stops': {}, 'available': False, 'checked_at': None}

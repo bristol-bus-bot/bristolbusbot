@@ -106,12 +106,15 @@ def vehicle_profile(slug: str):
         if bus["vehicleRef"] == profile["vehicle_ref"]
         and bus["operatorRef"] == profile["operator"]), None)
     public_code = details.get("fleetNumber") or profile["vehicle_ref"].split("-")[-1]
-    profile_view = {**profile, "delay_plot": _delay_plot(profile)}
+    from ..services import record_words
+    profile_view = {**profile, "delay_plot": _delay_plot(profile),
+                    "plain_english": record_words.summary(profile)}
     profile_view["routes"] = []
     for route in profile.get("routes", []):
         route_view = {
             **route,
             "delay_bins_s": profile.get("delay_bins_s"),
+            "comparison_text": record_words.route_comparison(route),
         }
         route_view["delay_plot"] = _delay_plot(route_view, compact=True)
         profile_view["routes"].append(route_view)
@@ -133,6 +136,12 @@ def vehicle_profile_data(slug: str):
     profile = audit.profile(slug)
     if profile is None:
         abort(404)
+    from ..services import record_words
+    profile = {
+        **profile, "plain_english": record_words.summary(profile),
+        "routes": [{**route, "comparison_text": record_words.route_comparison(route)}
+                   for route in profile.get("routes", [])],
+    }
     response = jsonify({"profile": profile})
     response.headers["Cache-Control"] = "no-cache"
     return response

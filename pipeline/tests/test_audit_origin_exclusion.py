@@ -120,6 +120,8 @@ def test_public_day_rollup_rolls_back_every_product_on_late_failure(monkeypatch)
     monkeypatch.setattr(
         audit_rollup, "rollup_frequency", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(
+        audit_rollup, "rollup_hours", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
         audit_rollup, "day_consistency_reasons",
         lambda *_args, **_kwargs: ["deliberate_test_contradiction"])
 

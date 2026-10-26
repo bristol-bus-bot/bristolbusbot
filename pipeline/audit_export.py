@@ -28,6 +28,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT_DB = os.getenv("BBB_AUDIT_DB", os.path.join(HERE, "audit.db"))
 OUT_DIR = os.getenv("BBB_AUDIT_SITE_DIR", os.path.join(HERE, "audit_site"))
 OUT_FILE = os.path.join(OUT_DIR, "audit_data.json")
+HOURLY_DIR = "hourly"
+# Hourly figures pool the most recent published days: one day gives most
+# route/hour cells only a handful of readings.
+HOURLY_WINDOW_DAYS = 28
+MIN_HOURLY_READINGS = 30
 
 AREA = "WECA"
 TARGET_PCT = 95
@@ -218,6 +223,159 @@ def build_day(cur, service_date):
     return day
 
 
+def day_type(service_date):
+    """Weekday or weekend by the service day the journey belongs to."""
+    return "weekend" if datetime.strptime(service_date, "%Y%m%d").weekday() >= 5 else "weekday"
+
+
+def build_hourly(cur, dates, operator):
+    """On-time, early and late counts by local hour, split weekday/weekend.
+
+    Hours are sparse ({"7": [on_time, early, late]}); an hour with no readings
+    is left out rather than shown as zero.
+    """
+    window = dates[-HOURLY_WINDOW_DAYS:]
+    result = {
+        "operator": operator,
+        "window": {
+            "from": window[0], "to": window[-1],
+            "days": {kind: sum(day_type(d) == kind for d in window)
+                     for kind in ("weekday", "weekend")},
+        },
+        "min_readings": MIN_HOURLY_READINGS,
+        "network": {"weekday": {}, "weekend": {}},
+        "routes": {},
+    }
+    placeholders = ",".join("?" for _ in window)
+    try:
+        rows = cur.execute(
+            f"""SELECT service_date, route, hour, on_time, early, late
+                  FROM daily_hour_summary
+                 WHERE operator = ? AND service_date IN ({placeholders})""",
+            (operator, *window)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    if not rows:
+        return None
+    for row in rows:
+        if row["route"] is None:
+            target = result["network"]
+        else:
+            target = result["routes"].setdefault(
+                row["route"], {"weekday": {}, "weekend": {}})
+        cell = target[day_type(row["service_date"])].setdefault(
+            str(row["hour"]), [0, 0, 0])
+        cell[0] += row["on_time"]
+        cell[1] += row["early"]
+        cell[2] += row["late"]
+    return result
+
+
+JOURNEY_BANDS = ("am_peak", "interpeak", "pm_peak", "evening")
+
+
+def build_journeys(cur, window, operator):
+    """Timetabled, seen and very-likely-not-run journeys over the window.
+
+    Counts come only from days whose trip coverage passed its health check;
+    routes withheld for duplicate timetable entries are already left out of
+    daily_trip_coverage. "Very likely didn't run" counts only from operator
+    days whose duty-gap check passed. Each entry is [timetabled, seen,
+    very_likely_not_run], in total and by the band the journey starts in.
+    """
+    from audit_rollup import trip_time_band_for
+    pooled = operator == NETWORK_LABEL
+    ops = SHOW_OPERATORS if pooled else [operator]
+    placeholders = ",".join("?" for _ in window)
+    op_ph = ",".join("?" for _ in ops)
+    try:
+        coverage = cur.execute(
+            f"""SELECT operator, route, time_band,
+                       SUM(scheduled_trips) AS scheduled, SUM(observed_trips) AS seen
+                  FROM valid_daily_trip_coverage
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})
+                 GROUP BY operator, route, time_band""", (*window, *ops)).fetchall()
+        checked = {(r["operator"], r["service_date"]) for r in cur.execute(
+            f"""SELECT operator, service_date FROM valid_daily_duty_gap_days
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})""",
+            (*window, *ops))}
+        gaps = cur.execute(
+            f"""SELECT operator, service_date, route, first_departure
+                  FROM valid_daily_duty_gap_candidates
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})""",
+            (*window, *ops)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    if not coverage:
+        return None
+
+    def blank():
+        return {"total": [0, 0, 0], "bands": {band: [0, 0, 0] for band in JOURNEY_BANDS}}
+
+    result = {"duty_checked": bool(checked), "network": blank(), "routes": {}}
+
+    def add(route, band, index, value):
+        for target in (result["network"], result["routes"].setdefault(route, blank())):
+            target["total"][index] += value
+            if band in target["bands"]:
+                target["bands"][band][index] += value
+
+    for row in coverage:
+        route = public_route(row["operator"], row["route"], pooled)
+        add(route, row["time_band"], 0, int(row["scheduled"] or 0))
+        add(route, row["time_band"], 1, int(row["seen"] or 0))
+    for row in gaps:
+        if (row["operator"], row["service_date"]) in checked:
+            add(public_route(row["operator"], row["route"], pooled),
+                trip_time_band_for(row["first_departure"]), 2, 1)
+    return result
+
+
+SEGMENTS_DIR = "segments"
+
+
+def write_segments(conn, dates, operators):
+    """Write segments/<operator>.json (reviewed timetable-fit stretches)."""
+    import audit_segments
+    window = dates[-HOURLY_WINDOW_DAYS:]
+    built = audit_segments.build(conn, window, NETWORK_LABEL, public_route)
+    if not built:
+        return None
+    os.makedirs(os.path.join(OUT_DIR, SEGMENTS_DIR), exist_ok=True)
+    files = {}
+    for operator in operators:
+        if operator not in built:
+            continue
+        name = f"{SEGMENTS_DIR}/{operator}.json"
+        payload = {"operator": operator, "window": {"from": window[0], "to": window[-1]},
+                   "min_journeys": audit_segments.MIN_JOURNEYS, **built[operator]}
+        with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
+            json.dump(payload, out, separators=(",", ":"))
+        files[operator] = name
+    return {"files": files} if files else None
+
+
+def write_hourly(cur, dates, operators):
+    """Write hourly/<operator>.json; return the index for audit_data.json."""
+    os.makedirs(os.path.join(OUT_DIR, HOURLY_DIR), exist_ok=True)
+    files = {}
+    for operator in operators:
+        payload = build_hourly(cur, dates, operator)
+        if payload is None:
+            continue
+        journeys = build_journeys(cur, dates[-HOURLY_WINDOW_DAYS:], operator)
+        if journeys:
+            payload["journeys"] = journeys
+        name = f"{HOURLY_DIR}/{operator}.json"
+        with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
+            json.dump(payload, out, separators=(",", ":"))
+        files[operator] = name
+    if not files:
+        return None
+    return {"window_days": HOURLY_WINDOW_DAYS,
+            "min_readings": MIN_HOURLY_READINGS, "files": files}
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"audit.db not found at {AUDIT_DB}")
@@ -280,6 +438,12 @@ def main():
     }
 
     os.makedirs(OUT_DIR, exist_ok=True)
+    hourly = write_hourly(cur, dates, [o["code"] for o in operators])
+    if hourly:
+        payload["hourly"] = hourly
+    segments = write_segments(conn, dates, [o["code"] for o in operators])
+    if segments:
+        payload["segments"] = segments
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
     exclusion_text = (

@@ -69,3 +69,22 @@ def test_accessibility_landmarks_and_live_regions_are_present():
     for marker in ('href="#main-content"', "<main", 'role="tablist"',
                    'role="alert"', 'aria-live="polite"'):
         assert marker in html
+
+
+def test_hourly_strips_escape_text_and_only_load_local_files():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'title="${escapeHTML(text)}"' in source
+    assert 'data-detail="${escapeHTML(text)}"' in source
+    assert 'aria-label="${escapeHTML(title)}"' in source
+    # The hourly file name comes from audit_data.json; only hourly/<code>.json
+    # is fetched, never an arbitrary path or URL.
+    assert r"/^hourly\/[A-Za-z0-9_-]+\.json$/.test(file)" in source
+    # Details are set as text, not HTML.
+    assert "detail.textContent = cell.dataset.detail" in source
+
+
+def test_timetable_fit_escapes_stop_names_and_only_loads_local_files():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "${escapeHTML(item.from)} → ${escapeHTML(item.to)}" in source
+    assert "${escapeHTML(item.route)}" in source
+    assert r"/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)" in source

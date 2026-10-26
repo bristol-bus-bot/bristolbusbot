@@ -178,7 +178,13 @@ export function busPopup(bus, featuredPost = null) {
     ]);
 }
 
-export function stopPopup(stop, onSelect) {
+const STOP_NOTICE_LINES = {
+    current: "⚠ Travel notice affects this stop",
+    uncertain: "⚠ Travel notice for this stop: check dates",
+    upcoming: "Upcoming travel notice for this stop",
+};
+
+export function stopPopup(stop, onSelect, noticeStatus) {
     const head = [el("div", { class: "sp-name" }, [stop.common_name])];
     if (stop.street) head.push(el("div", { class: "sp-street" }, [`on ${stop.street}`]));
     const loc = [stop.enriched_locality, stop.local_authority].filter(Boolean);
@@ -187,8 +193,12 @@ export function stopPopup(stop, onSelect) {
     return el("div", { class: "stop-popup sp" }, [
         el("div", { class: "sp-head" }, head),
         el("div", { class: "sp-body" }, [
+            STOP_NOTICE_LINES[noticeStatus]
+                ? el("div", { class: `sp-notice sp-notice--${noticeStatus}` },
+                     [STOP_NOTICE_LINES[noticeStatus]])
+                : null,
             el("button", { class: "sp-btn", onClick: () => onSelect(stop.stop_code) },
-               ["View departures"]),
+               [STOP_NOTICE_LINES[noticeStatus] ? "View departures and notice" : "View departures"]),
         ]),
     ]);
 }

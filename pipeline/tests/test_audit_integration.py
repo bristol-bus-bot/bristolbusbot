@@ -32,7 +32,8 @@ def database() -> sqlite3.Connection:
                observed_delay_s INTEGER,
                gps_distance_m INTEGER,
                vehicle_ref TEXT,
-               is_origin INTEGER NOT NULL DEFAULT 0
+               is_origin INTEGER NOT NULL DEFAULT 0,
+               scheduled_local TEXT
            )"""
     )
     return conn
@@ -48,12 +49,14 @@ def add_completed(conn: sqlite3.Connection, dates: list[str]) -> None:
 def add_observation(conn: sqlite3.Connection, service_date: str, vehicle: str,
                     route: str, number: int, *, operator: str = "FBRI",
                     delay: int = 0, stop: str | None = None,
-                    is_origin: bool = False) -> None:
+                    is_origin: bool = False, hour: int = 12) -> None:
+    scheduled = (f"{service_date[:4]}-{service_date[4:6]}-{service_date[6:]} "
+                 f"{hour:02d}:00:00+01:00")
     conn.execute(
-        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO timepoint_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (service_date, operator, route, f"{service_date}-{vehicle}-{route}-{number}",
          number, stop or f"STOP-{number}", delay, 25, vehicle,
-         int(is_origin)),
+         int(is_origin), scheduled),
     )
 
 
@@ -120,6 +123,7 @@ def test_headline_is_count_weighted_and_profile_gate_is_enforced():
             "delay_counts": [
                 0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0,
             ],
+            "comparison": profile["routes"][0]["comparison"],
             "days": [
                 {"service_date": "20260716", "readings": 15,
                  "on_time": 10, "early": 0, "late": 5,
@@ -293,3 +297,26 @@ def test_promote_sets_publish_time_only_after_input_is_valid(tmp_path):
     ]) == 0
     result = json.loads(published.read_text(encoding="utf-8"))
     assert datetime.fromisoformat(result["published_at"]).tzinfo is not None
+
+
+def test_each_bus_is_compared_with_other_buses_at_the_same_route_day_and_hour():
+    conn = database()
+    conn.row_factory = sqlite3.Row
+    days = ["20261020", "20261021"]
+    for day in days:
+        for n in range(20):
+            # Bus A runs the 8am journeys: half late. Other buses at 8am on
+            # the same route are mostly late too; at noon everyone is on time.
+            add_observation(conn, day, "A", "43", n, hour=8, delay=600 if n % 2 else 0)
+            add_observation(conn, day, "B", "43", 100 + n, hour=8, delay=600 if n % 4 else 0)
+            add_observation(conn, day, "C", "43", 200 + n, hour=12, delay=0)
+    by_vehicle, by_route, hours = integration._fair_comparison(conn.cursor(), days)
+    expected, compared = by_vehicle[("FBRI", "A")]
+    # A is compared with B only (same route, day and hour), never with C.
+    assert compared == 40 and round(100 * expected / compared) == 25
+    assert ("FBRI", "C") not in by_vehicle  # nobody else ran at noon
+    assert by_route[("FBRI", "A", "43")][1] == 40
+    assert hours[("FBRI", "A")][8] == [20, 0, 20]
+    assert integration._comparison(by_vehicle[("FBRI", "A")]) == {
+        "others_on_time_pct": 25.0, "compared_readings": 40}
+    assert integration._comparison([5.0, 10]) is None  # too few readings
