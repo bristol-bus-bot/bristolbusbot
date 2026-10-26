@@ -28,6 +28,17 @@ def api_notices():
     response = jsonify(result)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@bp.route("/api/notices/stops")
+def api_notice_stops():
+    """Stop codes with a published notice, for badging map markers."""
+    from ..services.notices import stop_summary
+    response = jsonify(stop_summary(db.live(), db.gtfs()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @bp.route("/api/route-hours")
 def api_route_hours():
     """One route's on-time share by hour, from the nightly audit files."""
