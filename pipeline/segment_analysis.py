@@ -216,6 +216,7 @@ def segment_pairs(audit, timetable, date_from=None, date_to=None):
                 "from_stop": a["stop_code"], "to_stop": b["stop_code"],
                 "day_type": day_type(service_date), "band": band_for(start.hour),
                 "planned_s": planned_s, "actual_s": planned_s + change_s, "change_s": change_s,
+                "start_delay_s": a["observed_delay_s"],
             })
     return pairs, tally
 

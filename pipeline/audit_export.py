@@ -331,6 +331,30 @@ def build_journeys(cur, window, operator):
     return result
 
 
+SEGMENTS_DIR = "segments"
+
+
+def write_segments(conn, dates, operators):
+    """Write segments/<operator>.json (reviewed timetable-fit stretches)."""
+    import audit_segments
+    window = dates[-HOURLY_WINDOW_DAYS:]
+    built = audit_segments.build(conn, window, NETWORK_LABEL, public_route)
+    if not built:
+        return None
+    os.makedirs(os.path.join(OUT_DIR, SEGMENTS_DIR), exist_ok=True)
+    files = {}
+    for operator in operators:
+        if operator not in built:
+            continue
+        name = f"{SEGMENTS_DIR}/{operator}.json"
+        payload = {"operator": operator, "window": {"from": window[0], "to": window[-1]},
+                   "min_journeys": audit_segments.MIN_JOURNEYS, **built[operator]}
+        with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
+            json.dump(payload, out, separators=(",", ":"))
+        files[operator] = name
+    return {"files": files} if files else None
+
+
 def write_hourly(cur, dates, operators):
     """Write hourly/<operator>.json; return the index for audit_data.json."""
     os.makedirs(os.path.join(OUT_DIR, HOURLY_DIR), exist_ok=True)
@@ -417,6 +441,9 @@ def main():
     hourly = write_hourly(cur, dates, [o["code"] for o in operators])
     if hourly:
         payload["hourly"] = hourly
+    segments = write_segments(conn, dates, [o["code"] for o in operators])
+    if segments:
+        payload["segments"] = segments
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
     exclusion_text = (

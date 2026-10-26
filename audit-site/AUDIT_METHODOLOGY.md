@@ -162,6 +162,35 @@ added together into one "cancelled" figure.
 The audit also says when journeys go missing most often, by the time the
 journey starts: 7–10am, 10am–4pm, 4–7pm, or evenings and early mornings.
 
+## Where the timetable doesn't fit
+
+For each journey, the change in lateness between two timing points next to
+each other in its timetable is the time it lost or gained on that stretch.
+Readings that skip a timing point are never paired. Results are pooled over
+the last 28 days by route, direction, stretch, weekday or weekend, and time
+of day (before 7am, 7–10am, 10am–4pm, 4–7pm, after 7pm). A group needs at
+least 30 journeys.
+
+Before anything is shown:
+- **One-offs are dropped.** A result must point the same way in at least 3
+  of the 4 weeks, so a week of roadworks or a closure doesn't count.
+- **Reading errors are dropped.** A big loss that is won back on the very
+  next stretch, or a typical time far above the timetable, is a reading on
+  the wrong visit to a stop or during a layover.
+- **Recovery time isn't slack.** Extra time on the last stretch into the end
+  of the route is put there on purpose, so it isn't listed.
+- **Waiting isn't traffic.** We record when a bus first reaches a stop, but
+  timetables give departure times. Where buses usually arrive early and
+  wait, the wait shows up on the next stretch, so that stretch is listed as
+  "where buses wait", not as "not enough time".
+
+"Not enough time allowed" means the median journey lost more than 2
+minutes. "More time allowed than buses need" means it gained more than 1
+minute. Each reading can be out by up to about half a minute, which is why
+only medians over many journeys are used. These figures describe the
+timetable and the service. They are not a measure of drivers, who can only
+make up time by driving faster or pulling away before people have sat down.
+
 ## Bus records on the live map
 
 Each bus's Record tab on bristolbuses.live compares it, like for like, with

@@ -81,3 +81,10 @@ def test_hourly_strips_escape_text_and_only_load_local_files():
     assert r"/^hourly\/[A-Za-z0-9_-]+\.json$/.test(file)" in source
     # Details are set as text, not HTML.
     assert "detail.textContent = cell.dataset.detail" in source
+
+
+def test_timetable_fit_escapes_stop_names_and_only_loads_local_files():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "${escapeHTML(item.from)} → ${escapeHTML(item.to)}" in source
+    assert "${escapeHTML(item.route)}" in source
+    assert r"/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)" in source

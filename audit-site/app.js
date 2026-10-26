@@ -45,6 +45,7 @@ const state = {
   geoSort: "reads",
   hourKind: "weekday",
   hourly: {},
+  segments: {},
 };
 
 const TINTS = {
@@ -276,8 +277,10 @@ function renderRouteDetail() {
       <div class="rd-stat"><span class="k">On time</span><span class="v">${finiteNumber(row.on_time).toLocaleString()}</span></div>
       <div class="rd-stat"><span class="k">Late</span><span class="v">${finiteNumber(row.late).toLocaleString()}</span></div>
     </div>
-    <div class="rd-hours" id="route-hours"></div>`;
+    <div class="rd-hours" id="route-hours"></div>
+    <div class="rd-fit" id="route-fit"></div>`;
   renderRouteHours(row.route);
+  renderRouteFit(row.route);
 }
 
 // --- Time of day -----------------------------------------------------------
@@ -392,6 +395,106 @@ function journeysHTML(entry, dutyChecked, days) {
       ${worstLine}
       <p class="faint audit-small">Same ${finiteNumber(days)} days as above, weekdays and weekends together, counting only days when our tracking was working properly.</p>
     </div>`;
+}
+
+// --- Where the timetable doesn't fit ----------------------------------------
+const FIT_BANDS = {
+  early: "before 7am", am_peak: "7–10am", interpeak: "10am–4pm",
+  pm_peak: "4–7pm", evening: "after 7pm",
+};
+const FIT_ORDER = ["early", "am_peak", "interpeak", "pm_peak", "evening"];
+
+function loadSegments(operator) {
+  const file = state.data.segments?.files?.[operator];
+  if (!file || !/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)) return Promise.resolve(null);
+  state.segments[operator] ||= fetch(file, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null);
+  return state.segments[operator];
+}
+
+function minutes(value) {
+  const n = finiteNumber(value);
+  return Number.isInteger(n) ? `${n} min` : `about ${Math.round(n)} min`;
+}
+
+// One line per stretch: its clearest time band, then the other times it shows.
+function groupStretches(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = [item.kind, item.from, item.to].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.values()].map((list) => {
+    list.sort((a, b) => Math.abs(b.typical_min - b.timetable_min) - Math.abs(a.typical_min - a.timetable_min));
+    const when = list
+      .slice().sort((a, b) => FIT_ORDER.indexOf(a.band) - FIT_ORDER.indexOf(b.band) || a.day_type.localeCompare(b.day_type))
+      .map((i) => `${i.day_type === "weekday" ? "weekdays" : "weekends"} ${FIT_BANDS[i.band] || i.band}`);
+    return { ...list[0], when: [...new Set(when)] };
+  });
+}
+
+function stretchLine(item, withRoute) {
+  const route = withRoute ? `<strong>${escapeHTML(item.route)}</strong> · ` : "";
+  const place = `${escapeHTML(item.from)} → ${escapeHTML(item.to)}`;
+  const when = `<span class="faint">${escapeHTML(item.when ? item.when.join(", ") : `${item.day_type === "weekday" ? "weekdays" : "weekends"} ${FIT_BANDS[item.band] || item.band}`)}</span>`;
+  if (item.kind === "waiting") {
+    return `<li>${route}${place}: buses usually arrive early at ${escapeHTML(item.from)} and wait there, so this stretch looks slower than the timetable. ${when}</li>`;
+  }
+  if (item.kind === "slack") {
+    return `<li>${route}${place}: the timetable allows <strong>${minutes(item.timetable_min)}</strong>, buses usually take <strong>${minutes(item.typical_min)}</strong>, so they run early and may have to wait. ${when}</li>`;
+  }
+  return `<li>${route}${place}: the timetable allows <strong>${minutes(item.timetable_min)}</strong>, buses usually take <strong>${minutes(item.typical_min)}</strong>. ${finiteNumber(item.share_pct)}% of ${finiteNumber(item.journeys).toLocaleString()} journeys lost 2+ minutes here. ${when}</li>`;
+}
+
+function fitHTML(items) {
+  const grouped = groupStretches(items || []);
+  const tight = grouped.filter((i) => i.kind === "tight");
+  const slack = grouped.filter((i) => i.kind === "slack");
+  // A stretch that is clearly too tight at some times isn't also listed as a
+  // waiting point; the tight result is the stronger finding.
+  const tightKeys = new Set(tight.map((i) => `${i.from}|${i.to}`));
+  const waiting = grouped.filter((i) => i.kind === "waiting" && !tightKeys.has(`${i.from}|${i.to}`));
+  if (!tight.length && !slack.length && !waiting.length) return "";
+  const part = (title, list) => list.length
+    ? `<p class="audit-small fit-sub">${title}</p><ul class="fit-lines">${list.map((i) => stretchLine(i, false)).join("")}</ul>` : "";
+  return `
+    <div class="fit">
+      <span class="k">Where the timetable doesn't fit</span>
+      ${part("Not enough time allowed", tight)}
+      ${part("More time allowed than buses need", slack)}
+      ${part("Where buses wait", waiting)}
+      <p class="faint audit-small">Between timing points, last 28 days, only patterns seen in at least 3 of the 4 weeks. This is about the timetable, not the drivers.</p>
+    </div>`;
+}
+
+async function renderRouteFit(route) {
+  const box = document.getElementById("route-fit");
+  if (!box) return;
+  const operator = state.operator;
+  const segments = await loadSegments(operator);
+  if (operator !== state.operator || String(route) !== String(state.selectedRoute)) return;
+  box.innerHTML = fitHTML(segments?.routes?.[route]);
+}
+
+async function renderNetworkFit() {
+  const panel = document.getElementById("network-fit");
+  if (!panel) return;
+  const operator = state.operator;
+  const segments = await loadSegments(operator);
+  if (operator !== state.operator) return;
+  const worst = (segments?.worst || []).slice(0, 10);
+  if (!worst.length) {
+    panel.innerHTML = "";
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  panel.innerHTML = `
+    <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">Where the timetable doesn't allow enough time</h3>
+    <p class="audit-muted audit-small">The stretches where buses most consistently take longer than the timetable gives them. This is a planning problem: drivers can only catch up by driving faster or pulling away before people have sat down.</p>
+    <ol class="fit-lines fit-worst">${worst.map((i) => stretchLine(i, true)).join("")}</ol>`;
 }
 
 function hourKindControls() {
@@ -570,6 +673,7 @@ function selectOperator(code) {
   });
   renderHeadline(opData);
   renderNetworkHours();
+  renderNetworkFit();
   renderRouteGrid();
   renderGeography(opData);
   renderFleet(opData);

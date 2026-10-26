@@ -15,6 +15,7 @@ Run from the bristol-live-buses folder:
     python audit_rollup.py --backfill-duty-gaps
     python audit_rollup.py --backfill-geo-routes
     python audit_rollup.py --backfill-hours
+    python audit_rollup.py --backfill-segments
 """
 
 import os
@@ -508,6 +509,26 @@ def rollup_hours(conn, date_str, operators, label, *, commit=True):
     if commit:
         conn.commit()
     return len(counts)
+
+
+def open_timetable():
+    """Read-only timetable connection for timetable-fit stretches, or None."""
+    path = os.getenv("BBB_TIMETABLE_DB", "/var/lib/bristolbusbot/pipeline/timetable.db")
+    if not os.path.exists(path):
+        return None
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def rollup_segments_day(conn, timetable, date_str):
+    import audit_segments
+    previous = conn.row_factory
+    conn.row_factory = sqlite3.Row
+    try:
+        return audit_segments.rollup_day(conn, timetable, date_str)
+    finally:
+        conn.row_factory = previous
 
 
 def hour_backfill_dates(conn):
@@ -1853,12 +1874,13 @@ def main():
     backfill_duty_gaps = "--backfill-duty-gaps" in raw_args
     backfill_geo_routes = "--backfill-geo-routes" in raw_args
     backfill_hours = "--backfill-hours" in raw_args
+    backfill_segments = "--backfill-segments" in raw_args
     allow_large_restatement = "--allow-large-restatement" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
     backfill_modes = sum((
         backfill_trip_coverage, backfill_duty_gaps, backfill_geo_routes,
-        backfill_hours))
+        backfill_hours, backfill_segments))
     if backfill_modes > 1:
         print("ERROR: choose one backfill mode at a time.")
         return 2
@@ -1926,6 +1948,19 @@ def main():
         conn.close()
         return 0
 
+    if backfill_segments:
+        timetable = open_timetable()
+        if timetable is None:
+            print("ERROR: timetable database not found (set BBB_TIMETABLE_DB).")
+            conn.close()
+            return 2
+        dates = hour_backfill_dates(conn)
+        print(f"Backfilling timetable-fit stretches for {len(dates)} retained days...")
+        for date_str in dates:
+            print(f"[{date_str}] {rollup_segments_day(conn, timetable, date_str)} stretch groups")
+        conn.close()
+        return 0
+
     try:
         date_str = resolve_date(positional)
     except ValueError:
@@ -1974,6 +2009,19 @@ def main():
 
     n = public_result["frequent_routes"]
     print(f"  frequency: {n} frequent routes classified.")
+
+    # Timetable fit is an analysis product: a failure here is reported but
+    # never undoes or blocks the published daily figures above.
+    timetable = open_timetable()
+    if timetable is None:
+        print("  timetable fit: skipped, timetable database not found.")
+    else:
+        try:
+            n = rollup_segments_day(conn, timetable, date_str)
+            print(f"  timetable fit: {n} stretch groups.")
+        except Exception as exc:  # noqa: BLE001 - reported, not fatal
+            conn.rollback()
+            print(f"  timetable fit: FAILED ({exc}); published figures unaffected.")
 
     if not no_prune:
         cutoff = (datetime.now(TARGET_TZ) - timedelta(days=RAW_RETENTION_DAYS)).strftime("%Y%m%d")

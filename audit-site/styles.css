@@ -1198,3 +1198,43 @@ details.detail[open] summary::before {
   font-size: 0.9rem;
   line-height: 1.5;
 }
+
+/* where the timetable doesn't fit */
+.network-fit {
+  margin: 4px 0 18px;
+}
+
+.network-fit[hidden] {
+  display: none;
+}
+
+.fit {
+  margin-top: 16px;
+}
+
+.fit .k {
+  color: var(--fg-3);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fit-sub {
+  margin: 8px 0 2px;
+  font-weight: 700;
+}
+
+.fit-lines {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.fit-lines li {
+  margin: 4px 0;
+}
+
+.rd-fit:empty {
+  display: none;
+}
