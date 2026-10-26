@@ -57,6 +57,8 @@ def create_app(config: Config | None = None) -> Flask:
     app.extensions["bbb_localities"] = loc_svc.locality_status(
         cfg.localities_json)
     from .services.audit_integration import AuditIntegration
+    from .services.route_hours import RouteHours
+    app.extensions["bbb_route_hours"] = RouteHours(cfg.audit_hourly_dir)
     app.extensions["bbb_audit_integration"] = AuditIntegration(
         cfg.audit_integration_json, cfg.audit_max_age_seconds)
 

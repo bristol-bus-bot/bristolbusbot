@@ -8,8 +8,17 @@
         let refreshInterval = null;
         let departureRefreshInterval = null;
         let noticeController = null;
+        let routeHoursController = null;
+        function routeHours() {
+            return routeHoursController ||= window.BBB.createRouteHoursController(
+                document.getElementById('route-hours'));
+        }
         function travelNotices() {
-            return noticeController ||= window.BBB.createNoticeController(document.getElementById('travel-notices'));
+            return noticeController ||= window.BBB.createNoticeController(
+                document.getElementById('travel-notices'), fetch, Date.now, {
+                    bannerHost: document.getElementById('stop-notice-banner'),
+                    onOpen: () => { if (isMobile()) setSheetState('expanded'); },
+                });
         }
         let routeShapesData = {};  // "OPERATOR_line_direction" key -> { route, operator, direction, points }
         let routeShapeLayers = []; // Leaflet polyline layers
@@ -65,13 +74,18 @@
             return best;
         }
 
-        // Small, deliberately quiet marker for stops.
-        function createStopIcon(isSelected) {
-            const size = isSelected ? 10 : 6;
-            const color = isSelected ? '#b48800' : '#8b949e';
+        // Small, deliberately quiet marker for stops, unless the feed publishes
+        // a notice for the stop: then it grows and carries a warning mark.
+        let stopNotices = {};  // stop_code -> 'current' | 'uncertain' | 'upcoming'
+        function createStopIcon(isSelected, stopCode) {
+            const style = window.BBB.stopMarkerStyle(stopNotices[stopCode], isSelected);
+            const size = style.size;
+            const mark = style.mark
+                ? '<path d="M5 2.3v3.2" stroke="#1b1b1b" stroke-width="1.3" stroke-linecap="round"/><circle cx="5" cy="7.4" r=".75" fill="#1b1b1b"/>'
+                : '';
             const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="${size}" height="${size}">
-                    <circle cx="5" cy="5" r="4" fill="${color}" stroke="#fff" stroke-width="1"/>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="${size}" height="${size}"${style.label ? ` role="img" aria-label="${style.label}"` : ''}>
+                    <circle cx="5" cy="5" r="4" fill="${style.fill}" stroke="${style.ring}" stroke-width="${style.mark || stopNotices[stopCode] ? 1.2 : 1}"/>${mark}
                 </svg>
             `;
             return L.divIcon({
@@ -343,15 +357,19 @@
 
             visible.forEach(stop => {
                 const isSel = stop.stop_code === selectedStopCode;
+                const zIndex = window.BBB.stopMarkerStyle(stopNotices[stop.stop_code], isSel).zIndex;
                 if (stopMarkers.has(stop.stop_code)) {
-                    stopMarkers.get(stop.stop_code).setIcon(createStopIcon(isSel));
+                    const m = stopMarkers.get(stop.stop_code);
+                    m.setIcon(createStopIcon(isSel, stop.stop_code));
+                    m.setZIndexOffset(zIndex);
                 } else {
                     const m = L.marker([stop.latitude, stop.longitude], {
-                        icon: createStopIcon(isSel),
-                        zIndexOffset: isSel ? 500 : 0
+                        icon: createStopIcon(isSel, stop.stop_code),
+                        zIndexOffset: zIndex
                     }).addTo(map);
 
-                    m.bindPopup(window.BBB.stopPopup(stop, selectStop));
+                    // Built on open so the notice line follows the latest feed.
+                    m.bindPopup(() => window.BBB.stopPopup(stop, selectStop, stopNotices[stop.stop_code]));
                     m.on('click', () => selectStop(stop.stop_code));
                     stopMarkers.set(stop.stop_code, m);
                 }
@@ -379,8 +397,8 @@
             }
 
             stopMarkers.forEach((m, code) => {
-                m.setIcon(createStopIcon(code === stopCode));
-                m.setZIndexOffset(code === stopCode ? 500 : 0);
+                m.setIcon(createStopIcon(code === stopCode, code));
+                m.setZIndexOffset(window.BBB.stopMarkerStyle(stopNotices[code], code === stopCode).zIndex);
             });
 
             document.getElementById('board-prompt').classList.add('hidden');
@@ -586,6 +604,21 @@
                 if (lower.includes(key)) return emoji;
             }
             return '';
+        }
+
+        // Badges come from the same rules as the stop panel's notice cards. An
+        // out-of-date feed clears them rather than leaving old badges up.
+        async function fetchStopNotices() {
+            try {
+                const res = await fetch('/api/notices/stops');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                stopNotices = data.available ? data.stops : {};
+            } catch (e) {
+                console.warn('fetchStopNotices failed:', e);
+                stopNotices = {};
+            }
+            updateStopMarkers(allStops);
         }
 
         let allStops = [];
@@ -1424,6 +1457,7 @@
             const operator = parts[0];
             const line = parts.slice(1).join('_');
             travelNotices().show({ operator, line });
+            routeHours().show(operator, line);
             const variants = routeIndex[activeRouteLine] || [];
             const operatorName = OPERATOR_NAMES[operator] || operator;
 
@@ -1461,6 +1495,7 @@
 
         function clearRouteView(keepSidebar) {
             travelNotices().clear();
+            routeHours().clear();
             // Remove route polylines
             activeRouteLineLayers.forEach(l => map.removeLayer(l));
             activeRouteLineLayers = [];
@@ -1760,6 +1795,8 @@
         fetchBusbotPosts();
         map.on('zoomend moveend', () => updateStopMarkers(allStops));
         refreshInterval = setInterval(fetchBuses, 15000);
+        fetchStopNotices();
+        setInterval(fetchStopNotices, 60000);
         setInterval(() => window.BBB.refreshPositionAges(), 1000);
         setInterval(fetchBusbotPosts, 120000);  // Refresh busbot posts every 2 minutes
         initSheetDrag();

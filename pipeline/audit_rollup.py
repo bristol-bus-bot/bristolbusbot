@@ -14,6 +14,7 @@ Run from the bristol-live-buses folder:
     python audit_rollup.py 20260601 --allow-large-restatement  attended only
     python audit_rollup.py --backfill-duty-gaps
     python audit_rollup.py --backfill-geo-routes
+    python audit_rollup.py --backfill-hours
 """
 
 import os
@@ -210,6 +211,23 @@ def init_summary_tables(conn):
     )
     cur.execute(
         "CREATE INDEX IF NOT EXISTS ix_peak_date ON daily_peak_summary(service_date, operator)"
+    )
+    # Punctuality by the local clock hour of the scheduled timing-point time.
+    # route NULL is the label's whole network, as in daily_peak_summary.
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_hour_summary (
+               service_date      TEXT NOT NULL,
+               operator          TEXT NOT NULL,
+               route             TEXT,
+               hour              INTEGER NOT NULL,
+               readings_in_gate  INTEGER NOT NULL,
+               on_time           INTEGER NOT NULL,
+               early             INTEGER NOT NULL,
+               late              INTEGER NOT NULL
+           )"""
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS ix_hour_date ON daily_hour_summary(service_date, operator)"
     )
     cur.execute(
         """CREATE TABLE IF NOT EXISTS daily_geo_summary (
@@ -434,6 +452,75 @@ def peak_band_for(scheduled_local):
     if 16 <= hour <= 18:
         return "pm_peak"
     return "evening"
+
+
+def local_hour(scheduled_local):
+    """Wall-clock hour of a stored scheduled time, or None if unreadable.
+
+    The collector stores an aware local datetime ("2026-10-25 01:30:00+01:00"),
+    so the text already carries the hour as shown on the timetable and bus stop.
+    On the autumn change day both 01:xx hours read 1; in spring there is no 1.
+    """
+    try:
+        hour = int(scheduled_local[11:13])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return hour if 0 <= hour <= 23 else None
+
+
+def rollup_hours(conn, date_str, operators, label, *, commit=True):
+    """Replace one day's hourly punctuality for one public label."""
+    op_ph = ",".join("?" for _ in operators)
+    pooled = len(operators) > 1
+    counts = {}
+    for operator, route, delay_s, dist_m, scheduled_local in conn.execute(
+            f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local
+               FROM timepoint_observations
+               WHERE service_date = ? AND operator IN ({op_ph})
+                 AND COALESCE(is_origin, 0) = 0""",
+            (date_str, *operators)):
+        if dist_m is None or dist_m > DISTANCE_GATE_M or delay_s is None:
+            continue
+        hour = local_hour(scheduled_local)
+        if hour is None:
+            continue
+        band = delay_band(delay_s)
+        label_route = public_route(operator, route, pooled)
+        # Readings without a route count towards the network row only.
+        keys = [(None, hour)] + ([(label_route, hour)] if label_route is not None else [])
+        for key in keys:
+            cell = counts.setdefault(key, {"on_time": 0, "early": 0, "late": 0})
+            cell[band] += 1
+    conn.execute(
+        "DELETE FROM daily_hour_summary WHERE service_date = ? AND operator = ?",
+        (date_str, label),
+    )
+    conn.executemany(
+        "INSERT INTO daily_hour_summary VALUES (?,?,?,?,?,?,?,?)",
+        [
+            (date_str, label, route, hour,
+             cell["on_time"] + cell["early"] + cell["late"],
+             cell["on_time"], cell["early"], cell["late"])
+            for (route, hour), cell in sorted(
+                counts.items(), key=lambda item: (item[0][0] is None, item[0][0] or "", item[0][1]))
+        ],
+    )
+    if commit:
+        conn.commit()
+    return len(counts)
+
+
+def hour_backfill_dates(conn):
+    """Rolled-up days whose raw readings are still retained."""
+    return [
+        row[0] for row in conn.execute(
+            """SELECT DISTINCT summary.service_date
+                 FROM daily_overall_summary summary
+                WHERE EXISTS (
+                      SELECT 1 FROM timepoint_observations raw
+                       WHERE raw.service_date = summary.service_date)
+                ORDER BY summary.service_date""")
+    ]
 
 
 def new_accumulator():
@@ -1727,6 +1814,10 @@ def rollup_public_day(
             commit=False)
 
         for operator in SHOW_OPERATORS:
+            rollup_hours(conn, date_str, [operator], operator, commit=False)
+        rollup_hours(conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, commit=False)
+
+        for operator in SHOW_OPERATORS:
             rollup_frequency(
                 conn, date_str, [operator], operator, commit=False)
         frequent_routes = rollup_frequency(
@@ -1761,11 +1852,13 @@ def main():
     backfill_trip_coverage = "--backfill-trip-coverage" in raw_args
     backfill_duty_gaps = "--backfill-duty-gaps" in raw_args
     backfill_geo_routes = "--backfill-geo-routes" in raw_args
+    backfill_hours = "--backfill-hours" in raw_args
     allow_large_restatement = "--allow-large-restatement" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
     backfill_modes = sum((
-        backfill_trip_coverage, backfill_duty_gaps, backfill_geo_routes))
+        backfill_trip_coverage, backfill_duty_gaps, backfill_geo_routes,
+        backfill_hours))
     if backfill_modes > 1:
         print("ERROR: choose one backfill mode at a time.")
         return 2
@@ -1817,6 +1910,19 @@ def main():
             groups = rollup_geo_routes(
                 conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, geo_index)
             print(f"  {groups} route/place groups")
+        conn.close()
+        return 0
+
+    if backfill_hours:
+        dates = hour_backfill_dates(conn)
+        print(f"Backfilling hourly punctuality for {len(dates)} retained days...")
+        for date_str in dates:
+            for op in SHOW_OPERATORS:
+                rollup_hours(conn, date_str, [op], op, commit=False)
+            cells = rollup_hours(
+                conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, commit=False)
+            conn.commit()
+            print(f"[{date_str}] {cells} route/hour cells")
         conn.close()
         return 0
 

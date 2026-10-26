@@ -29,6 +29,24 @@ at most once per minute while a stop/route is selected, using the existing UI
 refresh cycle; it never polls BODS directly. Selection changes discard late
 responses. Source text is rendered as text, and links require HTTPS.
 
+## Seeing a notice before tapping
+
+`/api/notices/stops` returns `{stop_code: status}` for every stop with a notice
+the stop panel would show, using the same rules, and nothing while the feed is
+out of date. The map refreshes it once a minute. A stop with a current or
+date-uncertain notice is drawn larger, in amber, with a "!" mark; an upcoming
+notice gets an amber ring. The popup says which. Selecting the stop puts a
+one-line banner above the stop sign ("Travel notice affects this stop", "...:
+check dates" or "Upcoming travel notice...") that opens the first notice card,
+and on phones expands the sheet. Route selections show the banner above their
+cards. Only stops listed in the notice's affected stops are badged: a notice that
+names a stop only in its text is never shown as affecting it.
+
+`site/scripts/notice_gaps.py` measures, on a laptop copy of `live.db`, how many
+disruptions each publisher sent, how many list affected stops, how many mention a
+stop only in their text (listed for the maintainer) and how many are skipped for
+missing or uncertain dates.
+
 Notice updates replace the stored version; this is not a complete disruption
 history or a measure of publisher responsiveness. A missing notice does not mean
 normal service. Notifications and social posting are outside this feature.

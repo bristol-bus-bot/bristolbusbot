@@ -326,9 +326,12 @@ a {
 }
 
 .route-cell .cell-route {
+  max-width: 100%;
   font-size: 0.98rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .route-cell .cell-pct {
@@ -1058,4 +1061,140 @@ details.detail[open] summary::before {
   background: var(--surface-2);
   color: var(--fg-1);
   border-color: var(--amber);
+}
+
+/* time-of-day strips: one cell per hour, coloured by on-time share */
+.hctl {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: 0.82rem;
+  padding: 5px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.hctl:hover {
+  color: var(--fg-1);
+}
+
+.hctl.active {
+  background: var(--surface-2);
+  color: var(--fg-1);
+  border-color: var(--amber);
+}
+
+.network-hours {
+  margin: 4px 0 18px;
+}
+
+.network-hours[hidden] {
+  display: none;
+}
+
+.hour-summary {
+  margin: 8px 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.hour-strip {
+  display: flex;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 18px;
+  cursor: pointer;
+}
+
+.hour-cell {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.hour-cell.lown {
+  opacity: 0.35;
+}
+
+.hour-cell.picked,
+.hour-cell:focus-visible {
+  outline: 2px solid var(--fg-1);
+  outline-offset: 1px;
+}
+
+.hour-detail {
+  min-height: 1.4em;
+  margin: 2px 0 0;
+  color: var(--fg-2);
+}
+
+.hour-tick {
+  position: absolute;
+  top: 31px;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--fg-3);
+}
+
+.hour-foot {
+  margin: 2px 0 0;
+}
+
+.rd-hours {
+  margin-top: 14px;
+}
+
+.rd-hours:empty {
+  display: none;
+}
+
+.rd-hours-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rd-hours-head .k {
+  color: var(--fg-3);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.journeys {
+  margin-top: 16px;
+}
+
+.journeys .k {
+  color: var(--fg-3);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.journey-lines {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
