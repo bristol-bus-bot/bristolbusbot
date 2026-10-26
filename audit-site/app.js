@@ -43,6 +43,9 @@ const state = {
   selectedRoute: null,
   geoView: "area",
   geoSort: "reads",
+  hourKind: "weekday",
+  hourly: {},
+  segments: {},
 };
 
 const TINTS = {
@@ -273,7 +276,292 @@ function renderRouteDetail() {
       <div class="rd-stat"><span class="k">Early</span><span class="v">${finiteNumber(row.early).toLocaleString()}</span></div>
       <div class="rd-stat"><span class="k">On time</span><span class="v">${finiteNumber(row.on_time).toLocaleString()}</span></div>
       <div class="rd-stat"><span class="k">Late</span><span class="v">${finiteNumber(row.late).toLocaleString()}</span></div>
+    </div>
+    <div class="rd-hours" id="route-hours"></div>
+    <div class="rd-fit" id="route-fit"></div>`;
+  renderRouteHours(row.route);
+  renderRouteFit(row.route);
+}
+
+// --- Time of day -----------------------------------------------------------
+// The service day starts at 04:00, so late-night hours sit after 23:00.
+const HOUR_ORDER = [...Array(20).keys()].map((h) => h + 4).concat([0, 1, 2, 3]);
+
+function hourLabel(hour) {
+  return String(hour).padStart(2, "0") + ":00";
+}
+
+function inTen(on, total) {
+  return `${Math.round((10 * on) / total)} in 10`;
+}
+
+function loadHourly(operator) {
+  const file = state.data.hourly?.files?.[operator];
+  if (!file || !/^hourly\/[A-Za-z0-9_-]+\.json$/.test(file)) return Promise.resolve(null);
+  state.hourly[operator] ||= fetch(file, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null);
+  return state.hourly[operator];
+}
+
+// Cells for the hours this route or network runs, from first to last.
+function hourCells(byKind, kind, minReadings) {
+  const present = HOUR_ORDER.filter((h) =>
+    (byKind.weekday || {})[h] || (byKind.weekend || {})[h]);
+  if (!present.length) return [];
+  const first = HOUR_ORDER.indexOf(present[0]);
+  const last = HOUR_ORDER.indexOf(present[present.length - 1]);
+  return HOUR_ORDER.slice(first, last + 1).map((hour) => {
+    const [on, early, late] = (byKind[kind] || {})[hour] || [0, 0, 0];
+    const total = finiteNumber(on) + finiteNumber(early) + finiteNumber(late);
+    return { hour, on: finiteNumber(on), early: finiteNumber(early), late: finiteNumber(late),
+      total, pct: total ? (100 * on) / total : null, low: total < minReadings };
+  });
+}
+
+function hourSummary(cells, kind) {
+  const solid = cells.filter((c) => c.total && !c.low);
+  const when = kind === "weekday" ? "On weekdays" : "At weekends";
+  if (solid.length < 2) return `${when} there aren't yet enough readings in any hour to compare times of day.`;
+  const worst = solid.reduce((a, b) => (b.pct < a.pct ? b : a));
+  const best = solid.reduce((a, b) => (b.pct > a.pct ? b : a));
+  if (Math.round(best.pct / 10) === Math.round(worst.pct / 10))
+    return `${when} it is about as punctual at every well-measured hour: around ${inTen(best.on, best.total)} on time.`;
+  return `${when} it is least punctual from ${hourLabel(worst.hour)} (${inTen(worst.on, worst.total)} on time) and most punctual from ${hourLabel(best.hour)} (${inTen(best.on, best.total)}).`;
+}
+
+function hourStripHTML(byKind, hourly, title) {
+  const kind = state.hourKind;
+  const cells = hourCells(byKind, kind, hourly.min_readings);
+  if (!cells.length) return '<p class="faint audit-small">No hourly readings for this period yet.</p>';
+  const days = hourly.window.days[kind];
+  const strip = cells.map((c) => {
+    const colour = c.total ? verdict(c.pct, state.target) : "var(--fg-3)";
+    const text = c.total
+      ? `${hourLabel(c.hour)}: ${inTen(c.on, c.total)} on time, ${c.late.toLocaleString()} late, ${c.early.toLocaleString()} early, from ${c.total.toLocaleString()} readings${c.low ? " (too few to rely on)" : ""}`
+      : `${hourLabel(c.hour)}: no readings`;
+    return `<li class="hour-cell${c.low ? " lown" : ""}" title="${escapeHTML(text)}" tabindex="0"
+      data-detail="${escapeHTML(text)}" style="background:${c.total ? colour : "transparent"}">
+      <span class="sr-only">${escapeHTML(text)}</span>
+      <span class="hour-tick" aria-hidden="true">${c.hour % 3 === 0 ? String(c.hour).padStart(2, "0") : ""}</span></li>`;
+  }).join("");
+  return `
+    <p class="hour-summary">${escapeHTML(hourSummary(cells, kind))}</p>
+    <ol class="hour-strip" aria-label="${escapeHTML(title)}">${strip}</ol>
+    <p class="audit-small hour-detail" aria-live="polite">Tap an hour for its figures.</p>
+    <p class="faint audit-small hour-foot">${days} ${kind === "weekday" ? "weekday" : "weekend"} service day${days === 1 ? "" : "s"},
+      ${escapeHTML(format.serviceDate(hourly.window.from))} to ${escapeHTML(format.serviceDate(hourly.window.to))}.
+      Hours are the scheduled time at each timing point. Faded hours have fewer than ${finiteNumber(hourly.min_readings)} readings.</p>`;
+}
+
+const JOURNEY_BAND_LABELS = {
+  am_peak: "7–10am", interpeak: "10am–4pm", pm_peak: "4–7pm",
+  evening: "evenings and early mornings",
+};
+
+function inHundred(part, whole) {
+  return `${Math.round((100 * part) / whole)} in 100`;
+}
+
+// Three honestly separate numbers, never added together into "cancelled".
+function journeysHTML(entry, dutyChecked, days) {
+  if (!entry) return "";
+  const [timetabled, seen, likely] = entry.total.map((v) => finiteNumber(v));
+  if (!timetabled) return "";
+  const unseen = Math.max(0, timetabled - seen - (dutyChecked ? likely : 0));
+  const lines = [
+    `<li><strong>${timetabled.toLocaleString()}</strong> journeys were timetabled.</li>`,
+    `<li>We saw <strong>${seen.toLocaleString()}</strong> of them running (${inHundred(seen, timetabled)}).</li>`,
+  ];
+  if (dutyChecked) {
+    lines.push(likely
+      ? `<li><strong>${likely.toLocaleString()}</strong> very likely didn't run: the same bus was tracked on the journey before and the journey after, but not on this one.</li>`
+      : "<li>None looked like a journey that didn't run (the same bus seen before and after, but not on it).</li>");
+  }
+  lines.push(`<li>We didn't see the other <strong>${unseen.toLocaleString()}</strong>. That could be a cancellation or a bus with its tracker switched off, so we don't count them as cancelled.</li>`);
+  const overallMissing = (timetabled - seen) / timetabled;
+  const worst = Object.entries(entry.bands || {})
+    .map(([band, v]) => ({ band, timetabled: finiteNumber(v[0]), seen: finiteNumber(v[1]) }))
+    .filter((b) => b.timetabled >= 50)
+    .map((b) => ({ ...b, missing: (b.timetabled - b.seen) / b.timetabled }))
+    .sort((a, b) => b.missing - a.missing)[0];
+  const worstLine = worst && worst.missing >= 0.03 && worst.missing >= 1.5 * overallMissing
+    ? `<p class="audit-small">Most often missing: <strong>${escapeHTML(JOURNEY_BAND_LABELS[worst.band] || worst.band)}</strong>, when ${inHundred(worst.timetabled - worst.seen, worst.timetabled)} journeys weren't seen.</p>`
+    : "";
+  return `
+    <div class="journeys">
+      <span class="k">Did the buses turn up?</span>
+      <ul class="journey-lines">${lines.join("")}</ul>
+      ${worstLine}
+      <p class="faint audit-small">Same ${finiteNumber(days)} days as above, weekdays and weekends together, counting only days when our tracking was working properly.</p>
     </div>`;
+}
+
+// --- Where the timetable doesn't fit ----------------------------------------
+const FIT_BANDS = {
+  early: "before 7am", am_peak: "7–10am", interpeak: "10am–4pm",
+  pm_peak: "4–7pm", evening: "after 7pm",
+};
+const FIT_ORDER = ["early", "am_peak", "interpeak", "pm_peak", "evening"];
+
+function loadSegments(operator) {
+  const file = state.data.segments?.files?.[operator];
+  if (!file || !/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)) return Promise.resolve(null);
+  state.segments[operator] ||= fetch(file, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null);
+  return state.segments[operator];
+}
+
+function minutes(value) {
+  const n = finiteNumber(value);
+  return Number.isInteger(n) ? `${n} min` : `about ${Math.round(n)} min`;
+}
+
+// One line per stretch: its clearest time band, then the other times it shows.
+function groupStretches(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = [item.kind, item.from, item.to].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.values()].map((list) => {
+    list.sort((a, b) => Math.abs(b.typical_min - b.timetable_min) - Math.abs(a.typical_min - a.timetable_min));
+    const when = list
+      .slice().sort((a, b) => FIT_ORDER.indexOf(a.band) - FIT_ORDER.indexOf(b.band) || a.day_type.localeCompare(b.day_type))
+      .map((i) => `${i.day_type === "weekday" ? "weekdays" : "weekends"} ${FIT_BANDS[i.band] || i.band}`);
+    return { ...list[0], when: [...new Set(when)] };
+  });
+}
+
+function stretchLine(item, withRoute) {
+  const route = withRoute ? `<strong>${escapeHTML(item.route)}</strong> · ` : "";
+  const place = `${escapeHTML(item.from)} → ${escapeHTML(item.to)}`;
+  const when = `<span class="faint">${escapeHTML(item.when ? item.when.join(", ") : `${item.day_type === "weekday" ? "weekdays" : "weekends"} ${FIT_BANDS[item.band] || item.band}`)}</span>`;
+  if (item.kind === "waiting") {
+    return `<li>${route}${place}: buses usually arrive early at ${escapeHTML(item.from)} and wait there, so this stretch looks slower than the timetable. ${when}</li>`;
+  }
+  if (item.kind === "slack") {
+    return `<li>${route}${place}: the timetable allows <strong>${minutes(item.timetable_min)}</strong>, buses usually take <strong>${minutes(item.typical_min)}</strong>, so they run early and may have to wait. ${when}</li>`;
+  }
+  return `<li>${route}${place}: the timetable allows <strong>${minutes(item.timetable_min)}</strong>, buses usually take <strong>${minutes(item.typical_min)}</strong>. ${finiteNumber(item.share_pct)}% of ${finiteNumber(item.journeys).toLocaleString()} journeys lost 2+ minutes here. ${when}</li>`;
+}
+
+function fitHTML(items) {
+  const grouped = groupStretches(items || []);
+  const tight = grouped.filter((i) => i.kind === "tight");
+  const slack = grouped.filter((i) => i.kind === "slack");
+  // A stretch that is clearly too tight at some times isn't also listed as a
+  // waiting point; the tight result is the stronger finding.
+  const tightKeys = new Set(tight.map((i) => `${i.from}|${i.to}`));
+  const waiting = grouped.filter((i) => i.kind === "waiting" && !tightKeys.has(`${i.from}|${i.to}`));
+  if (!tight.length && !slack.length && !waiting.length) return "";
+  const part = (title, list) => list.length
+    ? `<p class="audit-small fit-sub">${title}</p><ul class="fit-lines">${list.map((i) => stretchLine(i, false)).join("")}</ul>` : "";
+  return `
+    <div class="fit">
+      <span class="k">Where the timetable doesn't fit</span>
+      ${part("Not enough time allowed", tight)}
+      ${part("More time allowed than buses need", slack)}
+      ${part("Where buses wait", waiting)}
+      <p class="faint audit-small">Between timing points, last 28 days, only patterns seen in at least 3 of the 4 weeks. This is about the timetable, not the drivers.</p>
+    </div>`;
+}
+
+async function renderRouteFit(route) {
+  const box = document.getElementById("route-fit");
+  if (!box) return;
+  const operator = state.operator;
+  const segments = await loadSegments(operator);
+  if (operator !== state.operator || String(route) !== String(state.selectedRoute)) return;
+  box.innerHTML = fitHTML(segments?.routes?.[route]);
+}
+
+async function renderNetworkFit() {
+  const panel = document.getElementById("network-fit");
+  if (!panel) return;
+  const operator = state.operator;
+  const segments = await loadSegments(operator);
+  if (operator !== state.operator) return;
+  const worst = (segments?.worst || []).slice(0, 10);
+  if (!worst.length) {
+    panel.innerHTML = "";
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  panel.innerHTML = `
+    <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">Where the timetable doesn't allow enough time</h3>
+    <p class="audit-muted audit-small">The stretches where buses most consistently take longer than the timetable gives them. This is a planning problem: drivers can only catch up by driving faster or pulling away before people have sat down.</p>
+    <ol class="fit-lines fit-worst">${worst.map((i) => stretchLine(i, true)).join("")}</ol>`;
+}
+
+function hourKindControls() {
+  return ["weekday", "weekend"].map((kind) =>
+    `<button type="button" class="hctl${state.hourKind === kind ? " active" : ""}" data-hour-kind="${kind}"
+      aria-pressed="${state.hourKind === kind ? "true" : "false"}">${kind === "weekday" ? "Weekdays" : "Weekends"}</button>`).join("");
+}
+
+function wireHourControls(container) {
+  container.querySelectorAll(".hour-cell").forEach((cell) => {
+    const show = () => {
+      const detail = cell.closest("ol").nextElementSibling;
+      container.querySelectorAll(".hour-cell.picked").forEach((c) => c.classList.remove("picked"));
+      cell.classList.add("picked");
+      detail.textContent = cell.dataset.detail;
+    };
+    cell.addEventListener("click", show);
+    cell.addEventListener("focus", show);
+  });
+  container.querySelectorAll(".hctl").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.hourKind = button.dataset.hourKind;
+      renderNetworkHours();
+      renderRouteDetail();
+    });
+  });
+}
+
+async function renderNetworkHours() {
+  const panel = document.getElementById("network-hours");
+  if (!panel) return;
+  const operator = state.operator;
+  const hourly = await loadHourly(operator);
+  if (operator !== state.operator) return;
+  if (!hourly) {
+    panel.innerHTML = "";
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  panel.innerHTML = `
+    <h3 class="dash-sub" style="border-top:none;padding-top:0;margin-top:6px">By time of day</h3>
+    <div class="controls">${hourKindControls()}</div>
+    ${hourStripHTML(hourly.network, hourly, `${operatorName(operator)} on time by hour`)}
+    ${journeysHTML(hourly.journeys?.network, hourly.journeys?.duty_checked,
+      finiteNumber(hourly.window.days.weekday) + finiteNumber(hourly.window.days.weekend))}`;
+  wireHourControls(panel);
+}
+
+async function renderRouteHours(route) {
+  const box = document.getElementById("route-hours");
+  if (!box) return;
+  const operator = state.operator;
+  const hourly = await loadHourly(operator);
+  if (operator !== state.operator || String(route) !== String(state.selectedRoute)) return;
+  const byKind = hourly?.routes?.[route];
+  const journeys = hourly?.journeys?.routes?.[route];
+  if (!byKind && !journeys) {
+    box.innerHTML = "";
+    return;
+  }
+  const days = finiteNumber(hourly.window.days.weekday) + finiteNumber(hourly.window.days.weekend);
+  box.innerHTML = (byKind ? `
+    <div class="rd-hours-head"><span class="k">By time of day</span><span class="controls">${hourKindControls()}</span></div>
+    ${hourStripHTML(byKind, hourly, `Route ${route} on time by hour`)}` : "")
+    + journeysHTML(journeys, hourly.journeys.duty_checked, days);
+  wireHourControls(box);
 }
 
 function drawTargetLine(container, target) {
@@ -384,6 +672,8 @@ function selectOperator(code) {
     b.setAttribute("aria-selected", active ? "true" : "false");
   });
   renderHeadline(opData);
+  renderNetworkHours();
+  renderNetworkFit();
   renderRouteGrid();
   renderGeography(opData);
   renderFleet(opData);

@@ -80,6 +80,12 @@
                     </span>
                 </div>
             {% endif %}
+            {% if profile.plain_english %}
+                <div class="profile-plain">
+                    <strong>In plain English</strong>
+                    {% for line in profile.plain_english %}<p>{{ line }}</p>{% endfor %}
+                </div>
+            {% endif %}
             <div class="profile-stat-grid">
                 <div><strong>{{ profile.on_time_pct }}%</strong><span>on time</span></div>
                 <div><strong>{{ '{:,}'.format(profile.readings) }}</strong><span>timing-point readings</span></div>
@@ -101,7 +107,7 @@
                     <details{% if loop.first %} open{% endif %}>
                         <summary>
                             <strong class="profile-route-badge">{{ route.route }}</strong>
-                            <span class="profile-route-result">{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
+                            <span class="profile-route-result">{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{% if route.comparison_text %}{{ route.comparison_text }} · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
                             {% if route.delay_plot %}
                             <span class="profile-delay-chart is-compact" role="img"
                                   aria-label="{{ route.readings }} timing-point readings: {{ route.early }} early, {{ route.on_time }} on time, {{ route.late }} late">

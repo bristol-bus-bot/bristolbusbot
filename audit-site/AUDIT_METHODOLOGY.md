@@ -114,6 +114,96 @@ clearly for a later service date until a newly published target is deliberately
 added. It does not silently carry 87% into a financial year for which the
 scheme provides no target.
 
+## Time of day
+
+Each reading is put in the hour of its **scheduled** time at that timing point,
+on the local clock (07:00-07:59 is "07:00"), not the time the journey started
+or the time the bus arrived. So a journey that starts at 07:50 can count in
+both the 07:00 and 08:00 hours. The same distance gate, origin exclusion and
+on-time definition apply as for the daily figures.
+
+Hours are pooled over the most recent 28 published service days, because one
+day gives most routes only a handful of readings in each hour. Weekdays and
+weekends are shown separately, because school runs and commuter traffic only
+happen on weekdays. The split follows the service day a journey belongs to:
+a bus at 00:30 on Saturday morning that is part of Friday's timetable counts
+as Friday (a weekday) in the 00:00 hour. Bank holidays count as the weekday
+they fall on. On the October clock-change day the 01:00 hour happens twice,
+and readings from both are counted together; in March there is no 01:00 hour.
+
+An hour with fewer than 30 readings is shown faded and is too small to rely
+on. The plain-English line above each chart only compares hours with at least
+30 readings, and says so when there aren't two such hours to compare. The
+hourly figures are published in separate files, loaded only when someone
+opens that view, so the main data file doesn't grow.
+
+## Did the buses turn up?
+
+Each route shows three separate numbers for the same 28 days. They are never
+added together into one "cancelled" figure.
+
+- **Timetabled and seen.** Journeys in the timetable, and how many of them we
+  tracked running. Only days when our collector was healthy for the whole
+  service day count (see "Coverage").
+- **Very likely didn't run.** In the timetable, buses work in blocks: one
+  bus does a set of journeys one after another. A journey counts here only
+  when all of these are true: the same bus (one identified vehicle) was
+  tracked on the journey before it in its block and on the journey after it;
+  each of those was matched unambiguously; the gaps either side are under an
+  hour; and the journey itself was never seen. The bus was clearly out in
+  service, so the journey very likely didn't run. We don't say "cancelled",
+  because a bus can still run a journey with its tracker off. Days when an
+  operator's timetable has block details for fewer than 95% of journeys
+  don't count at all.
+- **Not seen.** The rest of the journeys we didn't see. That could be a
+  cancellation, or a bus with its tracker switched off. We can't tell which,
+  so we don't count them either way.
+
+The audit also says when journeys go missing most often, by the time the
+journey starts: 7–10am, 10am–4pm, 4–7pm, or evenings and early mornings.
+
+## Where the timetable doesn't fit
+
+For each journey, the change in lateness between two timing points next to
+each other in its timetable is the time it lost or gained on that stretch.
+Readings that skip a timing point are never paired. Results are pooled over
+the last 28 days by route, direction, stretch, weekday or weekend, and time
+of day (before 7am, 7–10am, 10am–4pm, 4–7pm, after 7pm). A group needs at
+least 30 journeys.
+
+Before anything is shown:
+- **One-offs are dropped.** A result must point the same way in at least 3
+  of the 4 weeks, so a week of roadworks or a closure doesn't count.
+- **Reading errors are dropped.** A big loss that is won back on the very
+  next stretch, or a typical time far above the timetable, is a reading on
+  the wrong visit to a stop or during a layover.
+- **Recovery time isn't slack.** Extra time on the last stretch into the end
+  of the route is put there on purpose, so it isn't listed.
+- **Waiting isn't traffic.** We record when a bus first reaches a stop, but
+  timetables give departure times. Where buses usually arrive early and
+  wait, the wait shows up on the next stretch, so that stretch is listed as
+  "where buses wait", not as "not enough time".
+
+"Not enough time allowed" means the median journey lost more than 2
+minutes. "More time allowed than buses need" means it gained more than 1
+minute. Each reading can be out by up to about half a minute, which is why
+only medians over many journeys are used. These figures describe the
+timetable and the service. They are not a measure of drivers, who can only
+make up time by driving faster or pulling away before people have sat down.
+
+## Bus records on the live map
+
+Each bus's Record tab on bristolbuses.live compares it, like for like, with
+the other buses on the same route, on the same service day and in the same
+scheduled hour. For every reading the bus made, the comparison is the
+on-time share of the other buses' readings in that same slot. So a bus that
+mostly ran 8am journeys is compared with other buses at 8am, not with a quiet
+Sunday afternoon. Over 27 September to 24 October 2026, 478 of 592 buses with
+200+ readings were within 5 points of the buses around them: a bus's record
+mostly reflects when and where it ran, not the bus or its driver. The
+plain-English summary is built from fixed sentences filled in with these
+numbers.
+
 ## Geography (area and ward)
 
 Each timing-point reading is tied to its stop's unitary authority (Bristol, Bath
@@ -244,10 +334,20 @@ exists. This fills that gap. These are independent estimates built to the
 official definition, not the official figures, and will differ from any operator
 or regulator measurement that uses different sampling.
 
+These figures measure the service against its timetable. They are not a
+measure of individual drivers. A bus that is late because the timetable allows
+too little time for the road, the traffic or the turnaround is a planning and
+management problem, and that is where the criticism belongs.
+
 ## Changes to the measurement
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**October 2026 - punctuality by time of day.** New hourly figures, split
+weekday and weekend, for each route and for the network (see "Time of day").
+They were backfilled from the retained raw readings, so they start about 95
+days before publication. The daily figures are unchanged.
 
 **30 September 2026 - every local bus operator published.** Stagecoach
 South Wales, Faresaver, Kempsford Transport, Libra Travel, FromeBus, Newport

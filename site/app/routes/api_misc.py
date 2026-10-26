@@ -28,6 +28,28 @@ def api_notices():
     response = jsonify(result)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@bp.route("/api/notices/stops")
+def api_notice_stops():
+    """Stop codes with a published notice, for badging map markers."""
+    from ..services.notices import stop_summary
+    response = jsonify(stop_summary(db.live(), db.gtfs()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.route("/api/route-hours")
+def api_route_hours():
+    """One route's on-time share by hour, from the nightly audit files."""
+    operator = (request.args.get("operator") or "").upper()
+    route = (request.args.get("route") or "")[:20]
+    result = current_app.extensions["bbb_route_hours"].route(operator, route)
+    response = jsonify({"available": result is not None, **(result or {})})
+    response.headers["Cache-Control"] = "public, max-age=900"
+    return response
+
+
 logger = logging.getLogger(__name__)
 
 BUSBOT_HANDLE = "bristolbusbot.live"  # the bot's own-domain handle (launch 2026-07-13)
