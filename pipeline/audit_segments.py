@@ -192,6 +192,7 @@ def build(conn, window, pooled_label, public_route):
         from_name, to_name, _ = meta[key[:5]]
         item = {
             "direction": direction, "from": from_name, "to": to_name,
+            "from_stop": key[3], "to_stop": key[4],
             "band": band, "day_type": day_type, "kind": kind,
             "timetable_min": round(s["planned"] / 60, 1),
             "typical_min": round((s["planned"] + s["median"]) / 60, 1),

@@ -6,11 +6,12 @@ import { BUS_MODEL_BLURBS } from './bus-model-commentary.js';
 import { LIVERY_FACTS } from './livery-facts.js';
 import { depotFact } from './depot-facts.js';
 import { placeFact } from './place-cards.js';
+import { TimetableFit } from './timetable-fit.js';
 
 /** The bus itself: each aspect gets its own prompt and only its own facts. */
 export const VEHICLE_ASPECTS = ['livery', 'model', 'power', 'age', 'features'] as const;
 export type VehicleAspect = typeof VEHICLE_ASPECTS[number];
-export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic' | 'place';
+export type StorySubject = 'service' | VehicleAspect | 'depot' | 'weather' | 'wider' | 'traffic' | 'place' | 'timetable';
 /**
  * A rotation slot. "vehicle" is filled by the next bus aspect in VEHICLE_ASPECTS
  * order. "wider?" is a second facts turn, used only when the fact library for the
@@ -65,6 +66,7 @@ export const SUBJECT_PERSONAS: Record<StorySubject, string> = {
     weather: `You are the Bristol Bus Bot, watching the region's buses with dry humour and a distinctly local interest in the weather. Write a small weather-and-bus vignette: let the supplied conditions set the scene, then work the bus observation naturally into it. Sound like a Bristolian noticing the day, rather than a weather bulletin reading out measurements. Find humour in the combination without pretending the weather caused the bus's timing or inventing what passengers experienced.`,
     depot: `You are the Bristol Bus Bot, a quietly enthusiastic observer of the region's bus network and the garages behind it. Write about this bus through its connection to its listed home depot. Make that connection the subject of the post, with its route and timing woven in, rather than tacking depot-assigned onto a routine report. Your voice is familiar, curious and gently funny. A home garage is an assignment, not evidence that the bus has just left it or is heading back.`,
     service: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. Make the supplied timing the point of this post. Give substantial lateness a pointed observation and treat a small discrepancy proportionately. For an on-time bus, be quietly pleased and matter-of-fact: a good moment without thanking, congratulating or praising the operator for basic competence. Keep that positivity free of a cynical final sting. Be concise and specific. Your readers depend on these buses; your criticism belongs with the service and its management, while drivers and passengers remain on your side.`,
+    timetable: `You are the Bristol Bus Bot, a dogged little Raspberry Pi holding a corporate behemoth to account through dry wit and stubborn attention to its buses. This post is about this one bus and its lateness. It has just reached the end of a stretch where, according to the supplied audit figures, the timetable routinely allows less time than buses need at this time of day. Use that as background to put the blame where it belongs: on the timetable and the people who plan the service, never on the driver, who can only catch up by driving faster or pulling away before people have sat down. Give the supplied minutes exactly as supplied. The figures describe how buses usually run there; never claim they prove why this bus is late or where it lost time. Keep it concise and on the passenger's and driver's side.`,
     wider: `You are the Bristol Bus Bot, a dogged little Raspberry Pi with a dry eye for the gap between corporate announcements and the buses people use. Write a wry observation that connects this bus report to the supplied verified development: make the comparison or opinion explicit, with a small, pointed payoff. Two factual sentences placed side by side are not finished commentary. Keep the fact's scope, figures and qualifications intact; one bus cannot establish a company-wide trend or explain its cause. Be concise, specific and on the passenger's side. If no worthwhile connection fits, omit the claim and write about the bus alone, with hook_used false.`,
 };
 /** Weekday 07:00-09:59 and 16:00-18:59, UK time. */
@@ -179,7 +181,10 @@ export function nextVehicleAspect(eligible: SubjectChoice[], history: PublishedS
     return undefined;
 }
 
-export function availableSubjects(event: BusEvent, weather?: string | null, hook?: EditorialSelection | null, traffic?: TrafficContext | null): SubjectChoice[] {
+const defaultTimetableFit = new TimetableFit();
+
+export function availableSubjects(event: BusEvent, weather?: string | null, hook?: EditorialSelection | null, traffic?: TrafficContext | null,
+    timetableFit: TimetableFit = defaultTimetableFit): SubjectChoice[] {
     const journey = event.journeyContext;
     const service: SubjectChoice = { kind: 'service', key: '', context: {} };
     // Only an interesting timetable position; no full list of endpoints and counts.
@@ -231,6 +236,10 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
             choices.push({ kind: 'weather', key: `weather:${condition.toLowerCase()}`, context: { areaWeather: text } });
         }
     }
+    // A bus at least five minutes late at the end of a stretch the timetable
+    // routinely under-times: the audit figure is background to this bus's story.
+    const fit = timetableFit.factFor(event);
+    if (fit) choices.push({ kind: 'timetable', key: `timetable:${fit.route}:${fit.from}:${fit.to}`, context: { timetableFit: fit } });
     if (hook) choices.push({ kind: 'wider', key: `wider:${hook.id}`, context: {
         editorial: { claim: hook.claim || hook.label, qualification: hook.promptHint, requiredPhrases: hook.requirements },
     } });
@@ -239,9 +248,9 @@ export function availableSubjects(event: BusEvent, weather?: string | null, hook
 
 export function chooseSubject(event: BusEvent, weather: string | null | undefined, hook: EditorialSelection | null,
     publishedCount = 0, history: PublishedSubject[] = [], recentPosts: string[] = [], traffic?: TrafficContext | null,
-    options: { widerLibrarySize?: number; cycle?: CycleSlot[] } = {}): SubjectChoice {
+    options: { widerLibrarySize?: number; cycle?: CycleSlot[]; timetableFit?: TimetableFit } = {}): SubjectChoice {
     const cycle = options.cycle || SUBJECT_CYCLE;
-    const choices = availableSubjects(event, weather, hook, traffic);
+    const choices = availableSubjects(event, weather, hook, traffic, options.timetableFit);
     const recent = recentPosts.slice(0, 6).join(' ').toLowerCase();
     const eligible = choices.filter(choice => choice.kind === 'service' || (
         history.at(-1)?.kind !== choice.kind
@@ -259,6 +268,12 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // The second facts turn only exists while the library can sustain it.
     const preferred = slot === 'wider?'
         ? ((options.widerLibrarySize || 0) >= WIDER_LIBRARY_MINIMUM ? 'wider' : 'service') : slot;
+    // A timetable-fit story is a timing story, so it takes a service turn when
+    // one is available (it is rare: only late buses on known stretches).
+    if (preferred === 'service') {
+        const timetable = pool.find(choice => choice.kind === 'timetable');
+        if (timetable) return timetable;
+    }
     const exact = preferred === 'vehicle' ? vehicleNext : pool.find(choice => choice.kind === preferred);
     if (exact) return exact;
     // When the planned subject is unavailable (depot, wider and traffic often

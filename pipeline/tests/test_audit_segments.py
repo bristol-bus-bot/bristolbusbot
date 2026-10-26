@@ -72,6 +72,7 @@ def test_steady_tight_stretch_is_published_with_plain_numbers(tmp_path):
     item = items[0]
     assert (item["timetable_min"], item["typical_min"], item["journeys"], item["share_pct"]) == (7.0, 14.0, 40, 100)
     assert (item["band"], item["day_type"]) == ("am_peak", "weekday")
+    assert (item["from_stop"], item["to_stop"]) == ("A", "B")
     assert out["FBRI"]["worst"][0]["route"] == "1"
     assert "1" in out["ALL"]["routes"]
 
