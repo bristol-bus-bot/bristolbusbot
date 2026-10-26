@@ -336,7 +336,12 @@ function recordPanel(ctx) {
     }
 
     const profile = ctx.profile;
+    const words = Array.isArray(profile.plain_english) ? profile.plain_english : [];
     const root = el("div", { class: "vs-history" }, [
+        words.length ? el("div", { class: "vs-plain" }, [
+            el("strong", {}, ["In plain English"]),
+            ...words.map(line => el("p", {}, [line])),
+        ]) : null,
         delayFigure(profile),
         el("div", { class: "vs-metrics" }, [
             metric(`${profile.on_time_pct}%`, "on time"),
@@ -360,6 +365,7 @@ function recordPanel(ctx) {
             `${route.observed_days} day${route.observed_days === 1 ? "" : "s"}`,
             `${route.readings} readings`,
         ];
+        if (route.comparison_text) summaryParts.unshift(route.comparison_text);
         if (route.on_time_pct !== undefined)
             summaryParts.unshift(`${route.on_time_pct}% on time`);
         const routePlot = routeDelayPlot(route, profile.delay_bins_s);

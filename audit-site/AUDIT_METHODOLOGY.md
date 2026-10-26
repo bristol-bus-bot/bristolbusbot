@@ -162,6 +162,19 @@ added together into one "cancelled" figure.
 The audit also says when journeys go missing most often, by the time the
 journey starts: 7–10am, 10am–4pm, 4–7pm, or evenings and early mornings.
 
+## Bus records on the live map
+
+Each bus's Record tab on bristolbuses.live compares it, like for like, with
+the other buses on the same route, on the same service day and in the same
+scheduled hour. For every reading the bus made, the comparison is the
+on-time share of the other buses' readings in that same slot. So a bus that
+mostly ran 8am journeys is compared with other buses at 8am, not with a quiet
+Sunday afternoon. Over 27 September to 24 October 2026, 478 of 592 buses with
+200+ readings were within 5 points of the buses around them: a bus's record
+mostly reflects when and where it ran, not the bus or its driver. The
+plain-English summary is built from fixed sentences filled in with these
+numbers.
+
 ## Geography (area and ward)
 
 Each timing-point reading is tied to its stop's unitary authority (Bristol, Bath

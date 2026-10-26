@@ -227,6 +227,79 @@ def _bot_mentions(path: Path | None) -> dict[tuple[str, str], list[dict]]:
     return mentions
 
 
+def _fair_comparison(cur: sqlite3.Cursor, dates: list[str]) -> tuple[dict, dict, dict]:
+    """How other buses did on the same route, day and hour as each bus.
+
+    For every reading a bus made, the comparison is the on-time share of the
+    other buses' readings on the same route, service day and scheduled hour.
+    Weighting by the bus's own readings means it is compared like for like:
+    a bus that mostly ran the 08:00 school-run journeys is compared with 8am
+    on those routes, not with a quiet Sunday afternoon.
+
+    Returns expected on-time readings and compared readings per vehicle and
+    per vehicle and route, and the vehicle's own [on time, early, late]
+    counts by scheduled hour.
+    """
+    date_ph = _placeholders(dates)
+    op_ph = _placeholders(SHOW_OPERATORS)
+    rows = cur.execute(
+        f"""SELECT operator, vehicle_ref, route, service_date,
+                   CAST(substr(scheduled_local, 12, 2) AS INTEGER) AS hour,
+                   COUNT(*) AS readings,
+                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
+                            THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early
+            FROM timepoint_observations
+            WHERE service_date IN ({date_ph})
+              AND operator IN ({op_ph})
+              AND COALESCE(is_origin, 0) = 0
+              AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
+              AND route IS NOT NULL AND trim(route) != ''
+              AND scheduled_local IS NOT NULL
+              AND observed_delay_s IS NOT NULL
+              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
+            GROUP BY operator, vehicle_ref, route, service_date, hour""",
+        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S,
+         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
+    ).fetchall()
+    cells: dict[tuple, list[int]] = {}
+    for row in rows:
+        cell = cells.setdefault(
+            (row["operator"], row["route"], row["service_date"], row["hour"]), [0, 0])
+        cell[0] += int(row["on_time"] or 0)
+        cell[1] += int(row["readings"])
+    by_vehicle: dict[tuple, list[float]] = {}
+    by_route: dict[tuple, list[float]] = {}
+    hours: dict[tuple, dict[int, list[int]]] = {}
+    for row in rows:
+        operator, vehicle, route = row["operator"], row["vehicle_ref"], row["route"]
+        readings, on_time = int(row["readings"]), int(row["on_time"] or 0)
+        early = int(row["early"] or 0)
+        if row["hour"] is not None and 0 <= row["hour"] <= 23:
+            hour = hours.setdefault((operator, vehicle), {}).setdefault(row["hour"], [0, 0, 0])
+            hour[0] += on_time
+            hour[1] += early
+            hour[2] += readings - on_time - early
+        cell_on, cell_total = cells[(operator, route, row["service_date"], row["hour"])]
+        others = cell_total - readings
+        if others <= 0:
+            continue
+        expected = readings * (cell_on - on_time) / others
+        for target, key in ((by_vehicle, (operator, vehicle)),
+                            (by_route, (operator, vehicle, route))):
+            entry = target.setdefault(key, [0.0, 0])
+            entry[0] += expected
+            entry[1] += readings
+    return by_vehicle, by_route, hours
+
+
+def _comparison(entry: list[float] | None) -> dict | None:
+    if not entry or entry[1] < PROFILE_MIN_READINGS:
+        return None
+    return {"others_on_time_pct": round(100 * entry[0] / entry[1], 1),
+            "compared_readings": entry[1]}
+
+
 def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
               mentions: dict[tuple[str, str], list[dict]] | None = None) -> list[dict]:
     dates = _profile_dates(completed_dates)
@@ -312,6 +385,7 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
             "on_time_pct": round(100 * on_time / readings, 1),
         })
 
+    fair_vehicle, fair_route, vehicle_hours = _fair_comparison(cur, dates)
     profiles: list[dict] = []
     slugs: set[str] = set()
     for (operator, vehicle_ref), candidate in sorted(candidates.items()):
@@ -344,6 +418,8 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
                 "on_time_pct": round(
                     100 * route["on_time"] / route_readings, 1),
                 "delay_counts": route["delay_counts"],
+                "comparison": _comparison(
+                    fair_route.get((operator, vehicle_ref, route["route"]))),
                 "days": sorted(
                     route["days"],
                     key=lambda item: item["service_date"], reverse=True),
@@ -369,6 +445,10 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
             "delay_bins_s": list(DELAY_BIN_EDGES_S),
             "delay_counts": candidate["delay_counts"],
             "routes": routes,
+            "comparison": _comparison(fair_vehicle.get((operator, vehicle_ref))),
+            "hours": {
+                str(hour): counts for hour, counts in
+                sorted(vehicle_hours.get((operator, vehicle_ref), {}).items())},
             "bot_mentions": (mentions or {}).get((operator, vehicle_ref), []),
         })
     return profiles
