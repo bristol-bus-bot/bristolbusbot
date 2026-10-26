@@ -77,7 +77,7 @@ export class TimetableFit {
         if (!item) return null;
         return {
             route: event.line, from: String(item.from), to: String(item.to),
-            timetableMinutes: Number(item.timetable_min), typicalMinutes: Math.round(Number(item.typical_min)),
+            timetableMinutes: Math.round(Number(item.timetable_min)), typicalMinutes: Math.round(Number(item.typical_min)),
             lostTwoMinutesShare: Number(item.share_pct), journeys: Number(item.journeys),
             when: `${slot!.dayType === 'weekday' ? 'weekdays' : 'weekends'} ${BAND_LABELS[slot!.band]}`,
             scope: 'How buses on this route usually run on this stretch at this time of day over the last four weeks, '
