@@ -292,6 +292,11 @@ exists. This fills that gap. These are independent estimates built to the
 official definition, not the official figures, and will differ from any operator
 or regulator measurement that uses different sampling.
 
+These figures measure the service against its timetable. They are not a
+measure of individual drivers. A bus that is late because the timetable allows
+too little time for the road, the traffic or the turnaround is a planning and
+management problem, and that is where the criticism belongs.
+
 ## Changes to the measurement
 
 Changes that affect comparability of the published figures are recorded
