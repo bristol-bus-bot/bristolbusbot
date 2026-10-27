@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify
 
 from .. import db
+from ..http_cache import EDGE_CACHE_10S
 from ..services import departures as dep_svc
 
 bp = Blueprint("api_departures", __name__)
@@ -17,4 +18,6 @@ def api_departures(stop_code: str):
         stale_seconds=cfg.stale_vehicle_seconds)
     if result is None:
         return jsonify({"error": "Stop not found"}), 404
-    return jsonify(result)
+    response = jsonify(result)
+    response.headers["Cache-Control"] = EDGE_CACHE_10S
+    return response
