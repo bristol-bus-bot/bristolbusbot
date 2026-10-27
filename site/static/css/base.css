@@ -195,7 +195,6 @@
             /* Hide timestamp and social handle; keep social icons. */
             .header-desktop-only { display: none !important; }
             .social-links { border-left: none !important; padding-left: 0 !important; margin-left: 0 !important; }
-            .bsky-handle { display: none !important; }
 
             .main-layout {
                 flex-direction: column !important;
