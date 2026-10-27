@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, url_for
 
 from .. import db
+from ..http_cache import EDGE_CACHE_10S
 from ..services import buses as buses_svc
 from ..services.stop_names import clean_stop_name
 
@@ -29,9 +30,10 @@ def api_buses():
     resp = jsonify({"buses": payload, "count": len(payload)})
     # Clients poll faster than the collector writes, so roughly half of
     # all polls fetch identical data. An ETag turns those into bodyless
-    # 304s; browsers handle the revalidation transparently.
+    # 304s; browsers handle the revalidation transparently. Cloudflare may
+    # also hold the answer for 10 seconds.
     resp.add_etag()
-    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Cache-Control"] = EDGE_CACHE_10S
     return resp.make_conditional(request)
 
 
