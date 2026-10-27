@@ -1,6 +1,8 @@
 """Page routes for the live map and vehicle profiles."""
 from __future__ import annotations
 
+import re
+
 import math
 from datetime import datetime
 
@@ -89,7 +91,13 @@ def index():
         "index.html",
         audit_headline=audit.headline(),
         carto_basemap_key=cfg.carto_basemap_key,
+        kofi_url=_kofi_url(cfg.kofi_url),
     )
+
+
+def _kofi_url(value: str) -> str | None:
+    """Only a plain https://ko-fi.com/<name> link is ever rendered."""
+    return value if re.fullmatch(r"https://ko-fi\.com/[A-Za-z0-9_]{1,64}", value or "") else None
 
 
 @bp.route("/vehicles/<slug>")

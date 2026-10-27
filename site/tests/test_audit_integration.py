@@ -85,7 +85,7 @@ def test_compact_headline_and_vehicle_links_use_fresh_published_snapshot(
 
     index = client.get("/")
     assert index.status_code == 200
-    assert b"Audit: 55.0% on time" in index.data
+    assert b"55.0% on time" in index.data
     assert b"Full methodology" not in index.data
     header_start = index.data.index(b"<header")
     header_end = index.data.index(b"</header>", header_start)
@@ -141,11 +141,11 @@ def test_stale_or_small_snapshot_hides_every_public_surface(
         app, tmp_path,
         published_at=datetime.now(timezone.utc) - timedelta(hours=49),
     )
-    assert b"Audit: 55.0% on time" not in client.get("/").data
+    assert b"55.0% on time" not in client.get("/").data
     assert client.get(f"/vehicles/{SLUG}").status_code == 404
     assert client.get(f"/api/vehicle-profiles/{SLUG}").status_code == 404
 
     install_snapshot(app, tmp_path, readings=10000, qualification_status='unavailable')
-    assert b"Audit: 55.0% on time" not in client.get("/").data
+    assert b"55.0% on time" not in client.get("/").data
     # Headline and profile samples are independent; an eligible profile remains.
     assert client.get(f"/vehicles/{SLUG}").status_code == 200

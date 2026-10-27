@@ -59,6 +59,8 @@ class Config:
         os.getenv("BBB_FEATURED_POST_MAX_AGE_MIN", "240")))
     enforce_https: bool = field(default_factory=lambda: _env_bool(
         "BBB_ENFORCE_HTTPS", False))
+    # The header's coffee link appears only once a Ko-fi page is configured.
+    kofi_url: str = field(default_factory=lambda: os.getenv("BBB_KOFI_URL", "").strip())
     carto_basemap_key: str = field(default_factory=lambda: os.getenv(
         "BBB_CARTO_BASEMAP_KEY", "").strip())
     public_hosts: tuple[str, ...] = ("bristolbuses.live", "www.bristolbuses.live")

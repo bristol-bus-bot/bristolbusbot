@@ -65,16 +65,26 @@ body {
   stroke: var(--fg-1);
 }
 
-#header-stats {
+/* Everything after the logo. It is the header's only scrolling area: if the
+   row is ever wider than the screen it swipes sideways rather than wrapping
+   or hiding items. */
+.header-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
   min-width: 0;
-  margin-left: 6px;
-  padding: 6px;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-#header-stats::-webkit-scrollbar {
+.header-scroll::-webkit-scrollbar {
   display: none;
+}
+
+#header-stats {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 6px;
 }
 
 .stat-chip {
@@ -129,8 +139,11 @@ body {
 }
 
 .toggle-btn {
-  min-height: 36px;
-  padding: 0 13px;
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--toggle-brown) 45%, transparent);
   border-radius: var(--r-md);
   background: transparent;
@@ -164,6 +177,7 @@ body {
   align-items: center;
   gap: 12px;
   margin-left: auto;
+  padding-left: 12px;
 }
 
 #last-updated {
@@ -185,6 +199,10 @@ body {
 
 [data-theme="night"] .instagram-link {
   color: #f4a3d2;
+}
+
+[data-theme="night"] .coffee-link {
+  color: #e0b080;
 }
 
 .theme-toggle {
@@ -226,37 +244,48 @@ body {
   border-left: 1px solid var(--line);
 }
 
-.bsky-link {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #0069c9;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.bsky-link:hover {
-  color: #0085ff;
-}
-
-.bsky-handle {
-  font-size: var(--t-small) !important;
-}
-
-.instagram-link {
+/* One round style for the outside links: Bluesky, Instagram, GitHub, coffee. */
+.icon-link {
   display: inline-grid;
   flex: none;
   width: 28px;
   height: 28px;
   place-items: center;
   border-radius: 50%;
-  color: #b32376;
   text-decoration: none;
 }
 
-.instagram-link:hover {
+.icon-link:hover,
+.icon-link:focus-visible {
   background: var(--surface-2);
+}
+
+.bsky-link {
+  color: #0069c9;
+}
+
+.bsky-link:hover {
+  color: #0085ff;
+}
+
+.instagram-link {
+  color: #b32376;
+}
+
+.instagram-link:hover {
   color: #d62976;
+}
+
+.github-header-link {
+  color: var(--fg-2);
+}
+
+.github-header-link:hover {
+  color: var(--fg-1);
+}
+
+.coffee-link {
+  color: #8a5a2b;
 }
 
 /* Main shell and controls ------------------------------------------------ */
@@ -1517,27 +1546,40 @@ span.vs-stop-name {
 
 /* Narrow desktop and tablet ------------------------------------------- */
 
-/* The full header needs ~1420px. Drop the lowest-priority text first so the
-   status chips keep their room; whatever still doesn't fit scrolls. */
-@media (min-width: 769px) and (max-width: 1439px) {
-  .bsky-handle {
+/* The full header fits from about 1280px. Below that the clock goes first. */
+@media (min-width: 769px) and (max-width: 1279px) {
+  #last-updated {
     display: none;
-  }
-
-  .audit-headline-full {
-    display: none;
-  }
-
-  .audit-headline-compact {
-    display: inline;
   }
 }
 
-/* Tablets and small laptops: layer toggles move to the map FABs, as on
-   mobile, and the sidebar narrows so the map isn't squeezed. */
+/* Below 1200px the row is wider than the screen even without the clock, so
+   it becomes one swipeable row (as on phones), with a soft fade on the right
+   to show there is more. */
+@media (max-width: 1199px) {
+  .header-scroll {
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .header-scroll > *,
+  #header-stats > .stat-chip {
+    scroll-snap-align: start;
+  }
+
+  /* Room past the fade so the last icon can be scrolled fully into view. */
+  .header-actions {
+    padding-right: 32px;
+  }
+}
+
+/* Tablets and small laptops: the layer toggles move to the map buttons, as
+   on mobile, and the sidebar narrows so the map isn't squeezed. */
 @media (min-width: 769px) and (max-width: 1199px) {
-  #header-toggles,
-  #last-updated {
+  #header-toggles {
     display: none;
   }
 
@@ -1570,7 +1612,7 @@ span.vs-stop-name {
   #header-stats {
     gap: 6px !important;
     margin-left: 8px !important;
-    padding-bottom: 2px;
+    padding: 4px 0 !important;
   }
 
   #header-stats .stat-label {
@@ -1578,22 +1620,30 @@ span.vs-stop-name {
   }
 
   .stat-chip {
-    min-height: 36px;
+    min-height: 44px;
     padding: 6px 9px;
   }
 
   .header-actions {
     gap: 6px;
+    margin-left: 0;
+    padding-left: 8px;
   }
 
   .theme-toggle {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
   }
 
   .social-links {
+    gap: 2px;
     padding-left: 5px !important;
     border-left: 0 !important;
+  }
+
+  .icon-link {
+    width: 44px;
+    height: 44px;
   }
 
   .audit-headline-link {
@@ -1730,19 +1780,9 @@ span.vs-stop-name {
   }
 }
 
-@media (max-width: 590px) {
-  #header-stats {
-    max-width: calc(100vw - 250px);
-  }
-}
-
 @media (max-width: 440px) {
   #logo-sign {
     width: 86px;
-  }
-
-  #header-stats {
-    max-width: calc(100vw - 225px);
   }
 
   .header-actions {

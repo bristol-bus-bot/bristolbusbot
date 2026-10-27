@@ -47,14 +47,10 @@
     text-underline-offset: 3px;
 }
 
-.audit-headline-compact { display: none; }
-
 @media (max-width: 768px) {
     .audit-headline-link {
         padding-left: 0;
         border-left: 0;
         font-size: 11px;
     }
-    .audit-headline-full { display: none; }
-    .audit-headline-compact { display: inline; }
 }
