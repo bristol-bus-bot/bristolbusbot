@@ -34,7 +34,11 @@ install -m 0644 "$AUDIT_SITE_DIR/audit_data.json" docs/audit_data.json
 if [ -f "$AUDIT_SITE_DIR/audit_summary.json" ]; then
     install -m 0644 "$AUDIT_SITE_DIR/audit_summary.json" docs/audit_summary.json
 fi
-install -m 0644 "$ASSET_DIR/index.html" docs/index.html
+# Stamp the page with a fingerprint of its script and styles, so a browser
+# holding an older copy of either fetches the new one with the new page.
+ASSET_VERSION="$(cat "$ASSET_DIR/app.js" "$ASSET_DIR/styles.css" | sha256sum | cut -c1-12)"
+sed "s/__ASSET_VERSION__/$ASSET_VERSION/g" "$ASSET_DIR/index.html" > docs/index.html
+chmod 0644 docs/index.html
 install -m 0644 "$ASSET_DIR/app.js" docs/app.js
 install -m 0644 "$ASSET_DIR/styles.css" docs/styles.css
 install -m 0644 "$ASSET_DIR/favicon.svg" docs/favicon.svg

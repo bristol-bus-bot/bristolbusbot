@@ -134,3 +134,13 @@ def test_published_files_use_unix_line_endings():
     # The Pi runs these; a Windows line ending breaks the script's first line.
     for path in (ROOT.parent / "deploy" / "publish_to_github.sh", ROOT / "places.json"):
         assert b"\r" not in path.read_bytes(), path.name
+
+
+def test_page_asks_for_the_script_and_styles_by_version():
+    # GitHub Pages lets browsers keep files for ten minutes. Versioned links
+    # stop a new page running with an old script or stylesheet.
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    script = (ROOT.parent / "deploy" / "publish_to_github.sh").read_text(encoding="utf-8")
+    assert 'href="styles.css?v=__ASSET_VERSION__"' in html
+    assert 'src="app.js?v=__ASSET_VERSION__"' in html
+    assert 'sed "s/__ASSET_VERSION__/$ASSET_VERSION/g" "$ASSET_DIR/index.html" > docs/index.html' in script
