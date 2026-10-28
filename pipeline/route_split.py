@@ -39,10 +39,14 @@ def area_label(area):
 class RouteSplit:
     """Route labels with the area added where a number is shared."""
 
-    def __init__(self, shared=(), trip_areas=None, geo_index=None):
+    def __init__(self, shared=(), trip_areas=None, geo_index=None, area_routes=None):
         self.shared = set(shared)
         self.trip_areas = dict(trip_areas or {})
         self.geo_index = geo_index
+        # {(operator, route): {area served: label area}} for readings whose
+        # trip isn't scheduled: Bristol's U2 serves Bristol and North Somerset
+        # and is labelled "U2 N Somerset", so a Bristol stop maps there.
+        self.area_routes = dict(area_routes or {})
 
     def route(self, operator, route, trip_id=None, stop_code=None):
         """The label for one reading or trip; unchanged unless shared."""
@@ -51,8 +55,8 @@ class RouteSplit:
         area = self.trip_areas.get(trip_id)
         if area is None and stop_code and self.geo_index:
             # A reading whose trip isn't in the schedule still sits at a stop,
-            # and shared routes never meet, so its stop decides.
-            area = self._stop_area(stop_code)
+            # and shared routes never meet, so its stop's area decides.
+            area = self.area_routes.get((operator, route), {}).get(self._stop_area(stop_code))
         return f"{route} {area}" if area else route
 
     def _stop_area(self, stop_code):
@@ -60,12 +64,13 @@ class RouteSplit:
         return area_label(place["area"]) if place else None
 
 
+def _served(counts):
+    return {area for area, n in counts.items() if n >= SERVED_SHARE * sum(counts.values())}
+
+
 def _components(profiles):
     """Group route IDs whose served areas overlap; returns lists of IDs."""
-    served = {
-        rid: {area for area, n in counts.items() if n >= SERVED_SHARE * sum(counts.values())}
-        for rid, counts in profiles.items() if counts
-    }
+    served = {rid: _served(counts) for rid, counts in profiles.items() if counts}
     parent = {rid: rid for rid in served}
 
     def find(rid):
@@ -145,7 +150,7 @@ def build(conn, geo_index=None):
     candidates = {key for key, by_route in starts.items() if len(_components(by_route)) > 1}
     readings = _reading_areas(conn, geo_index, candidates)
 
-    shared, route_area = set(), {}
+    shared, route_area, area_routes = set(), {}, defaultdict(dict)
     for operator, route in candidates:
         profiles = {
             rid: readings.get((operator, route, rid)) or counts
@@ -157,8 +162,11 @@ def build(conn, geo_index=None):
         shared.add((operator, route))
         for ids in components:
             total = sum((profiles[rid] for rid in ids), Counter())
+            label = total.most_common(1)[0][0]
             for rid in ids:
-                route_area[(operator, route, rid)] = total.most_common(1)[0][0]
+                route_area[(operator, route, rid)] = label
+                for area in _served(profiles[rid]):
+                    area_routes[(operator, route)][area] = label
 
     # One pass over the schedule: the table is keyed by date, so a query per
     # number would scan it once each.
@@ -174,6 +182,7 @@ def build(conn, geo_index=None):
                 trip_areas[trip_id] = area
     split.shared = shared
     split.trip_areas = trip_areas
+    split.area_routes = dict(area_routes)
     return split
 
 
