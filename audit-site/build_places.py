@@ -56,5 +56,5 @@ def build() -> dict:
 
 
 if __name__ == "__main__":
-    OUT.write_text(json.dumps(build(), separators=(",", ":")) + "\n", encoding="utf-8")
+    OUT.write_text(json.dumps(build(), separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {OUT} ({OUT.stat().st_size:,} bytes)")

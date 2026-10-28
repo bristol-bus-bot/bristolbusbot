@@ -128,3 +128,9 @@ def test_nightly_publish_copies_the_places_file():
     script = (ROOT.parent / "deploy" / "publish_to_github.sh").read_text(encoding="utf-8")
     assert 'install -m 0644 "$ASSET_DIR/places.json" docs/places.json' in script
     assert script.count("docs/places.json") >= 3
+
+
+def test_published_files_use_unix_line_endings():
+    # The Pi runs these; a Windows line ending breaks the script's first line.
+    for path in (ROOT.parent / "deploy" / "publish_to_github.sh", ROOT / "places.json"):
+        assert b"\r" not in path.read_bytes(), path.name
