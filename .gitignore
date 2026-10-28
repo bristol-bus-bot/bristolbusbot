@@ -63,3 +63,6 @@ docs/DOMAIN.md
 /.bbb-final-*/
 /output/
 /tmp/
+
+# AI assistants' and one-off working files (see AGENTS.md).
+/.scratch/
