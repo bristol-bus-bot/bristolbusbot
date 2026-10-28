@@ -48,6 +48,18 @@ test('no fact for small delays, other stops, other times, shaky observations or 
   assert.equal(new TimetableFit(path.join(dir, 'missing'), true).factFor(event), null);
 });
 
+test('a number used in two towns is found under its town label by the stop the bus passed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'segments-'));
+  const bath = { ...tight, from: 'Guildhall', to: 'Bus Station', to_stop: 'bathbus' };
+  fs.writeFileSync(path.join(dir, 'FBRI.json'), JSON.stringify({ operator: 'FBRI', routes: {
+    '1 Bristol': [tight], '1 Bath': [bath], '11': [{ ...tight, to_stop: 'eleven' }] } }));
+  const fit = new TimetableFit(dir, true);
+  assert.equal(fit.factFor(event).from, 'Temple Meads Stn');
+  assert.equal(fit.factFor({ ...event, lastStopCode: 'bathbus' }).from, 'Guildhall');
+  assert.equal(fit.factFor(event).route, '1');
+  assert.equal(fit.factFor({ ...event, lastStopCode: 'eleven' }), null);
+});
+
 test('it takes a service turn, stays about the bus, and is never repeated back to back', () => {
   const fit = new TimetableFit(segments([tight]), true);
   const choice = chooseSubject(event, null, null, 0, [], [], null, { cycle: ['service', 'vehicle', 'weather', 'depot'], timetableFit: fit });

@@ -21,6 +21,7 @@ import statistics
 from collections import defaultdict
 from datetime import datetime
 
+import route_split
 import segment_analysis
 
 MIN_JOURNEYS = 30
@@ -86,16 +87,21 @@ def rollup_day(conn, timetable, date_str, *, commit=True):
     """Replace one service day's stretch measurements. Returns rows written."""
     init_tables(conn)
     pairs, _ = segment_analysis.segment_pairs(conn, timetable, date_str, date_str)
+    split = route_split.for_connection(conn)
     groups = defaultdict(list)
     for p in pairs:
-        groups[(p["operator"], p["route"], p["direction"],
+        # Stored under the public label ("4 Bath"); the timetable still knows
+        # the route by its plain number, which the termini lookup needs.
+        label = split.route(p["operator"], p["route"], p.get("trip_id"), p.get("stop_code"))
+        groups[(p["operator"], label, p["direction"],
                 p["from_stop"], p["to_stop"], p["band"])].append(p)
-    termini, names = _termini_and_names(timetable, groups)
+    termini, names = _termini_and_names(
+        timetable, {(k[0], items[0]["route"]) for k, items in groups.items()})
     rows = []
     for (operator, route, direction, a, b, band), items in groups.items():
         rows.append((
             date_str, operator, route, direction, a, b, names.get(a), names.get(b), band,
-            int(b in termini.get((operator, route, direction), ())),
+            int(b in termini.get((operator, items[0]["route"], direction), ())),
             int(statistics.median(p["planned_s"] for p in items)),
             sum(1 for p in items if p["start_delay_s"] < -60),
             json.dumps([int(p["change_s"]) for p in items], separators=(",", ":")),

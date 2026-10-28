@@ -17,6 +17,7 @@ from collections import defaultdict
 
 from audit_operators import NETWORK_LABEL, SHOW_OPERATORS, public_route
 from audit_scope import frequency_adherence, operator_composition
+import route_split
 from sample_quality import qualify_row
 from snapshot_quality import withheld_routes
 
@@ -38,7 +39,9 @@ def _raw_medians(cur, window):
     delays = defaultdict(lambda: defaultdict(list))
     try:
         rows = cur.execute(
-            f"""SELECT operator, route, observed_delay_s FROM timepoint_observations
+            f"""SELECT operator, route, observed_delay_s, trip_id,
+                       {route_split.column_or_null(cur.connection, "timepoint_observations", "stop_code")}
+                  FROM timepoint_observations
                  WHERE service_date IN ({_placeholders(window)})
                    AND operator IN ({_placeholders(SHOW_OPERATORS)})
                    AND COALESCE(is_origin, 0) = 0
@@ -47,7 +50,9 @@ def _raw_medians(cur, window):
             (*window, *SHOW_OPERATORS, DISTANCE_GATE_M))
     except sqlite3.OperationalError:
         return {}
-    for operator, route, delay in rows:
+    split = route_split.for_connection(cur.connection)
+    for operator, route, delay, trip_id, stop_code in rows:
+        route = split.route(operator, route, trip_id, stop_code)
         for label, pooled in ((operator, False), (NETWORK_LABEL, True)):
             delays[label][None].append(delay)
             if route is not None:
