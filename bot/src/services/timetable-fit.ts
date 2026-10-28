@@ -71,7 +71,12 @@ export class TimetableFit {
         if (!(Number(event.delayMinutes) >= MIN_LATE_MINUTES) || !event.lastStopCode || !event.operatorRef) return null;
         const slot = bandFor(event.timestamp);
         const data = slot && this.load(event.operatorRef);
-        const items: any[] = Array.isArray(data?.routes?.[event.line]) ? data.routes[event.line] : [];
+        // A number reused in another town is filed as "4 Bath" / "4 Bristol";
+        // the stop the bus just passed picks the right one.
+        const routes = data?.routes && typeof data.routes === 'object' ? data.routes : {};
+        const items: any[] = Object.keys(routes)
+            .filter(key => key === event.line || key.startsWith(`${event.line} `))
+            .flatMap(key => (Array.isArray(routes[key]) ? routes[key] : []));
         const item = items.find(i => i && i.kind === 'tight' && i.to_stop === event.lastStopCode
             && i.band === slot!.band && i.day_type === slot!.dayType);
         if (!item) return null;

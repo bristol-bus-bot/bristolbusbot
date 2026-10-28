@@ -286,6 +286,17 @@ Bristol. Each operator's own figures use its route numbers as printed. In the
 combined network view every operator except First is tagged, so the two appear
 as "13" and "13 Stagecoach" rather than being added together.
 
+One operator can also reuse a number in different towns. First runs Bristol,
+Bath and Weston-super-Mare under one operator code, and its 4 is one route in
+Bath and another in Bristol. Each scheduled trip names its timetable route, and
+each timetable route serves the council areas its recent readings fall in (or,
+without readings, the areas its trips start in). Routes under one number that
+share any area are treated as one service: a route crossing a boundary, or a
+new timetable edition. Routes that never meet are reported separately, labelled
+with their main area: "4 Bath", "4 Bristol", "U2 N Somerset". A reading whose
+trip is not in the day's schedule takes the area of its stop. Numbers used in
+one place only keep their plain label.
+
 ## Frequent services
 
 A route's frequency label is a schedule proxy: at least six departures in its
@@ -356,6 +367,15 @@ management problem, and that is where the criticism belongs.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**28 October 2026 - routes sharing a number in different towns are reported
+separately.** First's 1, 2, 3, 4, 5, 6, 7, 8, 20, 41, U1, U1N and U2 each
+covered two or three different routes in Bristol, Bath and North Somerset, and
+were added together. They now appear as, for example, "4 Bath" and "4
+Bristol" (see "Route numbers shared by operators"). The days in the 28-day
+view were recomputed from the retained raw readings. Daily rows from before 22
+August 2026, when scheduled trips started recording their timetable route,
+keep the merged figures. Network and operator totals are unchanged.
 
 **26 October 2026 - the audit opens on the last 28 days.** Previously it showed
 only the latest service day. The figures for any single day are unchanged.

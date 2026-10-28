@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from dateutil import tz
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, public_route
+import route_split
 from audit_publication import day_consistency_reasons
 from audit_geo import load_geo_index, geo_for
 from audit_fleet import load_fleet_index, fleet_for, fleet_number
@@ -474,8 +475,12 @@ def rollup_hours(conn, date_str, operators, label, *, commit=True):
     op_ph = ",".join("?" for _ in operators)
     pooled = len(operators) > 1
     counts = {}
-    for operator, route, delay_s, dist_m, scheduled_local in conn.execute(
-            f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local
+    split = route_split.for_connection(conn)
+    stop_sql = route_split.column_or_null(conn, "timepoint_observations", "stop_code")
+    for (operator, route, delay_s, dist_m, scheduled_local,
+         trip_id, stop_code) in conn.execute(
+            f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local,
+                      trip_id, {stop_sql}
                FROM timepoint_observations
                WHERE service_date = ? AND operator IN ({op_ph})
                  AND COALESCE(is_origin, 0) = 0""",
@@ -486,7 +491,8 @@ def rollup_hours(conn, date_str, operators, label, *, commit=True):
         if hour is None:
             continue
         band = delay_band(delay_s)
-        label_route = public_route(operator, route, pooled)
+        label_route = public_route(
+            operator, split.route(operator, route, trip_id, stop_code), pooled)
         # Readings without a route count towards the network row only.
         keys = [(None, hour)] + ([(label_route, hour)] if label_route is not None else [])
         for key in keys:
@@ -663,10 +669,13 @@ def load_trip_coverage_rows(conn, date_str, operators):
               AND expected.operator IN ({op_ph})""",
         (date_str, *operators, UNKNOWN_DIRECTION, date_str, *operators),
     ).fetchall()
+    split = route_split.for_connection(conn)
     return [
         {
             "operator": operator,
             "route": route or UNKNOWN_ROUTE,
+            # The public label: "4 Bath" where First's 4 also runs elsewhere.
+            "label_route": split.route(operator, route, trip_id) or UNKNOWN_ROUTE,
             "trip_id": trip_id,
             "direction": direction,
             "first_departure": first_departure,
@@ -698,7 +707,7 @@ def route_trip_counts(conn, date_str, operators):
     observed = {}
     withheld_labels = set()
     for row in load_trip_coverage_rows(conn, date_str, operators):
-        route = None if row["route"] == UNKNOWN_ROUTE else row["route"]
+        route = None if row["label_route"] == UNKNOWN_ROUTE else row["label_route"]
         label = public_route(row["operator"], route, pooled)
         if withheld_key(row) in withheld:
             withheld_labels.add(label)
@@ -854,7 +863,7 @@ def rollup_trip_coverage(conn, date_str, operators=SHOW_OPERATORS):
     for row in counted:
         band = trip_time_band_for(row["first_departure"])
         for label in (row["operator"], NETWORK_LABEL):
-            route = public_route(row["operator"], row["route"], label == NETWORK_LABEL)
+            route = public_route(row["operator"], row["label_route"], label == NETWORK_LABEL)
             key = (label, route, row["direction"], band)
             group = groups.setdefault(key, {
                 "scheduled": 0, "observed": 0, "exact": 0,
@@ -989,10 +998,11 @@ def load_duty_gap_inputs(conn, date_str, operators):
     end_sql = (
         "last_departure" if "last_departure" in expected_columns else "NULL")
     op_ph = ",".join("?" for _ in operators)
+    split = route_split.for_connection(conn)
     scheduled = [
         {
             "operator": operator,
-            "route": route or UNKNOWN_ROUTE,
+            "route": split.route(operator, route, trip_id) or UNKNOWN_ROUTE,
             "trip_id": trip_id,
             "direction": direction,
             "first_departure": first_departure,
@@ -1339,14 +1349,17 @@ def rollup(
     op_ph = ",".join("?" for _ in operators)
 
     pooled = len(operators) > 1
+    stop_sql = route_split.column_or_null(conn, "timepoint_observations", "stop_code")
     cur.execute(
-        f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local
+        f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local,
+                  trip_id, {stop_sql}
            FROM timepoint_observations
            WHERE service_date = ? AND operator IN ({op_ph})
              AND COALESCE(is_origin, 0) = 0""",
         (date_str, *operators),
     )
     observations = cur.fetchall()
+    split = route_split.for_connection(conn)
 
     if not observations:
         existing = cur.execute(
@@ -1376,9 +1389,11 @@ def rollup(
             )
 
     per_route = {}
-    for operator, route, delay_s, dist_m, scheduled_local in observations:
+    for (operator, route, delay_s, dist_m, scheduled_local,
+         trip_id, stop_code) in observations:
         stats = per_route.setdefault(
-            public_route(operator, route, pooled), new_accumulator())
+            public_route(operator, split.route(operator, route, trip_id, stop_code), pooled),
+            new_accumulator())
         stats["readings_total"] += 1
         if dist_m is None or dist_m > DISTANCE_GATE_M:
             stats["excluded_distance"] += 1
@@ -1567,7 +1582,7 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT operator, stop_code, route, observed_delay_s
+        f"""SELECT operator, stop_code, route, observed_delay_s, trip_id
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
               AND COALESCE(is_origin, 0) = 0
@@ -1576,7 +1591,9 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
     )
     geography = {}
     routes = {}
-    for source_operator, stop_code, route, delay_s in cur.fetchall():
+    split = route_split.for_connection(conn, geo_index)
+    for source_operator, stop_code, route, delay_s, trip_id in cur.fetchall():
+        route = split.route(source_operator, route, trip_id, stop_code)
         place = geo_for(geo_index, stop_code)
         if not place:
             continue
@@ -1684,7 +1701,9 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT operator, route, vehicle_ref, observed_delay_s
+        f"""SELECT operator, route, vehicle_ref, observed_delay_s,
+                   {route_split.column_or_null(conn, "timepoint_observations", "trip_id")},
+                   {route_split.column_or_null(conn, "timepoint_observations", "stop_code")}
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
               AND COALESCE(is_origin, 0) = 0
@@ -1692,7 +1711,9 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
         (date_str, *operators, DISTANCE_GATE_M),
     )
     models = {}
-    for op, route, vehicle_ref, delay_s in cur.fetchall():
+    split = route_split.for_connection(conn)
+    for op, route, vehicle_ref, delay_s, trip_id, stop_code in cur.fetchall():
+        route = split.route(op, route, trip_id, stop_code)
         f = fleet_for(fleet_index, op, vehicle_ref)
         if not f:
             continue
@@ -1744,13 +1765,17 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT route, first_departure, operator, route_id, direction FROM expected_trips
+        f"""SELECT route, first_departure, operator, route_id, direction,
+                   {route_split.column_or_null(conn, "expected_trips", "trip_id")}
+            FROM expected_trips
             WHERE service_date = ? AND operator IN ({op_ph})""",
         (date_str, *operators),
     )
     hourly = {}
+    labels = {}
     unknown_routes = set()
-    for route, first_departure, operator, route_id, direction in cur.fetchall():
+    split = route_split.for_connection(conn)
+    for route, first_departure, operator, route_id, direction, trip_id in cur.fetchall():
         if not route_id or direction is None:
             unknown_routes.add(route)
         if not first_departure:
@@ -1761,6 +1786,8 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
             continue
         if 6 <= hour <= 19:
             hours = hourly.setdefault((route,operator,route_id,direction), {})
+            labels.setdefault((route,operator,route_id,direction),
+                              split.route(operator, route, trip_id))
             hours[hour] = hours.get(hour, 0) + 1
 
     cur.execute(
@@ -1774,8 +1801,9 @@ def rollup_frequency(conn, date_str, operators, label, *, commit=True):
     withheld = withheld_routes(conn, date_str)
     by_route = {}
     doubtful = set()
-    for (route,operator,_,_), hours in hourly.items():
-        route_label = public_route(operator, route, pooled)
+    for key, hours in hourly.items():
+        route, operator = key[0], key[1]
+        route_label = public_route(operator, labels[key], pooled)
         by_route.setdefault(route_label,[]).append(max(hours.values()))
         if route in unknown_routes or (operator, route or "") in withheld:
             doubtful.add(route_label)
