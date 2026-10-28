@@ -135,3 +135,40 @@ def test_the_daily_rollup_reports_each_town_separately(monkeypatch):
         """SELECT readings_in_gate FROM daily_overall_summary
             WHERE service_date = ? AND operator = 'FBRI'""", (day,)).fetchone()
     assert overall[0] == 9
+
+
+def test_an_unscheduled_reading_joins_the_route_serving_its_area():
+    # Bristol's U2 serves Bristol and North Somerset and is labelled after its
+    # main area; a stray reading at a Bristol stop belongs to it, not to a new
+    # "U2 Bristol".
+    conn = database()
+    day = "20261023"
+    geo = {**GEO, "nsom1": {"area": "North Somerset", "ward": "Blagdon & Churchill"}}
+    schedule(conn, day, "U2-BATH", "U2", "R-BATH", "bath1")
+    schedule(conn, day, "U2-BRIS", "U2", "R-BRIS", "bris1")
+    reading(conn, day, "U2-BATH", "U2", "bath1", 0)
+    reading(conn, day, "U2-BRIS", "U2", "bris1", 0)
+    for _ in range(3):
+        reading(conn, day, "U2-BRIS", "U2", "nsom1", 0)
+    split = route_split.build(conn, geo)
+    assert split.route("FBRI", "U2", "U2-BRIS") == "U2 N Somerset"
+    assert split.route("FBRI", "U2", "STRAY", "bris2") == "U2 N Somerset"
+    assert split.route("FBRI", "U2", "STRAY", "bath2") == "U2 Bath"
+
+
+def test_the_confidence_check_files_evidence_under_the_split_labels(monkeypatch):
+    import sample_quality
+    conn = database()
+    for column in ("vehicle_ref TEXT", "siri_journey_ref TEXT", "recorded_at TEXT"):
+        conn.execute(f"ALTER TABLE timepoint_observations ADD COLUMN {column}")
+    day = two_fours(conn)
+    reading(conn, day, "BATH-A", "4", "bath1", 30)
+    reading(conn, day, "BRIS-A", "4", "bris1", 900)
+    conn.execute("UPDATE timepoint_observations SET vehicle_ref = 'V1', siri_journey_ref = 'J1', "
+                 "recorded_at = '2026-10-23T08:10:00+01:00'")
+    monkeypatch.setattr(route_split, "load_geo_index", lambda: GEO)
+    route_split._cache.clear()
+    sample_quality.write_day(conn, day, GEO)
+    keys = {row[0] for row in conn.execute(
+        "SELECT scope_key FROM daily_sample_support WHERE operator = 'FBRI' AND scope = 'route'")}
+    assert keys == {"4 Bath", "4 Bristol"}

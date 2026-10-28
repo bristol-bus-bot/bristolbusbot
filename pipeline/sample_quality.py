@@ -9,6 +9,7 @@ from audit_geo import geo_for
 from audit_fleet import fleet_for
 
 from sample_rules import qualification
+import route_split
 
 
 def init_schema(c):
@@ -32,6 +33,9 @@ def write_day(c,day,geo_index,fleet_index=None):
         FROM timepoint_observations WHERE service_date=? AND COALESCE(is_origin,0)=0
         AND gps_distance_m BETWEEN 0 AND 150 AND observed_delay_s IS NOT NULL
         ORDER BY operator,trip_id,vehicle_ref,siri_journey_ref,stop_sequence''',(day,)).fetchall()
+    # The same route labels as the daily rollup ("4 Bath"), so every route's
+    # figure finds its evidence.
+    split=route_split.for_connection(c,geo_index)
     journeys=defaultdict(list)
     for row in rows:
         if row[0] in SHOW_OPERATORS:journeys[tuple(row[:1])+tuple(row[2:5])].append(tuple(row))
@@ -53,6 +57,7 @@ def write_day(c,day,geo_index,fleet_index=None):
         if len({x[1] for x in items})>1:bad.add(identity)
         for row in items:
             op,route,_,_,_,_,_,delay,stop=row
+            route=split.route(op,route,identity[1],stop)
             scopes=[('overall',''),('route',route or '')]
             fleet = fleet_for(fleet_index, op, identity[2]) if fleet_index else None
             if fleet and fleet.get('model'):
