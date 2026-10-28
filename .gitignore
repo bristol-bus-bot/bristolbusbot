@@ -66,3 +66,5 @@ docs/DOMAIN.md
 
 # AI assistants' and one-off working files (see AGENTS.md).
 /.scratch/
+# Local pointer that makes Claude Code load AGENTS.md; kept out of the public repo.
+/CLAUDE.md
