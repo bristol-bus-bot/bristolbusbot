@@ -1,3 +1,5 @@
+import importlib.util
+import json
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -24,12 +26,15 @@ def test_dynamic_text_is_escaped_before_inner_html_rendering():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     required_guards = (
         "const route = escapeHTML(row.route)",
-        "${escapeHTML(row.route)}",
+        "${escapeHTML(number)}",
+        "${escapeHTML(operator)}",
         "const key = escapeHTML(row.key)",
         "${escapeHTML(o.code)}",
         "${escapeHTML(o.name)}",
         "${escapeHTML(m.model)}",
-        "${escapeHTML(r[0])}",
+        "${escapeHTML(x.title)}",
+        "${escapeHTML(x.text)}",
+        "${escapeHTML(AREA_LABELS[area.name] || area.name)}",
     )
     assert all(guard in source for guard in required_guards)
     assert "line.innerHTML" not in source
@@ -66,7 +71,7 @@ def test_historical_restatement_and_excluded_day_are_disclosed():
 
 def test_accessibility_landmarks_and_live_regions_are_present():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    for marker in ('href="#main-content"', "<main", 'role="tablist"',
+    for marker in ('href="#main-content"', "<main", '<label class="sr-only" for="operator">',
                    'role="alert"', 'aria-live="polite"'):
         assert marker in html
 
@@ -86,7 +91,7 @@ def test_hourly_strips_escape_text_and_only_load_local_files():
 def test_timetable_fit_escapes_stop_names_and_only_loads_local_files():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "${escapeHTML(item.from)} → ${escapeHTML(item.to)}" in source
-    assert "${escapeHTML(item.route)}" in source
+    assert "${escapeHTML(splitRoute(item.route)[0])}" in source
     assert r"/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)" in source
 
 
@@ -94,3 +99,32 @@ def test_page_loads_the_small_summary_and_escapes_period_labels():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     assert 'fetchJSON("audit_summary.json")' in source
     assert "${escapeHTML(label)}" in source
+
+
+def test_operator_picker_sits_in_the_bar_that_stays_on_screen():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    nav = html[html.index('<nav class="jump"'):html.index("</nav>")]
+    assert '<select id="operator"' in nav
+
+
+def test_map_only_loads_the_local_places_file():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'fetch("places.json")' in source
+    assert "https://" not in source.split("function loadPlaces", 1)[1].split("}", 1)[0]
+    data = json.loads((ROOT / "places.json").read_text(encoding="utf-8"))
+    assert {a["name"] for a in data["areas"]} == {
+        "Bath and North East Somerset", "Bristol", "North Somerset", "South Gloucestershire"}
+    assert len(data["wards"]) > 100
+
+
+def test_places_file_matches_its_sources():
+    spec = importlib.util.spec_from_file_location("build_places", ROOT / "build_places.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert json.loads((ROOT / "places.json").read_text(encoding="utf-8")) == module.build()
+
+
+def test_nightly_publish_copies_the_places_file():
+    script = (ROOT.parent / "deploy" / "publish_to_github.sh").read_text(encoding="utf-8")
+    assert 'install -m 0644 "$ASSET_DIR/places.json" docs/places.json' in script
+    assert script.count("docs/places.json") >= 3
