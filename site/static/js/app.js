@@ -426,9 +426,11 @@
             if (routeViewActive) return;
             if (!vehicleSidebarState) travelNotices().show({ stop: stopCode });
             try {
+                // no-cache: always check with the server, whatever lifetime a
+                // cache in between hands the browser (unchanged answers are cheap).
                 const [liveRes, schedRes] = await Promise.all([
-                    fetch(`/api/departures/${stopCode}`),
-                    fetch(`/api/scheduled-departures/${stopCode}`)
+                    fetch(`/api/departures/${stopCode}`, { cache: 'no-cache' }),
+                    fetch(`/api/scheduled-departures/${stopCode}`, { cache: 'no-cache' })
                 ]);
 
                 if (!liveRes.ok) console.warn(`loadDepartures: /api/departures/${stopCode} returned HTTP ${liveRes.status}`);
@@ -531,7 +533,10 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 10000);
             try {
-                const res = await fetch('/api/buses', { signal: controller.signal });
+                // no-cache: Cloudflare once told browsers to keep this for 4
+                // hours; always check with the server (an unchanged answer is a
+                // cheap 304 thanks to the ETag).
+                const res = await fetch('/api/buses', { signal: controller.signal, cache: 'no-cache' });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 latestBusData = data.buses || [];
@@ -1799,6 +1804,15 @@
         setInterval(fetchStopNotices, 60000);
         setInterval(() => window.BBB.refreshPositionAges(), 1000);
         setInterval(fetchBusbotPosts, 120000);  // Refresh busbot posts every 2 minutes
+        // Phones freeze a home-screen app in the background and its timers with
+        // it. Coming back to the app refreshes at once instead of showing the
+        // positions from when it was last open.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            fetchBuses();
+            fetchStopNotices();
+            if (selectedStopCode && !routeViewActive) loadDepartures(selectedStopCode);
+        });
         initSheetDrag();
         console.log(`Init dispatched in ${(performance.now() - _initStart).toFixed(0)}ms (data loading async)`);
 
