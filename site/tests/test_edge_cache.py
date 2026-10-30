@@ -28,6 +28,18 @@ def test_buses_keep_their_etag_and_304_with_the_edge_header(client):
     assert again.headers["Cache-Control"] == EDGE
 
 
+def test_the_map_always_asks_for_fresh_live_data():
+    # Cloudflare's browser cache setting once turned max-age=0 into 4 hours
+    # and the home-screen app showed hours-old positions. The map must not
+    # depend on that setting.
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "fetch('/api/buses', { signal: controller.signal, cache: 'no-cache' })" in source
+    assert "fetch(`/api/departures/${stopCode}`, { cache: 'no-cache' })" in source
+    assert "fetch(`/api/scheduled-departures/${stopCode}`, { cache: 'no-cache' })" in source
+    assert "document.addEventListener('visibilitychange'" in source
+
+
 def test_other_api_answers_are_not_edge_cached(client):
     response = client.get("/api/notices/stops")
     assert "s-maxage" not in response.headers.get("Cache-Control", "")
