@@ -1,4 +1,4 @@
-"""Blueprint registration — the only place routes are wired up."""
+"""Blueprint registration: the only place routes are wired up."""
 from __future__ import annotations
 
 from flask import Flask

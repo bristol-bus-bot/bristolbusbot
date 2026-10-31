@@ -26,7 +26,7 @@ def _static_asset_version(static_folder: str) -> str:
 def create_app(config: Config | None = None) -> Flask:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = Flask(__name__, template_folder="../templates",
                 static_folder="../static")
     app.config["BBB"] = config or Config()
