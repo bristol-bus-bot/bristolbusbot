@@ -5,6 +5,8 @@ commentary across the West of England (WECA), built entirely on open data
 from the Bus Open Data Service (BODS). This started out as a hobby engineering project when I got a Raspberry Pi 4.
 After many damp waits for rush hour buses in East Bristol, I decided to weaponise my frustration and automate being passive-aggressive about First Bus, so here we are.
 
+**Live map:** [Bristol Buses LIVE](https://bristolbuses.live) · **Punctuality audit:** [West of England bus punctuality audit](https://bristol-bus-bot.github.io/weca-bus-audit/) · **Bluesky:** [Bristol Bus Bot](https://bsky.app/profile/did:plc:y2oqhgnbw66jtd5hnbda76nk)
+
 ## The map
 
 | Folder | What it is | Language | Runs where |

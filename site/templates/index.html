@@ -1,10 +1,29 @@
 {% extends "base.html" %}
+{% block canonical %}<link rel="canonical" href="{{ public_origin }}/">{% endblock %}
+{% block structured_data %}
+    {#- A data block, not a script: browsers don't run it, so the CSP is unaffected. #}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Bristol Buses LIVE",
+        "alternateName": "Bristol Bus Bot",
+        "url": "{{ public_origin }}/",
+        "sameAs": [
+            "https://bsky.app/profile/did:plc:y2oqhgnbw66jtd5hnbda76nk",
+            "https://www.instagram.com/bristolbusbot/",
+            "https://github.com/bristol-bus-bot/bristolbusbot"{% if kofi_url %},
+            "{{ kofi_url }}"{% endif %}
+        ]
+    }
+    </script>
+{% endblock %}
 {% block body %}
 
     <header class="site-header">
-        <div class="flex items-center gap-2 flex-shrink-0">
+        <h1 class="site-title flex items-center gap-2 flex-shrink-0">
             <!-- SVG road sign logo: Bristol Buses LIVE (bristolbuses.live) -->
-            <svg id="logo-sign" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 126 46" height="38" aria-label="Bristol Buses Live">
+            <svg id="logo-sign" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 126 46" height="38" role="img" aria-label="Bristol Buses LIVE – live bus map for Bristol and the West of England">
                 <!-- Green sign background with grey border -->
                 <rect id="logo-border" x="1" y="1" width="124" height="44" rx="4" ry="4" fill="#00703C" stroke-width="1.5"/>
                 <!-- Blue badge for 'Bristol' -->
@@ -16,7 +35,7 @@
                 <rect x="63" y="24" width="42" height="16" rx="2" ry="2" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="0.5"/>
                 <text x="84" y="36.5" text-anchor="middle" fill="#f59e0b" font-family="Bitcount Grid Double, monospace" font-size="10.5" font-weight="700" letter-spacing="0.1em">LIVE</text>
             </svg>
-        </div>
+        </h1>
 
         <!-- Everything after the logo: one row that swipes sideways on phones. -->
         <div class="header-scroll">
@@ -93,10 +112,29 @@
                     </svg>
                 </a>
                 {% endif %}
+                <button type="button" id="about-link" class="icon-link about-link"
+                    popovertarget="about-panel" aria-label="About this map" title="About this map">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="11" x2="12" y2="16"/>
+                        <circle cx="12" cy="8" r="0.5" fill="currentColor"/>
+                    </svg>
+                </button>
             </div>
         </div>
         </div>
     </header>
+
+    {#- Server-rendered so search engines read it; a person opens it with the
+        ⓘ button. A popover needs no script, so the CSP is unaffected. #}
+    <div id="about-panel" popover class="about-panel">
+        <button type="button" class="about-close" popovertarget="about-panel" popovertargetaction="hide" aria-label="Close">×</button>
+        <h2>About this map</h2>
+        <p>This map shows every bus with live tracking across Bristol, Bath, Weston and the rest of the West of England, updated every few seconds. Tap a bus to see where it's going and how late it is. Tap a stop to see what's coming next, or at least what's meant to be.</p>
+        <p>It also keeps score. Every journey is checked against the timetable at each timing point, and a bus counts as on time if it's no more than a minute early and under six minutes late. That's the government's definition, not mine. Mine would be stricter. The results go into an open <a href="https://bristol-bus-bot.github.io/weca-bus-audit/">punctuality audit</a>, broken down by operator, route, area and individual bus, so you can find out whether it's just your route or everyone's. The <a href="https://bsky.app/profile/did:plc:y2oqhgnbw66jtd5hnbda76nk">Bristol Bus Bot</a> account on Bluesky posts from the same data, with more opinions.</p>
+        <p>All of this comes from public data the operators have to publish through the government's <a href="https://www.bus-data.dft.gov.uk/">Bus Open Data Service</a>, with fleet and livery details largely borrowed from <a href="https://bustimes.org/">bustimes.org</a>. The data belongs to the public, so the map is free: no ads, no analytics, no app to download, and no premium tier for the useful bits. It's built in my spare time and runs on a Raspberry Pi in Bristol, which is more reliable than some of the routes it tracks. The code is <a href="https://github.com/bristol-bus-bot/bristolbusbot">on GitHub</a>.</p>
+        <p class="about-footnote"><a href="/privacy">Privacy</a></p>
+    </div>
 
     <!-- Main layout -->
     <div class="main-layout">
@@ -213,6 +251,7 @@
                         </svg>
                         <span>Source on GitHub</span>
                     </a>
+                    <a id="privacy-link" class="github-link" href="/privacy">Privacy</a>
                     <span class="sidebar-updated"><span>Updated</span> <span id="departure-update-time"></span></span>
                 </div>
             </div>
