@@ -93,9 +93,12 @@ test('the checked-in editorial context is valid and contains no Bee Network clai
   const raw = readFileSync(path, 'utf8');
   assert.doesNotMatch(raw, /Bee Network/i);
   const document = validateEditorialDocument(JSON.parse(raw));
-  assert.equal(document.facts.length, 27);
-  assert.equal(document.occasions.length, 8);
-  assert.equal(document.news.length, 1);
+  // Content edits shouldn't need test edits: check shape, not counts.
+  for (const list of ['facts', 'occasions', 'news']) {
+    assert.ok(document[list].length > 0, `${list} is empty`);
+    const ids = document[list].map(entry => entry.id);
+    assert.equal(new Set(ids).size, ids.length, `${list} has duplicate ids`);
+  }
 });
 
 

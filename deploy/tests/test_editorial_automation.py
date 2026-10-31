@@ -77,9 +77,11 @@ def seed_candidate(root: Path, raw: bytes, blob_sha: str = "b" * 40) -> None:
 
 def test_checked_in_context_passes_both_runtime_contracts():
     document, summary = validate_bytes(valid_raw())
-    assert summary["facts"] == 27
-    assert summary["occasions"] == 8
-    assert summary["news"] == 1
+    # Content edits shouldn't need test edits: check shape, not counts.
+    for name in ("facts", "occasions", "news"):
+        assert summary[name] > 0
+        ids = [entry["id"] for entry in document[name]]
+        assert len(ids) == len(set(ids))
     assert "bee network" not in json.dumps(document).lower()
 
 
