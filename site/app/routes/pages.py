@@ -108,7 +108,7 @@ def _public_origin() -> str:
 
 @bp.route("/privacy")
 def privacy():
-    return render_template("privacy.html", contact_email="bristolbusbot@gmail.com")
+    return render_template("privacy.html", contact_email="hello@bristolbusbot.live")
 
 
 @bp.route("/robots.txt")
