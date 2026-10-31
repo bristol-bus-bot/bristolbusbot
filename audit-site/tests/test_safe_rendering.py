@@ -150,6 +150,8 @@ def test_audit_site_has_search_basics_and_publishes_them():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     assert '<meta name="description"' in html
     assert '<meta property="og:title"' in html
+    # Google Search Console ownership (URL-prefix property for the audit site).
+    assert '<meta name="google-site-verification" content="jJreNS1rfgwbymtiuRrzHCfHi8ZP4BG9JeubNYaZslE">' in html
     assert '<link rel="canonical" href="https://bristol-bus-bot.github.io/weca-bus-audit/">' in html
     assert "Sitemap: https://bristol-bus-bot.github.io/weca-bus-audit/sitemap.xml" in (
         ROOT / "robots.txt").read_text(encoding="utf-8")
