@@ -90,7 +90,10 @@ def test_hourly_strips_escape_text_and_only_load_local_files():
 
 def test_timetable_fit_escapes_stop_names_and_only_loads_local_files():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
-    assert "${escapeHTML(item.from)} → ${escapeHTML(item.to)}" in source
+    assert "${stopHTML(item.from, item.from_place)} → ${stopHTML(item.to, item.to_place)}" in source
+    # Stop names and their towns are escaped before they reach innerHTML.
+    assert "? `${escapeHTML(name)} <span class=\"place\">(${escapeHTML(place)})</span>`" in source
+    assert ": escapeHTML(name);" in source
     assert "${escapeHTML(splitRoute(item.route)[0])}" in source
     assert r"/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)" in source
 

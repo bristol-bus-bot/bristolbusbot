@@ -327,8 +327,8 @@ function journeysHTML(entry, dutyChecked) {
     <h3>Did the buses turn up?</h3>
     <div class="turnup">
       <div><b>${Math.round((100 * seen) / timetabled)}%</b><span>of ${timetabled.toLocaleString()} timetabled journeys seen running</span></div>
-      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span>very likely didn't run: the same bus was seen on the journeys either side</span></div>` : ""}
-      <div><b>${unseen.toLocaleString()}</b><span>not seen: cancelled or tracker off, we can't tell</span></div>
+      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span><strong>Very likely didn't run.</strong> We tracked the same bus on the journey before and the journey after, but not on this one.</span></div>` : ""}
+      <div><b>${unseen.toLocaleString()}</b><span><strong>Not seen.</strong> Either it was cancelled or the bus's tracker was off. We can't tell which.</span></div>
     </div>
     ${worstLine}
     <p class="faint small">Weekdays and weekends together, counting only days when our tracking was working properly.</p>`;
@@ -363,13 +363,32 @@ function strongestStretches(items, kinds) {
   return [...best.values()].sort((a, b) => Math.abs(gap(b)) - Math.abs(gap(a)));
 }
 
+/** A stop name with its town after it, when the town isn't already in the name. */
+function stopLabel(name, place) {
+  return place ? `${name} (${place})` : String(name ?? "");
+}
+
+function stopHTML(name, place) {
+  return place
+    ? `${escapeHTML(name)} <span class="place">(${escapeHTML(place)})</span>`
+    : escapeHTML(name);
+}
+
+/** "+6 min" for a stretch that takes longer than timetabled, "3 min spare" for one with slack. */
+function minutesPill(item) {
+  const minutes = Math.round(Math.abs(gap(item)));
+  return item.kind === "slack"
+    ? `<span class="pill-gap spare">${minutes} min spare</span>`
+    : `<span class="pill-gap">+${minutes} min</span>`;
+}
+
 function stretchHTML(item, scale, withRoute) {
   const when = `${dayTypeLabel(item.day_type)} ${FIT_BANDS[item.band] || item.band}`;
   const note = item.kind === "tight"
     ? `${when} · ${finiteNumber(item.share_pct)}% of ${finiteNumber(item.journeys).toLocaleString()} journeys lose 2+ min here`
     : `${when} · buses run early here and may have to wait`;
   const badge = withRoute ? `<span class="badge">${escapeHTML(splitRoute(item.route)[0])}</span> ` : "";
-  return `<li>${badge}<strong>${escapeHTML(item.from)} → ${escapeHTML(item.to)}</strong>
+  return `<li>${minutesPill(item)} ${badge}<strong>${stopHTML(item.from, item.from_place)} → ${stopHTML(item.to, item.to_place)}</strong>
     <span class="small"> ${escapeHTML(note)}</span>${minutesBars(item, scale)}</li>`;
 }
 
@@ -382,7 +401,7 @@ function likelyReasons(route, hourly, segments) {
   if (tight.length) {
     const t = tight[0];
     out.push({ title: "The timetable doesn't allow enough time",
-      text: `Between ${t.from} and ${t.to}, buses get ${Math.round(t.timetable_min)} min but usually take about ${Math.round(t.typical_min)} (${dayTypeLabel(t.day_type)} ${FIT_BANDS[t.band] || t.band}).` });
+      text: `Between ${stopLabel(t.from, t.from_place)} and ${stopLabel(t.to, t.to_place)}, buses get ${Math.round(t.timetable_min)} min but usually take about ${Math.round(t.typical_min)} (${dayTypeLabel(t.day_type)} ${FIT_BANDS[t.band] || t.band}).` });
   }
   const byKind = hourly?.routes?.[route];
   const hours = byKind && bestAndWorstHour(hourCells(byKind, "weekday", hourly.min_readings));
@@ -455,7 +474,15 @@ function renderHeadline(opData) {
   if (groups) text += " " + [
     ["frequent", "Frequent services"], ["non_frequent", "Non-frequent services"],
     ["unclassified", "Frequency unverified"],
-  ].filter(([key]) => groups[key]).map(([key, label]) => `${label}: ${groups[key].on_time_pct == null ? "–" : finiteNumber(groups[key].on_time_pct).toFixed(1) + "%"} from ${finiteNumber(groups[key].readings).toLocaleString()} readings`).join("; ") + ".";
+  ].filter(([key]) => groups[key] && finiteNumber(groups[key].readings)).map(([key, label]) => {
+    const group = groups[key];
+    const routes = group.routes == null ? ""
+      : group.routes_counted === group.routes ? `, ${group.routes} routes`
+      : `, ${group.routes_counted} of ${group.routes} routes (the rest have too few readings)`;
+    return group.on_time_pct == null
+      ? `${label}: not enough readings for a figure yet`
+      : `${label}: ${finiteNumber(group.on_time_pct).toFixed(1)}% on time${routes}`;
+  }).join("; ") + ".";
   $("evidence-text").textContent = text;
 
   $("genat").textContent = data.generated_at ? new Date(data.generated_at).toLocaleString("en-GB") : "–";
@@ -557,6 +584,7 @@ async function renderRouteDetail() {
       <p class="faint small">Between timing points, last 28 days, only patterns seen in at least 3 of the 4 weeks.</p>` : ""}
     ${row.coverage_withheld ? '<p class="faint small">Journey coverage withheld: the timetable lists some of this route\'s journeys twice with identical times.</p>' : ""}
     <h3>The numbers</h3>
+    ${arrivalSplitHTML(row)}
     <div class="numbers">
       <div><span class="k">On time</span><span class="v">${finiteNumber(row.on_time_pct).toFixed(1)}%</span></div>
       <div><span class="k">Typical</span><span class="v">${format.delaySeconds(row.median_delay_s)}</span></div>
@@ -567,6 +595,24 @@ async function renderRouteDetail() {
   </div>`;
   wireHourControls(box, () => { renderRouteDetail(); renderNetworkHours(); });
   $("close").addEventListener("click", closeRoute);
+}
+
+/** Early, on time, late and very late as one bar, so "6 in 10 on time" says how the rest missed. */
+function arrivalSplitHTML(row) {
+  const readings = finiteNumber(row.readings_in_gate);
+  if (!readings) return "";
+  const veryLate = row.very_late == null ? null : Math.min(finiteNumber(row.very_late), finiteNumber(row.late));
+  const parts = [
+    ["early", "Early", "left more than a minute before the timetable", finiteNumber(row.early)],
+    ["ontime", "On time", "up to a minute early or under 6 minutes late", finiteNumber(row.on_time)],
+    ["late", "Late", veryLate == null ? "6 minutes or more" : "6 to 20 minutes", finiteNumber(row.late) - (veryLate || 0)],
+    ...(veryLate == null ? [] : [["verylate", "Very late", "20 minutes or more", veryLate]]),
+  ];
+  const pct = (n) => (100 * n) / readings;
+  return `<div class="split" role="img" aria-label="${escapeHTML(parts.map(([, label, , n]) => `${label} ${Math.round(pct(n))}%`).join(", "))}">${
+    parts.map(([key, label, , n]) => `<i class="${key}" style="width:${pct(n)}%" title="${escapeHTML(label)}: ${Math.round(pct(n))}%"></i>`).join("")}</div>
+    <ul class="split-legend">${parts.map(([key, label, what, n]) =>
+      `<li><i class="${key}"></i><strong>${Math.round(pct(n))}%</strong> ${escapeHTML(label.toLowerCase())} <span class="faint">(${escapeHTML(what)})</span></li>`).join("")}</ul>`;
 }
 
 // --- Network sections -----------------------------------------------------------------

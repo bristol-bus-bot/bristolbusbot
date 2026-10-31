@@ -23,6 +23,7 @@ from datetime import datetime
 
 import route_split
 import segment_analysis
+import stop_places
 
 MIN_JOURNEYS = 30
 TIGHT_S = 120
@@ -189,6 +190,7 @@ def build(conn, window, pooled_label, public_route):
     except Exception:
         return {}
     stats, meta, weeks = _pool(rows, window)
+    towns = stop_places.load()
     out = {}
     for key, s in stats.items():
         kind = classify(key, s, stats, meta, weeks)
@@ -198,6 +200,9 @@ def build(conn, window, pooled_label, public_route):
         from_name, to_name, _ = meta[key[:5]]
         item = {
             "direction": direction, "from": from_name, "to": to_name,
+            # The town after the stop name, unless the name already says it.
+            "from_place": stop_places.place(towns, key[3], from_name),
+            "to_place": stop_places.place(towns, key[4], to_name),
             "from_stop": key[3], "to_stop": key[4],
             "band": band, "day_type": day_type, "kind": kind,
             "timetable_min": round(s["planned"] / 60, 1),
