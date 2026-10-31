@@ -204,6 +204,29 @@ only medians over many journeys are used. These figures describe the
 timetable and the service. They are not a measure of drivers, who can only
 make up time by driving faster or pulling away before people have sat down.
 
+### Likely reasons
+
+The route panel suggests up to three likely reasons, each with its evidence.
+They are suggestions, not findings. Beyond a single stretch that loses time,
+three patterns are looked for:
+- **Time in the wrong place.** The stretch into a stop has more time than
+  buses need and the stretch out of it has too little, same direction and
+  time of day. Buses arrive early, wait, then run late. Shown when the
+  smaller of the two is at least 2 minutes.
+- **The timetable expects faster journeys after 10am.** A stretch gets at
+  least 2 minutes less from 10am than in the morning peak, but typical
+  journey times differ by 2 minutes or less, and the midday timing is short
+  by at least 3 minutes.
+- **Each trip starts later than the last.** Lateness at the first timing
+  point after the start of the route (the start itself is left out, because
+  buses wait there), for trips starting 7 to 10am against 1 to 7pm. For each
+  bus on each day with at least 4 trips, the later half of its trips is
+  compared with the earlier half; a rise of 2 minutes or more counts as
+  starting later. Shown when the afternoon is at least 3 minutes later than
+  the morning and at least 4 in 10 bus-days rose. This points to too little
+  time at the end of the route to catch up. Needs 20 trips in each period
+  and 10 bus-days.
+
 ## Bus records on the live map
 
 Each bus's Record tab on bristolbuses.live compares it, like for like, with
