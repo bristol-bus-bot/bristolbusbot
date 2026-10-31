@@ -372,3 +372,24 @@ def test_routine_skip_resets_the_stuck_count():
         "last_ok_at": "2026-10-16T04:00:00Z", "last_success_at": "2026-10-16T04:00:00Z",
         "last_skipped_at": "2026-10-21T04:00:00Z"}}}}
     assert status_digest.timetable_failing_days(snapshot, date(2026, 10, 22)) == 1
+
+
+def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
+    from datetime import date
+    import json as _json
+    context = tmp_path / "editorial-context.json"
+    context.write_text(_json.dumps({"occasions": [
+        {"id": "easter-2027", "label": "Easter",
+         "schedule": {"kind": "date_range", "start": "2027-03-28", "end": "2027-03-28"}},
+        {"id": "diwali-2026", "label": "Diwali",
+         "schedule": {"kind": "date_range", "start": "2026-11-06", "end": "2026-11-10"}},
+        {"id": "diwali-2027", "label": "Diwali",
+         "schedule": {"kind": "date_range", "start": "2027-10-29", "end": "2027-10-29"}},
+        {"id": "halloween", "label": "Halloween",
+         "schedule": {"kind": "annual_date", "month": 10, "day": 31}},
+    ]}), encoding="utf-8")
+    assert status_digest.moving_occasion_lines(date(2027, 4, 27), context) == []
+    lines = status_digest.moving_occasion_lines(date(2027, 4, 28), context)
+    assert lines == ["Occasions needing next year's dates: Easter. "
+                     "Ask Claude to add them, checked against a source."]
+    assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []

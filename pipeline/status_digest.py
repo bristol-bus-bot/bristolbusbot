@@ -32,6 +32,9 @@ DAILY_STATE = Path(os.getenv(
     "/var/lib/bristolbusbot/monitoring/daily-digest-state.json"))
 CURRENT_RELEASES = Path(os.getenv(
     "BBB_CURRENT_RELEASES", str(HOME / "bristolbusbot" / "current")))
+EDITORIAL_CONTEXT = Path(os.getenv(
+    "BBB_EDITORIAL_CONTEXT",
+    "/var/lib/bristolbusbot-editorial/editorial-context.json"))
 
 
 def _post(text: str) -> bool:
@@ -563,6 +566,34 @@ def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str
     return warnings, freshness
 
 
+def moving_occasion_lines(today: date | None = None,
+                          path: Path | None = None) -> list[str]:
+    """Moving-date occasions (Easter, Diwali...) are one entry per year. When
+    the latest entry for one ended over 30 days ago, next year's is missing."""
+    today = today or date.today()
+    try:
+        document = json.loads((path or EDITORIAL_CONTEXT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    latest: dict[str, tuple[date, str]] = {}
+    for item in document.get("occasions", []) if isinstance(document, dict) else []:
+        schedule = _dict(_dict(item).get("schedule"))
+        if schedule.get("kind") != "date_range":
+            continue
+        name = re.sub(r"-\d{4}$", "", str(item.get("id", "")))
+        try:
+            end = date.fromisoformat(str(schedule.get("end")))
+        except ValueError:
+            continue
+        if name not in latest or end > latest[name][0]:
+            latest[name] = (end, str(item.get("label") or name))
+    overdue = sorted(label for end, label in latest.values() if (today - end).days > 30)
+    if not overdue:
+        return []
+    return [f"Occasions needing next year's dates: {', '.join(overdue)}. "
+            "Ask Claude to add them, checked against a source."]
+
+
 def action_line(snapshot: dict, today: date | None = None) -> str:
     if recovery_status(snapshot, today)[0]:
         return '*You need to do:* Ask Claude to investigate the backup or timetable problem above; automatic retries have not fixed it.'
@@ -620,6 +651,7 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         "*Today's checks*",
         *(f"- {line}" for line in freshness),
         *(f"- {line}" for line in today_lines(snapshot, today)),
+        *(f"- {line}" for line in moving_occasion_lines(today)),
         "",
         action_line(snapshot, today),
     ]
