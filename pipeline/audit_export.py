@@ -467,6 +467,13 @@ def main():
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
     summary = build_summary(cur, payload, dates)
+    # Whether each route's trips start later as the day goes on (optional extra).
+    import start_lateness
+    period = summary.get("period") or {}
+    window = [d for d in dates if period.get("from", "") <= d <= period.get("to", "")]
+    added = start_lateness.attach(
+        summary, start_lateness.build(conn, window, public_route, NETWORK_LABEL))
+    print(f"  start lateness: {added} route rows measured.")
     # "From, to, via" for each route, from the timetable (optional extra).
     from audit_rollup import open_timetable
     import route_descriptions

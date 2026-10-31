@@ -394,10 +394,80 @@ function stretchHTML(item, scale, withRoute) {
 
 // --- Likely reasons ------------------------------------------------------------------
 // Only from patterns with evidence behind them, and never stated as fact.
-function likelyReasons(route, hourly, segments) {
+/**
+ * Time in the wrong place: spare time on the stretch into a stop and too
+ * little on the stretch out of it, same direction and time of day. Buses
+ * arrive early, wait, then run late. Returns the clearest pair, or null.
+ */
+function timeInTheWrongPlace(items) {
+  let best = null;
+  for (const tight of items.filter((i) => i.kind === "tight")) {
+    for (const slack of items.filter((i) => i.kind === "slack")) {
+      if (slack.to_stop !== tight.from_stop || slack.direction !== tight.direction
+          || slack.band !== tight.band || slack.day_type !== tight.day_type) continue;
+      // At least 2 minutes to move on each side, or it isn't worth saying.
+      const size = Math.min(-gap(slack), gap(tight));
+      if (size >= 2 && (!best || size > best.size)) best = { slack, tight, size };
+    }
+  }
+  return best;
+}
+
+/**
+ * The timetable gives a stretch less time from 10am than in the morning peak,
+ * but buses take about as long: the off-peak timing starts too early.
+ */
+function tenAmCut(items) {
+  let best = null;
+  for (const midday of items.filter((i) => i.kind === "tight" && i.band === "interpeak")) {
+    const morning = items.find((i) => i.band === "am_peak" && i.from_stop === midday.from_stop
+      && i.to_stop === midday.to_stop && i.direction === midday.direction && i.day_type === midday.day_type);
+    if (!morning) continue;
+    const cut = finiteNumber(morning.timetable_min) - finiteNumber(midday.timetable_min);
+    const sameSpeed = Math.abs(finiteNumber(morning.typical_min) - finiteNumber(midday.typical_min)) <= 2;
+    if (cut >= 2 && gap(midday) >= 3 && sameSpeed && (!best || cut > best.cut)) best = { morning, midday, cut };
+  }
+  return best;
+}
+
+// Trips start later as the day goes on: no slack at the end of the route to recover.
+function startsLaterAndLater(row) {
+  const s = row?.start_lateness;
+  if (!s || !finiteNumber(s.bus_days)) return null;
+  const rise = finiteNumber(s.later_min) - finiteNumber(s.morning_min);
+  const share = finiteNumber(s.later_days) / finiteNumber(s.bus_days);
+  return rise >= 3 && share >= 0.4 ? { ...s, share } : null;
+}
+
+function likelyReasons(route, hourly, segments, row) {
   const out = [];
   const items = segments?.routes?.[route] || [];
-  const tight = strongestStretches(items, ["tight"]);
+  const covered = new Set();  // stops a reason already explains
+
+  const wrongPlace = timeInTheWrongPlace(items);
+  if (wrongPlace) {
+    const { slack, tight } = wrongPlace;
+    const stop = stopLabel(tight.from, tight.from_place);
+    out.push({ title: `Too much time before ${tight.from}, too little after`,
+      text: `The timetable gives buses ${Math.round(slack.timetable_min)} min to reach ${stop} when they need about ${Math.round(slack.typical_min)}, then ${Math.round(tight.timetable_min)} min from there to ${stopLabel(tight.to, tight.to_place)} when they need about ${Math.round(tight.typical_min)} (${dayTypeLabel(tight.day_type)} ${FIT_BANDS[tight.band] || tight.band}). Moving a few minutes from before ${tight.from} to after it would fit how buses really run.` });
+    covered.add(tight.from_stop);
+  }
+
+  const later = startsLaterAndLater(row);
+  if (later) {
+    out.push({ title: "Each trip starts later than the last",
+      text: `Trips starting 7 to 10am set off about ${Math.round(later.morning_min)} min late; from 1pm they set off about ${Math.round(later.later_min)} min late. On ${Math.round(10 * later.share)} in 10 days the same bus kept starting later, which points to too little time at the end of the route to catch up.` });
+  }
+
+  const cut = tenAmCut(items);
+  if (cut && !covered.has(cut.midday.from_stop)) {
+    const { morning, midday } = cut;
+    out.push({ title: "The timetable expects faster journeys after 10am, but they don't get faster",
+      text: `${stopLabel(midday.from, midday.from_place)} to ${stopLabel(midday.to, midday.to_place)} gets ${Math.round(morning.timetable_min)} min before 10am and ${Math.round(midday.timetable_min)} min after, yet buses take about ${Math.round(midday.typical_min)} either way (${dayTypeLabel(midday.day_type)}).` });
+    covered.add(midday.from_stop);
+  }
+
+  const tight = strongestStretches(items, ["tight"]).filter((t) => !covered.has(t.from_stop));
   if (tight.length) {
     const t = tight[0];
     out.push({ title: "The timetable doesn't allow enough time",
@@ -418,7 +488,8 @@ function likelyReasons(route, hourly, segments) {
     }
   }
   const tightPlaces = new Set(tight.map((t) => `${t.from}|${t.to}`));
-  const wait = items.find((i) => i.kind === "waiting" && !tightPlaces.has(`${i.from}|${i.to}`));
+  const wait = items.find((i) => i.kind === "waiting" && !tightPlaces.has(`${i.from}|${i.to}`)
+    && !covered.has(i.from_stop));
   if (wait) {
     out.push({ title: `Buses wait at ${wait.from}`,
       text: "They usually arrive early and sit there, so the next stretch looks slow on paper." });
@@ -564,7 +635,7 @@ async function renderRouteDetail() {
   const route = escapeHTML(row.route);
   const [number, operatorLabel] = splitRoute(row.route);
   const colour = verdict(row.on_time_pct);
-  const reasons = likelyReasons(row.route, hourly, segments);
+  const reasons = likelyReasons(row.route, hourly, segments, row);
   const byKind = hourly?.routes?.[row.route];
   const fit = strongestStretches(segments?.routes?.[row.route], ["tight", "slack"]).slice(0, 4);
   const scale = Math.max(1, ...fit.map((s) => Math.max(finiteNumber(s.timetable_min), finiteNumber(s.typical_min))));
