@@ -136,7 +136,7 @@ def test_privacy_page_has_its_own_title_description_and_contact(client):
     assert page.h1 == 1
     assert page.links["canonical"] == f"{ORIGIN}/privacy"
     assert "cookies" in page.meta["description"]
-    assert 'href="mailto:bristolbusbot@gmail.com"' in html
+    assert 'href="mailto:hello@bristolbusbot.live"' in html
     assert 'id="privacy-link"' in client.get("/").get_data(as_text=True)
 
 
