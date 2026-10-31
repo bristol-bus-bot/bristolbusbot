@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-31T02:07:13Z",
+  "updated_at": "2026-10-31T02:26:33Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -1125,6 +1125,146 @@
   ],
   "occasions": [
     {
+      "id": "burns-night",
+      "review_due": "2028-01-11",
+      "label": "Burns Night",
+      "prompt_hint": "It's Burns Night, when Robert Burns is remembered with suppers and poetry. A light touch is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Burns Night",
+          "alternatives": [
+            "Burns Night",
+            "Robert Burns"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 1,
+        "day": 25
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Burns supper",
+        "url": "https://en.wikipedia.org/wiki/Burns_supper",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "imbolc",
+      "review_due": "2028-01-18",
+      "label": "Imbolc",
+      "prompt_hint": "It's Imbolc, the Gaelic festival marking the start of spring. A light seasonal nod (lighter evenings coming, first snowdrops) is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Imbolc",
+          "alternatives": [
+            "Imbolc",
+            "St Brigid's Day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 2,
+        "day": 1
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Imbolc",
+        "url": "https://en.wikipedia.org/wiki/Imbolc",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "st-davids-day",
+      "review_due": "2028-02-16",
+      "label": "St David's Day",
+      "prompt_hint": "It's St David's Day, the national day of Wales. A friendly nod (daffodils, leeks) is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "St David's Day",
+          "alternatives": [
+            "St David's Day",
+            "Dydd Gŵyl Dewi"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 3,
+        "day": 1
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "St David's Day",
+        "url": "https://en.wikipedia.org/wiki/St_David%27s_Day",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "st-patricks-day",
+      "review_due": "2028-03-03",
+      "label": "St Patrick's Day",
+      "prompt_hint": "It's St Patrick's Day. A friendly nod is fine; no drinking jokes and no stereotypes. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "St Patrick's Day",
+          "alternatives": [
+            "St Patrick's Day",
+            "St Patrick"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 3,
+        "day": 17
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "St Patrick's Day",
+        "url": "https://en.wikipedia.org/wiki/St_Patrick%27s_Day",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "st-georges-day",
+      "review_due": "2028-04-09",
+      "label": "St George's Day",
+      "prompt_hint": "It's St George's Day, England's national day. A friendly, inclusive nod is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "St George's Day",
+          "alternatives": [
+            "St George's Day",
+            "St George"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 4,
+        "day": 23
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "St George's Day",
+        "url": "https://en.wikipedia.org/wiki/St_George%27s_Day",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
       "id": "bristol-bus-boycott",
       "review_due": "2027-09-15",
       "label": "Bristol Bus Boycott anniversary",
@@ -1155,12 +1295,39 @@
         "day": 30
       },
       "probability": 0.5,
-      "max_uses_per_day": 1,
+      "max_uses_per_day": 5,
       "source": {
         "publisher": "First Bus",
         "title": "Bristol's day marking the 60th anniversary of the city's iconic bus boycott",
         "url": "https://news.firstbus.co.uk/news/bus-boycott-60th-anniversary",
         "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "id": "beltane",
+      "review_due": "2028-04-17",
+      "label": "Beltane",
+      "prompt_hint": "It's Beltane, the Gaelic May Day festival marking the start of summer. A light, sunny seasonal nod is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Beltane",
+          "alternatives": [
+            "Beltane"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 5,
+        "day": 1
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Beltane",
+        "url": "https://en.wikipedia.org/wiki/Beltane",
+        "verified_on": "2026-10-31"
       }
     },
     {
@@ -1182,12 +1349,68 @@
         "day": 3
       },
       "probability": 0.35,
-      "max_uses_per_day": 1,
+      "max_uses_per_day": 5,
       "source": {
         "publisher": "United Nations",
         "title": "World Bicycle Day",
         "url": "https://www.un.org/en/node/71511",
         "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "id": "world-humanist-day",
+      "review_due": "2028-06-07",
+      "label": "World Humanist Day",
+      "prompt_hint": "It's World Humanist Day, celebrating humanism and its values. A warm, friendly nod is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about anyone's beliefs or lack of them, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "World Humanist Day",
+          "alternatives": [
+            "World Humanist Day",
+            "humanist"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 6,
+        "day": 21
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "World Humanist Day",
+        "url": "https://en.wikipedia.org/wiki/World_Humanist_Day",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "lughnasadh",
+      "review_due": "2028-07-18",
+      "label": "Lughnasadh",
+      "prompt_hint": "It's Lughnasadh, the Gaelic festival marking the start of the harvest season. A light seasonal nod is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Lughnasadh",
+          "alternatives": [
+            "Lughnasadh",
+            "Lammas"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 8,
+        "day": 1
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Lughnasadh",
+        "url": "https://en.wikipedia.org/wiki/Lughnasadh",
+        "verified_on": "2026-10-31"
       }
     },
     {
@@ -1210,7 +1433,7 @@
         "day": 22
       },
       "probability": 0.35,
-      "max_uses_per_day": 1,
+      "max_uses_per_day": 5,
       "source": {
         "publisher": "European Mobility Week",
         "title": "Car-Free Day",
@@ -1249,7 +1472,7 @@
         "day": 26
       },
       "probability": 0.5,
-      "max_uses_per_day": 1,
+      "max_uses_per_day": 5,
       "source": {
         "publisher": "UK Parliament",
         "title": "Transport Committee Ninth Report - Bus services",
@@ -1276,7 +1499,7 @@
         "day": 31
       },
       "probability": 0.4,
-      "max_uses_per_day": 5,
+      "max_uses_per_day": 8,
       "source": {
         "publisher": "Wikipedia",
         "title": "Halloween",
@@ -1332,7 +1555,7 @@
         "day": 5
       },
       "probability": 0.4,
-      "max_uses_per_day": 5,
+      "max_uses_per_day": 8,
       "source": {
         "publisher": "Wikipedia",
         "title": "Guy Fawkes Night",
@@ -1359,12 +1582,577 @@
         "day": 26
       },
       "probability": 0.35,
-      "max_uses_per_day": 1,
+      "max_uses_per_day": 5,
       "source": {
         "publisher": "United Nations",
         "title": "World Sustainable Transport Day",
         "url": "https://www.un.org/en/node/206646",
         "verified_on": "2026-09-15"
+      }
+    },
+    {
+      "id": "st-andrews-day",
+      "review_due": "2027-11-16",
+      "label": "St Andrew's Day",
+      "prompt_hint": "It's St Andrew's Day, Scotland's national day. A friendly nod is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "St Andrew's Day",
+          "alternatives": [
+            "St Andrew's Day",
+            "St Andrew"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 11,
+        "day": 30
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "St Andrew's Day",
+        "url": "https://en.wikipedia.org/wiki/St_Andrew%27s_Day",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "diwali-2026",
+      "review_due": "2026-11-11",
+      "label": "Diwali",
+      "prompt_hint": "It's the Diwali festival of lights. A warm greeting and a light nod to lights on a dark evening is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Diwali",
+          "alternatives": [
+            "Diwali",
+            "Deepavali"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2026-11-06",
+        "end": "2026-11-10"
+      },
+      "probability": 0.15,
+      "max_uses_per_day": 1,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Diwali",
+        "url": "https://en.wikipedia.org/wiki/Diwali",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "guru-nanak-gurpurab-2026",
+      "review_due": "2026-11-25",
+      "label": "Guru Nanak Gurpurab",
+      "prompt_hint": "It's Guru Nanak Gurpurab, marking the birth of Guru Nanak, the first Sikh Guru. A warm greeting is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Guru Nanak Gurpurab",
+          "alternatives": [
+            "Guru Nanak Gurpurab",
+            "Guru Nanak",
+            "Gurpurab"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2026-11-24",
+        "end": "2026-11-24"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Guru Nanak Gurpurab",
+        "url": "https://en.wikipedia.org/wiki/Guru_Nanak_Gurpurab",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "hanukkah-2026",
+      "review_due": "2026-12-13",
+      "label": "Hanukkah",
+      "prompt_hint": "It's Hanukkah, the eight-night Jewish festival of lights (from sunset on 4 December). A warm greeting and a light nod to lights is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Hanukkah",
+          "alternatives": [
+            "Hanukkah",
+            "Chanukah"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2026-12-05",
+        "end": "2026-12-12"
+      },
+      "probability": 0.1,
+      "max_uses_per_day": 1,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Hanukkah",
+        "url": "https://en.wikipedia.org/wiki/Hanukkah",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "winter-solstice-2026",
+      "review_due": "2026-12-22",
+      "label": "Winter solstice",
+      "prompt_hint": "It's the winter solstice, the shortest day of the year; days start getting longer from here. Explain it through the science: Earth's axis is tilted by roughly 23.4 degrees, so as it orbits the Sun the length of the day changes through the year. Don't give daylight hours, sunrise or sunset times, or the exact moment of the solstice. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Winter solstice",
+          "alternatives": [
+            "winter solstice",
+            "shortest day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2026-12-21",
+        "end": "2026-12-21"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Solstice",
+        "url": "https://en.wikipedia.org/wiki/Solstice",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "lunar-new-year-2027",
+      "review_due": "2027-02-07",
+      "label": "Lunar New Year",
+      "prompt_hint": "It's Lunar New Year, the start of the Year of the Goat. A warm 'Happy New Year' is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Lunar New Year",
+          "alternatives": [
+            "Lunar New Year",
+            "Chinese New Year",
+            "Year of the Goat"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-02-06",
+        "end": "2027-02-06"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 8,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Chinese New Year",
+        "url": "https://en.wikipedia.org/wiki/Chinese_New_Year",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "ramadan-2027",
+      "review_due": "2027-03-09",
+      "label": "Ramadan",
+      "prompt_hint": "Ramadan is expected to have begun around 8 February; the exact dates depend on moon sighting. Say 'expected' or 'around', never a confirmed date. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Ramadan",
+          "alternatives": [
+            "Ramadan"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-02-08",
+        "end": "2027-03-08"
+      },
+      "probability": 0.1,
+      "max_uses_per_day": 1,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Ramadan",
+        "url": "https://en.wikipedia.org/wiki/Ramadan",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "pancake-day-2027",
+      "review_due": "2027-02-10",
+      "label": "Pancake Day",
+      "prompt_hint": "It's Pancake Day (Shrove Tuesday). A light pancake touch (flipping, toppings) is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Pancake Day",
+          "alternatives": [
+            "Pancake Day",
+            "Shrove Tuesday"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-02-09",
+        "end": "2027-02-09"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Shrove Tuesday",
+        "url": "https://en.wikipedia.org/wiki/Shrove_Tuesday",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "mothering-sunday-2027",
+      "review_due": "2027-03-08",
+      "label": "Mothering Sunday",
+      "prompt_hint": "It's Mothering Sunday. Keep it warm and gentle; don't assume everyone is celebrating, and don't joke about it. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Mothering Sunday",
+          "alternatives": [
+            "Mothering Sunday",
+            "Mother's Day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-03-07",
+        "end": "2027-03-07"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Mothering Sunday",
+        "url": "https://en.wikipedia.org/wiki/Mothering_Sunday",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "eid-al-fitr-2027",
+      "review_due": "2027-03-10",
+      "label": "Eid al-Fitr",
+      "prompt_hint": "Eid al-Fitr, marking the end of Ramadan, is expected around today; the exact date depends on moon sighting. Say 'expected' or 'around', never a confirmed date. A warm 'Eid Mubarak' is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Eid al-Fitr",
+          "alternatives": [
+            "Eid al-Fitr",
+            "Eid Mubarak",
+            "Eid"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-03-09",
+        "end": "2027-03-09"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 8,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Eid al-Fitr",
+        "url": "https://en.wikipedia.org/wiki/Eid_al-Fitr",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "spring-equinox-2027",
+      "review_due": "2027-03-21",
+      "label": "Spring equinox",
+      "prompt_hint": "It's the spring equinox, when day and night are roughly equal and days keep getting longer. Explain it through the science: Earth's axis is tilted by roughly 23.4 degrees, so as it orbits the Sun the length of the day changes through the year. Don't give daylight hours, sunrise or sunset times, or the exact moment of the equinox. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Spring equinox",
+          "alternatives": [
+            "spring equinox",
+            "March equinox",
+            "equinox"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-03-20",
+        "end": "2027-03-20"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Equinox",
+        "url": "https://en.wikipedia.org/wiki/Equinox",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "easter-2027",
+      "review_due": "2027-03-29",
+      "label": "Easter",
+      "prompt_hint": "It's Easter Sunday. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. A light seasonal touch (spring, chocolate eggs) is fine. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Easter",
+          "alternatives": [
+            "Easter"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-03-28",
+        "end": "2027-03-28"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 8,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "List of dates for Easter",
+        "url": "https://en.wikipedia.org/wiki/List_of_dates_for_Easter",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "passover-2027",
+      "review_due": "2027-04-30",
+      "label": "Passover",
+      "prompt_hint": "It's Passover (Pesach), which began at sunset on 21 April. A warm greeting is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Passover",
+          "alternatives": [
+            "Passover",
+            "Pesach"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-04-22",
+        "end": "2027-04-29"
+      },
+      "probability": 0.1,
+      "max_uses_per_day": 1,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Passover",
+        "url": "https://en.wikipedia.org/wiki/Passover",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "wesak-2027",
+      "review_due": "2027-05-21",
+      "label": "Wesak",
+      "prompt_hint": "It's Wesak (Vesak), when Buddhists mark the birth, enlightenment and death of the Buddha. A warm greeting is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Wesak",
+          "alternatives": [
+            "Wesak",
+            "Vesak",
+            "Buddha Day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-05-20",
+        "end": "2027-05-20"
+      },
+      "probability": 0.35,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Vesak",
+        "url": "https://en.wikipedia.org/wiki/Vesak",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "summer-solstice-2027",
+      "review_due": "2027-06-22",
+      "label": "Summer solstice",
+      "prompt_hint": "It's the summer solstice, the longest day of the year; days start getting shorter from here. Explain it through the science: Earth's axis is tilted by roughly 23.4 degrees, so as it orbits the Sun the length of the day changes through the year. Don't give daylight hours, sunrise or sunset times, or the exact moment of the solstice. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Summer solstice",
+          "alternatives": [
+            "summer solstice",
+            "longest day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-06-21",
+        "end": "2027-06-21"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Solstice",
+        "url": "https://en.wikipedia.org/wiki/Solstice",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "autumn-equinox-2027",
+      "review_due": "2027-09-24",
+      "label": "Autumn equinox",
+      "prompt_hint": "It's the autumn equinox, when day and night are roughly equal and the nights start drawing in. Explain it through the science: Earth's axis is tilted by roughly 23.4 degrees, so as it orbits the Sun the length of the day changes through the year. Don't give daylight hours, sunrise or sunset times, or the exact moment of the equinox. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Autumn equinox",
+          "alternatives": [
+            "autumn equinox",
+            "September equinox",
+            "equinox"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-09-23",
+        "end": "2027-09-23"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Equinox",
+        "url": "https://en.wikipedia.org/wiki/Equinox",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "rosh-hashanah-2027",
+      "review_due": "2027-10-03",
+      "label": "Rosh Hashanah",
+      "prompt_hint": "It's Rosh Hashanah, the Jewish New Year, which began at sunset yesterday. A warm 'Shana Tova' is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Rosh Hashanah",
+          "alternatives": [
+            "Rosh Hashanah",
+            "Shana Tova",
+            "Jewish New Year"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-10-02",
+        "end": "2027-10-02"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Rosh Hashanah",
+        "url": "https://en.wikipedia.org/wiki/Rosh_Hashanah",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "diwali-2027",
+      "review_due": "2027-10-30",
+      "label": "Diwali",
+      "prompt_hint": "It's Diwali, the festival of lights. A warm greeting and a light nod to lights on a dark evening is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Diwali",
+          "alternatives": [
+            "Diwali",
+            "Deepavali"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-10-29",
+        "end": "2027-10-29"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 8,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Diwali",
+        "url": "https://en.wikipedia.org/wiki/Diwali",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "winter-solstice-2027",
+      "review_due": "2027-12-23",
+      "label": "Winter solstice",
+      "prompt_hint": "It's the winter solstice, the shortest day of the year; days start getting longer from here. Explain it through the science: Earth's axis is tilted by roughly 23.4 degrees, so as it orbits the Sun the length of the day changes through the year. Don't give daylight hours, sunrise or sunset times, or the exact moment of the solstice. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Winter solstice",
+          "alternatives": [
+            "winter solstice",
+            "shortest day"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-12-22",
+        "end": "2027-12-22"
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Solstice",
+        "url": "https://en.wikipedia.org/wiki/Solstice",
+        "verified_on": "2026-10-31"
+      }
+    },
+    {
+      "id": "hanukkah-2027",
+      "review_due": "2028-01-02",
+      "label": "Hanukkah",
+      "prompt_hint": "It's Hanukkah, the eight-night Jewish festival of lights (from sunset on 24 December). A warm greeting and a light nod to lights is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
+      "requirements": [
+        {
+          "label": "Hanukkah",
+          "alternatives": [
+            "Hanukkah",
+            "Chanukah"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "date_range",
+        "start": "2027-12-25",
+        "end": "2028-01-01"
+      },
+      "probability": 0.1,
+      "max_uses_per_day": 1,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Hanukkah",
+        "url": "https://en.wikipedia.org/wiki/Hanukkah",
+        "verified_on": "2026-10-31"
       }
     }
   ],
