@@ -25,6 +25,8 @@ import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
 import { SystemdWatchdog } from './services/systemd-watchdog.js';
 import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
+import { HolidaySchedule } from './services/holiday-schedule.js';
+import { dirname, join } from 'path';
 
 /**
  * Coordinates the bot services and their lifecycle.
@@ -32,6 +34,7 @@ import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
 class BristolBusBot {
     private eventReader: EventReader | null = null;
     private rareWorkingShadowReader: RareWorkingShadowReader | null = null;
+    private holidaySchedule: HolidaySchedule | null = null;
     private config: any;
     private appState: ApplicationState;
     private databaseManager!: DatabaseManager;
@@ -241,54 +244,34 @@ class BristolBusBot {
     private startMonitoringLoop(): void {
         logger.info('🔍 Starting main bus monitoring loop...');
 
-        // Check if it's Christmas Day or Boxing Day (no bus service)
-        const now = DateTime.now().setZone(TARGET_TIMEZONE);
-        const isChristmasOrBoxingDay = now.month === 12 && (now.day === 25 || now.day === 26);
-
-        if (isChristmasOrBoxingDay) {
-            const dayName = now.day === 25 ? 'Christmas Day' : 'Boxing Day';
-            logger.info(`🎄 ${dayName} detected - SIRI monitoring disabled (no bus service)`);
-
-            // Schedule special post at 8am if we haven't passed it yet
-            this.scheduleChristmasPost(now);
-        } else {
-            // Normal operation - start SIRI monitoring (this handles the main 2-minute cycle)
-            // Event ingest is the production default. Direct SIRI ingest is an
-            // explicit diagnostic mode so it cannot create a second poller by
-            // accident.
-            const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
-            if (ingestMode === 'events') {
-                const liveDbPath = process.env.LIVE_DB_PATH
-                    || '/var/lib/bristolbusbot/collector/live.db';
-                // Every local bus operator by default (coaches and ferries are
-                // excluded); INGEST_OPERATORS=FBRI restores First-only posting.
-                const operators = (process.env.INGEST_OPERATORS || LOCAL_BUS_OPERATORS.join(','))
-                    .split(',').map(o => o.trim().toUpperCase()).filter(Boolean);
-                const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
-                this.eventReader = new EventReader(
-                    liveDbPath, this.appState, this.delayAnalyzer, operators,
-                    30_000, maxAgeMin, () => this.systemdWatchdog.progress());
-                this.eventReader.start();
-                this.socialMediaManager.setObservationValidator(
-                    event => this.eventReader?.isObservationCurrent(event) ?? false);
-                this.socialMediaManager.setPublicationValidator(
-                    event => this.eventReader?.isObservationPublishable(event) ?? false);
-                this.socialMediaManager.setStoryProvider(
-                    () => this.eventReader?.getCurrentStories() ?? []);
-                logger.info('Ingest: collector events', { liveDbPath, operators });
-                if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
-                    const snapshotPath = process.env.AUDIT_INTEGRATION_PATH
-                        || '/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json';
-                    const stateDbPath = process.env.APP_DATA_DB_PATH
-                        || '/var/lib/bristolbusbot/bot/app_data.db';
-                    this.rareWorkingShadowReader = new RareWorkingShadowReader(
-                        snapshotPath, stateDbPath);
-                    this.rareWorkingShadowReader.start();
-                }
-            } else {
-                this.siriMonitor.startMonitoring();
-            }
-        }
+        // Christmas Day and Boxing Day have no buses. The check runs every
+        // minute, not only at startup, so monitoring pauses and resumes at
+        // midnight and each greeting posts once per day across restarts.
+        this.holidaySchedule = new HolidaySchedule(
+            join(dirname(this.config.ai.editorialUsagePath), 'holiday-posts.json'),
+            {
+                startMonitoring: () => this.startIngest(),
+                stopMonitoring: () => this.stopIngest(),
+                post: async (message, now) => {
+                    logger.info(`🎄 Posting holiday message: "${message}"`);
+                    const result = await this.socialMediaManager.postUpdate(message, {
+                        timestamp: now.toISO()!,
+                        vehicleRef: 'HOLIDAY',
+                        datedJourneyRef: 'HOLIDAY',
+                        line: 'ALL',
+                        direction: 'N/A',
+                        originAimedDepartureTimeStr: now.toISO()!,
+                        delayMinutes: 0,
+                        lastStopCode: 'N/A',
+                        lastStopTime: now.toISO()!,
+                        eventType: 'punctual' as const,
+                        significance: 0,
+                    });
+                    return result.bluesky;
+                },
+            });
+        void this.holidaySchedule.tick();
+        setInterval(() => void this.holidaySchedule?.tick(), 60_000);
 
         // Set up daily cleanup interval
         setInterval(async () => {
@@ -300,89 +283,57 @@ class BristolBusBot {
         }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
 
         logger.info('Monitoring loop started successfully', {
-            siriInterval: isChristmasOrBoxingDay ? 'disabled (holiday)' : this.config.monitoring.fetchInterval,
+            siriInterval: this.config.monitoring.fetchInterval,
             cleanupInterval: '24 hours'
         });
     }
-    
-    /**
-     * Schedule special Christmas/Boxing Day post at 8am
-     */
-    private scheduleChristmasPost(now: DateTime): void {
-        const dayName = now.day === 25 ? 'Christmas Day' : 'Boxing Day';
-        const target8am = now.set({ hour: 8, minute: 0, second: 0, millisecond: 0 });
 
-        if (now < target8am) {
-            // Haven't reached 8am yet - schedule the post
-            const msUntil8am = target8am.toMillis() - now.toMillis();
-
-            logger.info(`🎅 Scheduling ${dayName} post for 8:00 AM`, {
-                currentTime: now.toFormat('HH:mm:ss'),
-                scheduledTime: target8am.toFormat('HH:mm:ss'),
-                delayMs: msUntil8am
-            });
-
-            setTimeout(async () => {
-                try {
-                    const message = now.day === 25
-                        ? "Merry Christmas from Bristol! 🎄 No bus service today - even the buses are taking a well-earned break. Normal service resumes December 27th."
-                        : "Happy Boxing Day! 🎁 No bus service today - the buses are still recovering from Christmas. Normal service resumes tomorrow.";
-
-                    // Create dummy event for holiday post
-                    const dummyEvent = {
-                        timestamp: now.toISO()!,
-                        vehicleRef: 'HOLIDAY',
-                        datedJourneyRef: 'HOLIDAY',
-                        line: 'ALL',
-                        direction: 'N/A',
-                        originAimedDepartureTimeStr: now.toISO()!,
-                        delayMinutes: 0,
-                        lastStopCode: 'N/A',
-                        lastStopTime: now.toISO()!,
-                        eventType: 'punctual' as const,
-                        significance: 0
-                    };
-
-                    logger.info(`🎄 Posting ${dayName} message: "${message}"`);
-                    await this.socialMediaManager.postUpdate(message, dummyEvent);
-                    logger.info(`✅ ${dayName} post sent successfully`);
-                } catch (error: any) {
-                    logger.error(`Failed to post ${dayName} message`, { error: error.message });
-                }
-            }, msUntil8am);
+    /** Start reading bus events (normal days). */
+    private startIngest(): void {
+        // Event ingest is the production default. Direct SIRI ingest is an
+        // explicit diagnostic mode so it cannot create a second poller by
+        // accident.
+        const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
+        if (ingestMode === 'events') {
+            const liveDbPath = process.env.LIVE_DB_PATH
+                || '/var/lib/bristolbusbot/collector/live.db';
+            // Every local bus operator by default (coaches and ferries are
+            // excluded); INGEST_OPERATORS=FBRI restores First-only posting.
+            const operators = (process.env.INGEST_OPERATORS || LOCAL_BUS_OPERATORS.join(','))
+                .split(',').map(o => o.trim().toUpperCase()).filter(Boolean);
+            const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
+            this.eventReader = new EventReader(
+                liveDbPath, this.appState, this.delayAnalyzer, operators,
+                30_000, maxAgeMin, () => this.systemdWatchdog.progress());
+            this.eventReader.start();
+            this.socialMediaManager.setObservationValidator(
+                event => this.eventReader?.isObservationCurrent(event) ?? false);
+            this.socialMediaManager.setPublicationValidator(
+                event => this.eventReader?.isObservationPublishable(event) ?? false);
+            this.socialMediaManager.setStoryProvider(
+                () => this.eventReader?.getCurrentStories() ?? []);
+            logger.info('Ingest: collector events', { liveDbPath, operators });
+            if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
+                const snapshotPath = process.env.AUDIT_INTEGRATION_PATH
+                    || '/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json';
+                const stateDbPath = process.env.APP_DATA_DB_PATH
+                    || '/var/lib/bristolbusbot/bot/app_data.db';
+                this.rareWorkingShadowReader = new RareWorkingShadowReader(
+                    snapshotPath, stateDbPath);
+                this.rareWorkingShadowReader.start();
+            }
         } else {
-            // Already past 8am - post immediately
-            logger.info(`🎄 Already past 8am on ${dayName}, posting immediately`);
-
-            (async () => {
-                try {
-                    const message = now.day === 25
-                        ? "Merry Christmas from Bristol! 🎄 No bus service today - even the buses are taking a well-earned break. Normal service resumes December 27th."
-                        : "Happy Boxing Day! 🎁 No bus service today - the buses are still recovering from Christmas. Normal service resumes tomorrow.";
-
-                    // Create dummy event for holiday post
-                    const dummyEvent = {
-                        timestamp: now.toISO()!,
-                        vehicleRef: 'HOLIDAY',
-                        datedJourneyRef: 'HOLIDAY',
-                        line: 'ALL',
-                        direction: 'N/A',
-                        originAimedDepartureTimeStr: now.toISO()!,
-                        delayMinutes: 0,
-                        lastStopCode: 'N/A',
-                        lastStopTime: now.toISO()!,
-                        eventType: 'punctual' as const,
-                        significance: 0
-                    };
-
-                    logger.info(`🎄 Posting ${dayName} message: "${message}"`);
-                    await this.socialMediaManager.postUpdate(message, dummyEvent);
-                    logger.info(`✅ ${dayName} post sent successfully`);
-                } catch (error: any) {
-                    logger.error(`Failed to post ${dayName} message`, { error: error.message });
-                }
-            })();
+            this.siriMonitor.startMonitoring();
         }
+    }
+
+    /** Stop reading bus events (no-service days). Safe to call when not started. */
+    private stopIngest(): void {
+        this.eventReader?.stop();
+        this.eventReader = null;
+        this.rareWorkingShadowReader?.stop();
+        this.rareWorkingShadowReader = null;
+        this.siriMonitor?.stopMonitoring();
     }
 
     /**
