@@ -14,6 +14,9 @@ from urllib.parse import urlsplit
 
 MAX_BYTES = 256 * 1024
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,79}")
+# The most times one occasion may be used in a day; matches the bot.
+MAX_OCCASION_USES_PER_DAY = 8
+
 ALLOWED_SOURCE_HOSTS = {
     # Reputable news and reference sites (Tom, 27 Sep 2026, PV-11).
     "wikipedia.org",
@@ -278,7 +281,7 @@ def validate_document(value: Any) -> dict[str, Any]:
                 item.get("probability"), f"{name}.probability", 0, 1),
             "max_uses_per_day": _number(
                 item.get("max_uses_per_day"), f"{name}.max_uses_per_day",
-                1, 5, integer=True),
+                1, MAX_OCCASION_USES_PER_DAY, integer=True),
             "source": _source(item.get("source"), f"{name}.source"),
         })
 

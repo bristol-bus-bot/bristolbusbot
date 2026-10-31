@@ -8,6 +8,8 @@ import { DateTime } from 'luxon';
 import {
   EditorialContextStore,
   editorialApplies,
+  isOccasionPeak,
+  OCCASION_OFF_PEAK_FACTOR,
   validateEditorialDocument,
 } from '../dist/services/editorial-context.js';
 
@@ -254,7 +256,7 @@ test('editorial requirements are mandatory, validated and exposed to commentary'
 });
 
 
-test('a deferred hook is not consumed and becomes eligible after its short sleep', () => {
+test('an old usage file that still has deferrals loads and is ignored', () => {
   const fact = {
     id: 'deferred-fact',
     claim: 'An approved claim.',
@@ -265,25 +267,67 @@ test('a deferred hook is not consumed and becomes eligible after its short sleep
     source: SOURCE,
   };
   const fixture = makeStore(documentWith({ facts: [fact] }));
+  writeFileSync(fixture.usagePath, JSON.stringify({
+    schema_version: 1, last_post_was_special: false, items: {},
+    deferrals: { 'deferred-fact': '2099-01-01T00:00:00Z' },
+  }));
+  const reloaded = new EditorialContextStore(fixture.contextPath, fixture.usagePath, () => 0);
   const now = DateTime.fromISO('2026-07-23T10:00:00', { zone: 'Europe/London' });
-  const selected = fixture.store.select(now, []);
-  assert.equal(selected?.id, fact.id);
-  fixture.store.recordDeferredPost(selected, now, 6);
+  assert.equal(reloaded.select(now, [])?.id, fact.id);
+  reloaded.recordPost(null, now);
+  assert.equal('deferrals' in JSON.parse(readFileSync(fixture.usagePath, 'utf8')), false);
+});
 
-  assert.equal(fixture.store.select(now.plus({ hours: 5 }), []), null);
-  assert.equal(fixture.store.select(now.plus({ hours: 7 }), [])?.id, fact.id);
 
-  const usage = JSON.parse(readFileSync(fixture.usagePath, 'utf8'));
-  assert.equal(usage.items[fact.id], undefined);
-  assert.match(usage.deferrals[fact.id], /Z$/);
+test('peak hours are 07:00-10:00 and 16:00-21:00 on the UK clock', () => {
+  const at = (time, date = '2026-11-02') => DateTime.fromISO(`${date}T${time}`, { zone: 'Europe/London' });
+  for (const time of ['06:59', '10:00', '15:59', '21:00', '23:30', '03:00']) {
+    assert.equal(isOccasionPeak(at(time)), false, time);
+  }
+  for (const time of ['07:00', '09:59', '16:00', '20:59']) {
+    assert.equal(isOccasionPeak(at(time)), true, time);
+  }
+  // Clock change (29 March 2026, 01:00 GMT -> 02:00 BST): judged on UK local time,
+  // whatever zone the caller passes.
+  assert.equal(isOccasionPeak(DateTime.fromISO('2026-03-29T06:30:00Z')), true);   // 07:30 BST
+  assert.equal(isOccasionPeak(DateTime.fromISO('2026-03-28T06:30:00Z')), false);  // 06:30 GMT
+  assert.equal(isOccasionPeak(DateTime.fromISO('2026-10-25T09:30:00Z')), true);   // 09:30 GMT, day clocks go back
+});
 
-  const reloaded = new EditorialContextStore(
-    fixture.contextPath,
-    fixture.usagePath,
-    () => 0,
-  );
-  assert.equal(reloaded.select(now.plus({ hours: 5 }), []), null);
-  assert.equal(reloaded.select(now.plus({ hours: 7 }), [])?.id, fact.id);
+
+test('an occasion is likelier at peak than off-peak, from one shared rule', () => {
+  const occasions = [{
+    id: 'halloween',
+    label: 'Halloween',
+    prompt_hint: 'A light spooky touch.',
+    requirements: REQUIREMENTS,
+    schedule: { kind: 'annual_date', month: 10, day: 31 },
+    probability: 0.4,
+    max_uses_per_day: 8,
+    source: SOURCE,
+  }];
+  // First random() picks the occasion; the second is the roll against its chance.
+  const roll = value => { const values = [0, value]; return () => values.shift() ?? 0.99; };
+  const peak = DateTime.fromISO('2026-10-31T19:00:00', { zone: 'Europe/London' });
+  const offPeak = DateTime.fromISO('2026-10-31T14:00:00', { zone: 'Europe/London' });
+  assert.equal(OCCASION_OFF_PEAK_FACTOR, 0.25);
+  assert.equal(makeStore(documentWith({ occasions }), roll(0.39)).store.select(peak, [])?.id, 'halloween');
+  assert.equal(makeStore(documentWith({ occasions }), roll(0.39)).store.select(offPeak, []), null);
+  assert.equal(makeStore(documentWith({ occasions }), roll(0.09)).store.select(offPeak, [])?.id, 'halloween');
+  // The caller's zone doesn't matter: 18:00 UTC on 31 Oct is 18:00 GMT, peak.
+  assert.equal(makeStore(documentWith({ occasions }), roll(0.39)).store
+    .select(DateTime.fromISO('2026-10-31T18:00:00Z'), [])?.id, 'halloween');
+});
+
+
+test('an occasion may be used up to 8 times a day, not 9', () => {
+  const occasion = cap => documentWith({ occasions: [{
+    id: 'big-day', label: 'Big day', prompt_hint: 'Hint.', requirements: REQUIREMENTS,
+    schedule: { kind: 'annual_date', month: 11, day: 5 }, probability: 0.4,
+    max_uses_per_day: cap, source: SOURCE,
+  }] });
+  assert.equal(validateEditorialDocument(occasion(8)).occasions[0].max_uses_per_day, 8);
+  assert.throws(() => validateEditorialDocument(occasion(9)), /max_uses_per_day/);
 });
 
 
