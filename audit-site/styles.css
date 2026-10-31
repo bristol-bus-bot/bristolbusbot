@@ -178,6 +178,11 @@ h3.first { margin-top: 0; }
 .rank li:last-child { border-bottom: 0; }
 .rank li.lim { opacity: 0.55; }
 .rank li.note { display: block; }
+.rank li.ward-why { display: block; padding-top: 0; color: var(--fg-2); font-size: 0.88rem; }
+.rank li.ward-why[hidden] { display: none; }
+.ward-name, .ward-route { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.ward-name { text-decoration: underline dotted; text-underline-offset: 3px; }
+.ward-route { text-decoration: underline; font-weight: 600; }
 .glance-card { margin-bottom: 12px; }
 .glance { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .glance strong { font: 800 2.4rem/1 var(--sans); color: var(--good); }

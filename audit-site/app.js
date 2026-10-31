@@ -783,7 +783,7 @@ async function renderMap(opData) {
       const [cx, cy] = point([lon, lat]);
       const r = 3 + 11 * Math.sqrt(finiteNumber(ward.readings_in_gate) / most);
       const text = `${areaText(ward.key, ward)}${limitedEvidence(ward) ? " (few readings)" : ""}`;
-      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${verdict(ward.on_time_pct)}" fill-opacity="${limitedEvidence(ward) ? 0.35 : 0.9}" tabindex="0" data-detail="${escapeHTML(text)}"><title>${escapeHTML(text)}</title></circle>`;
+      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${verdict(ward.on_time_pct)}" fill-opacity="${limitedEvidence(ward) ? 0.35 : 0.9}" tabindex="0" data-ward="${escapeHTML(ward.key)}" data-detail="${escapeHTML(text)}"><title>${escapeHTML(text)}</title></circle>`;
     }).join("");
   }
   svg.innerHTML = shapes + labels + dots;
@@ -791,10 +791,44 @@ async function renderMap(opData) {
     const show = () => {
       svg.querySelectorAll(".picked").forEach((s) => s.classList.remove("picked"));
       shape.classList.add("picked");
-      $("map-d").textContent = shape.dataset.detail;
+      const ward = shape.dataset.ward && (geography.ward || []).find((w) => w.key === shape.dataset.ward);
+      const why = ward ? wardRoutesHTML(ward) : "";
+      $("map-d").innerHTML = escapeHTML(shape.dataset.detail) + (why ? `.${why}` : "");
+      wireWardRoutes($("map-d"));
     };
     shape.addEventListener("click", show);
     shape.addEventListener("focus", show);
+  });
+}
+
+// "Mostly the X4 (4 in 10 here, 62% of readings) and the X5 (5 in 10, 30%)."
+// The routes behind a ward's figure, each linking to its route panel. Where
+// they carry under half its readings, they're only "the busiest".
+function wardRoutesHTML(ward) {
+  const total = finiteNumber(ward.readings_in_gate);
+  const routes = (ward.routes || []).filter((r) => total && finiteNumber(r.readings_in_gate) && r.on_time_pct != null);
+  if (!routes.length) return "";
+  const known = new Set(state.rows.map((r) => String(r.route)));
+  let covered = 0;
+  const parts = routes.map((r, i) => {
+    const name = known.has(String(r.route))
+      ? `<button type="button" class="ward-route" data-route="${escapeHTML(r.route)}">${escapeHTML(r.route)}</button>`
+      : escapeHTML(r.route);
+    const share = Math.round((100 * finiteNumber(r.readings_in_gate)) / total);
+    covered += share;
+    return `the ${name} (${inTen(r.on_time_pct)}${i ? "" : " here"}, ${share}%${i ? "" : " of readings"})`;
+  });
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  if (covered >= 50) return ` Mostly ${list}.`;
+  return parts.length === 1 ? ` The busiest route here is ${list}.` : ` The busiest routes here are ${list}.`;
+}
+
+function wireWardRoutes(box) {
+  box.querySelectorAll(".ward-route").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectRoute(button.dataset.route);
+      $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 }
 
@@ -802,9 +836,12 @@ function rankRow(row) {
   const key = escapeHTML(row.key);
   const colour = verdict(row.on_time_pct);
   const pct = finiteNumber(row.on_time_pct);
-  return `<li class="${limitedEvidence(row) ? "lim" : ""}" title="${key}: ${pct.toFixed(1)}% from ${finiteNumber(row.readings_in_gate).toLocaleString()} readings"><span>${key}</span>
+  const why = wardRoutesHTML(row);
+  const name = why ? `<button type="button" class="ward-name" aria-expanded="false">${key}</button>` : `<span>${key}</span>`;
+  return `<li class="${limitedEvidence(row) ? "lim" : ""}" title="${key}: ${pct.toFixed(1)}% from ${finiteNumber(row.readings_in_gate).toLocaleString()} readings">${name}
     <span class="mini"><i style="width:${Math.min(100, pct)}%;background:${colour}"></i><b style="left:${state.target}%"></b></span>
-    <span class="pct" style="color:${colour}">${Math.round(pct)}%</span></li>`;
+    <span class="pct" style="color:${colour}">${Math.round(pct)}%</span></li>`
+    + (why ? `<li class="ward-why" hidden>${key}: ${inTen(pct)} on time.${why}</li>` : "");
 }
 
 function renderWards(opData) {
@@ -816,6 +853,14 @@ function renderWards(opData) {
     : wards.filter((w) => !limitedEvidence(w)).sort((a, b) => a.on_time_pct - b.on_time_pct).slice(0, 6);
   $("wards").innerHTML = (query ? "" : '<li class="note small faint">Least punctual wards (search for yours)</li>')
     + (pick.map(rankRow).join("") || '<li class="note small faint">No ward matches.</li>');
+  $("wards").querySelectorAll(".ward-name").forEach((button) => {
+    button.addEventListener("click", () => {
+      const why = button.closest("li").nextElementSibling;
+      why.hidden = !why.hidden;
+      button.setAttribute("aria-expanded", String(!why.hidden));
+    });
+  });
+  wireWardRoutes($("wards"));
 }
 
 function renderPlaces(opData) {
