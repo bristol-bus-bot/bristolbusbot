@@ -39,7 +39,7 @@ class BoundaryFilter:
     The API bounding box is coarse and pulls in neighbouring-authority
     services that share route numbers; this is the real filter. If shapely or
     the GeoJSON is unavailable the filter degrades to pass-through (bounding
-    box only) with a logged warning — never a crash.
+    box only) with a logged warning: never a crash.
     """
 
     def __init__(self, geojson_path: str | None):

@@ -1,4 +1,4 @@
-"""/api/buses — every active vehicle, in the frontend's established shape."""
+"""/api/buses: every active vehicle, in the frontend's established shape."""
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request, url_for

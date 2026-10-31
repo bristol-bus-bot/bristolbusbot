@@ -59,7 +59,7 @@
           color: #fff; border: 2px solid var(--uk-grey); letter-spacing: .03em;
           font-family: var(--font-sans); }
 
-/* vehicle detail modal (vp-*) — shares pp-identity / badges / bot-quote */
+/* vehicle detail modal (vp-*): shares pp-identity / badges / bot-quote */
 .vp-header { display: flex; align-items: center; gap: 8px; }
 .vp-fleet { font-size: 18px; font-weight: 800; color: #fff;
             text-shadow: 0 1px 4px rgba(0,0,0,.6);

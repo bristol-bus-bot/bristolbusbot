@@ -38,8 +38,7 @@ export function vehicleCard(data, mode) {
     const full = mode !== "compact";
     const embedded = mode === "embedded";
 
-    // header: livery band = operator identity (kept saturated on purpose —
-    // the one non-flat element, same in both sizes)
+    // header: livery band = operator identity (kept saturated on purpose: // the one non-flat element, same in both sizes)
     const headKids = [];
     if (full) {
         headKids.push(el("span", { class: "vc-fleet" }, [`#${data.fleetCode}`]));
@@ -63,7 +62,7 @@ export function vehicleCard(data, mode) {
     header.style.background = data.liveryLeft || "#2a2a2a";
 
     const body = [];
-    // 1. plate — SAME element both sizes (md compact / lg full)
+    // 1. plate: SAME element both sizes (md compact / lg full)
     if (data.reg)
         body.push(el("div", { class: "vc-plate-row" },
                      [plate(data.reg, full ? "lg" : "md")]));
@@ -112,7 +111,7 @@ export function vehicleCard(data, mode) {
             el("span", { class: "vc-notes-label" }, ["Notes"]), data.notes]));
     // 8. actions
     (data.actions || []).forEach(a => body.push(a));
-    // 9. Flickr reg-plate search — bus spotters photograph most of the
+    // 9. Flickr reg-plate search: bus spotters photograph most of the
     // fleet; linking out (not embedding) credits photographers properly
     if (data.reg)
         body.push(el("a", {

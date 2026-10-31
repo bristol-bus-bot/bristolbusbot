@@ -403,14 +403,14 @@ punctuality result. It added a route-by-area/ward daily rollup for future local
 briefings and a generator which uses complete months, summed counts, explicit
 sample warnings and fail-closed timetable comparisons.
 
-**23 August 2026 — incomplete collector days excluded from coverage.** Daily
+**23 August 2026: incomplete collector days excluded from coverage.** Daily
 coverage now has a separate collector-health gate using successful polls,
 continuity across the scheduled operating window and feed match rate. Failed
 days retain private diagnostic totals but publish no expected-versus-observed
 coverage. The daily rollup also moved later so journeys timetabled after 29:00
 have time to begin before the service day is closed.
 
-**16 August 2026 — origin layovers excluded and trip matching corrected.**
+**16 August 2026: origin layovers excluded and trip matching corrected.**
 The audit previously retained the closest GPS reading at the first timing point
 of a trip. This could be a bus waiting on its stand before departure and could
 therefore overstate early running. First timing points are now excluded from
@@ -432,7 +432,7 @@ That service day is excluded from all public results and evidence packs until
 complete raw evidence can be restored. Publication checks also reject any day
 where the pooled totals contradict the sum of the operator totals.
 
-**Early July 2026 — collector transition; exact deployment chronology is
+**Early July 2026: collector transition; exact deployment chronology is
 incomplete.** An earlier account assigned the matching and stale-position
 changes to 13 July. Code commit `65899b8`, dated 5 July, already introduces
 stale `RecordedAtTime` filtering. A commit date does not establish its production
@@ -442,7 +442,7 @@ Treat comparisons spanning the early-July transition as method-sensitive;
 13 July remains a documented historical marker, not a verified deployment
 timestamp for all these changes.
 
-**16 August 2026 — timetable population changed.** Trip identities and
+**16 August 2026: timetable population changed.** Trip identities and
 scheduled departures differ across the timetable editions. A route-level
 comparison spanning this boundary is not automatically a like-for-like
 performance trend. Historical snapshots without a retained timetable file
@@ -456,7 +456,7 @@ and rollups can be recomputed; neither table is inherently write-once.
 Where retained sample support contradicts the published counts, derived
 results are withheld rather than silently rewritten.
 
-**14 July 2026 — timing points restored on TransXChange-sourced routes.**
+**14 July 2026: timing points restored on TransXChange-sourced routes.**
 Routes that enter the timetable via TransXChange rather than GTFS (42, 43,
 44, 45, 70, 74, 373, 376x, AZ1, AZ2, N43, X12 and the SB school services)
 carried no timing-point flags, because the conversion recognised only the
