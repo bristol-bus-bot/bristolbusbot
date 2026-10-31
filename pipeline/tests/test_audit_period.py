@@ -146,3 +146,34 @@ def test_routes_report_how_many_readings_were_20_minutes_or_more_late():
     route = next(r for r in routes if r["route"] == "1")
     assert route["late"] == 12
     assert route["very_late"] == 6
+
+
+def test_each_ward_names_its_busiest_routes_and_how_they_do_there():
+    conn = database()
+    for day in DAYS[:2]:
+        conn.execute("INSERT INTO daily_overall_summary (service_date, operator, readings_in_gate, on_time) VALUES (?,?,?,?)",
+                     (day, "FBRI", 100, 50))
+        conn.execute("INSERT INTO daily_geo_summary VALUES (?,?,?,?,?,?,?,?,?)",
+                     (day, "FBRI", "ward", "Portishead East", 100, 40, 40.0, None, None))
+        for route, readings, on_time in (("X4", 60, 20), ("X5", 30, 15), ("A2", 6, 3), ("X3", 4, 2)):
+            conn.execute(
+                "INSERT INTO daily_geo_route_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (day, "FBRI", "FBRI", "ward", "Portishead East", route, readings, on_time,
+                 0, 0, None, None, None))
+    geography = audit_period._geography(conn.cursor(), DAYS[:2], "FBRI")
+    ward = geography["ward"][0]
+    assert [r["route"] for r in ward["routes"]] == ["X4", "X5", "A2"]
+    assert ward["routes"][0] == {"route": "X4", "readings_in_gate": 120, "on_time_pct": 33.3}
+    assert sum(r["readings_in_gate"] for r in ward["routes"]) <= ward["readings_in_gate"]
+
+
+def test_network_ward_routes_use_the_network_route_labels():
+    conn = database()
+    conn.execute("INSERT INTO daily_geo_summary VALUES (?,?,?,?,?,?,?,?,?)",
+                 (DAYS[0], "ALL", "ward", "Central", 50, 25, 50.0, None, None))
+    for source in ("FBRI", "SSWL"):
+        conn.execute(
+            "INSERT INTO daily_geo_route_summary VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (DAYS[0], "ALL", source, "ward", "Central", "13", 20, 10, 0, 0, None, None, None))
+    routes = audit_period._geography(conn.cursor(), DAYS[:1], "ALL")["ward"][0]["routes"]
+    assert {r["route"] for r in routes} == {"13", audit_period.public_route("SSWL", "13", True)}

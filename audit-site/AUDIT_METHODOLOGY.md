@@ -249,6 +249,14 @@ by area and by ward. This shows where service is better or worse, but a ward's
 figure only reflects the stops we observed there, so sparsely-measured wards are
 treated as indicative.
 
+Tapping a ward names the routes behind its figure: the three with the most
+readings there over the last 28 days, each with its on-time share in that
+ward and its share of the ward's readings. This comes from the same private
+route-by-ward rollup as the evidence packs. A ward's route readings can add up
+to less than its total, because readings we couldn't tie to a route still
+count towards the ward. Where the three routes carry under half of a ward's
+readings, they are described as the busiest rather than the main cause.
+
 ## Dated local evidence packs
 
 A local evidence pack uses the same daily rollups as the audit and selects the
