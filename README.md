@@ -55,7 +55,7 @@ These are the principles that shape the code:
 ## Running locally
 
 - **collector**: `cd collector && pip install -e . && python -m collector.run`
-  — needs `.env` with `BODS_API_KEY`, plus a `timetable.db` built by the
+  needs `.env` with `BODS_API_KEY`, plus a `timetable.db` built by the
   pipeline (set `BBB_TIMETABLE_DB` to its path).
 - **site**: `cd site && pip install -e . -e ../collector && python wsgi.py`
   → http://localhost:5000. Point `BBB_LIVE_DB` at the collector's live.db.

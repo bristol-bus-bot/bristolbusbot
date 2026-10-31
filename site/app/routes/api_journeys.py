@@ -1,4 +1,4 @@
-"""/api/journey-schedule/<code> — the clicked-bus route drawing."""
+"""/api/journey-schedule/<code>: the clicked-bus route drawing."""
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request

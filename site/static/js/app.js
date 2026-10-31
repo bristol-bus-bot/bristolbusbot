@@ -64,7 +64,7 @@
                 // Skip near-black, near-white, and very pale colors
                 const lum = (r * 0.299 + g * 0.587 + b * 0.114);
                 if (lum < 20 || lum > 215) continue;
-                // Score by saturation — vibrant over grey — and prefer
+                // Score by saturation: vibrant over grey: and prefer
                 // mid-dark over bright (light ground: pale rings vanish)
                 const max = Math.max(r, g, b), min = Math.min(r, g, b);
                 const sat = max === 0 ? 0 : (max - min) / max;
@@ -161,7 +161,7 @@
             if (variants.length === 0) return null;
             if (variants.length === 1) return variants[0];
 
-            // Multiple variants — pick the one whose shape best matches the journey's stops.
+            // Multiple variants: pick the one whose shape best matches the journey's stops.
             // scheduleStops is an array of {latitude, longitude} from the journey schedule.
             if (scheduleStops && scheduleStops.length > 0) {
                 // Score each variant: how many schedule stops are within ~300m of the shape
@@ -192,7 +192,7 @@
                 pool.sort((a, b) => b.points.length - a.points.length);
                 return pool[0];
             }
-            // No info — return longest variant
+            // No info: return longest variant
             variants.sort((a, b) => b.points.length - a.points.length);
             return variants[0];
         }
@@ -604,7 +604,7 @@
             const lower = text.toLowerCase();
             // Direct match first
             if (LOCALITY_EMOJIS[lower]) return LOCALITY_EMOJIS[lower];
-            // Partial match — check if any key appears within the text
+            // Partial match: check if any key appears within the text
             for (const [key, emoji] of Object.entries(LOCALITY_EMOJIS)) {
                 if (lower.includes(key)) return emoji;
             }
@@ -643,7 +643,7 @@
             } catch (e) {
                 console.error(`fetchStops failed (${retries} retries left):`, e);
                 if (retries > 0) setTimeout(() => fetchStops(retries - 1), 3000);
-                else console.error('fetchStops: all retries exhausted — stops will not display');
+                else console.error('fetchStops: all retries exhausted: stops will not display');
             }
         }
 
@@ -695,7 +695,7 @@
             } catch (e) {
                 console.error(`fetchSearchStops failed (${retries} retries left):`, e);
                 if (retries > 0) setTimeout(() => fetchSearchStops(retries - 1), 5000);
-                else console.error('fetchSearchStops: all retries exhausted — search will not work');
+                else console.error('fetchSearchStops: all retries exhausted: search will not work');
             }
         }
 
@@ -720,7 +720,7 @@
             } catch (e) {
                 console.error(`fetchFleet failed (${retries} retries left):`, e);
                 if (retries > 0) setTimeout(() => fetchFleet(retries - 1), 3000);
-                else console.error('fetchFleet: all retries exhausted — bus search will not work');
+                else console.error('fetchFleet: all retries exhausted: bus search will not work');
             }
         }
 
@@ -744,7 +744,7 @@
             } catch (e) {
                 console.warn(`fetchBusDescriptions failed (${retries} retries left):`, e);
                 if (retries > 0) setTimeout(() => fetchBusDescriptions(retries - 1), 3000);
-                // Non-fatal — descriptions are flavour text. Panel still works without them.
+                // Non-fatal: descriptions are flavour text. Panel still works without them.
             }
         }
 
@@ -801,7 +801,7 @@
                 ? getFleetMatches(query, fleetLimit)
                 : { matches: [], total: 0 };
 
-            // Filter stops — show all if empty, otherwise filter
+            // Filter stops: show all if empty, otherwise filter
             let matches;
             if (query.length === 0) {
                 matches = searchStops;
@@ -940,7 +940,7 @@
             } catch (e) {
                 console.error(`fetchRouteShapes failed (${retries} retries left):`, e);
                 if (retries > 0) setTimeout(() => fetchRouteShapes(retries - 1), 3000);
-                else console.error('fetchRouteShapes: all retries exhausted — route shapes will not display');
+                else console.error('fetchRouteShapes: all retries exhausted: route shapes will not display');
             }
         }
 

@@ -24,7 +24,7 @@ code is covered by the root AGPL-3.0-only licence.
 
 ### Leaflet 1.9.4
 
-`site/static/vendor/leaflet-1.9.4/` — © Volodymyr Agafonkin and
+`site/static/vendor/leaflet-1.9.4/`: © Volodymyr Agafonkin and
 contributors, BSD 2-Clause licence. The licence text is retained
 alongside the vendored files.
 
@@ -59,16 +59,16 @@ Licence texts for both fonts are in `site/static/fonts/LICENSES.txt`.
 
 Full attributions in `ATTRIBUTION.md`; in summary:
 
-- **BODS** (Department for Transport) — timetables, real-time vehicle
+- **BODS** (Department for Transport): timetables, real-time vehicle
   locations and disruptions. Open Government Licence v3.0.
-- **Traveline National Dataset (TNDS)** — supplementary timetables. OGL.
-- **NaPTAN** — bus stop locations and codes. OGL v3.0.
-- **Bristol City Council, Bristol Bus Stops** — local stop-name and facility
+- **Traveline National Dataset (TNDS)**: supplementary timetables. OGL.
+- **NaPTAN**: bus stop locations and codes. OGL v3.0.
+- **Bristol City Council, Bristol Bus Stops**: local stop-name and facility
   enrichment. Open Government Licence.
-- **ONS Open Geography Portal** — ward and unitary-authority boundaries,
+- **ONS Open Geography Portal**: ward and unitary-authority boundaries,
   fetched by `pipeline/download_weca_boundary.py`. OGL v3.0; contains
   OS data © Crown copyright and database right.
-- **bustimes.org** — community-maintained fleet data (vehicle models,
+- **bustimes.org**: community-maintained fleet data (vehicle models,
   liveries, registrations), fetched at runtime, cached locally outside Git,
   and displayed with attribution and links back. The raw vehicle dataset is
   not redistributed in this repository.

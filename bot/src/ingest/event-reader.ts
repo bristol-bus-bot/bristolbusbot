@@ -1,4 +1,4 @@
-// Event Reader — the bot's production input: the shared collector's
+// Event Reader. The bot's production input is the shared collector's
 // events table.
 //
 // The collector has already matched the vehicle, measured the delay
@@ -7,7 +7,7 @@
 //   1. polls live.db for unconsumed events (operator-filtered)
 //   2. maps rows to the BusEvent shape the persona code expects
 //   3. runs the same freshness + significance selection as direct ingest
-//   4. marks rows consumed (never deletes — the collector owns the table)
+//   4. marks rows consumed (never deletes: the collector owns the table)
 //
 // Downstream services receive the same BusEvent shape as direct ingest.
 

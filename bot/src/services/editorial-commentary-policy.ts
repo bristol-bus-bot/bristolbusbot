@@ -278,7 +278,7 @@ function normalise(value: string): string {
         .normalize('NFKC')
         .toLocaleLowerCase('en-GB')
         .replace(/[’‘]/g, "'")
-        .replace(/[–—]/g, '-')
+        .replace(/[\u2013\u2014]/g, '-')
         .replace(/\s+/g, ' ')
         .trim();
 }

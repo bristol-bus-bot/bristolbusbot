@@ -193,7 +193,7 @@ export class DelayAnalyzer {
         }
       }
 
-      // Skip buses parked at depots — no point doing schedule lookups for them
+      // Skip buses parked at depots: no point doing schedule lookups for them
       if (activity.vehicleLocation) {
         const depotName = this.checkDepot(activity.vehicleLocation.latitude, activity.vehicleLocation.longitude);
         if (depotName) {
@@ -293,10 +293,10 @@ export class DelayAnalyzer {
         return null;
       }
 
-      // Skip buses waiting at their first stop before departure — they're not early, just waiting
+      // Skip buses waiting at their first stop before departure: they're not early, just waiting
       if (closestStopIndex === 0 && rawDelay < 0) {
         if (counters) counters.waitingAtOrigin = (counters.waitingAtOrigin || 0) + 1;
-        logDetailed('info', `[WAITING] ${activity.lineRef} (${activity.vehicleRef}) at first stop ${selectedStop.stop_name}, ${Math.abs(rawDelay)}min before departure — skipping`);
+        logDetailed('info', `[WAITING] ${activity.lineRef} (${activity.vehicleRef}) at first stop ${selectedStop.stop_name}, ${Math.abs(rawDelay)}min before departure: skipping`);
         return null;
       }
 

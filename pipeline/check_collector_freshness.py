@@ -34,7 +34,7 @@ def slack(text: str) -> None:
     try:
         url = WEBHOOK_CONF.read_text().splitlines()[0].strip()
     except OSError:
-        print("notify: webhook config missing — not delivered", file=sys.stderr)
+        print("notify: webhook config missing: not delivered", file=sys.stderr)
         return
     request = urllib.request.Request(
         url,
