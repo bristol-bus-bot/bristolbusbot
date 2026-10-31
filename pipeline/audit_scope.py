@@ -17,18 +17,30 @@ def operator_composition(counts):
 
 
 def frequency_adherence(rows):
-    groups = {key: dict(readings=0,on_time=0,available=True)
+    """On-time share by frequency class, from the routes that have a figure.
+
+    A route without a usable figure (too few readings) no longer blanks its
+    whole class; the class reports how many of its routes are counted."""
+    groups = {key: dict(readings=0,on_time=0,routes=0,routes_counted=0,
+                        counted_readings=0,counted_on_time=0)
               for key in ['frequent','non_frequent','unclassified']}
     for row in rows:
         key = 'frequent' if row.get('frequent') is True else (
               'non_frequent' if row.get('frequent') is False else 'unclassified')
         group = groups[key]
-        group['readings'] += int(row.get('readings_in_gate') or 0)
-        group['on_time'] += int(row.get('on_time') or 0)
-        group['available'] &= row.get('on_time_pct') is not None
+        readings = int(row.get('readings_in_gate') or 0)
+        on_time = int(row.get('on_time') or 0)
+        group['readings'] += readings
+        group['on_time'] += on_time
+        group['routes'] += 1
+        if row.get('on_time_pct') is not None:
+            group['routes_counted'] += 1
+            group['counted_readings'] += readings
+            group['counted_on_time'] += on_time
     for group in groups.values():
-        available = group.pop('available')
-        group['on_time_pct'] = (round(100*group['on_time']/group['readings'],1)
-                               if group['readings'] and available else None)
+        counted_readings = group.pop('counted_readings')
+        counted_on_time = group.pop('counted_on_time')
+        group['on_time_pct'] = (round(100*counted_on_time/counted_readings,1)
+                               if counted_readings else None)
     return dict(metric='timing_point_adherence',groups=groups,
                 caveat='Frequent-service results measure timetable adherence, not excess waiting time. Unclassified means the retained schedule cannot support the frequency label.')

@@ -20,3 +20,14 @@ def test_unknown_frequency_does_not_become_nonfrequent_or_zero_percent():
     assert groups['unclassified']['readings']==10
     assert groups['non_frequent']['on_time_pct'] is None
     assert groups['frequent']['on_time_pct'] is None
+
+
+def test_one_thin_route_no_longer_blanks_its_whole_frequency_class():
+    groups = frequency_adherence([
+        dict(frequent=False, readings_in_gate=100, on_time=60, on_time_pct=60.0),
+        dict(frequent=False, readings_in_gate=4, on_time=1, on_time_pct=None),
+    ])['groups']
+    assert groups['non_frequent']['on_time_pct'] == 60.0
+    assert groups['non_frequent']['routes'] == 2
+    assert groups['non_frequent']['routes_counted'] == 1
+    assert groups['non_frequent']['readings'] == 104

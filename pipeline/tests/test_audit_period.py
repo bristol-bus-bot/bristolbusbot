@@ -123,3 +123,26 @@ def test_the_page_summary_is_small_and_keeps_the_latest_day():
     assert [d["service_date"] for d in summary["days_index"]] == DAYS
     assert summary["period"]["by_operator"]["FBRI"]["routes"]
     assert summary["full_history"] == "audit_data.json"
+
+
+def test_routes_report_how_many_readings_were_20_minutes_or_more_late():
+    conn = database()
+    for day in DAYS[:2]:
+        counts = add_day(conn, day, "1", [0, 1500, 600])
+        conn.execute(
+            """INSERT INTO daily_route_summary (service_date, operator, route,
+                   readings_in_gate, on_time, early, late, on_time_pct, mean_delay_s,
+                   median_delay_s, readings_total, excluded_distance, expected_trips,
+                   observed_trips, coverage_pct)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (day, "FBRI", "1", counts["readings"], counts["on_time"], counts["early"],
+             counts["late"], None, 100, None, counts["readings"], 0, 10, 9, 90.0))
+        # One journey 25 min late (3 readings) and one 10 min late per day.
+        conn.execute("INSERT INTO daily_delay_histogram VALUES (?,?,?,?,?)",
+                     (day, "FBRI", "1", "late_20plus", 3))
+        conn.execute("INSERT INTO daily_delay_histogram VALUES (?,?,?,?,?)",
+                     (day, "FBRI", "1", "late_6_10", 3))
+    routes, _ = audit_period._routes(conn.cursor(), DAYS[:2], "FBRI", set(DAYS[:2]), {})
+    route = next(r for r in routes if r["route"] == "1")
+    assert route["late"] == 12
+    assert route["very_late"] == 6

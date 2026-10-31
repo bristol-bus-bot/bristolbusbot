@@ -131,6 +131,18 @@ def _routes(cur, window, operator, valid, medians):
             a["observed_trips"] += int(r["observed_trips"] or 0)
             a["coverage_days"] += 1
         a["days"] += 1
+    # 20+ minutes late, from the delay histogram the rollup already keeps.
+    very_late = defaultdict(int)
+    try:
+        for r in cur.execute(
+                f"""SELECT route, SUM(n) AS n FROM daily_delay_histogram
+                     WHERE operator = ? AND bucket = 'late_20plus' AND route IS NOT NULL
+                       AND service_date IN ({_placeholders(window)})
+                     GROUP BY route""",
+                (operator, *window)):
+            very_late[r["route"]] = int(r["n"] or 0)
+    except sqlite3.OperationalError:
+        pass
     frequent = {}
     try:
         for r in cur.execute(
@@ -155,6 +167,7 @@ def _routes(cur, window, operator, valid, medians):
             "median_delay_s": medians.get(route),
             "readings_in_gate": in_gate, "on_time": int(a["on_time"]),
             "early": int(a["early"]), "late": int(a["late"]),
+            "very_late": min(very_late[route], int(a["late"])),
             "expected_trips": int(a["expected_trips"]) if covered else None,
             "observed_trips": int(a["observed_trips"]) if covered else None,
             "coverage_pct": _pct(a["observed_trips"], a["expected_trips"]) if covered else None,
