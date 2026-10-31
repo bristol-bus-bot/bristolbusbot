@@ -467,6 +467,17 @@ def main():
     with open(OUT_FILE, "w", encoding="utf-8") as out:
         json.dump(payload, out, separators=(',', ':'))
     summary = build_summary(cur, payload, dates)
+    # "From, to, via" for each route, from the timetable (optional extra).
+    from audit_rollup import open_timetable
+    import route_descriptions
+    timetable = open_timetable()
+    if timetable is not None:
+        try:
+            added = route_descriptions.attach(
+                summary, route_descriptions.build(timetable, conn), public_route, NETWORK_LABEL)
+            print(f"  route descriptions: {added} route rows described.")
+        finally:
+            timetable.close()
     with open(os.path.join(OUT_DIR, SUMMARY_NAME), "w", encoding="utf-8") as out:
         json.dump(summary, out, separators=(',', ':'))
     exclusion_text = (

@@ -165,3 +165,9 @@ def test_audit_site_has_search_basics_and_publishes_them():
     for name in ("robots.txt", "sitemap.xml", "og-card.png"):
         assert f'install -m 0644 "$ASSET_DIR/{name}" docs/{name}' in script
         assert script.count(f"docs/{name}") >= 3
+
+
+def test_route_descriptions_are_escaped():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert '<p class="route-desc">${escapeHTML(row.description)}</p>' in source
+    assert 'title="${escapeHTML(row.description)}"' in source

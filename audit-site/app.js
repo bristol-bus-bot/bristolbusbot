@@ -496,7 +496,10 @@ function sortedRoutes() {
   const query = $("q").value.trim().toLowerCase();
   const rows = state.rows.filter(hasReadings).filter((row) => {
     const label = String(row.route).toLowerCase();
-    return !query || label.startsWith(query) || label.includes(" " + query);
+    // A place name finds the routes that go there ("clevedon" finds the X6).
+    const where = String(row.description || "").toLowerCase();
+    return !query || label.startsWith(query) || label.includes(" " + query)
+      || (query.length >= 3 && where.includes(query));
   });
   const limited = (row) => (limitedEvidence(row) ? 1 : 0);
   const sorts = {
@@ -517,7 +520,7 @@ function renderRouteList() {
     const pct = finiteNumber(row.on_time_pct);
     const selected = String(state.selectedRoute) === String(row.route);
     return `<li><button type="button" class="route-row${limitedEvidence(row) ? " lim" : ""}${selected ? " sel" : ""}" data-route="${route}"
-      aria-pressed="${selected ? "true" : "false"}" aria-label="Route ${route}: ${pct.toFixed(1)}% on time${limitedEvidence(row) ? ", few readings" : ""}">
+      aria-pressed="${selected ? "true" : "false"}" aria-label="Route ${route}: ${pct.toFixed(1)}% on time${limitedEvidence(row) ? ", few readings" : ""}"${row.description ? ` title="${escapeHTML(row.description)}"` : ""}>
       <span class="rname"><span class="badge">${escapeHTML(number)}</span><small>${escapeHTML(operator)}</small></span>
       <span class="mini"><i style="width:${Math.min(100, pct)}%;background:${colour}"></i><b style="left:${state.target}%"></b></span>
       <span class="pct" style="color:${colour}">${Math.round(pct)}%</span>
@@ -573,6 +576,7 @@ async function renderRouteDetail() {
       ${limitedEvidence(row) ? '<span class="small faint">few readings: treat with care</span>' : ""}
       <button class="close" type="button" id="close">Close</button>
     </div>
+    ${row.description ? `<p class="route-desc">${escapeHTML(row.description)}</p>` : ""}
     <p class="summary">${escapeHTML(routeSummary(row, hourly))}</p>
     <h3>Likely reasons</h3>
     <div class="reasons">${reasons.length
