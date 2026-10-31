@@ -9,9 +9,9 @@ import { BOT_DATA_PATHS } from '../config/data-paths.js';
 /** Spoken label only: never use this as a stop identity or a matching key. */
 export function spokenStopName(raw: string): string {
     return raw.trim()
-        .replace(/\s+[-–—]\s+(?:(?:Stop|Stand|Bay)\s+[A-Za-z0-9]{1,4}|[A-Z]\d{0,2}|[A-Z][a-z])\s*$/, '')
+        .replace(/\s+[-\u2013\u2014]\s+(?:(?:Stop|Stand|Bay)\s+[A-Za-z0-9]{1,4}|[A-Z]\d{0,2}|[A-Z][a-z])\s*$/, '')
         // NaPTAN position indicators such as "Down Lane - o/s" (outside) or "- nr".
-        .replace(/\s+[-–—]\s+(?:o\/s|opp|nr|adj|o\/p)\.?\s*$/i, '')
+        .replace(/\s+[-\u2013\u2014]\s+(?:o\/s|opp|nr|adj|o\/p)\.?\s*$/i, '')
         .replace(/\bStn\b/g, 'Station')
         .replace(/\bRd\b/g, 'Road')
         .replace(/\bUtd\b/g, 'United')
@@ -37,8 +37,8 @@ try {
     stopEnrichment = JSON.parse(data);
     logger.info(`Loaded ${Object.keys(stopEnrichment).length} enriched stop names from Bristol Open Data`);
 } catch {
-    // Graceful degradation — manual entries still work
-    logger.warn('stop_enrichment.json not found — using manual stop name mappings only');
+    // Graceful degradation: manual entries still work
+    logger.warn('stop_enrichment.json not found; using manual stop name mappings only');
 }
 
 // Suffixes to strip from enrichment names (bay numbers, platform numbers, etc.)
@@ -98,7 +98,7 @@ export function getStopEnrichment(): Record<string, StopEnrichment> {
 }
 
 // ─────────────────────────────────────────────────────
-// Manual overrides — returns null if no override applies
+// Manual overrides: returns null if no override applies
 // ─────────────────────────────────────────────────────
 
 function manualOverrides(stopName: string, stopCode: string): string | null {

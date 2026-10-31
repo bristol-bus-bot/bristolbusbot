@@ -47,7 +47,7 @@ def audit() -> dict:
     report: dict = {"generated": datetime.now().isoformat(timespec="seconds"),
                     "fleet_source": str(src.relative_to(REPO))}
     if not isinstance(fleet, list):
-        report["fleet"] = "MISSING everywhere — run with --fix"
+        report["fleet"] = "MISSING everywhere: run with --fix"
         return report
     active = [v for v in fleet if not v.get("withdrawn")]
     no_livery = [v for v in active
@@ -216,7 +216,7 @@ def main() -> int:
 
     report = audit()
     print("\n" + "=" * 60)
-    print("ENRICHMENT AUDIT" + ("" if fix else "  (read-only — use --fix to refresh)"))
+    print("ENRICHMENT AUDIT" + ("" if fix else "  (read-only: use --fix to refresh)"))
     print("=" * 60)
     print(json.dumps(report, indent=2))
     (HERE / "enrichment_report.json").write_text(json.dumps(report, indent=2))

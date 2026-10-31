@@ -348,7 +348,7 @@ def main():
     shutil.copy2(WECA_DB, staged_db)
 
     # Route shapes MUST come from the same GTFS extract the timetable was
-    # built from — shape_ids regenerate per BODS build, so importing from
+    # built from: shape_ids regenerate per BODS build, so importing from
     # any other download matches nothing (shape_ids are per-extract UUIDs).
     if (Path(GTFS_DIR) / "shapes.txt").exists():
         env_shapes = {**os.environ, "BBB_TIMETABLE_DB": str(staged_db),

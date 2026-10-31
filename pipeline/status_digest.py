@@ -103,7 +103,7 @@ def site_line() -> str:
     try:
         with urllib.request.urlopen(SITE_URL, timeout=10) as r:
             body = r.read(200).decode(errors="replace")
-        return f"*site*  :white_check_mark: healthz {r.status} — {body.strip()[:80]}"
+        return f"*site*  :white_check_mark: healthz {r.status}: {body.strip()[:80]}"
     except Exception as e:  # noqa: BLE001
         return f"*site*  :x: {e}"
 
