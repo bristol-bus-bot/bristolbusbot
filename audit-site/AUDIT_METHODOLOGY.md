@@ -297,6 +297,17 @@ with their main area: "4 Bath", "4 Bristol", "U2 N Somerset". A reading whose
 trip is not in the day's schedule takes the area of its stop. Numbers used in
 one place only keep their plain label.
 
+## Where each route goes
+
+Each route's one-line description ("Bristol to Clevedon, via Failand and
+Tickenham") is built from the timetable, not written by hand. It uses the
+commonest journey pattern in the route's busier direction. The two ends are
+named by their town, and the towns of the timing points in between give the
+"via" (up to three). Towns are the NaPTAN locality of each stop; a stop
+missing from that list borrows the town of stops with the same name in its
+ward. Where one end is outside the West of England and has no town on record,
+the description starts "From" the end we can name.
+
 ## Frequent services
 
 A route's frequency label is a schedule proxy: at least six departures in its

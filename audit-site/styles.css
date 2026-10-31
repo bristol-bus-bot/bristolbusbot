@@ -228,3 +228,6 @@ details p, details ul { margin: 10px 0 0; color: var(--fg-2); }
 .pill-gap.spare { background: rgba(125, 196, 255, 0.15); color: var(--link); }
 /* A stop's town, lighter than its name */
 .place { color: var(--fg-2); font-weight: 400; }
+
+/* Where the route goes (planning #87) */
+.route-desc { margin: 8px 0 0; color: var(--fg-2); font-size: 0.95rem; }
