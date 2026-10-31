@@ -144,3 +144,19 @@ def test_page_asks_for_the_script_and_styles_by_version():
     assert 'href="styles.css?v=__ASSET_VERSION__"' in html
     assert 'src="app.js?v=__ASSET_VERSION__"' in html
     assert 'sed "s/__ASSET_VERSION__/$ASSET_VERSION/g" "$ASSET_DIR/index.html" > docs/index.html' in script
+
+
+def test_audit_site_has_search_basics_and_publishes_them():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="description"' in html
+    assert '<meta property="og:title"' in html
+    assert '<link rel="canonical" href="https://bristol-bus-bot.github.io/weca-bus-audit/">' in html
+    assert "Sitemap: https://bristol-bus-bot.github.io/weca-bus-audit/sitemap.xml" in (
+        ROOT / "robots.txt").read_text(encoding="utf-8")
+    assert "<loc>https://bristol-bus-bot.github.io/weca-bus-audit/</loc>" in (
+        ROOT / "sitemap.xml").read_text(encoding="utf-8")
+    assert (ROOT / "og-card.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    script = (ROOT.parent / "deploy" / "publish_to_github.sh").read_text(encoding="utf-8")
+    for name in ("robots.txt", "sitemap.xml", "og-card.png"):
+        assert f'install -m 0644 "$ASSET_DIR/{name}" docs/{name}' in script
+        assert script.count(f"docs/{name}") >= 3

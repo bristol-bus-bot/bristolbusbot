@@ -6,7 +6,9 @@ import re
 import math
 from datetime import datetime
 
-from flask import Blueprint, abort, current_app, jsonify, render_template
+from xml.sax.saxutils import escape
+
+from flask import Blueprint, Response, abort, current_app, jsonify, render_template
 
 from .. import db
 from ..services import localities as loc_svc
@@ -98,6 +100,58 @@ def index():
 def _kofi_url(value: str) -> str | None:
     """Only a plain https://ko-fi.com/<name> link is ever rendered."""
     return value if re.fullmatch(r"https://ko-fi\.com/[A-Za-z0-9_]{1,64}", value or "") else None
+
+
+def _public_origin() -> str:
+    return "https://" + current_app.config["BBB"].public_hosts[0]
+
+
+@bp.route("/privacy")
+def privacy():
+    return render_template("privacy.html", contact_email="bristolbusbot@gmail.com")
+
+
+@bp.route("/robots.txt")
+def robots_txt():
+    body = "\n".join((
+        "User-agent: *",
+        "Disallow: /api/",
+        "Disallow: /assets/",
+        "",
+        f"Sitemap: {_public_origin()}/sitemap.xml",
+        "",
+    ))
+    response = Response(body, mimetype="text/plain")
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+@bp.route("/sitemap.xml")
+def sitemap_xml():
+    """The homepage, the privacy page and every vehicle profile that loads now.
+
+    Profiles come from the published audit integration, the same source the
+    profile pages use, so the sitemap never lists a page that would 404."""
+    origin = _public_origin()
+    audit = current_app.extensions["bbb_audit_integration"]
+    urls = [(f"{origin}/", None), (f"{origin}/privacy", None)]
+    for slug, through_date in audit.profile_slugs():
+        lastmod = None
+        if re.fullmatch(r"\d{8}", through_date):
+            lastmod = f"{through_date[:4]}-{through_date[4:6]}-{through_date[6:]}"
+        urls.append((f"{origin}/vehicles/{slug}", lastmod))
+    entries = "".join(
+        f"<url><loc>{escape(loc)}</loc>"
+        + (f"<lastmod>{lastmod}</lastmod>" if lastmod else "")
+        + "</url>"
+        for loc, lastmod in urls)
+    body = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f"{entries}</urlset>\n")
+    response = Response(body, mimetype="application/xml")
+    # Changes only when the audit is published, like the other static-ish data.
+    response.headers["Cache-Control"] = "public, max-age=900"
+    return response
 
 
 @bp.route("/vehicles/<slug>")

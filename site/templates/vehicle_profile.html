@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Bus {{ details.reg or public_code }} · Bristol Buses LIVE{% endblock %}
+{% block meta_description %}Measured punctuality for {{ profile.operator_name }} bus {{ details.reg or public_code }}: {{ profile.on_time_pct }}% on time across {{ '{:,}'.format(profile.readings) }} readings since {{ measurement_start_label }}.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ public_origin }}{{ request.path }}">{% endblock %}
+{% block og_title %}Bus {{ details.reg or public_code }}: how punctual is it? · Bristol Buses LIVE{% endblock %}
+{% block og_description %}{{ profile.operator_name }} bus {{ details.reg or public_code }} was on time {{ profile.on_time_pct }}% of the time across {{ '{:,}'.format(profile.readings) }} readings since {{ measurement_start_label }}.{% endblock %}
 {% block body_class %}profile-page{% endblock %}
 {% block styles %}<link rel="stylesheet" href="{{ asset_url('css/profile.css') }}">{% endblock %}
 {% block body %}

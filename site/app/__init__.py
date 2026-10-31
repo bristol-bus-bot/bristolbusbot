@@ -47,6 +47,8 @@ def create_app(config: Config | None = None) -> Flask:
             "versioned_static", version=asset_version, filename=filename)
 
     app.jinja_env.globals["asset_url"] = asset_url
+    # Absolute links in page metadata use the configured production host.
+    app.jinja_env.globals["public_origin"] = "https://" + app.config["BBB"].public_hosts[0]
 
     from .services.fleet import Fleet
     cfg = app.config["BBB"]

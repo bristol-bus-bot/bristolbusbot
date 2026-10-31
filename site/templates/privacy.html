@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Privacy · Bristol Buses LIVE{% endblock %}
+{% block meta_description %}How Bristol Buses LIVE handles your data: no cookies, adverts or analytics, and no log of who visits.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ public_origin }}/privacy">{% endblock %}
+{% block og_title %}Privacy · Bristol Buses LIVE{% endblock %}
+{% block og_description %}No cookies, adverts or analytics, and no log of who visits.{% endblock %}
+{% block body_class %}profile-page{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ asset_url('css/profile.css') }}">{% endblock %}
+{% block body %}
+<main class="profile-shell">
+    <nav class="profile-nav" aria-label="Back links">
+        <a href="/">← Track buses live</a>
+        <div class="profile-nav-actions">
+            <button class="theme-toggle" type="button" data-theme-toggle
+                    aria-label="Night mode" aria-pressed="false"
+                    title="Switch to night mode">
+                <span class="theme-icon" aria-hidden="true"></span>
+            </button>
+        </div>
+    </nav>
+
+    <article class="profile-card privacy-card">
+        <header class="profile-header">
+            <div class="profile-header-copy">
+                <p class="profile-kicker">Bristol Buses LIVE</p>
+                <h1>Privacy</h1>
+            </div>
+        </header>
+
+        <section>
+            <p>This site doesn't use cookies, adverts or analytics, and doesn't keep a log of who visits.</p>
+            <p>If you switch to night mode, your browser remembers that choice. It's stored on your device and never sent to me. If you use "find my location", your browser asks permission first, and your location is only used on your device to move the map. It isn't sent to the site.</p>
+            <p>The site runs behind Cloudflare, which, like any web host, sees your IP address in order to deliver the page. The map background tiles currently come from CARTO, which also sees your IP address when it sends them. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a> and <a href="https://carto.com/privacy">CARTO's privacy policy</a>.</p>
+            <p>Links to Bluesky, Instagram, GitHub and Ko-fi take you to those sites, and their own privacy policies apply once you're there.</p>
+            <p>Questions: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+        </section>
+    </article>
+</main>
+{% endblock %}
+{% block app_scripts %}{% endblock %}

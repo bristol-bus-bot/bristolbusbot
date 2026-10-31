@@ -115,6 +115,13 @@ class AuditIntegration:
             return None
         return self._profiles.get(slug)
 
+    def profile_slugs(self, now: datetime | None = None) -> list[tuple[str, str]]:
+        """(slug, through_date) for every profile that would load right now."""
+        if self.snapshot(now) is None:
+            return []
+        return sorted((slug, str(profile.get("through_date") or ""))
+                      for slug, profile in self._profiles.items())
+
     def slug_for_vehicle(self, operator: str | None,
                          vehicle_ref: str | None,
                          now: datetime | None = None) -> str | None:
