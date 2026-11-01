@@ -29,7 +29,7 @@ MAX_RECORDED_FAILURES = 100
 class AcceptancePolicy:
     """All acceptance thresholds live in one recorded policy."""
 
-    version: str = "service-window-v4"
+    version: str = "service-window-v5"
     near_term_days: int = 28
     minimum_forward_days: int = 180
     maximum_forward_days: int = 400
@@ -40,7 +40,10 @@ class AcceptancePolicy:
     substantial_operator_share: float = 0.01
     forward_coverage_ratio: float = 0.75
     raw_catastrophic_ratio: float = 0.25
-    provisional_holiday_lead_days: int = 56
+    # A holiday shortfall further ahead than this is a warning with a review
+    # date, not a refusal: operators often publish Christmas and bank holiday
+    # services late, and the Pi checks for a new timetable every night.
+    provisional_holiday_lead_days: int = 14
     # Shortfall gates cannot see duplicated or superseded service. A substantial
     # operator growing this much on several near-term days needs explanation.
     inflation_ratio: float = 1.25
