@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Bounded semantic comparison of two production timetable databases."""
+"""Bounded semantic comparison of two production timetable databases.
+
+The expensive part is reading each timetable's journeys and calendars
+(read_service_tables). That happens once per timetable, on GitHub when it is
+built, and travels with it as a small summary file. Comparing two summaries
+(compare_service_summaries) is plain Python and takes seconds, so the Pi never
+re-reads either database to decide whether a new timetable is safe.
+"""
 from __future__ import annotations
 
+import argparse
+import gzip
 import hashlib
+import json
 import math
 import sqlite3
 import time
@@ -23,6 +33,9 @@ MAX_DATABASE_BYTES = 512 * 1024 * 1024
 SQLITE_CACHE_KIB = 8 * 1024
 DEFAULT_DEADLINE_SECONDS = 8 * 60
 MAX_RECORDED_FAILURES = 100
+SERVICE_SUMMARY_VERSION = 1
+SERVICE_SUMMARY_FILENAME = "service_summary.json.gz"
+MAX_SERVICE_SUMMARY_BYTES = 32 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -360,15 +373,15 @@ def _timed_rows(connection: sqlite3.Connection, sql: str, deadline: float,
     return rows, monotonic() - started
 
 
-def _active_services(day: date, calendars: Iterable[sqlite3.Row],
+def _active_services(day: date,
+                     calendars: Iterable[tuple[str, date, date, tuple[int, ...]]],
                      exceptions: Mapping[date, Mapping[str, int]]) -> set[str]:
-    weekday = WEEKDAYS[day.weekday()]
+    """calendars are (service_id, start, end, weekday flags), parsed once."""
+    weekday = day.weekday()
     active = {
-        str(row["service_id"])
-        for row in calendars
-        if _parse_service_date(row["start_date"], "calendar start") <= day
-        <= _parse_service_date(row["end_date"], "calendar end")
-        and int(row[weekday]) == 1
+        service_id
+        for service_id, start, end, flags in calendars
+        if start <= day <= end and flags[weekday] == 1
     }
     for service_id, exception_type in exceptions.get(day, {}).items():
         if exception_type == 1:
@@ -381,13 +394,17 @@ def _active_services(day: date, calendars: Iterable[sqlite3.Row],
     return active
 
 
-def build_service_profile(path: Path, *, start_date: date,
-                          policy: AcceptancePolicy = DEFAULT_POLICY,
-                          deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
-                          monotonic: Callable[[], float] = time.monotonic) -> ServiceProfile:
-    """Read fixed aggregates once, then derive dated service entirely in Python."""
-    overall_started = monotonic()
-    deadline = overall_started + deadline_seconds
+def read_service_tables(path: Path, *,
+                        deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
+                        monotonic: Callable[[], float] = time.monotonic) -> dict[str, object]:
+    """Read the fixed aggregates a profile is derived from: the heavy part.
+
+    The result is plain JSON-ready data, so it can be computed once (on
+    GitHub, when the timetable is built) and compared later without the
+    database.
+    """
+    started = monotonic()
+    deadline = started + deadline_seconds
     connection = _open_database(path, deadline, monotonic)
     durations: list[float] = []
     try:
@@ -406,6 +423,75 @@ def build_service_profile(path: Path, *, start_date: date,
         durations.append(elapsed)
     finally:
         connection.close()
+    return {
+        "version": SERVICE_SUMMARY_VERSION,
+        "journey_identity": journey_identity,
+        "volumes": [[
+            str(row["service_id"] or ""), str(row["operator"]), str(row["route"]),
+            int(row["direction_id"]), int(row["trips"]), int(row["stop_times"]),
+            int(row["duplicate_trips"] or 0),
+            (int(row["journey"])
+             if "journey" in row.keys() and row["journey"] is not None else None),
+        ] for row in volume_rows],
+        "calendars": [[row["service_id"], *(row[field] for field in WEEKDAYS),
+                       row["start_date"], row["end_date"]] for row in calendar_rows],
+        "exceptions": [[row["service_id"], row["date"], row["exception_type"]]
+                       for row in exception_rows],
+        # A digest stands in for each shape's points, which is all a
+        # comparison needs and keeps the summary small.
+        "shapes": [[str(operator), str(route), int(direction),
+                    hashlib.sha256(str(points).encode("utf-8")).hexdigest()]
+                   for operator, route, direction, points in shape_rows
+                   if points is not None],
+        "query_seconds": round(monotonic() - started, 3),
+        "peak_query_seconds": round(max(durations, default=0.0), 3),
+    }
+
+
+def _checked_tables(tables: object) -> dict[str, object]:
+    """Refuse a summary that isn't the shape read_service_tables writes."""
+    if (not isinstance(tables, dict) or tables.get("version") != SERVICE_SUMMARY_VERSION
+            or tables.get("journey_identity") not in {"canonical_schedule", "database_rows"}
+            or not all(isinstance(tables.get(key), list)
+                       for key in ("volumes", "calendars", "exceptions", "shapes"))
+            or not all(isinstance(row, list) and len(row) == 8 for row in tables["volumes"])
+            or not all(isinstance(row, list) and len(row) == 10 for row in tables["calendars"])
+            or not all(isinstance(row, list) and len(row) == 3 for row in tables["exceptions"])
+            or not all(isinstance(row, list) and len(row) == 4 for row in tables["shapes"])):
+        raise ServiceProfileError(
+            "invalid_service_summary", "timetable service summary is not usable")
+    return tables
+
+
+def build_service_profile(path: Path, *, start_date: date,
+                          policy: AcceptancePolicy = DEFAULT_POLICY,
+                          deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
+                          monotonic: Callable[[], float] = time.monotonic) -> ServiceProfile:
+    """Read fixed aggregates once, then derive dated service entirely in Python."""
+    started = monotonic()
+    tables = read_service_tables(
+        path, deadline_seconds=deadline_seconds, monotonic=monotonic)
+    return profile_from_tables(
+        tables, start_date=start_date, policy=policy,
+        deadline_seconds=deadline_seconds - (monotonic() - started),
+        monotonic=monotonic)
+
+
+def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
+                        policy: AcceptancePolicy = DEFAULT_POLICY,
+                        deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
+                        monotonic: Callable[[], float] = time.monotonic) -> ServiceProfile:
+    """Derive dated service from a timetable's aggregates: no database needed."""
+    tables = _checked_tables(tables)
+    deadline = monotonic() + deadline_seconds
+    journey_identity = str(tables["journey_identity"])
+    volume_rows = [dict(zip(
+        ("service_id", "operator", "route", "direction_id", "trips",
+         "stop_times", "duplicate_trips", "journey"), row)) for row in tables["volumes"]]
+    calendar_rows = [dict(zip(("service_id", *WEEKDAYS, "start_date", "end_date"), row))
+                     for row in tables["calendars"]]
+    exception_rows = [dict(zip(("service_id", "date", "exception_type"), row))
+                      for row in tables["exceptions"]]
 
     volumes: dict[str, list[TripVolume]] = defaultdict(list)
     for row in volume_rows:
@@ -420,13 +506,12 @@ def build_service_profile(path: Path, *, start_date: date,
             trips=int(row["trips"]),
             stop_times=int(row["stop_times"]),
             duplicate_trips=int(row["duplicate_trips"] or 0),
-            journey=(int(row["journey"])
-                     if "journey" in row.keys() and row["journey"] is not None
-                     else None),
+            journey=(int(row["journey"]) if row["journey"] is not None else None),
         ))
 
     exceptions: dict[date, dict[str, int]] = defaultdict(dict)
     latest_date = start_date + timedelta(days=policy.minimum_forward_days - 1)
+    calendars: list[tuple[str, date, date, tuple[int, ...]]] = []
     for row in calendar_rows:
         service_id = str(row["service_id"] or "")
         start = _parse_service_date(row["start_date"], "calendar start")
@@ -440,6 +525,9 @@ def build_service_profile(path: Path, *, start_date: date,
                 or any(value not in {0, 1} for value in weekday_values):
             raise ServiceProfileError(
                 "malformed_calendar", "calendar service definition is invalid")
+        # Parsed once here, not once per calendar per day: that repeated
+        # parsing was nine-tenths of the comparison's time.
+        calendars.append((service_id, start, end, tuple(weekday_values)))
         latest_date = max(
             latest_date,
             end)
@@ -464,11 +552,8 @@ def build_service_profile(path: Path, *, start_date: date,
     )
     horizon_days = min(policy.maximum_forward_days, requested_horizon)
     route_shapes: dict[tuple[str, str, int], set[str]] = defaultdict(set)
-    for operator, route, direction, points in shape_rows:
-        if points is None:
-            continue
-        digest = hashlib.sha256(str(points).encode("utf-8")).hexdigest()
-        route_shapes[(str(operator), str(route), int(direction))].add(digest)
+    for operator, route, direction, digest in tables["shapes"]:
+        route_shapes[(str(operator), str(route), int(direction))].add(str(digest))
 
     operator_totals: dict[str, dict[str, int]] = defaultdict(
         lambda: {"trips": 0, "stop_times": 0})
@@ -482,7 +567,7 @@ def build_service_profile(path: Path, *, start_date: date,
             raise ServiceProfileError(
                 "database_profile_timeout", "timetable comparison exceeded its deadline")
         service_day = start_date + timedelta(days=offset)
-        active = _active_services(service_day, calendar_rows, exceptions)
+        active = _active_services(service_day, calendars, exceptions)
         trips = stop_times = 0
         routes: set[tuple[str, str]] = set()
         day_operators: dict[str, dict[str, int]] = defaultdict(
@@ -531,8 +616,8 @@ def build_service_profile(path: Path, *, start_date: date,
         route_totals=dict(route_totals),
         route_direction_totals=dict(route_direction_totals),
         route_shapes=dict(route_shapes),
-        query_seconds=monotonic() - overall_started,
-        peak_query_seconds=max(durations, default=0.0),
+        query_seconds=float(tables.get("query_seconds") or 0.0),
+        peak_query_seconds=float(tables.get("peak_query_seconds") or 0.0),
         duplicate_trips_removed=sum(
             volume.duplicate_trips
             for service_volumes in volumes.values()
@@ -920,3 +1005,66 @@ def compare_databases(current_path: Path, candidate_path: Path, *,
                                       provisional_requirements=provisional_requirements)
     result["duration_seconds"] = round(monotonic() - started, 3)
     return result
+
+
+def compare_service_summaries(current: Mapping[str, object], candidate: Mapping[str, object], *,
+                              start_date: date | None = None,
+                              policy: AcceptancePolicy = DEFAULT_POLICY,
+                              deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
+                              provisional_requirements: Iterable[dict] = (),
+                              monotonic: Callable[[], float] = time.monotonic) -> dict[str, object]:
+    """compare_databases, from two timetables' summaries instead of the files."""
+    effective_start = start_date or bristol_today()
+    started = monotonic()
+    profiles = [
+        profile_from_tables(tables, start_date=effective_start, policy=policy,
+                            deadline_seconds=deadline_seconds, monotonic=monotonic)
+        for tables in (current, candidate)
+    ]
+    result = compare_service_profiles(*profiles, policy=policy,
+                                      provisional_requirements=provisional_requirements)
+    result["duration_seconds"] = round(monotonic() - started, 3)
+    return result
+
+
+def write_service_summary(path: Path, tables: Mapping[str, object]) -> None:
+    """Save a timetable's summary as compact, deterministic gzipped JSON."""
+    data = json.dumps(_checked_tables(dict(tables)), separators=(",", ":"),
+                      sort_keys=True).encode("utf-8")
+    with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as output:
+        output.write(data)
+
+
+def load_service_summary(path: Path) -> dict[str, object]:
+    try:
+        if path.stat().st_size > MAX_SERVICE_SUMMARY_BYTES:
+            raise ServiceProfileError(
+                "invalid_service_summary", "timetable service summary is too large")
+        with gzip.open(path, "rb") as source:
+            data = source.read(16 * MAX_SERVICE_SUMMARY_BYTES + 1)
+        if len(data) > 16 * MAX_SERVICE_SUMMARY_BYTES:
+            raise ServiceProfileError(
+                "invalid_service_summary", "timetable service summary expands too far")
+        return _checked_tables(json.loads(data.decode("utf-8")))
+    except (OSError, EOFError, ValueError) as exc:
+        raise ServiceProfileError(
+            "invalid_service_summary", "timetable service summary is unreadable") from exc
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    summarise = commands.add_parser(
+        "summarise", help="write a timetable's service summary (the heavy read)")
+    summarise.add_argument("database", type=Path)
+    summarise.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    tables = read_service_tables(args.database, deadline_seconds=30 * 60)
+    write_service_summary(args.output, tables)
+    print(f"{args.output.name}: {args.output.stat().st_size} bytes, "
+          f"{len(tables['volumes'])} journeys, read in {tables['query_seconds']}s")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

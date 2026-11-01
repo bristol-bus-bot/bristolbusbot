@@ -42,10 +42,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
     parser.add_argument("--max-poll-age", type=float, default=120.0)
+    parser.add_argument(
+        "--skip-audit-check", action="store_true",
+        help="leave out the audit.db integrity scan (minutes on the Pi); for "
+             "checks that only need to know the collector is polling")
     args = parser.parse_args()
     live = args.state / "live.db"
     quick_check(live)
-    quick_check(args.state / "audit.db")
+    if not args.skip_audit_check:
+        quick_check(args.state / "audit.db")
     age = poll_age(live)
     if age < 0 or age > args.max_poll_age:
         raise RuntimeError(f"latest SIRI-VM success is stale: {age:.1f}s")

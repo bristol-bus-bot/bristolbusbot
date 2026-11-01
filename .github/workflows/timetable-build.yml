@@ -65,7 +65,7 @@ jobs:
           print(f'timetable.db: {size} / {MAX_DATABASE_BYTES} bytes')
           PY
 
-      - name: Create provenance manifest
+      - name: Create provenance manifest and service summary
         run: |
           python pipeline/timetable_manifest.py create \
             --database "$BBB_TIMETABLE_DB" \
@@ -87,7 +87,7 @@ jobs:
             --database "$RUNNER_TEMP/timetable-package/timetable.db" \
             --manifest "$RUNNER_TEMP/timetable-package/manifest.json" \
             --minimum-service-days 14
-          test "$(find "$RUNNER_TEMP/timetable-package" -maxdepth 1 -type f | wc -l)" -eq 3
+          test "$(find "$RUNNER_TEMP/timetable-package" -maxdepth 1 -type f | wc -l)" -eq 4
 
       - name: Upload seven-day delivery artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

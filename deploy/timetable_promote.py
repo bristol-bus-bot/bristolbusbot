@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -19,9 +20,20 @@ from pathlib import Path
 from typing import Callable
 
 from timetable_control import paths, promote, rollback, validate
-from timetable_delivery import BRISTOL_TZ, compare_with_current, sha256_file
-from timetable_service_profile import pending_holiday_coverage
-from timetable_manifest import verify_manifest
+from timetable_delivery import (
+    BRISTOL_TZ,
+    compare_with_current,
+    live_baseline,
+    save_live_baseline,
+    sha256_file,
+)
+from timetable_manifest import verify_service_summary
+from timetable_service_profile import (
+    SERVICE_SUMMARY_FILENAME,
+    ServiceProfileError,
+    load_service_summary,
+    pending_holiday_coverage,
+)
 
 
 SHADOW_ROOT = Path("/var/lib/bristolbusbot/timetable-shadow")
@@ -88,6 +100,7 @@ class Candidate:
     validation: dict[str, object]
     comparison: dict[str, object]
     tnds_status: str
+    summary: Path | None = None
 
 
 ATTENDED_RE = re.compile(r"([1-9][0-9]*)-([0-9a-f]{64})")
@@ -217,9 +230,12 @@ class SystemServices:
         for _ in range(attempts):
             try:
                 if component == "collector":
+                    # Fresh polls show the collector restarted and accepted the
+                    # timetable. The 1.3 GB audit integrity scan takes nearly
+                    # three minutes and has nothing to do with a timetable swap.
                     result = subprocess.run(
                         ["/usr/local/libexec/bbb-verify-collector-state",
-                         "--max-poll-age", "180"],
+                         "--max-poll-age", "180", "--skip-audit-check"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                         check=False, timeout=COLLECTOR_VERIFY_TIMEOUT_SECONDS)
                     if result.returncode == 0:
@@ -383,7 +399,8 @@ class TimetablePromoter:
         database = root / "timetable.db"
         manifest_path = root / "manifest.json"
         attribution = root / "TIMETABLE_ARTIFACT_ATTRIBUTION.txt"
-        for path in (database, manifest_path, attribution):
+        summary = root / SERVICE_SUMMARY_FILENAME
+        for path in (database, manifest_path, attribution, summary):
             require_regular(path, uid=self.uid, mode=0o600)
 
         delivery = read_json(self.config.delivery_state)
@@ -414,16 +431,29 @@ class TimetablePromoter:
                 or str(builder.get("workflow_run_id")) != run_id \
                 or builder.get("commit") != commit:
             raise PromotionError("invalid_manifest", "candidate provenance differs from shadow state")
+        # The overnight check already validated this exact file; the
+        # fingerprint proves nothing has changed since, so it isn't re-read.
+        # Only the comparison is repeated (from summaries, in seconds), since
+        # today's date and the live timetable may have moved on.
+        actual_hash = sha256_file(database)
+        if actual_hash != expected_hash:
+            raise PromotionError("candidate_changed", "candidate hash differs from shadow success")
+        artifact = manifest.get("artifact")
+        validation_record = manifest.get("validation")
+        validation = validation_record.get("result") if isinstance(validation_record, dict) else None
+        recorded_validation = attempt.get("validation")
+        if not isinstance(artifact, dict) or artifact.get("sha256") != actual_hash \
+                or not isinstance(validation, dict) or validation != recorded_validation:
+            raise PromotionError("candidate_changed", "candidate differs from its manifest or shadow")
         try:
-            validation = verify_manifest(
-                database=database,
-                manifest_path=manifest_path,
-                minimum_service_days=self.config.minimum_service_days,
-            )
+            verify_service_summary(manifest, root)
+            current_result, current_summary = live_baseline(
+                self.config.live_root / "timetable.db", self.config.monitoring_root)
             comparison = compare_with_current(
-                self.config.live_root / "timetable.db",
-                database,
+                current_result,
+                current_summary,
                 validation,
+                load_service_summary(summary),
                 start_date=self.now().astimezone(BRISTOL_TZ).date(),
                 provisional_requirements=pending_holiday_coverage(self.state_document()),
             )
@@ -432,19 +462,13 @@ class TimetablePromoter:
             context = exc.safe_context if hasattr(exc, "safe_context") else {}
             raise PromotionError(
                 str(code), "candidate failed root-side validation", context) from exc
-        actual_hash = sha256_file(database)
-        if actual_hash != expected_hash:
-            raise PromotionError("candidate_changed", "candidate hash differs from shadow success")
-        recorded_validation = attempt.get("validation")
-        if not isinstance(recorded_validation, dict) or validation != recorded_validation:
-            raise PromotionError("candidate_changed", "candidate counts differ from shadow success")
         sources = manifest.get("sources")
         tnds = sources.get("tnds") if isinstance(sources, dict) else None
         tnds_status = tnds.get("status") if isinstance(tnds, dict) else None
         if tnds_status not in {"not_needed", "fallback_used"}:
             raise PromotionError("invalid_manifest", "candidate source decision is missing")
         return Candidate(
-            run_id, commit, actual_hash, validation, comparison, tnds_status)
+            run_id, commit, actual_hash, validation, comparison, tnds_status, summary)
 
     @staticmethod
     def _safe_remove(path: Path, allowed_uids: set[int]) -> None:
@@ -502,6 +526,20 @@ class TimetablePromoter:
                 os.close(destination_fd)
             if temporary.exists() and not temporary.is_symlink():
                 temporary.unlink()
+
+    def _record_live_baseline(self, candidate: Candidate) -> None:
+        """The new live timetable's summary is the candidate's: save it so the
+        next comparison doesn't have to read the database. Best effort: if it
+        fails, the next check reads the live file once instead."""
+        if candidate.summary is None:
+            return
+        try:
+            save_live_baseline(
+                self.config.monitoring_root, self.config.live_root / "timetable.db",
+                candidate.validation,
+                lambda path: shutil.copyfile(candidate.summary, path))
+        except OSError:
+            pass
 
     def _restart_and_check(self) -> None:
         for component in ("collector", "site", "bot"):
@@ -729,6 +767,7 @@ class TimetablePromoter:
                 raise failure
             self._rollback_and_raise(state, failure, before_hash)
 
+        self._record_live_baseline(candidate)
         finished = self.now()
         state.update({
             "outcome": "accepted",

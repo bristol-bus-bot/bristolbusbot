@@ -147,7 +147,9 @@ def test_create_and_verify_manifest(tmp_path):
         minimum_service_days=14,
     )
 
-    assert manifest["manifest_version"] == 5
+    assert manifest["manifest_version"] == 6
+    summary = tmp_path / manifest["service_summary"]["filename"]
+    assert summary.is_file() and manifest["service_summary"]["bytes"] == summary.stat().st_size
     assert manifest["build"]["started_utc"] == "2026-07-17T00:00:00+00:00"
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \
@@ -156,6 +158,13 @@ def test_create_and_verify_manifest(tmp_path):
     assert manifest["sources"]["tnds"]["missing_before_fallback"] == ["42"]
     assert verify_manifest(
         database=database, manifest_path=manifest_path)["route_shapes"] == 1
+    # The Pi trusts the recorded result once the fingerprints match...
+    assert verify_manifest(database=database, manifest_path=manifest_path,
+                           recheck=False) == manifest["validation"]["result"]
+    # ...but never a summary that differs from the one GitHub recorded.
+    summary.write_bytes(summary.read_bytes() + b"x")
+    with pytest.raises(RuntimeError, match="service summary"):
+        verify_manifest(database=database, manifest_path=manifest_path, recheck=False)
 
 
 def test_verify_rejects_manifest_hash_mismatch(tmp_path):

@@ -31,10 +31,15 @@ from timetable_manifest import (
     verify_manifest,
 )
 from timetable_service_profile import (
+    MAX_SERVICE_SUMMARY_BYTES,
+    SERVICE_SUMMARY_FILENAME,
     ServiceProfileError,
     bristol_today,
-    compare_databases,
+    compare_service_summaries,
+    load_service_summary,
     pending_holiday_coverage,
+    read_service_tables,
+    write_service_summary,
 )
 
 
@@ -48,12 +53,18 @@ ALLOWED_FILES = {
     "timetable.db",
     "manifest.json",
     "TIMETABLE_ARTIFACT_ATTRIBUTION.txt",
+    SERVICE_SUMMARY_FILENAME,
 }
 SHADOW_ROOT = Path("/var/lib/bristolbusbot/timetable-shadow")
 LIVE_DATABASE = Path("/var/lib/bristolbusbot/pipeline/timetable.db")
 MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_DATABASE_BYTES = 512 * 1024 * 1024
-MAX_TOTAL_BYTES = MAX_DATABASE_BYTES + 2 * 1024 * 1024
+MAX_TOTAL_BYTES = MAX_DATABASE_BYTES + MAX_SERVICE_SUMMARY_BYTES + 2 * 1024 * 1024
+# The live timetable's summary, kept beside the promotion state so both the
+# overnight check and the swap can read and write it.
+BASELINE_ROOT = Path("/var/lib/bristolbusbot/monitoring")
+LIVE_SUMMARY = "live-timetable-summary.json.gz"
+LIVE_SUMMARY_RECORD = "live-timetable-summary.json"
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MINIMUM_SERVICE_DAYS = 14
 COVERAGE_WARNING_DAYS = 28
@@ -326,6 +337,7 @@ class DeliveryConfig:
     poll_timeout_seconds: int = 45 * 60
     discovery_timeout_seconds: int = 2 * 60
     promotion_state: Path = Path('/var/lib/bristolbusbot/monitoring/timetable-promotion.json')
+    baseline_root: Path = BASELINE_ROOT
 
     @property
     def state_path(self) -> Path:
@@ -384,6 +396,7 @@ def extract_safely(archive: Path, destination: Path) -> None:
         "timetable.db": MAX_DATABASE_BYTES,
         "manifest.json": 1024 * 1024,
         "TIMETABLE_ARTIFACT_ATTRIBUTION.txt": 64 * 1024,
+        SERVICE_SUMMARY_FILENAME: MAX_SERVICE_SUMMARY_BYTES,
     }
     try:
         with zipfile.ZipFile(archive) as package:
@@ -532,14 +545,59 @@ def validate_manifest_identity(manifest: dict, run: dict, artifact: dict,
             raise DeliveryError("invalid_manifest", f"manifest {source} archive set is invalid")
 
 
-def compare_with_current(current: Path, candidate: Path,
-                         candidate_result: dict[str, object], *,
+def database_key(path: Path) -> dict[str, int]:
+    """Identifies one exact live file: a swap or rollback gives a new inode."""
+    details = path.stat()
+    return {"device": details.st_dev, "inode": details.st_ino,
+            "bytes": details.st_size, "modified_ns": details.st_mtime_ns}
+
+
+def save_live_baseline(root: Path, live: Path, validation: dict[str, object],
+                       write_summary: Callable[[Path], None]) -> None:
+    """Record the live timetable's counts and summary for later comparisons."""
+    summary = root / LIVE_SUMMARY
+    temporary = root / f".{LIVE_SUMMARY}.new-{os.getpid()}"
+    write_summary(temporary)
+    os.chmod(temporary, 0o640)
+    os.replace(temporary, summary)
+    atomic_json(root / LIVE_SUMMARY_RECORD, {
+        "database": database_key(live),
+        "summary_sha256": sha256_file(summary),
+        "validation": validation,
+    })
+
+
+def live_baseline(live: Path, root: Path) -> tuple[dict[str, object], dict[str, object]]:
+    """The live timetable's counts and summary: from the record the last swap
+    left, or (first time, or after a rollback) read once from the file."""
+    try:
+        record = json.loads((root / LIVE_SUMMARY_RECORD).read_text(encoding="utf-8"))
+        if (isinstance(record, dict) and record.get("database") == database_key(live)
+                and isinstance(record.get("validation"), dict)
+                and record.get("summary_sha256") == sha256_file(root / LIVE_SUMMARY)):
+            return record["validation"], load_service_summary(root / LIVE_SUMMARY)
+    except (OSError, ValueError, ServiceProfileError):
+        pass
+    try:
+        validation = validate(live, today=date(1970, 1, 1))
+        tables = read_service_tables(live)
+    except (OSError, sqlite3.Error, RuntimeError, ServiceProfileError) as exc:
+        raise DeliveryError("current_timetable_invalid", "current timetable cannot be compared safely") from exc
+    try:
+        save_live_baseline(root, live, validation,
+                           lambda path: write_service_summary(path, tables))
+    except OSError:
+        pass  # still usable now; the next run reads the file again
+    return validation, tables
+
+
+def compare_with_current(current_result: dict[str, object],
+                         current_summary: Mapping[str, object],
+                         candidate_result: dict[str, object],
+                         candidate_summary: Mapping[str, object], *,
                          start_date: date | None = None,
                          provisional_requirements: list[dict] | None = None) -> dict[str, object]:
-    try:
-        current_result = validate(current, today=date(1970, 1, 1))
-    except (OSError, sqlite3.Error, RuntimeError) as exc:
-        raise DeliveryError("current_timetable_invalid", "current timetable cannot be compared safely") from exc
+    """Every acceptance gate, from counts and summaries alone (seconds)."""
     comparisons: dict[str, dict[str, object]] = {}
     for name, ratio in INVENTORY_RATIOS.items():
         new = int(candidate_result[name])
@@ -576,8 +634,8 @@ def compare_with_current(current: Path, candidate: Path,
                 {"metric": name, "current": old, "candidate": new,
                  "minimum": minimum})
     try:
-        semantic = compare_databases(
-            current, candidate, start_date=start_date or bristol_today(),
+        semantic = compare_service_summaries(
+            current_summary, candidate_summary, start_date=start_date or bristol_today(),
             provisional_requirements=provisional_requirements or [])
     except ServiceProfileError as exc:
         raise DeliveryError(exc.code, str(exc), exc.context) from exc
@@ -653,9 +711,11 @@ class TimetableDelivery:
 
     def coverage_urgent(self) -> tuple[bool, str]:
         try:
-            result = validate(self.config.live_database, today=date(1970, 1, 1))
+            # From the live timetable's record (written at the last swap), so
+            # a quiet night doesn't read the database at all.
+            result, _ = live_baseline(self.config.live_database, self.config.baseline_root)
             latest = datetime.strptime(str(result["latest_service"]), "%Y%m%d").date()
-        except (OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
+        except (OSError, sqlite3.Error, RuntimeError, ValueError, KeyError) as exc:
             raise DeliveryError("current_timetable_invalid", "current timetable health cannot be read") from exc
         threshold = self.now().astimezone(BRISTOL_TZ).date() + timedelta(
             days=self.config.coverage_warning_days)
@@ -766,13 +826,18 @@ class TimetableDelivery:
                 raise DeliveryError("invalid_manifest", "parcel manifest is not an object")
             validate_manifest_identity(manifest, run, artifact, self.now())
             try:
+                # The fingerprint proves this is the file GitHub validated
+                # and summarised, so its recorded results are trusted rather
+                # than re-read from the database here.
                 validation = verify_manifest(
                     database=payload / "timetable.db",
                     manifest_path=manifest_path,
                     minimum_service_days=self.config.minimum_service_days,
+                    recheck=False,
                 )
+                candidate_summary = load_service_summary(payload / SERVICE_SUMMARY_FILENAME)
             except (OSError, ValueError, sqlite3.Error, RuntimeError,
-                    json.JSONDecodeError) as exc:
+                    json.JSONDecodeError, ServiceProfileError) as exc:
                 raise DeliveryError(
                     "candidate_validation_failed",
                     "candidate timetable failed independent validation") from exc
@@ -780,10 +845,13 @@ class TimetableDelivery:
             text = attribution.read_text(encoding="utf-8")
             if "Open Government Licence" not in text or len(text) > 64 * 1024:
                 raise DeliveryError("invalid_attribution", "parcel attribution is missing or invalid")
+            current_result, current_summary = live_baseline(
+                self.config.live_database, self.config.baseline_root)
             comparison = compare_with_current(
-                self.config.live_database,
-                payload / "timetable.db",
+                current_result,
+                current_summary,
                 validation,
+                candidate_summary,
                 start_date=self.now().astimezone(BRISTOL_TZ).date(),
                 provisional_requirements=pending_holiday_coverage(json.loads(
                     self.config.promotion_state.read_text(encoding='utf-8')))

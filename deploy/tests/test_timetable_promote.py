@@ -62,8 +62,11 @@ def test_collector_health_allows_the_pi_integrity_check_to_finish(monkeypatch):
     monkeypatch.setattr(subprocess, "run", completed)
 
     assert SystemServices().wait_component("collector") is True
+    # The swap only needs fresh polls; the audit integrity scan (minutes on
+    # the Pi) is left to deploys.
     assert calls[0][0] == [
-        "/usr/local/libexec/bbb-verify-collector-state", "--max-poll-age", "180"]
+        "/usr/local/libexec/bbb-verify-collector-state", "--max-poll-age", "180",
+        "--skip-audit-check"]
     assert len(calls) == 1
 
 
@@ -174,7 +177,8 @@ def promotion_case(tmp_path: Path, *, services=None, fault=None):
         "Open Government Licence v3.0.\n",
         encoding="utf-8",
     )
-    for path in (database, manifest, attribution):
+    summary = candidate / "service_summary.json.gz"
+    for path in (database, manifest, attribution, summary):
         path.chmod(0o600)
     candidate.chmod(0o700)
 
@@ -292,6 +296,28 @@ def test_auto_mode_cannot_consume_an_attended_shadow(tmp_path, monkeypatch):
     assert failure.value.code == "shadow_not_automatic"
     assert live.read_bytes() == before
     assert services.restarts == []
+
+
+def test_the_swap_does_not_re_read_either_database_and_records_the_new_baseline(
+        tmp_path, monkeypatch):
+    import timetable_delivery
+    import timetable_promote
+    promoter, _, candidate, live, _ = promotion_case(tmp_path)
+    # The overnight check leaves the live baseline behind.
+    timetable_delivery.live_baseline(live, promoter.config.monitoring_root)
+    monkeypatch.setattr(timetable_delivery, "read_service_tables",
+                        lambda *a, **k: pytest.fail("a database was read for the comparison"))
+    monkeypatch.setattr(timetable_delivery, "validate",
+                        lambda *a, **k: pytest.fail("a database was re-validated"))
+
+    assert promoter.run(attended(candidate))["outcome"] == "accepted"
+
+    # The next comparison starts from the new live timetable's summary,
+    # copied from the candidate, again without reading the database.
+    result, _ = timetable_delivery.live_baseline(live, promoter.config.monitoring_root)
+    assert result["latest_service"] == "20991231"
+    assert timetable_promote.load_service_summary(
+        promoter.config.monitoring_root / "live-timetable-summary.json.gz")
 
 
 def test_attended_promotion_refuses_a_different_reviewed_identity(tmp_path):
