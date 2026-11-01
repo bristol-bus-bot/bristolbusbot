@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{%- set name = route.operator_short ~ " " ~ route.label %}
+{% block title %}{{ route.label }} bus punctuality{% if route.ends %}: {{ route.ends }}{% endif %} · Bristol Buses LIVE{% endblock %}
+{% block meta_description %}{% if route.usable %}How often the {{ name }} bus runs on time: {{ route.on_time_pct }}% on time over the last 28 days, measured from every bus we can see.{% else %}{{ name }} bus{% if route.ends %}, {{ route.ends }}{% endif %}: not enough readings yet to say how punctual it is.{% endif %}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ public_origin }}{{ request.path }}">{% endblock %}
+{% block og_title %}{{ name }} bus punctuality · Bristol Buses LIVE{% endblock %}
+{% block og_description %}{% if route.usable %}The {{ route.label }} was on time {{ route.in_ten }} in 10 times over the last 28 days.{% else %}Not enough readings yet to say how punctual the {{ route.label }} is.{% endif %}{% endblock %}
+{% block body_class %}profile-page{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ asset_url('css/profile.css') }}"><link rel="stylesheet" href="{{ asset_url('css/route.css') }}">{% endblock %}
+{% block body %}
+<main class="profile-shell">
+    <nav class="profile-nav" aria-label="Back links">
+        <a href="/routes">← All routes</a>
+        <div class="profile-nav-actions">
+            <a href="/">Track buses live</a>
+            <button class="theme-toggle" type="button" data-theme-toggle
+                    aria-label="Night mode" aria-pressed="false"
+                    title="Switch to night mode">
+                <span class="theme-icon" aria-hidden="true"></span>
+            </button>
+        </div>
+    </nav>
+
+    <article class="profile-card">
+        <header class="profile-header route-header">
+            <span class="route-badge" aria-hidden="true">{{ route.label }}</span>
+            <div class="profile-header-copy">
+                <p class="profile-kicker">{{ route.operator_name }}</p>
+                <h1>{{ name }}</h1>
+                {% if route.description %}<p>{{ route.description }}</p>{% endif %}
+            </div>
+        </header>
+
+        {% if route.usable %}
+        <section aria-labelledby="punctuality-title">
+            <h2 id="punctuality-title">How often it runs on time</h2>
+            <p class="route-lead">How often the {{ route.label }} runs on time, measured from every bus we can see: over the last 28 days ({{ period_label }}) it was on time <strong>{{ route.in_ten }} in 10</strong> times{% if route.late_in_ten %}, and late {{ route.late_in_ten }} in 10{% endif %}. The West of England target for 2026 to 2027 is 87%.</p>
+            <div class="route-split" role="img" aria-label="{% for key, label, pct in route.split %}{{ label }} {{ pct|round|int }}%{% if not loop.last %}, {% endif %}{% endfor %}">
+                {% for key, label, pct in route.split %}<span class="is-{{ key }}" style="width:{{ pct }}%"></span>{% endfor %}
+            </div>
+            <ul class="route-split-key">
+                {% for key, label, pct in route.split %}<li><i class="is-{{ key }}" aria-hidden="true"></i>{{ label }} {{ pct|round|int }}%</li>{% endfor %}
+            </ul>
+            <div class="profile-stat-grid">
+                <div><strong>{{ route.on_time_pct }}%</strong><span>on time, from {{ '{:,}'.format(route.readings) }} readings</span></div>
+                {% if route.typical %}<div><strong>{{ route.typical }}</strong><span>typical lateness</span></div>{% endif %}
+                {% if route.journeys %}<div><strong>{{ route.journeys[0] }} of {{ route.journeys[1] }}</strong><span>timetabled journeys seen running</span></div>{% endif %}
+            </div>
+            <p class="profile-note">On time means between 1 minute early and 5 min 59 s late at a timing point, measured within 150 m of it.</p>
+        </section>
+
+        {% if route.hours %}
+        <section aria-labelledby="hours-title">
+            <h2 id="hours-title">Time of day</h2>
+            <p>{% if route.worst_hour %}On weekdays it's worst {{ route.worst_hour }}. {% endif %}Each bar is the share of weekday readings on time in that hour.</p>
+            <div class="route-hours" role="img" aria-label="{% for h in route.hours %}{{ h.label }} {{ h.pct }}% on time{% if not loop.last %}, {% endif %}{% endfor %}">
+                {% for h in route.hours %}<span class="route-hour is-{{ h.level }}" style="height:{{ [h.pct, 3]|max }}%" title="{{ h.label }}: {{ h.pct }}% on time"></span>{% endfor %}
+            </div>
+            <div class="route-hour-labels" aria-hidden="true">
+                {% for h in route.hours %}<span>{% if h.hour % 3 == 0 %}{{ h.label }}{% endif %}</span>{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if route.stretch %}
+        <section aria-labelledby="stretch-title">
+            <h2 id="stretch-title">Where the timetable doesn't fit</h2>
+            {% set s = route.stretch %}
+            {% if s.kind == "tight" %}
+            <p>{{ s.from }} to {{ s.to }}: the timetable allows {{ s.timetable }} min, but buses usually take about {{ s.typical }}{% if s.when %} ({{ s.when }}){% endif %}. Buses fall behind here.</p>
+            {% else %}
+            <p>{{ s.from }} to {{ s.to }}: the timetable allows {{ s.timetable }} min, but buses usually take about {{ s.typical }}{% if s.when %} ({{ s.when }}){% endif %}. Time the timetable could use elsewhere.</p>
+            {% endif %}
+        </section>
+        {% endif %}
+        {% else %}
+        <section>
+            <h2>Not enough readings yet</h2>
+            <p>We haven't seen enough of the {{ route.label }} over the last 28 days to say how punctual it is. This page fills in automatically once we have.</p>
+        </section>
+        {% endif %}
+
+        {% if vehicles %}
+        <section aria-labelledby="vehicles-title">
+            <h2 id="vehicles-title">Buses seen on the {{ route.label }}</h2>
+            <ul class="route-vehicles">
+                {% for v in vehicles %}<li><a href="/vehicles/{{ v.slug }}">{{ v.code }}</a></li>{% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        <section class="route-links">
+            <a href="/">Track buses live on the map</a>
+            <a href="{{ audit_url }}">Full figures and method in the audit ↗</a>
+        </section>
+    </article>
+</main>
+{% endblock %}
+{% block app_scripts %}{% endblock %}

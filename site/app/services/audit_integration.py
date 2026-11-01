@@ -122,6 +122,26 @@ class AuditIntegration:
         return sorted((slug, str(profile.get("through_date") or ""))
                       for slug, profile in self._profiles.items())
 
+    def vehicles_on_route(self, operator: str, route: str,
+                          now: datetime | None = None, limit: int = 30) -> list[dict]:
+        """Profiles that ran one operator's route, busiest first.
+
+        Profiles record plain route numbers, so a number shared between towns
+        ("4 Bath", "4 Bristol") can't be told apart and lists no vehicles."""
+        if self.snapshot(now) is None or " " in route:
+            return []
+        found = []
+        for slug, profile in self._profiles.items():
+            if profile.get("operator") != operator:
+                continue
+            for item in profile.get("routes") or []:
+                if str(item.get("route") or "") == route:
+                    found.append({"slug": slug, "vehicle_ref": profile.get("vehicle_ref"),
+                                  "code": str(profile.get("vehicle_ref") or "").split("-")[-1],
+                                  "readings": int(item.get("readings") or 0)})
+                    break
+        return sorted(found, key=lambda v: -v["readings"])[:limit]
+
     def slug_for_vehicle(self, operator: str | None,
                          vehicle_ref: str | None,
                          now: datetime | None = None) -> str | None:
