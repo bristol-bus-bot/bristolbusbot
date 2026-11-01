@@ -9,7 +9,6 @@ MAX_JOURNEY_AGE = timedelta(hours=2)
 from collector.matching import DAYS, match_fuzzy
 from collector.timeparse import gtfs_seconds, parse_iso_utc
 
-from .stop_names import clean_stop_name
 
 LDN = ZoneInfo("Europe/London")
 
@@ -153,7 +152,7 @@ def journey_schedule(gtfs, journey_code: str, *, trip_id: str = "",
                     break
         stops.append({
             "stop_code": code,
-            "common_name": clean_stop_name(r["stop_name"] or "Unknown", code),
+            "common_name": r["stop_name"] or "Unknown",
             "arrival_time": r["arrival_time"],
             "departure_time": r["departure_time"],
             "latitude": r["stop_lat"],
