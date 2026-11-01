@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -47,6 +48,11 @@ BLURB_MAX_AGE_HOURS = 24 * 8
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
+# One line, https://ntfy.sh/<private topic>: the topic Tom's phone subscribes
+# to. Separate from the home board's topic, so alerts don't appear on it.
+PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
+_SLACK_LINK = re.compile(r"<(https?://[^|>]+)\|([^>]+)>")
+_SLACK_EMOJI = re.compile(r":[a-z_]+:\s*")
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1182,6 +1188,19 @@ def http_ok(url: str) -> bool:
 
 
 def notify(text: str) -> bool:
+    """Send an alert to Slack and, when it matters, to Tom's phone.
+
+    True if either got it, so a Slack outage doesn't repeat the phone alert."""
+    slack = _notify_slack(text)
+    phone = False
+    if needs_tom(text):
+        phone = notify_phone(text, urgent=True)
+    elif ":white_check_mark:" in text:
+        phone = notify_phone(text, urgent=False)
+    return slack or phone
+
+
+def _notify_slack(text: str) -> bool:
     try:
         url = WEBHOOK.read_text(encoding="utf-8").splitlines()[0].strip()
         parts = urlsplit(url)
@@ -1194,6 +1213,48 @@ def notify(text: str) -> bool:
             response.read()
             return 200 <= int(response.status) < 300
     except (OSError, ValueError):
+        return False
+
+
+def needs_tom(text: str) -> bool:
+    """Something is broken, or the message asks Tom to act. "Rejected safely,
+    nothing to do" alerts stay in Slack and the digest and don't buzz."""
+    if ":rotating_light:" in text:
+        return True
+    action = re.search(r"\*You need to do:\*\s*(.*)", text)
+    return bool(action) and not action.group(1).lower().startswith("nothing")
+
+
+def phone_message(text: str) -> tuple[str, str]:
+    """Slack formatting to plain text: (title, body)."""
+    plain = _SLACK_LINK.sub(r"\2 (\1)", text)
+    plain = _SLACK_EMOJI.sub("", plain).replace("*", "")
+    lines = [line.strip() for line in plain.splitlines() if line.strip()]
+    if not lines:
+        return "Bristol Bus Bot", ""
+    return lines[0][:120], "\n".join(lines[1:])[:3500]
+
+
+def notify_phone(text: str, *, urgent: bool) -> bool:
+    """Push one alert to the ntfy topic Tom's phone subscribes to."""
+    try:
+        url = PHONE_TOPIC.read_text(encoding="utf-8").splitlines()[0].strip()
+        parts = urlsplit(url)
+        topic = parts.path.strip("/")
+        if (parts.scheme != "https" or parts.hostname != "ntfy.sh"
+                or not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", topic)):
+            return False
+        title, body = phone_message(text)
+        request = urllib.request.Request(
+            "https://ntfy.sh/", data=json.dumps({
+                "topic": topic, "title": title, "message": body or title,
+                "priority": 4 if urgent else 2,
+                "tags": ["rotating_light" if urgent else "white_check_mark"],
+            }).encode(), headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read()
+            return 200 <= int(response.status) < 300
+    except (OSError, ValueError, IndexError):
         return False
 
 

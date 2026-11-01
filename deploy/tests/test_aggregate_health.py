@@ -1153,3 +1153,67 @@ def test_streak_starts_after_the_latest_routine_skip_not_the_last_full_success(
         tmp_path, monkeypatch, automation, {"active": []})
     aggregate_health.main()
     assert "failing for" not in messages[0]
+
+
+
+def test_only_alerts_that_need_tom_buzz_his_phone():
+    assert aggregate_health.needs_tom(":rotating_light: *Bristol Bus Bot needs attention*")
+    assert aggregate_health.needs_tom(
+        "*Timetable updates have been failing for 3 days.* *You need to do:* Ask Claude to investigate")
+    assert not aggregate_health.needs_tom(
+        ":warning: *A new timetable was rejected safely*\n*You need to do:* Nothing now.")
+    assert not aggregate_health.needs_tom(
+        "*You need to do:* Nothing today. If this repeats tomorrow, ask Claude")
+
+
+def test_phone_alerts_are_plain_text_with_the_link_kept():
+    title, body = aggregate_health.phone_message(
+        ":warning: *A new timetable was rejected safely*\n"
+        "GitHub build: <https://github.com/x/actions/runs/1|run 1>\n"
+        "*You need to do:* Nothing now.")
+    assert title == "A new timetable was rejected safely"
+    assert body == "GitHub build: run 1 (https://github.com/x/actions/runs/1)\nYou need to do: Nothing now."
+
+
+FAKE_HOOK = "https://hooks.slack.com/" + "services/T/B/x"  # scan-secrets: allow (dummy)
+
+
+def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch):
+    webhook = tmp_path / "webhook"
+    webhook.write_text(FAKE_HOOK + "\n")
+    topic = tmp_path / "ntfy"
+    topic.write_text("https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+    monkeypatch.setattr(aggregate_health, "WEBHOOK", webhook)
+    monkeypatch.setattr(aggregate_health, "PHONE_TOPIC", topic)
+    sent = []
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b""
+
+    def urlopen(request, timeout):
+        sent.append((request.full_url, json.loads(request.data)))
+        return Response()
+
+    monkeypatch.setattr(aggregate_health.urllib.request, "urlopen", urlopen)
+    assert aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*\nProblem area: the site.")
+    assert [url for url, _ in sent] == [FAKE_HOOK, "https://ntfy.sh/"]
+    push = sent[1][1]
+    assert push["topic"] == "busbot-alerts-abcdefghijkl" and push["priority"] == 4
+    assert push["title"] == "Bristol Bus Bot needs attention"
+
+    sent.clear()
+    aggregate_health.notify(":warning: *Rejected safely*\n*You need to do:* Nothing now.")
+    assert [url for url, _ in sent] == [FAKE_HOOK]
+
+    sent.clear()
+    aggregate_health.notify(":white_check_mark: *Timetable update recovered*\nAll good.")
+    assert sent[1][1]["priority"] == 2
+
+    # A topic that isn't on ntfy.sh is never used.
+    topic.write_text("https://example.com/busbot-alerts-abcdefghijkl\n")
+    sent.clear()
+    aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*")
+    assert [url for url, _ in sent] == [FAKE_HOOK]
