@@ -32,12 +32,20 @@ from timetable_delivery import (
     SafeRedirectHandler,
     WORKFLOW_PATH,
     TimetableDelivery,
+    LIVE_SUMMARY_RECORD,
     compare_with_current,
     extract_safely,
+    live_baseline,
     read_github_token,
     sha256_file,
 )
 from timetable_manifest import database_summary
+from timetable_service_profile import (
+    SERVICE_SUMMARY_FILENAME,
+    SERVICE_SUMMARY_VERSION,
+    read_service_tables,
+    write_service_summary,
+)
 from timetable_editions import normalize_database
 
 
@@ -52,6 +60,7 @@ def test_oversize_archive_records_safe_diagnostic_context(tmp_path, monkeypatch)
         package.writestr('timetable.db', b'x' * 11)
         package.writestr('manifest.json', '{}')
         package.writestr('TIMETABLE_ARTIFACT_ATTRIBUTION.txt', 'OGL')
+        package.writestr(SERVICE_SUMMARY_FILENAME, b'summary')
     with pytest.raises(DeliveryError) as error:
         extract_safely(archive, tmp_path / 'out')
     assert error.value.safe_context == {
@@ -93,6 +102,8 @@ def run_record(**updates) -> dict:
 def write_manifest(database: Path, destination: Path, **updates) -> None:
     normalize_database(database)
     result = validate(database, minimum_service_days=14)
+    summary = destination.parent / SERVICE_SUMMARY_FILENAME
+    write_service_summary(summary, read_service_tables(database))
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "created_utc": "2026-07-22T09:05:00+00:00",
@@ -112,6 +123,12 @@ def write_manifest(database: Path, destination: Path, **updates) -> None:
             "sha256": sha256_file(database),
         },
         "database": database_summary(database),
+        "service_summary": {
+            "filename": SERVICE_SUMMARY_FILENAME,
+            "version": SERVICE_SUMMARY_VERSION,
+            "bytes": summary.stat().st_size,
+            "sha256": sha256_file(summary),
+        },
         "validation": {
             "validator": VALIDATOR_ID,
             "minimum_service_days": 14,
@@ -209,11 +226,13 @@ def delivery(tmp_path: Path, client: FakeClient) -> TimetableDelivery:
     live = tmp_path / "live" / "timetable.db"
     live.parent.mkdir(parents=True)
     make_timetable(live)
+    (tmp_path / "monitoring").mkdir(exist_ok=True)
     config = DeliveryConfig(
         shadow_root=tmp_path / "shadow",
         live_database=live,
         poll_timeout_seconds=1,
         discovery_timeout_seconds=1,
+        baseline_root=tmp_path / "monitoring",
     )
     return TimetableDelivery(
         config,
@@ -397,11 +416,51 @@ def test_count_collapse_is_a_hard_failure(tmp_path):
 
     with pytest.raises(DeliveryError, match="below safe minimum") as failure:
         compare_with_current(
-            current, candidate,
-            validate(candidate, minimum_service_days=14),
+            validate(current, today=NOW.date()), read_service_tables(current),
+            validate(candidate, minimum_service_days=14), read_service_tables(candidate),
             start_date=NOW.date(),
         )
     assert failure.value.code == "candidate_count_collapse"
+
+
+def test_live_summary_is_read_once_then_reused_until_the_file_changes(tmp_path, monkeypatch):
+    import timetable_delivery
+    live = tmp_path / "timetable.db"
+    make_timetable(live)
+    root = tmp_path / "monitoring"
+    root.mkdir()
+    reads = []
+    original = timetable_delivery.read_service_tables
+    monkeypatch.setattr(timetable_delivery, "read_service_tables",
+                        lambda path, **kw: reads.append(path) or original(path, **kw))
+
+    first = live_baseline(live, root)
+    second = live_baseline(live, root)
+    assert len(reads) == 1 and first == second
+
+    # A swap replaces the file (new inode): read it again, once.
+    replacement = tmp_path / "new.db"
+    make_timetable(replacement)
+    replacement.replace(live)
+    live_baseline(live, root)
+    assert len(reads) == 2
+
+    # A summary that doesn't match its record is never trusted.
+    (root / LIVE_SUMMARY_RECORD).write_text(json.dumps({"database": {}, "validation": {}}))
+    live_baseline(live, root)
+    assert len(reads) == 3
+
+
+def test_the_pi_never_re_reads_the_candidate_database(tmp_path, monkeypatch):
+    import timetable_delivery
+    archive = make_package(tmp_path)
+    runner = delivery(tmp_path, FakeClient(archive))
+    live_baseline(runner.config.live_database, runner.config.baseline_root)
+    monkeypatch.setattr(timetable_delivery, "read_service_tables",
+                        lambda *a, **k: pytest.fail("a database was read for the comparison"))
+    monkeypatch.setattr(timetable_delivery, "validate",
+                        lambda *a, **k: pytest.fail("a database was re-validated"))
+    assert runner.run(RUN_ID)["run_id"] == RUN_ID
 
 
 def test_shadow_root_cannot_contain_or_sit_inside_live_directory(tmp_path):
