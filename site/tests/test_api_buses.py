@@ -111,9 +111,10 @@ def test_eurocoaches_yard_detected():
 
 
 def test_last_stop_uses_shared_yate_name(app, client):
+    """The bus panel and the stop list show the timetable's (built) name."""
     import sqlite3
     with sqlite3.connect(app.config["BBB"].timetable_db) as conn:
-        conn.execute("UPDATE stops SET stop_code='sglmtmg', stop_name='Shopping Centre' WHERE stop_id='S2'")
+        conn.execute("UPDATE stops SET stop_code='sglmtmg', stop_name='Yate Shopping Centre' WHERE stop_id='S2'")
     with sqlite3.connect(app.config["BBB"].live_db) as conn:
         conn.execute("UPDATE vehicles SET stop_code='sglmtmg' WHERE vehicle_ref='FBRI-36205'")
     bus = next(b for b in get_buses(client)["buses"] if b["vehicleRef"] == "FBRI-36205")

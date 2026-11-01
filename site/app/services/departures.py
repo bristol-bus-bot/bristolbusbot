@@ -5,7 +5,6 @@ import math
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from .stop_names import clean_stop_name
 
 LDN = ZoneInfo("Europe/London")
 ETA_MIN, ETA_MAX = -2, 60
@@ -76,7 +75,7 @@ def departures_for_stop(live_conn, gtfs_conn, stop_code: str,
     departures.sort(key=lambda d: d["eta_dt_iso"])
     return {
         "stop_code": stop_code,
-        "stop_name": clean_stop_name(stop["stop_name"] or stop_code, stop_code),
+        "stop_name": stop["stop_name"] or stop_code,
         "departures": departures[:MAX_RESULTS],
         "last_updated": now_local.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
@@ -109,7 +108,7 @@ def _stop_name(gtfs_conn, stop_code: str | None) -> str | None:
         return None
     row = gtfs_conn.execute(
         "SELECT stop_name FROM stops WHERE stop_code = ?", (stop_code,)).fetchone()
-    return clean_stop_name(row["stop_name"], stop_code) if row else None
+    return (row["stop_name"] or "Unknown") if row else None
 
 
 def _db_path(conn) -> str:
