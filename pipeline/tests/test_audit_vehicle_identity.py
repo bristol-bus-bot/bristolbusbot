@@ -159,3 +159,16 @@ def test_default_descriptions_follow_the_active_site_sibling():
     ]
     assert all(path.parent.name == "site"
                for path in identity_audit.DEFAULT_DESCRIPTIONS)
+
+
+SHARED = json.loads(
+    (PIPELINE.parent / "shared" / "fixtures" / "vehicle_identity.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", SHARED["cases"], ids=lambda c: c["why"])
+def test_shared_vehicle_identity(case):
+    """The same examples the bot, the site and the live map run."""
+    found = identity_audit.safe_match(
+        identity_audit.indexes(SHARED["fleet"]), case["operator"], case["vehicle_ref"])
+    expected = case["expected"]
+    assert found == (None if expected is None else SHARED["fleet"][expected])

@@ -1,0 +1,215 @@
+{
+ "_about": "Which fleet record a live vehicle reference resolves to. The bot (bot/src/services/vehicle-identity.ts), the site (site/app/services/fleet.py), the audit check (pipeline/audit_vehicle_identity.py) and, for operator:fleet-code lookups, the live map (site/static/js/vehicle_identity.js) must all give these answers. expected is an index into fleet, or null.",
+ "fleet": [
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "101",
+   "reg": "AA11 AAA"
+  },
+  {
+   "operator": {
+    "id": "OPBB"
+   },
+   "fleet_code": "101",
+   "reg": "BB11 BBB"
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "202",
+   "reg": "AA22 AAA",
+   "withdrawn": true
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "202",
+   "reg": "AA22 AAB"
+  },
+  {
+   "operator": {
+    "id": "OPCC"
+   },
+   "fleet_code": "303",
+   "reg": "CC33 CCC",
+   "withdrawn": true
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "404",
+   "reg": "AA44 AAA"
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "404",
+   "reg": "AA44 AAB"
+  },
+  {
+   "operator": {
+    "id": "OPDD"
+   },
+   "fleet_code": "505",
+   "reg": "DD55 DDD"
+  },
+  {
+   "operator": {
+    "id": "OPEE"
+   },
+   "fleet_code": "606",
+   "reg": "EE66 EEE"
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "77-1",
+   "reg": "AA77 AAA"
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "77-1",
+   "reg": "AA77 AAB"
+  },
+  {
+   "operator": {
+    "id": "OPAA"
+   },
+   "fleet_code": "1",
+   "reg": "AA01 AAA"
+  },
+  {
+   "fleet_code": "808",
+   "reg": "NO08 OPR"
+  }
+ ],
+ "cases": [
+  {
+   "vehicle_ref": "OPAA-101",
+   "operator": "OPAA",
+   "expected": 0,
+   "why": "the operator prefix is stripped from the fleet code"
+  },
+  {
+   "vehicle_ref": "101",
+   "operator": "OPBB",
+   "expected": 1,
+   "why": "a shared fleet code resolves within the operator"
+  },
+  {
+   "vehicle_ref": "101",
+   "operator": "OPZZ",
+   "expected": null,
+   "why": "an unknown operator can't borrow another's bus"
+  },
+  {
+   "vehicle_ref": "101",
+   "operator": "",
+   "expected": null,
+   "why": "with no operator, a code two operators use is ambiguous"
+  },
+  {
+   "vehicle_ref": "AA11_AAA",
+   "operator": "OPAA",
+   "expected": 0,
+   "why": "registrations match however they're punctuated"
+  },
+  {
+   "vehicle_ref": "BB11-BBB",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "another operator's registration doesn't match"
+  },
+  {
+   "vehicle_ref": "OPAA-AA11AAA",
+   "operator": "OPAA",
+   "expected": 0,
+   "why": "an operator-prefixed registration matches"
+  },
+  {
+   "vehicle_ref": "202",
+   "operator": "OPAA",
+   "expected": 3,
+   "why": "a withdrawn bus gives way to the active one with its code"
+  },
+  {
+   "vehicle_ref": "303",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "another operator's withdrawn bus is never borrowed"
+  },
+  {
+   "vehicle_ref": "303",
+   "operator": "OPCC",
+   "expected": 4,
+   "why": "an operator's own withdrawn bus still matches"
+  },
+  {
+   "vehicle_ref": "303",
+   "operator": "",
+   "expected": 4,
+   "why": "with no operator, the one bus carrying the code matches"
+  },
+  {
+   "vehicle_ref": "404",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "two active buses with one code are ambiguous"
+  },
+  {
+   "vehicle_ref": "505",
+   "operator": "",
+   "expected": 7,
+   "why": "with no operator, a code only one operator uses matches"
+  },
+  {
+   "vehicle_ref": "505",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "a code owned by a different operator doesn't match"
+  },
+  {
+   "vehicle_ref": "EE66EEE",
+   "operator": "",
+   "expected": 8,
+   "why": "with no operator, a registration only one bus has matches"
+  },
+  {
+   "vehicle_ref": "77-1",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "an ambiguous full code isn't rescued by its suffix"
+  },
+  {
+   "vehicle_ref": "808",
+   "operator": "OPAA",
+   "expected": 12,
+   "why": "a record with no operator can't contradict the live one"
+  },
+  {
+   "vehicle_ref": "",
+   "operator": "OPAA",
+   "expected": null,
+   "why": "an empty reference matches nothing"
+  }
+ ],
+ "map_operator_codes": {
+  "OPAA:101": 0,
+  "OPBB:101": 1,
+  "OPAA:202": 3,
+  "OPCC:303": 4,
+  "OPAA:404": null,
+  "OPDD:505": 7,
+  "OPAA:77-1": null,
+  "OPAA:1": 11
+ }
+}

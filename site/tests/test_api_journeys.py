@@ -1,6 +1,6 @@
 def test_exact_journey_code(client):
     data = client.get("/api/journey-schedule/VJ_2100?operator=FBRI").get_json()
-    assert data["destination"] == "Hengrove Leisure Pk"
+    assert data["destination"] == "Hengrove Leisure Park"
     assert [s["stop_code"] for s in data["stops"]] == ["0100A", "0100B", "0100C"]
     assert data["stops"][0]["stop_sequence"] == 1
 

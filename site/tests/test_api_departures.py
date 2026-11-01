@@ -17,9 +17,9 @@ def get(client, code):
 
 def test_departure_board_shape_and_eta(client):
     data = get(client, "0100C").get_json()
-    # cleaner corrections are keyed to real stop codes; fixture code 0100C
-    # is not curated, so the raw name passes through.
-    assert data["stop_name"] == "Hengrove Leisure Pk"
+    # fixture code 0100C is not curated, but abbreviations like "Pk" are
+    # corrected wherever they appear (shared/fixtures/stop_names.json).
+    assert data["stop_name"] == "Hengrove Leisure Park"
     lines = {d["vehicleRef"]: d for d in data["departures"]}
     # the mid-route bus: ETA = 22:10 sched + 2 min delay = 22:12 -> 10 min
     d = lines["FBRI-36205"]

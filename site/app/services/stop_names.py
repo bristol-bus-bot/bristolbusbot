@@ -1,4 +1,9 @@
-"""Hand-curated stop-name corrections used by search and departures."""
+"""Hand-curated stop-name corrections used by search and departures.
+
+The bot keeps the same tables in bot/src/utils/stop-name-cleaner.ts. Both are
+checked against shared/fixtures/stop_names.json, so a correction added to one
+fails the other's tests until it is added there too.
+"""
 
 # Maps (exact_stop_code, original_name) -> cleaned_name.
 # Location corrections use reviewed NaPTAN codes rather than guessed prefixes.
@@ -43,7 +48,7 @@ STOP_NAME_EXACT = {
     ('bstjdgp', 'Alverstoke'): 'Alverstoke Green',
     ('bstmdwp', 'Stapleton Baptist Ch'): 'Stapleton Baptist Church',
     ('bstmwga', 'Quadrant West'): 'Hillfields Quadrant West',
-    ('bstpgja', 'Bridge Campus'): 'Bridge Learning Campus Secondary School',
+    ('bstpgja', 'Bridge Campus'): 'Bridge Learning Campus',
     ('bstpgwa', 'Cater Road Rbt'): 'Cater Road Roundabout',
     ('bstpjmd', 'Third Way'): 'Third Way Avonmouth',
     ('bstpjtg', 'Filwood Grn Business Pk'): 'Filwood Green Business Park',
@@ -114,6 +119,16 @@ STOP_NAME_PREFIX = [
     ('sgldg', 'Tesco', 'Thornbury Tesco'),
 ]
 
+# Abbreviated names corrected wherever they appear: (original_name, cleaned_name)
+STOP_NAME_ANY = {
+    'Charlton Rd Jct': 'Charlton Road Junction',
+    'Filwood Grn Business Pk': 'Filwood Green Business Park',
+    'Hengrove Leisure Pk': 'Hengrove Leisure Park',
+    'Stapleton Baptist Ch': 'Stapleton Baptist Church',
+    'Temple Meads Stn': 'Bristol Temple Meads Station',
+}
+
+
 def clean_stop_name(stop_name, stop_code):
     """Clean generic stop names using stop code to add location context."""
     if not stop_code or not stop_name:
@@ -127,4 +142,4 @@ def clean_stop_name(stop_name, stop_code):
     for prefix, original, cleaned in STOP_NAME_PREFIX:
         if code.startswith(prefix) and stop_name == original:
             return cleaned
-    return stop_name
+    return STOP_NAME_ANY.get(stop_name, stop_name)
