@@ -1180,8 +1180,7 @@ FAKE_HOOK = "https://hooks.slack.com/" + "services/T/B/x"  # scan-secrets: allow
 
 def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch):
     webhook = tmp_path / "webhook"
-    webhook.write_text(FAKE_HOOK + "
-")
+    webhook.write_text(FAKE_HOOK + "\n")
     topic = tmp_path / "ntfy"
     topic.write_text("https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
     monkeypatch.setattr(aggregate_health, "WEBHOOK", webhook)
