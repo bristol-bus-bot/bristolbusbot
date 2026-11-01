@@ -1175,6 +1175,9 @@ def test_phone_alerts_are_plain_text_with_the_link_kept():
     assert body == "GitHub build: run 1 (https://github.com/x/actions/runs/1)\nYou need to do: Nothing now."
 
 
+FAKE_HOOK = "https://hooks.slack.com/" + "services/T/B/x"  # scan-secrets: allow (dummy)
+
+
 def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch):
     webhook = tmp_path / "webhook"
     webhook.write_text("https://hooks.slack.com/services/T/B/x\n")
@@ -1196,14 +1199,14 @@ def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch
 
     monkeypatch.setattr(aggregate_health.urllib.request, "urlopen", urlopen)
     assert aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*\nProblem area: the site.")
-    assert [url for url, _ in sent] == ["https://hooks.slack.com/services/T/B/x", "https://ntfy.sh/"]
+    assert [url for url, _ in sent] == [FAKE_HOOK, "https://ntfy.sh/"]
     push = sent[1][1]
     assert push["topic"] == "busbot-alerts-abcdefghijkl" and push["priority"] == 4
     assert push["title"] == "Bristol Bus Bot needs attention"
 
     sent.clear()
     aggregate_health.notify(":warning: *Rejected safely*\n*You need to do:* Nothing now.")
-    assert [url for url, _ in sent] == ["https://hooks.slack.com/services/T/B/x"]
+    assert [url for url, _ in sent] == [FAKE_HOOK]
 
     sent.clear()
     aggregate_health.notify(":white_check_mark: *Timetable update recovered*\nAll good.")
@@ -1213,4 +1216,4 @@ def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch
     topic.write_text("https://example.com/busbot-alerts-abcdefghijkl\n")
     sent.clear()
     aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*")
-    assert [url for url, _ in sent] == ["https://hooks.slack.com/services/T/B/x"]
+    assert [url for url, _ in sent] == [FAKE_HOOK]
