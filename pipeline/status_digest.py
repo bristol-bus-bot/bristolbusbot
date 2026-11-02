@@ -21,6 +21,8 @@ HOME = Path.home()
 LIVE_DB = Path(os.getenv(
     "BBB_LIVE_DB", "/var/lib/bristolbusbot/collector/live.db"))
 WEBHOOK_CONF = HOME / ".config" / "busbot-alerts" / "webhook"
+# Tom's phone (ntfy). Slack is the full update; the phone gets one line.
+PHONE_CONF = HOME / ".config" / "busbot-alerts" / "ntfy"
 BOT_DB = Path(os.getenv(
     "BBB_BOT_DB", "/var/lib/bristolbusbot/bot/app_data.db"))
 SITE_URL = "http://127.0.0.1:5002/healthz"
@@ -47,6 +49,73 @@ def _post(text: str) -> bool:
         headers={"Content-Type": "application/json"})
     urllib.request.urlopen(req, timeout=15).read()
     return True
+
+
+SAFE_UPDATE_AREAS = {
+    "job:timetable-automation": "a new timetable",
+    "job:fleet-automation": "fleet details",
+    "job:locality-automation": "stop locations",
+    "job:blurb-generation": "bus descriptions",
+    "job:editorial-refresh": "the occasions calendar",
+    "job:editorial-fetch": "the occasions calendar",
+    "job:editorial-promote": "the occasions calendar",
+}
+
+
+def phone_summary(snapshot: dict, today: date | None = None) -> tuple[str, str, int]:
+    """(title, one or two lines, ntfy priority) for the daily phone note.
+
+    All fine is quiet; a snag that doesn't need Tom yet makes a normal
+    notification; anything that does is the same as the Slack action line."""
+    warnings, _ = recovery_status(snapshot, today)
+    if warnings:
+        return ("Bus bot: needs you", " ".join(warnings)
+                + " Ask Claude to investigate.", 4)
+    blurbs = _dict(snapshot.get("blurb_generation"))
+    if blurbs.get("status") == "pending_review":
+        buses = int(_dict(blurbs.get("pending_review")).get("buses", 0) or 0)
+        return ("Bus bot: all fine, one thing waiting",
+                f"Descriptions for {buses} bus{'' if buses == 1 else 'es'} are "
+                "waiting for your review when convenient.", 3)
+    issues = [str(issue) for issue in (snapshot.get("issues") or [])
+              if isinstance(snapshot.get("issues"), list)]
+    if issues and all(issue in SAFE_UPDATE_AREAS for issue in issues):
+        areas = sorted({SAFE_UPDATE_AREAS[issue] for issue in issues})
+        return ("Bus bot: a snag, nothing to do yet",
+                f"An update to {' and '.join(areas)} was rejected safely and "
+                "the current version is still in use. The Pi will keep "
+                "retrying.", 3)
+    if snapshot.get("status") == "warning":
+        return ("Bus bot: all fine, a reminder coming up",
+                "Everything is working. Something needs attention soon, such "
+                "as renewing a token or holiday timetables. Details in Slack.", 3)
+    if snapshot.get("status") == "ok" and not issues:
+        return ("Bus bot: all fine",
+                "Buses, the website and the bot are all working. Nothing to do.", 2)
+    return ("Bus bot: a snag, nothing to do yet",
+            "An automatic check isn't happy. The safe version stays in use, "
+            "and you'll get a separate alert if it needs you.", 3)
+
+
+def _post_phone(title: str, message: str, priority: int) -> bool:
+    try:
+        url = PHONE_CONF.read_text(encoding="utf-8").splitlines()[0].strip()
+    except (OSError, IndexError):
+        return False
+    topic = url.removeprefix("https://ntfy.sh/").strip("/")
+    if not url.startswith("https://ntfy.sh/") \
+            or not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", topic):
+        return False
+    request = urllib.request.Request(
+        "https://ntfy.sh/", data=json.dumps({
+            "topic": topic, "title": title, "message": message,
+            "priority": priority, "tags": ["bus"],
+        }).encode(), headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(request, timeout=15).read()
+        return True
+    except OSError:
+        return False
 
 
 def collector_lines() -> list[str]:
@@ -678,6 +747,8 @@ def main() -> None:
     except (OSError, json.JSONDecodeError, ValueError):
         previous = {}
     message = daily_message(snapshot, previous)
+    if _post_phone(*phone_summary(snapshot)):
+        print("daily phone summary sent")
     if _post(message):
         _write_state(snapshot)
         print("daily update posted")
