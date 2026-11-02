@@ -320,3 +320,26 @@ def test_each_bus_is_compared_with_other_buses_at_the_same_route_day_and_hour():
     assert integration._comparison(by_vehicle[("FBRI", "A")]) == {
         "others_on_time_pct": 25.0, "compared_readings": 40}
     assert integration._comparison([5.0, 10]) is None  # too few readings
+
+
+def test_bus_profiles_use_the_town_labels_for_shared_route_numbers(monkeypatch):
+    """A bus on Bath's 4 is listed under "4 Bath", like the rest of the audit."""
+    conn = database()
+    completed = ["20260714", "20260715"]
+    add_completed(conn, completed)
+    for day in completed:
+        for number in range(15):
+            add_observation(conn, day, "FBRI-BATH", "4", number, stop=f"bth{number}")
+            add_observation(conn, day, "FBRI-BRIS", "4", number, stop=f"bst{number}")
+    conn.commit()
+
+    class Split:
+        def route(self, operator, route, trip_id=None, stop_code=None):
+            if route != "4":
+                return route
+            return "4 Bath" if str(stop_code).startswith("bth") else "4 Bristol"
+
+    monkeypatch.setattr(integration.route_split, "for_connection", lambda conn, *a: Split())
+    payload = integration.build_payload(conn, completed[-1])
+    routes = {p["vehicle_ref"]: [r["route"] for r in p["routes"]] for p in payload["profiles"]}
+    assert routes == {"FBRI-BATH": ["4 Bath"], "FBRI-BRIS": ["4 Bristol"]}
