@@ -34,6 +34,8 @@ DAILY_STATE = Path(os.getenv(
     "/var/lib/bristolbusbot/monitoring/daily-digest-state.json"))
 CURRENT_RELEASES = Path(os.getenv(
     "BBB_CURRENT_RELEASES", str(HOME / "bristolbusbot" / "current")))
+DESCRIPTION_HISTORY = Path(os.getenv(
+    "BBB_BLURB_HISTORY", "/var/lib/bristolbusbot/blurb-pending/history"))
 EDITORIAL_CONTEXT = Path(os.getenv(
     "BBB_EDITORIAL_CONTEXT",
     "/var/lib/bristolbusbot-editorial/editorial-context.json"))
@@ -637,6 +639,32 @@ def moving_occasion_lines(today: date | None = None,
             "Ask Claude to add them, checked against a source."]
 
 
+def published_description_lines(today: date | None = None,
+                                history: Path | None = None) -> list[str]:
+    """Mondays: the bus descriptions that went live in the last week, so Tom
+    can spot any to pull. They publish automatically after their checks."""
+    today = today or datetime.now(timezone.utc).date()
+    if today.weekday() != 0:
+        return []
+    lines = []
+    for path in sorted((history or DESCRIPTION_HISTORY).glob("*.approved.json")):
+        try:
+            batch = json.loads(path.read_text(encoding="utf-8"))
+            published = date.fromisoformat(str(batch.get("created_at", ""))[:10])
+        except (OSError, ValueError):
+            continue
+        if not 0 <= (today - published).days <= 7:
+            continue
+        for variant, items in _dict(batch.get("additions")).items():
+            for key, text in _dict(items).items():
+                lines.append(f"{key} ({str(variant).replace('_', ' ')}): {text}")
+    if not lines:
+        return []
+    return [f"*Bus descriptions published this week ({len(lines)})*",
+            *(f"- {line}" for line in lines[:60]),
+            "Ask Claude to pull any you don't like.", ""]
+
+
 def action_line(snapshot: dict, today: date | None = None) -> str:
     if recovery_status(snapshot, today)[0]:
         return '*You need to do:* Ask Claude to investigate the backup or timetable problem above; automatic retries have not fixed it.'
@@ -691,6 +719,7 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         "- Threads and new website ideas are optional and parked, not overdue "
         "core work.",
         "",
+        *published_description_lines(today),
         "*Today's checks*",
         *(f"- {line}" for line in freshness),
         *(f"- {line}" for line in today_lines(snapshot, today)),

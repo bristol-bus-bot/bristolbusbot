@@ -429,3 +429,20 @@ def test_daily_phone_summary_only_goes_to_an_ntfy_topic(tmp_path, monkeypatch):
     assert status_digest._post_phone("Bus bot: all fine", "m", 2)
     assert sent == [{"topic": "busbot-alerts-abcdefghijkl", "title": "Bus bot: all fine",
                      "message": "m", "priority": 2, "tags": ["bus"]}]
+
+
+def test_monday_update_lists_descriptions_published_that_week(tmp_path):
+    history = tmp_path / "history"
+    history.mkdir()
+    (history / "20261101T021500Z-aaaaaaaa.approved.json").write_text(json.dumps({
+        "created_at": "2026-11-01T02:15:00+00:00",
+        "additions": {"in_service": {"FBRI:303": "Known Model. Doing another shift."},
+                      "waiting": {}, "depot": {}}}))
+    (history / "20261001T021500Z-bbbbbbbb.approved.json").write_text(json.dumps({
+        "created_at": "2026-10-01T02:15:00+00:00",
+        "additions": {"in_service": {"FBRI:1": "Old line."}}}))
+    lines = status_digest.published_description_lines(date(2026, 11, 2), history)
+    assert lines[0] == "*Bus descriptions published this week (1)*"
+    assert "- FBRI:303 (in service): Known Model. Doing another shift." in lines
+    assert not any("Old line" in line for line in lines)
+    assert status_digest.published_description_lines(date(2026, 11, 3), history) == []
