@@ -1785,6 +1785,21 @@
 
         }
 
+        // A route page links to /?route=FBRI_72: open that route's view once
+        // its path or a live bus on it has loaded, then tidy the address.
+        function openRouteFromAddress(attempt = 0) {
+            const routeKey = new URLSearchParams(location.search).get('route') || '';
+            if (!/^[A-Z0-9]{2,8}_[A-Za-z0-9]{1,8}$/.test(routeKey)) return;
+            const ready = (routeIndex[routeKey] || []).length
+                || latestBusData.some(bus => window.BBB.isBusOnRoute(bus, routeKey));
+            if (!ready && attempt < 40) {
+                setTimeout(() => openRouteFromAddress(attempt + 1), 500);
+                return;
+            }
+            try { history.replaceState(null, '', location.pathname + location.hash); } catch (_e) { /* ignore */ }
+            if (ready) selectSearchRoute(routeKey);
+        }
+
         // init
         console.log('Bristol Live Buses: initialising...');
         const _initStart = performance.now();
@@ -1798,6 +1813,7 @@
         fetchFleet();
         fetchBusDescriptions();
         fetchBusbotPosts();
+        openRouteFromAddress();
         map.on('zoomend moveend', () => updateStopMarkers(allStops));
         refreshInterval = setInterval(fetchBuses, 15000);
         fetchStopNotices();
