@@ -50,9 +50,9 @@ PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
 # One line, https://ntfy.sh/<private topic>: the topic Tom's phone subscribes
 # to. Separate from the home board's topic, so alerts don't appear on it.
+# Anyone who knows a topic can read it, so the phone only ever gets the state
+# ("needs your attention"); the details stay in Slack.
 PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
-_SLACK_LINK = re.compile(r"<(https?://[^|>]+)\|([^>]+)>")
-_SLACK_EMOJI = re.compile(r":[a-z_]+:\s*")
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1225,16 +1225,6 @@ def needs_tom(text: str) -> bool:
     return bool(action) and not action.group(1).lower().startswith("nothing")
 
 
-def phone_message(text: str) -> tuple[str, str]:
-    """Slack formatting to plain text: (title, body)."""
-    plain = _SLACK_LINK.sub(r"\2 (\1)", text)
-    plain = _SLACK_EMOJI.sub("", plain).replace("*", "")
-    lines = [line.strip() for line in plain.splitlines() if line.strip()]
-    if not lines:
-        return "Bristol Bus Bot", ""
-    return lines[0][:120], "\n".join(lines[1:])[:3500]
-
-
 def notify_phone(text: str, *, urgent: bool) -> bool:
     """Push one alert to the ntfy topic Tom's phone subscribes to."""
     try:
@@ -1244,10 +1234,11 @@ def notify_phone(text: str, *, urgent: bool) -> bool:
         if (parts.scheme != "https" or parts.hostname != "ntfy.sh"
                 or not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", topic)):
             return False
-        title, body = phone_message(text)
+        title = ("Bus bot needs your attention" if urgent
+                 else "Bus bot: back to normal")
         request = urllib.request.Request(
             "https://ntfy.sh/", data=json.dumps({
-                "topic": topic, "title": title, "message": body or title,
+                "topic": topic, "title": title, "message": "Details are in Slack.",
                 "priority": 4 if urgent else 2,
                 "tags": ["rotating_light" if urgent else "white_check_mark"],
             }).encode(), headers={"Content-Type": "application/json"})

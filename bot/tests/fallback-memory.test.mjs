@@ -62,3 +62,26 @@ test('from 4am the early buses at their first stop are preferred; before then no
  assert.equal(selectStory([a],[],()=>0,at('2026-10-22T03:20:00Z')).vehicleRef,'a');     // none at a first stop
  assert.equal(selectStory([a,b],[],()=>0,at('2026-10-22T01:00:00Z')).vehicleRef,'a');   // 02:00 BST: unchanged
 });
+
+import { spokenPlace } from '../dist/services/posting-fallback.js';
+test('fallback posts say where the stop is, not just its name', () => {
+  const data = {
+    a: { street: 'Kellaway Avenue', locality: 'Golden Hill' },
+    b: { street: 'Baldwin Street', locality: 'Bristol City Centre' },
+    c: { street: 'B4509', locality: 'Tortworth' },
+    d: { street: 'Redcliffe Way', locality: 'Temple Meads' },
+    e: { street: 'Lower Bristol Rd', locality: 'Lower Bristol Road' },
+  };
+  assert.equal(spokenPlace({ lastStopName: 'Phoenix Grove', lastStopCode: 'a' }, data), 'Phoenix Grove on Kellaway Avenue in Golden Hill');
+  assert.equal(spokenPlace({ lastStopName: 'Baldwin Street', lastStopCode: 'b' }, data), 'Baldwin Street in Bristol City Centre');
+  assert.equal(spokenPlace({ lastStopName: 'Tortworth Primary School', lastStopCode: 'c' }, data), 'Tortworth Primary School');
+  assert.equal(spokenPlace({ lastStopName: 'Bristol Temple Meads Station', lastStopCode: 'd' }, data), 'Bristol Temple Meads Station on Redcliffe Way');
+  assert.equal(spokenPlace({ lastStopName: 'Riverside Road', lastStopCode: 'e' }, data), 'Riverside Road on Lower Bristol Road');
+  assert.equal(spokenPlace({ lastStopName: 'Unknown Stop', lastStopCode: 'zz' }, data), 'Unknown Stop');
+});
+
+test('one minute is singular', () => {
+  const event = { line: '72', direction: 'outbound', lastStopName: 'Baldwin Street', lastStopCode: 'x',
+                  timestamp: '2026-11-02T08:15:00Z', delayMinutes: -1, eventType: 'early' };
+  assert.match(observationPost(event), /1 minute early/);
+});

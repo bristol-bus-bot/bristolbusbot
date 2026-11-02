@@ -395,22 +395,20 @@ def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
     assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []
 
 
-def test_daily_phone_summary_is_one_plain_line_for_each_state(monkeypatch):
+def test_daily_phone_summary_only_says_the_state(monkeypatch):
     monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: ([], []))
-    title, body, priority = status_digest.phone_summary({"status": "ok", "issues": []})
-    assert (title, priority) == ("Bus bot: all fine", 2)
-    assert "Nothing to do" in body
-
-    title, body, priority = status_digest.phone_summary(
-        {"status": "degraded", "issues": ["job:timetable-automation"]})
-    assert title == "Bus bot: a snag, nothing to do yet" and priority == 3
-    assert "a new timetable was rejected safely" in body
-
+    assert status_digest.phone_summary({"status": "ok", "issues": []}) == (
+        "Bus bot: all fine", "Everything is working.", 2)
+    assert status_digest.phone_summary(
+        {"status": "degraded", "issues": ["job:timetable-automation"]}) == (
+        "Bus bot: a snag, nothing to do yet", "Details are in Slack.", 3)
+    waiting = {"status": "ok", "issues": [],
+               "blurb_generation": {"status": "pending_review", "pending_review": {"buses": 35}}}
+    assert status_digest.phone_summary(waiting) == (
+        "Bus bot: something needs your attention", "Details are in Slack.", 3)
     monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: (
         ["Timetable updates have failed every check for 3 days."], []))
-    title, body, priority = status_digest.phone_summary({"status": "degraded", "issues": []})
-    assert title == "Bus bot: needs you" and priority == 4
-    assert body.endswith("Ask Claude to investigate.")
+    assert status_digest.phone_summary({"status": "degraded", "issues": []})[2] == 4
 
 
 def test_daily_phone_summary_only_goes_to_an_ntfy_topic(tmp_path, monkeypatch):

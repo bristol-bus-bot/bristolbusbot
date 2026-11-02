@@ -40,7 +40,7 @@ export function latestStoryEvents(events: BusEvent[], now = Date.now()): BusEven
 
 export function storyStatus(event: BusEvent): string {
     return event.eventType === 'punctual' ? 'on time'
-        : `${Math.abs(event.delayMinutes)} minutes ${event.eventType === 'early' ? 'early' : 'late'}`;
+        : `${Math.abs(event.delayMinutes)} minute${Math.abs(event.delayMinutes) === 1 ? '' : 's'} ${event.eventType === 'early' ? 'early' : 'late'}`;
 }
 
 export function vehicleDetail(event: BusEvent, recentPosts: string[]): string | null {

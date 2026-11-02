@@ -1166,13 +1166,31 @@ def test_only_alerts_that_need_tom_buzz_his_phone():
         "*You need to do:* Nothing today. If this repeats tomorrow, ask Claude")
 
 
-def test_phone_alerts_are_plain_text_with_the_link_kept():
-    title, body = aggregate_health.phone_message(
-        ":warning: *A new timetable was rejected safely*\n"
-        "GitHub build: <https://github.com/x/actions/runs/1|run 1>\n"
-        "*You need to do:* Nothing now.")
-    assert title == "A new timetable was rejected safely"
-    assert body == "GitHub build: run 1 (https://github.com/x/actions/runs/1)\nYou need to do: Nothing now."
+def test_phone_alerts_never_carry_the_details():
+    """Anyone who knows the topic can read it, so only the state is sent."""
+    sent = []
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b""
+
+    import pytest
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(aggregate_health.urllib.request, "urlopen",
+                            lambda request, timeout: sent.append(json.loads(request.data)) or Response())
+        monkeypatch.setattr(aggregate_health.PHONE_TOPIC.__class__, "read_text",
+                            lambda self, encoding=None: "https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+        aggregate_health.notify_phone(
+            ":rotating_light: *Bristol Bus Bot needs attention*\nGitHub build: <https://github.com/x|run 1>",
+            urgent=True)
+    finally:
+        monkeypatch.undo()
+    assert sent[0]["title"] == "Bus bot needs your attention"
+    assert sent[0]["message"] == "Details are in Slack."
+    assert "github" not in json.dumps(sent).lower()
 
 
 FAKE_HOOK = "https://hooks.slack.com/" + "services/T/B/x"  # scan-secrets: allow (dummy)
@@ -1202,7 +1220,7 @@ def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch
     assert [url for url, _ in sent] == [FAKE_HOOK, "https://ntfy.sh/"]
     push = sent[1][1]
     assert push["topic"] == "busbot-alerts-abcdefghijkl" and push["priority"] == 4
-    assert push["title"] == "Bristol Bus Bot needs attention"
+    assert push["title"] == "Bus bot needs your attention"
 
     sent.clear()
     aggregate_health.notify(":warning: *Rejected safely*\n*You need to do:* Nothing now.")
