@@ -887,6 +887,39 @@ def test_blurb_generation_reports_pending_review_without_an_incident(
     assert issues == []
 
 
+def test_a_batch_approved_by_its_checks_is_publishing_not_waiting_for_tom(
+        tmp_path, monkeypatch):
+    marker = tmp_path / "enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    pending = tmp_path / "pending.json"
+    pending.write_text(json.dumps({
+        "status": "pending_review", "batch_id": "20261102T021500Z-abcdef12",
+        "created_at": "2026-11-02T02:15:00+00:00",
+        "additions": {"in_service": {"OPAA:101": "one"}, "waiting": {}, "depot": {}},
+    }), encoding="utf-8")
+    approval = tmp_path / "approval.json"
+    monkeypatch.setattr(aggregate_health, "BLURB_GENERATION_MARKER", marker)
+    monkeypatch.setattr(aggregate_health, "BLURB_PENDING", pending)
+    monkeypatch.setattr(aggregate_health, "BLURB_APPROVAL", approval)
+    monkeypatch.setattr(aggregate_health, "BLURB_USAGE", tmp_path / "usage.json")
+    monkeypatch.setattr(aggregate_health, "_fleet_job",
+                        lambda name: {"result": "success", "age_hours": 1, "name": name})
+    monkeypatch.setattr(aggregate_health.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    approval.write_text(json.dumps({"batch_id": "20261102T021500Z-abcdef12",
+                                    "approved_at": datetime.now(timezone.utc).isoformat()}))
+    status, issues = aggregate_health.blurb_generation_check()
+    assert status["status"] == "publishing" and issues == []
+
+    # Still unpublished two days after approval: publishing is stuck.
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    approval.write_text(json.dumps({"batch_id": "20261102T021500Z-abcdef12", "approved_at": old}))
+    status, issues = aggregate_health.blurb_generation_check()
+    assert status["failure_code"] == "publish_overdue"
+    assert issues == ["job:blurb-generation"]
+
+
 def test_timetable_notification_state_advances_only_after_successful_send(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"
