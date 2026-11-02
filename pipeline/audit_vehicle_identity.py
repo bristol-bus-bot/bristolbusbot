@@ -131,6 +131,7 @@ def indexes(records: list[dict]) -> dict:
     registrations_scoped: dict[tuple[str, str], dict] = {}
     legacy_codes: dict[str, dict] = {}
     scoped_groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    code_groups: dict[str, list[dict]] = defaultdict(list)
     registration_groups: dict[str, list[dict]] = defaultdict(list)
     active_code_operators: dict[str, set[str]] = defaultdict(set)
 
@@ -143,6 +144,7 @@ def indexes(records: list[dict]) -> dict:
             if not record.get("withdrawn"):
                 active_code_operators[code].add(operator)
         if code:
+            code_groups[code].append(record)
             # Deliberately reproduce the site's historical last-record-wins
             # bare-code index so the audit measures the real failure mode.
             legacy_codes[code] = record
@@ -157,6 +159,7 @@ def indexes(records: list[dict]) -> dict:
         "registrations_scoped": registrations_scoped,
         "legacy_codes": legacy_codes,
         "scoped_groups": scoped_groups,
+        "code_groups": code_groups,
         "registration_groups": registration_groups,
         "active_code_operators": active_code_operators,
     }
@@ -175,27 +178,40 @@ def preferred_scoped_record(records: list[dict]) -> dict | None:
     return None
 
 
+def preferred_registration_record(records: list[dict]) -> dict | None:
+    """A registration with no operator must name one operator's one fleet code."""
+    active = [record for record in records if not record.get("withdrawn")]
+    candidates = active or records
+    identities = {(operator_id(record), fleet_code(record)) for record in candidates}
+    return candidates[-1] if len(identities) == 1 else None
+
+
 def safe_match(index: dict, operator: str, vehicle_ref: str) -> dict | None:
-    for value in possible_fleet_codes(vehicle_ref):
+    """The live rule, shared with the bot and the site: all three run
+    shared/fixtures/vehicle_identity.json."""
+    operator = str(operator or "").strip().upper()
+    codes = possible_fleet_codes(vehicle_ref)
+    for value in codes:
         registration = normalise_registration(value)
-        direct = index["registrations_scoped"].get((operator, registration))
+        direct = (index["registrations_scoped"].get((operator, registration)) if operator
+                  else preferred_registration_record(index["registration_groups"].get(registration, [])))
         if direct:
             return direct
-    for code in possible_fleet_codes(vehicle_ref):
-        record = preferred_scoped_record(
-            index["scoped_groups"].get((operator, code), []))
-        if record:
-            return record
-    # A bare-code fallback is safe only when exactly one active operator owns
-    # that code. This preserves compatibility without cross-wiring collisions.
-    for code in possible_fleet_codes(vehicle_ref):
+    # The first code the operator has decides, even when it's ambiguous: an
+    # ambiguous "77-1" mustn't be rescued by another bus numbered "1".
+    for code in codes:
+        if operator and (operator, code) in index["scoped_groups"]:
+            return preferred_scoped_record(index["scoped_groups"][(operator, code)])
+    # A bare-code fallback is safe only when it can't cross operators: one
+    # active owner at most, and never another operator's bus (a record with
+    # no operator at all is fine).
+    for code in codes:
+        record = preferred_scoped_record(index["code_groups"].get(code, []))
         owners = index["active_code_operators"].get(code, set())
-        if len(owners) == 1:
-            owner = next(iter(owners))
-            if operator and owner != operator:
-                continue
-            return preferred_scoped_record(
-                index["scoped_groups"].get((owner, code), []))
+        if record and len(owners) <= 1 and (
+                not operator or operator in owners
+                or (not owners and not operator_id(record))):
+            return record
     return None
 
 

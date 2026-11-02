@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Bus routes and their punctuality · Bristol Buses LIVE{% endblock %}
+{% block meta_description %}Every bus route in Bristol and the West of England, with how often each one runs on time over the last 28 days.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ public_origin }}/routes">{% endblock %}
+{% block og_title %}Bus routes and their punctuality · Bristol Buses LIVE{% endblock %}
+{% block og_description %}How often every bus route in Bristol and the West of England runs on time.{% endblock %}
+{% block body_class %}profile-page{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ asset_url('css/profile.css') }}"><link rel="stylesheet" href="{{ asset_url('css/route.css') }}">{% endblock %}
+{% block body %}
+<main class="profile-shell">
+    <nav class="profile-nav" aria-label="Back links">
+        <a href="/">← Track buses live</a>
+        <div class="profile-nav-actions">
+            <button class="theme-toggle" type="button" data-theme-toggle
+                    aria-label="Night mode" aria-pressed="false"
+                    title="Switch to night mode">
+                <span class="theme-icon" aria-hidden="true"></span>
+            </button>
+        </div>
+    </nav>
+
+    <article class="profile-card">
+        <header class="profile-header">
+            <div class="profile-header-copy">
+                <p class="profile-kicker">Bristol Buses LIVE</p>
+                <h1>Bus routes</h1>
+                <p>How often each route runs on time, over the last 28 days.</p>
+            </div>
+        </header>
+
+        {% for group in groups %}
+        <section aria-labelledby="op-{{ group.operator }}">
+            <h2 id="op-{{ group.operator }}">{{ group.name }}</h2>
+            <ul class="route-index">
+                {% for r in group.routes %}
+                <li><a href="/routes/{{ r.operator_slug }}/{{ r.route_slug }}">
+                    <span class="route-badge is-small">{{ r.label }}</span>
+                    <span class="route-index-text">{% if r.row.description %}{{ r.row.description.split(', via ')[0] }}{% endif %}</span>
+                    <span class="route-index-pct">{% if r.usable %}{{ r.row.on_time_pct|round|int }}%{% else %}few readings{% endif %}</span>
+                </a></li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% else %}
+        <section><p>Route figures aren't available right now.</p></section>
+        {% endfor %}
+    </article>
+</main>
+{% endblock %}
+{% block app_scripts %}{% endblock %}

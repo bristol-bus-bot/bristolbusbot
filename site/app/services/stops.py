@@ -5,7 +5,6 @@ import math
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from .stop_names import clean_stop_name
 
 LDN = ZoneInfo("Europe/London")
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -27,7 +26,7 @@ def all_stops(gtfs_conn) -> list[dict]:
         BBOX).fetchall()
     return [{
         "stop_code": r["stop_code"],
-        "common_name": clean_stop_name(r["stop_name"], r["stop_code"] or ""),
+        "common_name": r["stop_name"] or "Unknown",
         "latitude": r["stop_lat"],
         "longitude": r["stop_lon"],
     } for r in rows]
@@ -99,7 +98,7 @@ def scheduled_departures(gtfs_conn, stop_code: str,
             })
     return {
         "stop_code": stop_code,
-        "stop_name": clean_stop_name(stop["stop_name"] or stop_code, stop_code),
+        "stop_name": stop["stop_name"] or stop_code,
         "scheduled_departures": departures,
         "last_updated": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }

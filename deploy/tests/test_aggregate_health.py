@@ -887,6 +887,39 @@ def test_blurb_generation_reports_pending_review_without_an_incident(
     assert issues == []
 
 
+def test_a_batch_approved_by_its_checks_is_publishing_not_waiting_for_tom(
+        tmp_path, monkeypatch):
+    marker = tmp_path / "enabled"
+    marker.write_text("enabled=now\n", encoding="utf-8")
+    pending = tmp_path / "pending.json"
+    pending.write_text(json.dumps({
+        "status": "pending_review", "batch_id": "20261102T021500Z-abcdef12",
+        "created_at": "2026-11-02T02:15:00+00:00",
+        "additions": {"in_service": {"OPAA:101": "one"}, "waiting": {}, "depot": {}},
+    }), encoding="utf-8")
+    approval = tmp_path / "approval.json"
+    monkeypatch.setattr(aggregate_health, "BLURB_GENERATION_MARKER", marker)
+    monkeypatch.setattr(aggregate_health, "BLURB_PENDING", pending)
+    monkeypatch.setattr(aggregate_health, "BLURB_APPROVAL", approval)
+    monkeypatch.setattr(aggregate_health, "BLURB_USAGE", tmp_path / "usage.json")
+    monkeypatch.setattr(aggregate_health, "_fleet_job",
+                        lambda name: {"result": "success", "age_hours": 1, "name": name})
+    monkeypatch.setattr(aggregate_health.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(returncode=0))
+
+    approval.write_text(json.dumps({"batch_id": "20261102T021500Z-abcdef12",
+                                    "approved_at": datetime.now(timezone.utc).isoformat()}))
+    status, issues = aggregate_health.blurb_generation_check()
+    assert status["status"] == "publishing" and issues == []
+
+    # Still unpublished two days after approval: publishing is stuck.
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    approval.write_text(json.dumps({"batch_id": "20261102T021500Z-abcdef12", "approved_at": old}))
+    status, issues = aggregate_health.blurb_generation_check()
+    assert status["failure_code"] == "publish_overdue"
+    assert issues == ["job:blurb-generation"]
+
+
 def test_timetable_notification_state_advances_only_after_successful_send(
         tmp_path, monkeypatch):
     state = tmp_path / "monitoring"
@@ -1153,3 +1186,85 @@ def test_streak_starts_after_the_latest_routine_skip_not_the_last_full_success(
         tmp_path, monkeypatch, automation, {"active": []})
     aggregate_health.main()
     assert "failing for" not in messages[0]
+
+
+
+def test_only_alerts_that_need_tom_buzz_his_phone():
+    assert aggregate_health.needs_tom(":rotating_light: *Bristol Bus Bot needs attention*")
+    assert aggregate_health.needs_tom(
+        "*Timetable updates have been failing for 3 days.* *You need to do:* Ask Claude to investigate")
+    assert not aggregate_health.needs_tom(
+        ":warning: *A new timetable was rejected safely*\n*You need to do:* Nothing now.")
+    assert not aggregate_health.needs_tom(
+        "*You need to do:* Nothing today. If this repeats tomorrow, ask Claude")
+
+
+def test_phone_alerts_never_carry_the_details():
+    """Anyone who knows the topic can read it, so only the state is sent."""
+    sent = []
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b""
+
+    import pytest
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(aggregate_health.urllib.request, "urlopen",
+                            lambda request, timeout: sent.append(json.loads(request.data)) or Response())
+        monkeypatch.setattr(aggregate_health.PHONE_TOPIC.__class__, "read_text",
+                            lambda self, encoding=None: "https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+        aggregate_health.notify_phone(
+            ":rotating_light: *Bristol Bus Bot needs attention*\nGitHub build: <https://github.com/x|run 1>",
+            urgent=True)
+    finally:
+        monkeypatch.undo()
+    assert sent[0]["title"] == "Bus bot needs your attention"
+    assert sent[0]["message"] == "Details are in Slack."
+    assert "github" not in json.dumps(sent).lower()
+
+
+FAKE_HOOK = "https://hooks.slack.com/" + "services/T/B/x"  # scan-secrets: allow (dummy)
+
+
+def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch):
+    webhook = tmp_path / "webhook"
+    webhook.write_text(FAKE_HOOK + "\n")
+    topic = tmp_path / "ntfy"
+    topic.write_text("https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+    monkeypatch.setattr(aggregate_health, "WEBHOOK", webhook)
+    monkeypatch.setattr(aggregate_health, "PHONE_TOPIC", topic)
+    sent = []
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b""
+
+    def urlopen(request, timeout):
+        sent.append((request.full_url, json.loads(request.data)))
+        return Response()
+
+    monkeypatch.setattr(aggregate_health.urllib.request, "urlopen", urlopen)
+    assert aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*\nProblem area: the site.")
+    assert [url for url, _ in sent] == [FAKE_HOOK, "https://ntfy.sh/"]
+    push = sent[1][1]
+    assert push["topic"] == "busbot-alerts-abcdefghijkl" and push["priority"] == 4
+    assert push["title"] == "Bus bot needs your attention"
+
+    sent.clear()
+    aggregate_health.notify(":warning: *Rejected safely*\n*You need to do:* Nothing now.")
+    assert [url for url, _ in sent] == [FAKE_HOOK]
+
+    sent.clear()
+    aggregate_health.notify(":white_check_mark: *Timetable update recovered*\nAll good.")
+    assert sent[1][1]["priority"] == 2
+
+    # A topic that isn't on ntfy.sh is never used.
+    topic.write_text("https://example.com/busbot-alerts-abcdefghijkl\n")
+    sent.clear()
+    aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*")
+    assert [url for url, _ in sent] == [FAKE_HOOK]

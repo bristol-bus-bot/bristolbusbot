@@ -109,7 +109,7 @@
                 <li>
                     <details{% if loop.first %} open{% endif %}>
                         <summary>
-                            <strong class="profile-route-badge">{{ route.route }}</strong>
+                            {% if route.page %}<a class="profile-route-badge" href="{{ route.page }}" title="Route {{ route.route }}: all buses">{{ route.route }}</a>{% else %}<strong class="profile-route-badge">{{ route.route }}</strong>{% endif %}
                             <span class="profile-route-result">{% if route.on_time_pct is defined %}{{ route.on_time_pct }}% on time · {% endif %}{% if route.comparison_text %}{{ route.comparison_text }} · {% endif %}{{ route.observed_days }} day{% if route.observed_days != 1 %}s{% endif %} · {{ route.readings }} readings</span>
                             {% if route.delay_plot %}
                             <span class="profile-delay-chart is-compact" role="img"

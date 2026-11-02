@@ -61,6 +61,8 @@ def create_app(config: Config | None = None) -> Flask:
     from .services.audit_integration import AuditIntegration
     from .services.route_hours import RouteHours
     app.extensions["bbb_route_hours"] = RouteHours(cfg.audit_hourly_dir)
+    from .services.route_pages import RoutePages
+    app.extensions["bbb_route_pages"] = RoutePages(cfg.audit_site_dir)
     app.extensions["bbb_audit_integration"] = AuditIntegration(
         cfg.audit_integration_json, cfg.audit_max_age_seconds)
 

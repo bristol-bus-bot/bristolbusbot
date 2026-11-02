@@ -1,0 +1,793 @@
+{
+ "_about": "Corrections applied once, when the timetable is built (pipeline/prepare_stop_names.py). The timetable's stop_name holds the result and source_stop_name the original, so the bot, the site, the live map and the audit all show the same name. Rules are tried in order: exact (stop code and name), prefix (code prefix and name, longer prefixes first), any (name anywhere), then words (whole-word abbreviations).",
+ "exact": [
+  [
+   "bstagpa",
+   "The Roman Villa",
+   "Kingsweston Roman Villa"
+  ],
+  [
+   "bstagpd",
+   "The Roman Villa",
+   "Kingsweston Roman Villa"
+  ],
+  [
+   "bstajdt",
+   "Woodleaze",
+   "Woodleaze in Sea Mills"
+  ],
+  [
+   "bstajmj",
+   "Riverleaze",
+   "Bristol Manor Farm Football Club"
+  ],
+  [
+   "bstdgjg",
+   "Students Union",
+   "UoB Students Union"
+  ],
+  [
+   "bstdgpt",
+   "Students Union",
+   "UoB Students Union"
+  ],
+  [
+   "bstdtmw",
+   "Whiteleaze",
+   "Whiteleaze - Southmead Road"
+  ],
+  [
+   "bstdwag",
+   "Charlton Rd Jct",
+   "Charlton Road Junction"
+  ],
+  [
+   "bstgpmt",
+   "Hengrove Leisure Pk",
+   "Hengrove Leisure Park"
+  ],
+  [
+   "bstgpwt",
+   "Hengrove Leisure Pk",
+   "Hengrove Leisure Park"
+  ],
+  [
+   "bstjdgp",
+   "Alverstoke",
+   "Alverstoke Green"
+  ],
+  [
+   "bstmdwp",
+   "Stapleton Baptist Ch",
+   "Stapleton Baptist Church"
+  ],
+  [
+   "bstmwga",
+   "Quadrant West",
+   "Hillfields Quadrant West"
+  ],
+  [
+   "bstpgdw",
+   "Skills Academy",
+   "South Bristol Skills Academy"
+  ],
+  [
+   "bstpgja",
+   "Bridge Campus",
+   "Bridge Learning Campus"
+  ],
+  [
+   "bstpgmj",
+   "Transport Hub",
+   "Bristol University North Village Transport Hub"
+  ],
+  [
+   "bstpgmp",
+   "Transport Hub",
+   "Bristol University North Village Transport Hub"
+  ],
+  [
+   "bstpgwa",
+   "Cater Road Rbt",
+   "Cater Road Roundabout"
+  ],
+  [
+   "bstpjmd",
+   "Third Way",
+   "Third Way Avonmouth"
+  ],
+  [
+   "bstpjtg",
+   "Filwood Grn Business Pk",
+   "Filwood Green Business Park"
+  ],
+  [
+   "bstpmwt",
+   "Portway P&R",
+   "Portway Park & Ride"
+  ],
+  [
+   "bstptdw",
+   "Sainsbury's",
+   "Arno's Vale Sainsbury's"
+  ],
+  [
+   "bthadgp",
+   "Post Office",
+   "Compton Martin Post Office"
+  ],
+  [
+   "bthadgt",
+   "Post Office",
+   "Compton Martin Post Office"
+  ],
+  [
+   "bthadtw",
+   "Post Office",
+   "Chew Magna Post Office"
+  ],
+  [
+   "bthadwa",
+   "Post Office",
+   "Chew Magna Post Office"
+  ],
+  [
+   "bthagat",
+   "Post Office",
+   "Bishop Sutton Post Office"
+  ],
+  [
+   "bthagaw",
+   "Post Office",
+   "Bishop Sutton Post Office"
+  ],
+  [
+   "bthajaj",
+   "Hillcrest",
+   "Hillcrest Pensford"
+  ],
+  [
+   "bthamda",
+   "Methodist Church",
+   "High Littleton Methodist Church"
+  ],
+  [
+   "bthamtd",
+   "War Memorial",
+   "Paulton War Memorial"
+  ],
+  [
+   "bthawjm",
+   "Recreation Ground",
+   "Timsbury Recreation Ground"
+  ],
+  [
+   "bthawjt",
+   "Recreation Ground",
+   "Timsbury Recreation Ground"
+  ],
+  [
+   "bthawmt",
+   "Two Headed Man",
+   "Keynsham Motors"
+  ],
+  [
+   "bthdatw",
+   "Village Hall",
+   "Haydon Village Hall"
+  ],
+  [
+   "bthdawg",
+   "Village Hall",
+   "Haydon Village Hall"
+  ],
+  [
+   "bthdjtp",
+   "Newbridge P&R",
+   "Newbridge Park & Ride"
+  ],
+  [
+   "bthdmpw",
+   "Methodist Church",
+   "The Hollow Methodist Church"
+  ],
+  [
+   "bthjatw",
+   "Post Office",
+   "Odd Down Post Office"
+  ],
+  [
+   "bthjdwg",
+   "Sainsbury's",
+   "Odd Down Sainsbury's"
+  ],
+  [
+   "bthjdwg",
+   "Sainsburys",
+   "Odd Down Sainsbury's"
+  ],
+  [
+   "bthmdmt",
+   "Methodist Church",
+   "Bathampton Methodist Church"
+  ],
+  [
+   "bthmdmw",
+   "Methodist Church",
+   "Bathampton Methodist Church"
+  ],
+  [
+   "bthmjmp",
+   "Village Hall",
+   "Freshford Village Hall"
+  ],
+  [
+   "bthmjmt",
+   "Village Hall",
+   "Freshford Village Hall"
+  ],
+  [
+   "bthmwjt",
+   "Sainsbury's",
+   "Odd Down Sainsbury's"
+  ],
+  [
+   "bthmwjt",
+   "Sainsburys",
+   "Odd Down Sainsbury's"
+  ],
+  [
+   "bthpamj",
+   "Post Office",
+   "Keynsham Post Office"
+  ],
+  [
+   "bthpdap",
+   "Tesco",
+   "Old Mills Tesco"
+  ],
+  [
+   "bthpdat",
+   "Tesco",
+   "Old Mills Tesco"
+  ],
+  [
+   "sgladaj",
+   "Post Office",
+   "Severn Beach Post Office"
+  ],
+  [
+   "sgladam",
+   "Post Office",
+   "Severn Beach Post Office"
+  ],
+  [
+   "sglagdg",
+   "Rugby Club",
+   "Clifton Rugby Club"
+  ],
+  [
+   "sglagdj",
+   "Rugby Club",
+   "Clifton Rugby Club"
+  ],
+  [
+   "sglagwd",
+   "Bus Station",
+   "Cribbs Causeway Bus Station"
+  ],
+  [
+   "sglajtp",
+   "The Green",
+   "The Green, Olveston"
+  ],
+  [
+   "sglajwg",
+   "The Green",
+   "The Green, Olveston"
+  ],
+  [
+   "sglatjp",
+   "Sainsbury's",
+   "Stoke Gifford Sainsbury's"
+  ],
+  [
+   "sglatjp",
+   "Sainsburys",
+   "Stoke Gifford Sainsbury's"
+  ],
+  [
+   "sgldgap",
+   "Leisure Centre",
+   "Thornbury Leisure Centre"
+  ],
+  [
+   "sgldgat",
+   "Leisure Centre",
+   "Thornbury Leisure Centre"
+  ],
+  [
+   "sgldjgm",
+   "Health Centre",
+   "Thornbury Health Centre"
+  ],
+  [
+   "sgldjgw",
+   "Health Centre",
+   "Thornbury Health Centre"
+  ],
+  [
+   "sglgwgp",
+   "Sainsbury's",
+   "Emersons Green Sainsbury's"
+  ],
+  [
+   "sglmgtp",
+   "War Memorial",
+   "Westerleigh War Memorial"
+  ],
+  [
+   "sglmgwj",
+   "War Memorial",
+   "Westerleigh War Memorial"
+  ],
+  [
+   "sglmtap",
+   "Morrisons",
+   "Yate Morrisons"
+  ],
+  [
+   "sglmtma",
+   "Shopping Centre",
+   "Yate Shopping Centre"
+  ],
+  [
+   "sglmtmd",
+   "Shopping Centre",
+   "Yate Shopping Centre"
+  ],
+  [
+   "sglmtmg",
+   "Shopping Centre",
+   "Yate Shopping Centre"
+  ],
+  [
+   "sglmwma",
+   "The Clock",
+   "Chipping Sodbury Clock Tower"
+  ],
+  [
+   "sglmwtg",
+   "The Boot",
+   "The Boot Inn"
+  ],
+  [
+   "sglpapj",
+   "Social Club",
+   "Horton Social Club"
+  ],
+  [
+   "sglpapm",
+   "Social Club",
+   "Horton Social Club"
+  ],
+  [
+   "sglpata",
+   "Post Office",
+   "Horton Post Office"
+  ],
+  [
+   "sglpatd",
+   "Post Office",
+   "Horton Post Office"
+  ],
+  [
+   "sglpgpg",
+   "Post Box",
+   "Badminton Post Box"
+  ],
+  [
+   "sglpgpj",
+   "Post Box",
+   "Badminton Post Box"
+  ],
+  [
+   "sglpmpg",
+   "Morrisons",
+   "Yate Morrisons"
+  ],
+  [
+   "sglptwt",
+   "Park & Ride (B)",
+   "Yate Park & Ride (B)"
+  ],
+  [
+   "sglpwdj",
+   "Shopping Centre",
+   "Yate Shopping Centre"
+  ],
+  [
+   "sglpwdm",
+   "Shopping Centre",
+   "Yate Shopping Centre"
+  ],
+  [
+   "sglpwgt",
+   "Park & Ride (A)",
+   "Yate Park & Ride (A)"
+  ],
+  [
+   "sglpwjw",
+   "The Square",
+   "The Square, Abbey Wood"
+  ],
+  [
+   "sglpwma",
+   "The Square",
+   "The Square, Abbey Wood"
+  ],
+  [
+   "sgltada",
+   "Park & Ride (C)",
+   "Yate Park & Ride (C)"
+  ],
+  [
+   "sgltadg",
+   "Amazon",
+   "Amazon Distribution Centre BRS1"
+  ],
+  [
+   "wsmadwg",
+   "School",
+   "Uphill School"
+  ],
+  [
+   "wsmagag",
+   "School",
+   "Uphill School"
+  ],
+  [
+   "wsmdamg",
+   "Primary School",
+   "Hutton Primary School"
+  ],
+  [
+   "wsmdapj",
+   "Health Centre",
+   "Worle Health Centre"
+  ],
+  [
+   "wsmdapt",
+   "Health Centre",
+   "Worle Health Centre"
+  ],
+  [
+   "wsmdjda",
+   "The Green",
+   "The Green, Locking"
+  ],
+  [
+   "wsmdjdt",
+   "Health Centre",
+   "Locking Castle Health Centre"
+  ],
+  [
+   "wsmdpmg",
+   "Tesco",
+   "Clevedon Tesco"
+  ],
+  [
+   "wsmdpmp",
+   "Tesco",
+   "Clevedon Tesco"
+  ],
+  [
+   "wsmdwgw",
+   "Church",
+   "Sandford Church"
+  ],
+  [
+   "wsmdwja",
+   "Church",
+   "Sandford Church"
+  ],
+  [
+   "wsmdwmj",
+   "Playing Fields",
+   "Winscombe Playing Fields"
+  ],
+  [
+   "wsmdwmp",
+   "School",
+   "Sandford School"
+  ],
+  [
+   "wsmdwmw",
+   "Playing Fields",
+   "Winscombe Playing Fields"
+  ],
+  [
+   "wsmdwpa",
+   "School",
+   "Sandford School"
+  ],
+  [
+   "wsmdwpg",
+   "Village Hall",
+   "Walton-in-Gordano Village Hall"
+  ],
+  [
+   "wsmgapj",
+   "Tesco",
+   "Congresbury Tesco"
+  ],
+  [
+   "wsmgapm",
+   "Tesco",
+   "Congresbury Tesco"
+  ],
+  [
+   "wsmgdmt",
+   "School",
+   "Tickenham School"
+  ],
+  [
+   "wsmgdpm",
+   "School",
+   "Tickenham School"
+  ],
+  [
+   "wsmgdtg",
+   "Village Hall",
+   "Tickenham Village Hall"
+  ],
+  [
+   "wsmgdwm",
+   "Village Hall",
+   "Tickenham Village Hall"
+  ],
+  [
+   "wsmgwgd",
+   "Crossroads",
+   "Backwell Crossroads"
+  ],
+  [
+   "wsmgwgm",
+   "Crossroads",
+   "Backwell Crossroads"
+  ],
+  [
+   "wsmgwgp",
+   "Crossroads",
+   "Backwell Crossroads"
+  ],
+  [
+   "wsmgwjd",
+   "Leisure Centre",
+   "Backwell Leisure Centre"
+  ],
+  [
+   "wsmgwjg",
+   "Leisure Centre",
+   "Backwell Leisure Centre"
+  ],
+  [
+   "wsmgwpd",
+   "Telephone Box",
+   "Brockley Telephone Box"
+  ],
+  [
+   "wsmjdgd",
+   "Post Office",
+   "Felton Post Office"
+  ],
+  [
+   "wsmjdgm",
+   "Post Office",
+   "Felton Post Office"
+  ],
+  [
+   "wsmjdta",
+   "War Memorial",
+   "Barrow Gurney War Memorial"
+  ],
+  [
+   "wsmjdtd",
+   "War Memorial",
+   "Barrow Gurney War Memorial"
+  ],
+  [
+   "wsmjwgj",
+   "Dental Practice",
+   "Portishead Dental Practice"
+  ],
+  [
+   "wsmjwgp",
+   "Marina Healthcare Centre",
+   "Portishead Marina Healthcare Centre"
+  ],
+  [
+   "wsmpawp",
+   "Sainsbury's",
+   "Portishead Sainsbury's"
+  ],
+  [
+   "wsmpawp",
+   "Sainsburys",
+   "Portishead Sainsbury's"
+  ],
+  [
+   "wsmpdpd",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdpg",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdpj",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdpm",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdpw",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdta",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdtg",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdtj",
+   "Interchange",
+   "Weston-super-Mare Interchange"
+  ],
+  [
+   "wsmpdtw",
+   "Airport Bus Station",
+   "Bristol Airport Bus Station"
+  ],
+  [
+   "wsmpgwm",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpgwp",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpgwt",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjad",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjag",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjaj",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjam",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjap",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjat",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ],
+  [
+   "wsmpjaw",
+   "Public Transport Interchange",
+   "Bristol Airport Interchange"
+  ]
+ ],
+ "prefix": [
+  [
+   "bstg",
+   "Bus Station",
+   "Bristol Bus Station"
+  ],
+  [
+   "bstj",
+   "Temple Meads Stn",
+   "Bristol Temple Meads Station"
+  ],
+  [
+   "bstgw",
+   "Temple Meads Stn",
+   "Bristol Temple Meads Station"
+  ],
+  [
+   "bthm",
+   "Bus Station",
+   "Bath Bus Station"
+  ],
+  [
+   "bthj",
+   "Morrisons",
+   "Bath Morrisons"
+  ],
+  [
+   "sglagt",
+   "Bus Station",
+   "Cribbs Causeway Bus Station"
+  ],
+  [
+   "sglag",
+   "Retail Park",
+   "Cribbs Causeway Retail Park"
+  ],
+  [
+   "sgldg",
+   "Tesco",
+   "Thornbury Tesco"
+  ]
+ ],
+ "any": [
+  [
+   "Charlton Rd Jct",
+   "Charlton Road Junction"
+  ],
+  [
+   "Filwood Grn Business Pk",
+   "Filwood Green Business Park"
+  ],
+  [
+   "Hengrove Leisure Pk",
+   "Hengrove Leisure Park"
+  ],
+  [
+   "Stapleton Baptist Ch",
+   "Stapleton Baptist Church"
+  ],
+  [
+   "Temple Meads Stn",
+   "Bristol Temple Meads Station"
+  ]
+ ],
+ "words": [
+  [
+   "Stn",
+   "Station"
+  ],
+  [
+   "Rd",
+   "Road"
+  ],
+  [
+   "Utd",
+   "United"
+  ]
+ ]
+}

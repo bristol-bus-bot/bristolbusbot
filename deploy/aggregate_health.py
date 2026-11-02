@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -42,11 +43,17 @@ LOCALITY_REFRESH_MARKER = Path(
 BLURB_GENERATION_MARKER = Path(
     "/etc/bristolbusbot/blurb-generation-enabled")
 BLURB_PENDING = Path("/var/lib/bristolbusbot/blurb-pending/pending.json")
+BLURB_APPROVAL = Path("/var/lib/bristolbusbot/blurb-pending/approval.json")
 BLURB_USAGE = Path("/var/lib/bristolbusbot/monitoring/blurb-usage.json")
-BLURB_MAX_AGE_HOURS = 24 * 8
+BLURB_MAX_AGE_HOURS = 24 * 2  # the check runs daily
 REMOTE_HOME = Path(os.environ.get("BBB_REMOTE_HOME", Path.home()))
 PUBLISHED = REMOTE_HOME / "bus-audit-repo/docs/audit_data.json"
 WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
+# One line, https://ntfy.sh/<private topic>: the topic Tom's phone subscribes
+# to. Separate from the home board's topic, so alerts don't appear on it.
+# Anyone who knows a topic can read it, so the phone only ever gets the state
+# ("needs your attention"); the details stay in Slack.
+PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1071,12 +1078,34 @@ def blurb_generation_check() -> tuple[dict, list[str]]:
             not isinstance(age, (int, float)) or age > BLURB_MAX_AGE_HOURS):
         result.update({"status": "failed", "failure_code": "overdue"})
         return result, ["job:blurb-generation"]
+    if "pending_review" in result and BLURB_APPROVAL.is_file() \
+            and not BLURB_APPROVAL.is_symlink():
+        approved_at = None
+        try:
+            approval = json.loads(BLURB_APPROVAL.read_text(encoding="utf-8"))
+            if approval.get("batch_id") == result["pending_review"]["batch_id"]:
+                approved_at = approval.get("approved_at")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
+        if approved_at:
+            # Approved by its checks; the promotion timer publishes it within
+            # the day. Still waiting two days later means publishing is stuck.
+            try:
+                waiting_hours = age_seconds(str(approved_at)) / 3600
+            except ValueError:
+                waiting_hours = 0
+            if waiting_hours > 48:
+                result.update({"status": "failed", "failure_code": "publish_overdue"})
+                return result, ["job:blurb-generation"]
+            result["status"] = "publishing"
+            result["summary"] = "approved descriptions are waiting for the nightly publish"
+            return result, []
     if "pending_review" in result:
         result["status"] = "pending_review"
         result["summary"] = "generated text is waiting for human approval"
     elif job.get("result") in {"success", "skipped"}:
         result["status"] = "healthy"
-        result["summary"] = "weekly check completed with no pending batch"
+        result["summary"] = "daily check completed with no pending batch"
     else:
         result["summary"] = "enabled; waiting for the first attended run"
     return result, []
@@ -1182,6 +1211,19 @@ def http_ok(url: str) -> bool:
 
 
 def notify(text: str) -> bool:
+    """Send an alert to Slack and, when it matters, to Tom's phone.
+
+    True if either got it, so a Slack outage doesn't repeat the phone alert."""
+    slack = _notify_slack(text)
+    phone = False
+    if needs_tom(text):
+        phone = notify_phone(text, urgent=True)
+    elif ":white_check_mark:" in text:
+        phone = notify_phone(text, urgent=False)
+    return slack or phone
+
+
+def _notify_slack(text: str) -> bool:
     try:
         url = WEBHOOK.read_text(encoding="utf-8").splitlines()[0].strip()
         parts = urlsplit(url)
@@ -1194,6 +1236,39 @@ def notify(text: str) -> bool:
             response.read()
             return 200 <= int(response.status) < 300
     except (OSError, ValueError):
+        return False
+
+
+def needs_tom(text: str) -> bool:
+    """Something is broken, or the message asks Tom to act. "Rejected safely,
+    nothing to do" alerts stay in Slack and the digest and don't buzz."""
+    if ":rotating_light:" in text:
+        return True
+    action = re.search(r"\*You need to do:\*\s*(.*)", text)
+    return bool(action) and not action.group(1).lower().startswith("nothing")
+
+
+def notify_phone(text: str, *, urgent: bool) -> bool:
+    """Push one alert to the ntfy topic Tom's phone subscribes to."""
+    try:
+        url = PHONE_TOPIC.read_text(encoding="utf-8").splitlines()[0].strip()
+        parts = urlsplit(url)
+        topic = parts.path.strip("/")
+        if (parts.scheme != "https" or parts.hostname != "ntfy.sh"
+                or not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", topic)):
+            return False
+        title = ("Bus bot needs your attention" if urgent
+                 else "Bus bot: back to normal")
+        request = urllib.request.Request(
+            "https://ntfy.sh/", data=json.dumps({
+                "topic": topic, "title": title, "message": "Details are in Slack.",
+                "priority": 4 if urgent else 2,
+                "tags": ["rotating_light" if urgent else "white_check_mark"],
+            }).encode(), headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read()
+            return 200 <= int(response.status) < 300
+    except (OSError, ValueError, IndexError):
         return False
 
 

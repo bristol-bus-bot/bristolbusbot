@@ -43,6 +43,11 @@ LIVE_DB = Path("/var/lib/bristolbusbot/collector/live.db")
 AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
 PENDING = PENDING_ROOT / "pending.json"
 APPROVAL = PENDING_ROOT / "approval.json"
+# Every bus the generator has already considered. Only buses missing from it
+# are written for, so the cost follows new arrivals, not the whole fleet.
+KNOWN_BUSES = PENDING_ROOT / "known-buses.json"
+# Automatic runs ask for a few buses at a time, as they appear.
+AUTO_IDENTITIES_PER_RUN = 10
 HISTORY = PENDING_ROOT / "history"
 USAGE_LEDGER = MONITORING / "blurb-usage.json"
 PROMOTION_STATE = MONITORING / "blurb-promotion.json"
@@ -101,6 +106,12 @@ _ELECTRIC_CLAIM = re.compile(
     r"\b(?:battery[- ]electric|electric|zero[- ]emission|EV)\b",
     re.IGNORECASE)
 _DIESEL_CLAIM = re.compile(r"\bdiesel\b", re.IGNORECASE)
+# A description shows whatever that bus is doing, so it mustn't call it late.
+_BLAMES_LATENESS = re.compile(
+    r"\b(?:delays?|delayed|late|lateness|unreliab\w*|disappoint\w*|"
+    r"(?:fury|anger|rage) at the timetable)\b", re.IGNORECASE)
+_YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+_CURRENT_PLATE = re.compile(r"^[A-Z]{2}(\d{2})\s?[A-Z]{3}$")
 _DIESEL_CONVERSION = re.compile(
     r"\b(?:converted|repowered|former(?:ly)?|once)\b[^.]{0,50}\bdiesel\b|"
     r"\bdiesel\b[^.]{0,50}\b(?:converted|repowered)\b", re.IGNORECASE)
@@ -306,6 +317,22 @@ def validate_grounding(value: str, summary: Mapping[str, object],
         raise BlurbError("generated description contradicts the powertrain")
     if variant == "waiting" and _WAITING_LIVE_STATE.search(value):
         raise BlurbError("generated description claims an unverified live state")
+    if variant in {"in_service", "waiting"} and _BLAMES_LATENESS.search(value):
+        raise BlurbError("generated description calls this bus late")
+    built = registration_year(str(summary.get("registration") or ""))
+    if built is not None:
+        for year in map(int, _YEAR.findall(value)):
+            if abs(year - built) > 1:
+                raise BlurbError("generated description gives the wrong year")
+
+
+def registration_year(registration: str) -> int | None:
+    """The year a current-style UK plate (AB12 CDE) was issued, else None."""
+    match = _CURRENT_PLATE.fullmatch(registration.strip().upper())
+    if not match:
+        return None
+    number = int(match.group(1))
+    return 2000 + (number if number < 50 else number - 50)
 
 
 def validate_batch_variety(values: Mapping[str, str], variant: str) -> None:
@@ -509,7 +536,9 @@ def build_work(*, fleet_path: Path = FLEET, live_db: Path = LIVE_DB,
                description_paths: Mapping[str, Path] = VARIANTS,
                model_context_path: Path = MODEL_CONTEXT,
                observed_days: int = OBSERVED_DAYS,
-               maximum_identities: int = 40) -> dict[str, object]:
+               maximum_identities: int = 40,
+               known: set[str] | None = None) -> dict[str, object]:
+    """What to write. With ``known``, only buses not already in it count."""
     raw_fleet = load_json(fleet_path, list)
     records = [item for item in raw_fleet if isinstance(item, dict)
                and not item.get("withdrawn")]
@@ -537,8 +566,11 @@ def build_work(*, fleet_path: Path = FLEET, live_db: Path = LIVE_DB,
 
     missing_by_key: dict[str, list[str]] = {}
     unknown_models: set[str] = set()
+    unknown_keys: list[str] = []
     eligible: list[str] = []
     for scoped_key, record in sorted(scoped.items()):
+        if known is not None and scoped_key in known:
+            continue
         operator, code = scoped_key.split(":", 1)
         missing = [
             variant for variant, values in descriptions.items()
@@ -552,6 +584,7 @@ def build_work(*, fleet_path: Path = FLEET, live_db: Path = LIVE_DB,
                        if isinstance(vehicle_type, dict) else "", 120)
         if not model or model not in contexts:
             unknown_models.add(model or "Unknown")
+            unknown_keys.append(scoped_key)
             continue
         missing_by_key[scoped_key] = missing
         eligible.append(scoped_key)
@@ -572,6 +605,8 @@ def build_work(*, fleet_path: Path = FLEET, live_db: Path = LIVE_DB,
         "requests": requests,
         "selected_keys": selected,
         "eligible_keys": eligible,
+        "scoped_keys": sorted(scoped),
+        "unknown_keys": unknown_keys,
         "unknown_models": sorted(unknown_models),
         "observed_identities": len(observed),
         "matched_identities": matched_identities,
@@ -859,6 +894,23 @@ def _pending_exists(path: Path) -> bool:
     return payload.get("status") == "pending_review"
 
 
+def load_known(path: Path = KNOWN_BUSES) -> set[str] | None:
+    """Buses already considered, or None before the first automatic run."""
+    if not path.exists() and not path.is_symlink():
+        return None
+    payload = load_json(path, dict)
+    keys = payload.get("buses")
+    if payload.get("schema") != SCHEMA or not isinstance(keys, list) \
+            or not all(isinstance(key, str) for key in keys):
+        raise BlurbError("known-bus record has the wrong shape")
+    return set(keys)
+
+
+def save_known(keys: set[str], path: Path = KNOWN_BUSES) -> None:
+    atomic_json(path, {"schema": SCHEMA, "updated_at": utcnow().isoformat(),
+                       "buses": sorted(keys)})
+
+
 def generate_pending(*, fleet_path: Path = FLEET,
                      live_db: Path = LIVE_DB, audit_db: Path = AUDIT_DB,
                      description_paths: Mapping[str, Path] = VARIANTS,
@@ -866,17 +918,43 @@ def generate_pending(*, fleet_path: Path = FLEET,
                      pending_path: Path = PENDING,
                      ledger_path: Path = USAGE_LEDGER,
                      limits: Limits | None = None,
-                     client: GeminiClient | None = None) -> dict[str, object]:
+                     client: GeminiClient | None = None,
+                     auto: bool = False,
+                     known_path: Path = KNOWN_BUSES,
+                     approval_path: Path = APPROVAL) -> dict[str, object]:
+    """Write descriptions for buses that need them.
+
+    auto: only buses not seen by an earlier automatic run, a few at a time,
+    and the batch is approved by its checks (the promotion timer publishes
+    it). The first automatic run only records today's buses, so the existing
+    backlog never costs anything."""
     if _pending_exists(pending_path):
         raise NothingToDo("a generated batch is already waiting for review")
     limits = limits or Limits.environment()
+    known = load_known(known_path) if auto else None
     work = build_work(
         fleet_path=fleet_path, live_db=live_db, audit_db=audit_db,
         description_paths=description_paths,
         model_context_path=model_context_path,
-        maximum_identities=limits.identities_per_run)
+        maximum_identities=(min(limits.identities_per_run, AUTO_IDENTITIES_PER_RUN)
+                            if auto else limits.identities_per_run),
+        known=known if auto else None)
+    if auto and known is None:
+        save_known(set(work["scoped_keys"]), known_path)
+        raise NothingToDo(
+            f"recorded {len(work['scoped_keys'])} buses already in service; "
+            "only buses that appear after today will be described")
     selected = work["selected_keys"]
+
+    def remember() -> None:
+        # Unknown models and buses beyond this run's cap stay unknown, so
+        # they're picked up later rather than skipped for good.
+        if auto:
+            later = set(work["unknown_keys"]) | (set(work["eligible_keys"]) - set(selected))
+            save_known(known | (set(work["scoped_keys"]) - later), known_path)
+
     if not selected:
+        remember()
         unknown = work["unknown_models"]
         note = (f"; {len(unknown)} model context entries are needed"
                 if unknown else "")
@@ -975,6 +1053,9 @@ def generate_pending(*, fleet_path: Path = FLEET,
     }
     validate_pending(batch)
     atomic_json(pending_path, batch)
+    remember()
+    if auto:
+        approve_pending(pending_path, approval_path, by="automatic checks")
     return batch
 
 
@@ -1075,7 +1156,7 @@ def show_pending(path: Path = PENDING) -> str:
 
 
 def approve_pending(pending_path: Path = PENDING,
-                    approval_path: Path = APPROVAL) -> dict:
+                    approval_path: Path = APPROVAL, by: str = "Tom") -> dict:
     raw = _regular_bytes(pending_path)
     payload = validate_pending(json.loads(raw))
     approval = {
@@ -1083,6 +1164,7 @@ def approve_pending(pending_path: Path = PENDING,
         "batch_id": payload["batch_id"],
         "pending_sha256": sha256_bytes(raw),
         "approved_at": utcnow().isoformat(),
+        "approved_by": by,
     }
     atomic_json(approval_path, approval)
     return approval
@@ -1231,6 +1313,11 @@ def promote_pending(*, pending_path: Path = PENDING,
                     = _wait_site) -> dict[str, object]:
     if not _running_as_root():
         raise BlurbError("promotion must run as root")
+    # The promotion timer runs daily; most days there's nothing approved.
+    if not pending_path.exists() and not pending_path.is_symlink():
+        raise NothingToDo("no batch waiting to publish")
+    if not approval_path.exists() and not approval_path.is_symlink():
+        raise NothingToDo("the waiting batch hasn't been approved")
     pending_raw = _regular_bytes(pending_path)
     pending = validate_pending(json.loads(pending_raw))
     approval = load_json(approval_path, dict)
@@ -1307,7 +1394,9 @@ def promote_pending(*, pending_path: Path = PENDING,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("generate", help="create a pending batch only")
+    generate_parser = subparsers.add_parser(
+        "generate", help="create a pending batch (--auto: new buses, approved by its checks)")
+    generate_parser.add_argument("--auto", action="store_true")
     subparsers.add_parser("show", help="show the current pending batch")
     subparsers.add_parser("approve", help="approve the exact pending bytes")
     subparsers.add_parser("discard", help="archive without changing the site")
@@ -1319,13 +1408,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
-            result = generate_pending()
+            result = generate_pending(auto=args.auto)
             count = len(set().union(*(
                 set(values) for values in result["additions"].values())))
             rejected = len(result.get("rejections", []))
             print(f"pending blurb batch {result['batch_id']}: "
-                  f"{count} bus(es) need human review; "
-                  f"{rejected} invalid line(s) dropped")
+                  f"{count} bus(es) "
+                  + ("approved by the checks, to publish"
+                     if args.auto else "need human review")
+                  + f"; {rejected} invalid line(s) dropped")
         elif args.command == "show":
             print(show_pending())
         elif args.command == "approve":

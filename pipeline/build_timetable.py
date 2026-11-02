@@ -377,6 +377,13 @@ def main():
             "Stop-search lookup generation failed - refusing to publish the candidate.")
         return 2
 
+    # Best public stop names, once, so the bot, site, map and audit agree.
+    logger.info("Correcting stop names...")
+    if not run([PY, str(HERE / "prepare_stop_names.py"), str(staged_db)]):
+        staged_db.unlink(missing_ok=True)
+        logger.error("Stop-name correction failed - refusing to publish the candidate.")
+        return 2
+
     try:
         finalize_static_database(staged_db)
     except (OSError, sqlite3.Error, RuntimeError) as exc:

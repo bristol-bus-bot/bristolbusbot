@@ -158,6 +158,21 @@ function inTen(pct) {
   return `${Math.round(finiteNumber(pct) / 10)} in 10`;
 }
 
+// The route's page on the live map site, which mirrors route_pages.py:
+// /routes/<operator>/<route>, e.g. /routes/first/4-bath. Only one operator's
+// own labels have a page (the network view tags labels with the operator).
+const ROUTE_PAGE_OPERATORS = { FBRI: "first" };
+function pageSlug(value) {
+  let text = String(value || "").toLowerCase().replace(/'/g, "");
+  if (text.startsWith("the ")) text = text.slice(4);
+  return text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function routePageUrl(operator, route) {
+  if (!operator || operator === "ALL" || !route) return null;
+  const operatorSlug = ROUTE_PAGE_OPERATORS[operator] || pageSlug(operatorName(operator));
+  return operatorSlug ? `https://bristolbuses.live/routes/${operatorSlug}/${pageSlug(route)}` : null;
+}
+
 function operatorName(code) {
   const meta = (state.data.operators || []).find((o) => o.code === code);
   return meta ? meta.name : code;
@@ -648,6 +663,7 @@ async function renderRouteDetail() {
       <button class="close" type="button" id="close">Close</button>
     </div>
     ${row.description ? `<p class="route-desc">${escapeHTML(row.description)}</p>` : ""}
+    ${routePageUrl(state.operator, row.route) ? `<p class="route-desc"><a href="${escapeHTML(routePageUrl(state.operator, row.route))}">Route page on bristolbuses.live ↗</a></p>` : ""}
     <p class="summary">${escapeHTML(routeSummary(row, hourly))}</p>
     <h3>Likely reasons</h3>
     <div class="reasons">${reasons.length

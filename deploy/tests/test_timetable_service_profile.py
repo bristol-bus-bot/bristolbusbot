@@ -291,10 +291,11 @@ def test_distant_special_date_is_visible_and_has_a_review_deadline(tmp_path, day
     assert len(warnings) == 2
     assert {w['metric'] for w in warnings} == {'trips', 'stop_times'}
     assert all(w['code'] == 'provisional_holiday_coverage' for w in warnings)
-    assert all(w['review_by'] == (day-timedelta(days=56)).isoformat() for w in warnings)
+    lead = service_profile.AcceptancePolicy().provisional_holiday_lead_days
+    assert all(w['review_by'] == (day-timedelta(days=lead)).isoformat() for w in warnings)
 
 
-@pytest.mark.parametrize('days_ahead', [0, 28, 55, 56])
+@pytest.mark.parametrize('days_ahead', [0, 7, 13, 14])
 def test_approaching_holiday_stays_strict(tmp_path, days_ahead):
     day = date(2026,12,24)
     services = [{'operator': 'MAIN', 'route': '1'}]
@@ -321,10 +322,12 @@ def test_original_floor_survives_updates_and_resolves_only_when_filled(tmp_path)
     repeated = compare_databases(sparse, sparse, start_date=START,
                                  provisional_requirements=requirements)
     assert [w['minimum'] for w in repeated['warnings']] == [w['minimum'] for w in requirements]
+    # Once the holiday is inside the lead window, the original floor bites.
+    review = date(2026,12,24) - timedelta(days=service_profile.AcceptancePolicy().provisional_holiday_lead_days)
     with pytest.raises(ServiceProfileError):
-        compare_databases(sparse, sparse, start_date=date(2026,10,29),
+        compare_databases(sparse, sparse, start_date=review,
                           provisional_requirements=requirements)
-    resolved = compare_databases(sparse, current, start_date=date(2026,10,29),
+    resolved = compare_databases(sparse, current, start_date=review,
                                  provisional_requirements=requirements)
     assert resolved['warnings'] == []
 

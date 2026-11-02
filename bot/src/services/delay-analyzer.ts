@@ -3,7 +3,6 @@
 
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
-import { cleanStopName } from '../utils/stop-name-cleaner.js';
 import { ApplicationState } from './application-state.js';
 import { resolveFleetVehicle } from './vehicle-identity.js';
 import type { DatabaseManager } from './database-manager.js';
@@ -327,7 +326,7 @@ export class DelayAnalyzer {
         delayMinutes: rawDelay,
         lastStopCode: selectedStop.stop,
         lastStopTime: selectedSchedLocal.toFormat('HH:mm:ss'),
-        lastStopName: cleanStopName(selectedStop.stop_name, selectedStop.stop)
+        lastStopName: selectedStop.stop_name
       };
 
       // Prediction
