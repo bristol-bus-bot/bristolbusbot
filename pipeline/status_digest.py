@@ -51,50 +51,24 @@ def _post(text: str) -> bool:
     return True
 
 
-SAFE_UPDATE_AREAS = {
-    "job:timetable-automation": "a new timetable",
-    "job:fleet-automation": "fleet details",
-    "job:locality-automation": "stop locations",
-    "job:blurb-generation": "bus descriptions",
-    "job:editorial-refresh": "the occasions calendar",
-    "job:editorial-fetch": "the occasions calendar",
-    "job:editorial-promote": "the occasions calendar",
-}
+ATTENTION = ("Bus bot: something needs your attention", "Details are in Slack.")
 
 
 def phone_summary(snapshot: dict, today: date | None = None) -> tuple[str, str, int]:
-    """(title, one or two lines, ntfy priority) for the daily phone note.
+    """(title, message, ntfy priority) for the daily phone note.
 
-    All fine is quiet; a snag that doesn't need Tom yet makes a normal
-    notification; anything that does is the same as the Slack action line."""
-    warnings, _ = recovery_status(snapshot, today)
-    if warnings:
-        return ("Bus bot: needs you", " ".join(warnings)
-                + " Ask Claude to investigate.", 4)
+    Anyone who knows the topic can read it, so it only ever says the state;
+    the details are in the Slack update. All fine is quiet."""
+    if recovery_status(snapshot, today)[0]:
+        return (*ATTENTION, 4)
     blurbs = _dict(snapshot.get("blurb_generation"))
-    if blurbs.get("status") == "pending_review":
-        buses = int(_dict(blurbs.get("pending_review")).get("buses", 0) or 0)
-        return ("Bus bot: all fine, one thing waiting",
-                f"Descriptions for {buses} bus{'' if buses == 1 else 'es'} are "
-                "waiting for your review when convenient.", 3)
+    if blurbs.get("status") == "pending_review" or snapshot.get("status") == "warning":
+        return (*ATTENTION, 3)
     issues = [str(issue) for issue in (snapshot.get("issues") or [])
               if isinstance(snapshot.get("issues"), list)]
-    if issues and all(issue in SAFE_UPDATE_AREAS for issue in issues):
-        areas = sorted({SAFE_UPDATE_AREAS[issue] for issue in issues})
-        return ("Bus bot: a snag, nothing to do yet",
-                f"An update to {' and '.join(areas)} was rejected safely and "
-                "the current version is still in use. The Pi will keep "
-                "retrying.", 3)
-    if snapshot.get("status") == "warning":
-        return ("Bus bot: all fine, a reminder coming up",
-                "Everything is working. Something needs attention soon, such "
-                "as renewing a token or holiday timetables. Details in Slack.", 3)
     if snapshot.get("status") == "ok" and not issues:
-        return ("Bus bot: all fine",
-                "Buses, the website and the bot are all working. Nothing to do.", 2)
-    return ("Bus bot: a snag, nothing to do yet",
-            "An automatic check isn't happy. The safe version stays in use, "
-            "and you'll get a separate alert if it needs you.", 3)
+        return ("Bus bot: all fine", "Everything is working.", 2)
+    return ("Bus bot: a snag, nothing to do yet", "Details are in Slack.", 3)
 
 
 def _post_phone(title: str, message: str, priority: int) -> bool:

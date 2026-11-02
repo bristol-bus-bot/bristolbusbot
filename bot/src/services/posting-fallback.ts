@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { BusEvent } from '../types/bus-types.js';
 import { storyStatus } from './story-brief.js';
-import { spokenStopName } from '../utils/stop-name-cleaner.js';
+import { getStopEnrichment, spokenStopName } from '../utils/stop-name-cleaner.js';
 import { spokenDestination } from './journey-context.js';
 import { logger } from '../utils/logging.js';
 import { isSmallHours } from './story-subject.js';
@@ -84,11 +84,29 @@ export function reservePost(now = Date.now(), history: Array<{ text: string; pub
     return [...EDITORIAL_RESERVE].sort((a,b) => used.get(a)! - used.get(b)!)[0];
 }
 
+/**
+ * Where the bus was, as a person would say it: "Phoenix Grove on Kellaway
+ * Avenue in Golden Hill". The street and area come from the stop data and are
+ * left out when unknown, already in the stop's name, or only a road number.
+ */
+export function spokenPlace(event: Pick<BusEvent, 'lastStopName' | 'lastStopCode'>,
+                            enrichment: Record<string, { street?: string | null; locality?: string | null }> = getStopEnrichment()): string {
+    const stop = spokenStopName(event.lastStopName || '');
+    const record = event.lastStopCode ? enrichment[event.lastStopCode] : undefined;
+    const has = (text: string, part: string) => text.toLowerCase().includes(part.toLowerCase());
+    let place = stop;
+    const street = spokenStopName(record?.street || '');
+    if (stop && street && !/^[ABM]\d+$/i.test(street) && !has(stop, street)) place += ` on ${street}`;
+    const area = (record?.locality || '').trim();
+    if (stop && area && !has(place, area)) place += ` in ${area}`;
+    return place;
+}
+
 export function observationPost(event: BusEvent, recentPosts: string[] = []): string {
     const time = DateTime.fromISO(event.timestamp).setZone('Europe/London').toFormat('HH:mm');
     const destination = spokenDestination(event);
     const route = destination ? `${event.line} towards ${destination}` : `${['inbound','outbound'].includes(event.direction) ? `${event.direction} ` : ''}${event.line}`;
-    const stop = spokenStopName(event.lastStopName || ''), status = storyStatus(event);
+    const stop = spokenPlace(event), status = storyStatus(event);
     const shapes = [
         `The ${route} was ${status} at ${stop}.`,
         `At ${stop}, the ${route} was ${status}.`,
