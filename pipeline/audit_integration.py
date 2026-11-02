@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from audit_operators import NETWORK_LABEL, OPERATOR_NAMES, SHOW_OPERATORS
+import route_split
 from audit_publication import publication_exclusions
 
 
@@ -310,6 +311,7 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
     histogram_sql = _histogram_select_sql()
     day_rows = cur.execute(
         f"""SELECT operator, vehicle_ref, route, service_date,
+                   MIN(trip_id) AS trip_id, MIN(stop_code) AS stop_code,
                    COUNT(*) AS readings,
                    SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
                             THEN 1 ELSE 0 END) AS on_time,
@@ -330,11 +332,15 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
          *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchall()
 
+    # A number shared between towns ("4" in Bath and in Bristol) gets the same
+    # label as everywhere else in the audit ("4 Bath"). One bus works one
+    # town's route on a given day, so that day's first journey decides.
+    split = route_split.for_connection(cur.connection)
     candidates: dict[tuple[str, str], dict] = {}
     for row in day_rows:
         operator = row["operator"]
         vehicle_ref = row["vehicle_ref"]
-        route_name = row["route"]
+        route_name = split.route(operator, row["route"], row["trip_id"], row["stop_code"])
         service_date = row["service_date"]
         readings = int(row["readings"])
         on_time = int(row["on_time"] or 0)

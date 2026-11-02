@@ -129,3 +129,27 @@ def test_route_pages_keep_the_strict_script_policy(app, client, tmp_path):
     csp = response.headers["Content-Security-Policy"]
     assert "'unsafe-inline'" not in csp.split("script-src", 1)[1].split(";", 1)[0]
     assert "<script>" not in response.get_data(as_text=True)
+
+
+def test_the_map_link_opens_that_route(app, client, tmp_path):
+    install_routes(app, tmp_path)
+    assert 'href="/?route=FBRI_72">See the 72 live on the map</a>' in client.get(
+        "/routes/first/72").get_data(as_text=True)
+    # The live map knows "4 Bath" as route 4.
+    assert 'href="/?route=FBRI_4">See the 4 live on the map</a>' in client.get(
+        "/routes/first/4-bath").get_data(as_text=True)
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "function openRouteFromAddress(" in source and "openRouteFromAddress();" in source
+
+
+def test_shared_numbers_list_their_own_towns_buses(app, client, tmp_path):
+    install_routes(app, tmp_path)
+    path = install_snapshot(app, tmp_path)
+    import json as _json
+    payload = _json.loads(path.read_text(encoding="utf-8"))
+    payload["profiles"][0]["routes"][0]["route"] = "4 Bath"
+    path.write_text(_json.dumps(payload), encoding="utf-8")
+    html = client.get("/routes/first/4-bath").get_data(as_text=True)
+    assert f'href="/vehicles/{SLUG}"' in html
+    assert 'href="/routes/first/4-bath"' in client.get(f"/vehicles/{SLUG}").get_data(as_text=True)
