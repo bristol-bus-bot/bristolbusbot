@@ -90,7 +90,7 @@
         {% endif %}
 
         <section class="route-links">
-            <a href="/">Track buses live on the map</a>
+            <a href="/?route={{ route.map_route|urlencode }}">See the {{ route.label.split(' ')[0] }} live on the map</a>
             <a href="{{ audit_url }}">Full figures and method in the audit ↗</a>
         </section>
     </article>

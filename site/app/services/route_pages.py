@@ -172,7 +172,10 @@ class RoutePages:
             return None
         row = entry["row"]
         view = {**entry, "ends": _ends(row.get("description")),
-                "description": row.get("description")}
+                "description": row.get("description"),
+                # The live map knows routes by operator and number ("4 Bath"
+                # is route 4 there, both towns).
+                "map_route": f"{entry['operator']}_{entry['label'].split(' ')[0]}"}
         if not entry["usable"]:
             return view
         readings = int(row.get("readings_in_gate") or 0)

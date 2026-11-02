@@ -124,11 +124,9 @@ class AuditIntegration:
 
     def vehicles_on_route(self, operator: str, route: str,
                           now: datetime | None = None, limit: int = 30) -> list[dict]:
-        """Profiles that ran one operator's route, busiest first.
-
-        Profiles record plain route numbers, so a number shared between towns
-        ("4 Bath", "4 Bristol") can't be told apart and lists no vehicles."""
-        if self.snapshot(now) is None or " " in route:
+        """Profiles that ran one operator's route, busiest first. Shared
+        numbers carry their town ("4 Bath"), the same labels as the audit."""
+        if self.snapshot(now) is None:
             return []
         found = []
         for slug, profile in self._profiles.items():
