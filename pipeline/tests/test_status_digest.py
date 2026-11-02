@@ -393,3 +393,41 @@ def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
     assert lines == ["Occasions needing next year's dates: Easter. "
                      "Ask Claude to add them, checked against a source."]
     assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []
+
+
+def test_daily_phone_summary_is_one_plain_line_for_each_state(monkeypatch):
+    monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: ([], []))
+    title, body, priority = status_digest.phone_summary({"status": "ok", "issues": []})
+    assert (title, priority) == ("Bus bot: all fine", 2)
+    assert "Nothing to do" in body
+
+    title, body, priority = status_digest.phone_summary(
+        {"status": "degraded", "issues": ["job:timetable-automation"]})
+    assert title == "Bus bot: a snag, nothing to do yet" and priority == 3
+    assert "a new timetable was rejected safely" in body
+
+    monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: (
+        ["Timetable updates have failed every check for 3 days."], []))
+    title, body, priority = status_digest.phone_summary({"status": "degraded", "issues": []})
+    assert title == "Bus bot: needs you" and priority == 4
+    assert body.endswith("Ask Claude to investigate.")
+
+
+def test_daily_phone_summary_only_goes_to_an_ntfy_topic(tmp_path, monkeypatch):
+    sent = []
+
+    class Response:
+        def read(self):
+            return b""
+
+    monkeypatch.setattr(status_digest.urllib.request, "urlopen",
+                        lambda request, timeout: sent.append(json.loads(request.data)) or Response())
+    conf = tmp_path / "ntfy"
+    monkeypatch.setattr(status_digest, "PHONE_CONF", conf)
+    assert not status_digest._post_phone("t", "m", 2)
+    conf.write_text("https://example.com/busbot-alerts-abcdefghijkl\n")
+    assert not status_digest._post_phone("t", "m", 2)
+    conf.write_text("https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+    assert status_digest._post_phone("Bus bot: all fine", "m", 2)
+    assert sent == [{"topic": "busbot-alerts-abcdefghijkl", "title": "Bus bot: all fine",
+                     "message": "m", "priority": 2, "tags": ["bus"]}]
