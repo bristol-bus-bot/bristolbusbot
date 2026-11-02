@@ -876,6 +876,7 @@ def render_html(report: dict) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
 <title>Local bus evidence - {e(report['scope']['display'])}</title>
 <style>
 :root{{--ink:#14201d;--muted:#58645f;--paper:#f7f3e8;--card:#fffdf6;--green:#0b6b53;--lime:#cce85b;--amber:#e7a92f;--red:#b73a3a;--line:#d9d4c7}}
@@ -894,6 +895,7 @@ ol.questions{{padding-left:1.35rem}} ol.questions li{{margin:0 0 1rem;padding-le
 <header><div class="eyebrow">Independent local bus evidence</div>
 <h1>{e(report['scope']['display'])}</h1>
 <p class="period">What was happening from {e(pretty_date(report['period']['start'].replace('-', '')))} to {e(pretty_date(report['period']['end'].replace('-', '')))}, prepared for {e(pretty_date(date.fromisoformat(report['committee_date'])))}.</p></header>
+<div class="withheld"><strong>This page was a test</strong> of a printable summary format. It isn't part of the audit and isn't distributed by this project.</div>
 <div class="callout"><strong>Read this first:</strong> these are independent estimates from open data, not official operator or WECA figures. They measure timing-point observations, not cancellations.</div>
 <section class="cards"><div class="card"><b>{headline['on_time_pct']:.1f}%</b><span>on time</span></div>
 <div class="card"><b>{headline['readings']:,}</b><span>qualifying readings</span></div>
