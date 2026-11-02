@@ -70,14 +70,13 @@ single vehicle appears on both sides. The two valid-only views fail closed with
 the existing collector health gate and withhold operators whose duty detail is
 less than 95% complete. These are **candidate duty gaps, not cancellations**.
 None of these tables is read by `audit_export.py`, the audit website or the
-committee-pack generator.
+test summary generator.
 
 Use `audit_rollup.py --backfill-duty-gaps` only after snapshots genuinely carry
 the block and end-time fields. It selects only complete retained dates with raw
 observations and never reconstructs older duties from a newer timetable.
 
-`frequency_changes.py` is the separate read-only timetable-change report used
-for campaign and committee preparation. By default it compares four complete
+`frequency_changes.py` is the separate read-only timetable-change report. By default it compares four complete
 weeks with the equivalent block 1, 3, 6 and 12 months earlier:
 
 ```sh
@@ -103,16 +102,18 @@ python3 frequency_changes.py \
 
 Use `--exclude-date YYYYMMDD=reason` for an exceptional local closure or
 one-off national holiday. `--format json` exposes the same checked result for
-the committee-pack generator, including exact usable/excluded dates,
+the test summary generator, including exact usable/excluded dates,
 unavailable-history reasons, percentage changes and withheld unstable rows.
 The unit is scheduled journeys in one representative Monday-Friday week, not
 operated journeys or cancellations. Rows made before 22 August 2026 do not
 contain trustworthy route identity, so current 3/6/12-month results correctly
 say unavailable rather than guessing.
 
-`evidence_pack.py` makes a dated, phone-readable local briefing from complete
-calendar months. Choose one area, ward or small route group and give the date
-of the committee meeting:
+`evidence_pack.py` was a 2026 test of a dated, printable summary for one area,
+ward or small route group, built from complete calendar months. It was a test
+of the format only: it isn't part of the audit, isn't run routinely and its
+output isn't distributed. Pages it makes are marked as a test and kept out of
+search engines. To run it again:
 
 ```sh
 BBB_AUDIT_DB=/var/lib/bristolbusbot/collector/audit.db \

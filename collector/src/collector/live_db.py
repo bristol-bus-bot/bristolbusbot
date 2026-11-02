@@ -1,4 +1,4 @@
-"""live.db — the collector's output database, read by the site and the bot.
+"""live.db: the collector's output database, read by the site and the bot.
 
 Contract from COLLECTOR_SPEC.md §5/§6:
 - vehicles: one row per vehicle, current state, aged out by readers at 90 s.

@@ -178,6 +178,11 @@ h3.first { margin-top: 0; }
 .rank li:last-child { border-bottom: 0; }
 .rank li.lim { opacity: 0.55; }
 .rank li.note { display: block; }
+.rank li.ward-why { display: block; padding-top: 0; color: var(--fg-2); font-size: 0.88rem; }
+.rank li.ward-why[hidden] { display: none; }
+.ward-name, .ward-route { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.ward-name { text-decoration: underline dotted; text-underline-offset: 3px; }
+.ward-route { text-decoration: underline; font-weight: 600; }
 .glance-card { margin-bottom: 12px; }
 .glance { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .glance strong { font: 800 2.4rem/1 var(--sans); color: var(--good); }
@@ -213,3 +218,21 @@ details p, details ul { margin: 10px 0 0; color: var(--fg-2); }
   .turnup { grid-template-columns: 1fr; }
   .fit .mins { grid-template-columns: 76px 1fr 56px; }
 }
+
+/* Route panel: how the arrivals split (planning #83) */
+.split { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-2); margin: 4px 0 8px; }
+.split i { display: block; height: 100%; }
+.split .early, .split-legend .early { background: var(--link); }
+.split .ontime, .split-legend .ontime { background: var(--good); }
+.split .late, .split-legend .late { background: var(--warn); }
+.split .verylate, .split-legend .verylate { background: var(--bad); }
+.split-legend { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: 0.88rem; }
+.split-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+/* Minutes lost or spare, leading each stretch */
+.pill-gap { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(248, 81, 73, 0.15); color: var(--bad); font: 700 0.85rem var(--mono); margin-right: 4px; }
+.pill-gap.spare { background: rgba(125, 196, 255, 0.15); color: var(--link); }
+/* A stop's town, lighter than its name */
+.place { color: var(--fg-2); font-weight: 400; }
+
+/* Where the route goes (planning #87) */
+.route-desc { margin: 8px 0 0; color: var(--fg-2); font-size: 0.95rem; }

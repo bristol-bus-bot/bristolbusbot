@@ -77,7 +77,7 @@ def active_buses(live_conn, fleet: Fleet, stale_seconds: int = 90,
             "waitingAtOrigin": waiting,
             "directionId": 1 if direction in ("inbound", "inb") else 0,
             "journeyCode": r["journey_ref"],
-            "tripId": r["trip_id"],  # the collector's own match — display it,
+            "tripId": r["trip_id"],  # the collector's own match: display it,
                                      # never re-derive it (re-matching once
                                      # served the wrong town's route)
             "directionRef": direction,

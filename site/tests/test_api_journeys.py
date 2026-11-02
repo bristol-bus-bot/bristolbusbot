@@ -36,7 +36,7 @@ def test_stale_journey_refused(client):
 def test_collector_trip_id_short_circuits_matching(client):
     """Wrong-town matching regression (one operator, same line number in
     two towns): when the collector's own trip_id is passed, the endpoint
-    must serve exactly that trip — no re-matching, even with a junk journey
+    must serve exactly that trip: no re-matching, even with a junk journey
     code and no other hints."""
     data = client.get(
         "/api/journey-schedule/garbage?tripId=T_OUT").get_json()

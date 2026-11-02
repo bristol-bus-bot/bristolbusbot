@@ -7,8 +7,8 @@ Please report suspected vulnerabilities privately using GitHub's
 this repository). That route reaches the maintainer directly without
 disclosing the issue publicly.
 
-Ordinary bugs — wrong delays, broken layout, a confused departure board
-— belong in public issues, not security reports.
+Ordinary bugs (wrong delays, broken layout, a confused departure board)
+belong in public issues, not security reports.
 
 ## Scope notes
 

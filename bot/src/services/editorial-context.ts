@@ -17,6 +17,20 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{1,79}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const MAX_CONTEXT_BYTES = 256 * 1024;
+/** Occasions are likelier when more people are reading: UK local hours, end exclusive. */
+export const OCCASION_PEAK_HOURS: ReadonlyArray<readonly [number, number]> = [[7, 10], [16, 21]];
+/** Off-peak, an occasion's chance is its probability times this. */
+export const OCCASION_OFF_PEAK_FACTOR = 0.25;
+/** The most times one occasion may be used in a day. */
+export const MAX_OCCASION_USES_PER_DAY = 8;
+const OCCASION_ZONE = 'Europe/London';
+
+/** True during the peak hours, judged on the UK clock whatever zone `now` is in. */
+export function isOccasionPeak(now: DateTime): boolean {
+    const hour = now.setZone(OCCASION_ZONE).hour;
+    return OCCASION_PEAK_HOURS.some(([start, end]) => hour >= start && hour < end);
+}
+
 const ALLOWED_SOURCE_HOSTS = [
     // Reputable news and reference sites (Tom, 27 Sep 2026, PV-11). Each claim
     // is still checked individually; an allowed host is not evidence.
@@ -139,7 +153,6 @@ interface UsageState {
     schema_version: 1;
     last_post_was_special: boolean;
     items: Record<string, UsageRecord>;
-    deferrals: Record<string, string>;
 }
 
 export interface EditorialStatus {
@@ -371,7 +384,7 @@ export function validateEditorialDocument(value: unknown): EditorialDocument {
             throw new Error(`occasions[${index}].schedule.kind is unsupported`);
         }
         const maxUses = requireNumber(
-            occasion.max_uses_per_day, `occasions[${index}].max_uses_per_day`, 1, 5
+            occasion.max_uses_per_day, `occasions[${index}].max_uses_per_day`, 1, MAX_OCCASION_USES_PER_DAY
         );
         if (!Number.isInteger(maxUses)) throw new Error(`occasions[${index}].max_uses_per_day must be an integer`);
         return {
@@ -435,7 +448,6 @@ function emptyUsage(): UsageState {
         schema_version: 1,
         last_post_was_special: false,
         items: {},
-        deferrals: {},
     };
 }
 
@@ -446,21 +458,11 @@ function loadUsage(path: string): UsageState {
             || !value.items || typeof value.items !== 'object' || Array.isArray(value.items)) {
             throw new Error('unsupported usage state');
         }
-        const rawDeferrals = value.deferrals;
-        const deferrals: Record<string, string> = {};
-        if (rawDeferrals && typeof rawDeferrals === 'object' && !Array.isArray(rawDeferrals)) {
-            for (const [id, until] of Object.entries(rawDeferrals)) {
-                if (ID_RE.test(id) && typeof until === 'string'
-                    && DateTime.fromISO(until, { setZone: true }).isValid) {
-                    deferrals[id] = until;
-                }
-            }
-        }
+        // Older files may still carry a "deferrals" map; it is ignored.
         return {
             schema_version: 1,
             last_post_was_special: value.last_post_was_special,
             items: value.items as Record<string, UsageRecord>,
-            deferrals,
         };
     } catch (error: any) {
         if (existsSync(path)) logger.warn('Editorial usage state was ignored', { error: error.message });
@@ -572,12 +574,14 @@ export class EditorialContextStore {
         const today = now.toISODate();
         if (!this.status.loaded || !today) return 0;
         return this.document.facts.filter(item => editorialApplies(item, today, event)
-            && activeOnDate(item.active_from, item.active_until, today) && !this.isDeferred(item.id, now)).length;
+            && activeOnDate(item.active_from, item.active_until, today)).length;
     }
 
     select(now: DateTime, recentPosts: string[], event?: Pick<BusEvent, 'operatorRef' | 'line' | 'placeContext'>,
         options: { factsTurn?: boolean } = {}): EditorialSelection | null {
         if (!this.status.loaded || this.usage.last_post_was_special) return null;
+        // Dates and hours are judged on the UK clock, whatever zone the caller used.
+        now = now.setZone(OCCASION_ZONE);
         const today = now.toISODate();
         const nowIso = now.toUTC().toISO();
         if (!today || !nowIso) return null;
@@ -588,18 +592,26 @@ export class EditorialContextStore {
             && item.schedule.month === now.month
             && item.schedule.day === now.day
             && this.canUseOccasion(item, today)
-            && !this.isDeferred(item.id, now)
         );
         const rangedOccasions = this.document.occasions.filter(item =>
             editorialApplies(item, today, event)
             && item.schedule.kind === 'date_range'
             && activeOnDate(item.schedule.start, item.schedule.end, today)
             && this.canUseOccasion(item, today)
-            && !this.isDeferred(item.id, now)
         );
         const occasion = chooseOne(exactOccasions, this.random)
             || chooseOne(rangedOccasions, this.random);
-        if (occasion && this.random() < occasion.probability) {
+        const peak = isOccasionPeak(now);
+        const chance = occasion
+            ? occasion.probability * (peak ? 1 : OCCASION_OFF_PEAK_FACTOR) : 0;
+        const taken = occasion !== null && this.random() < chance;
+        if (occasion) {
+            logger.info('Editorial occasion considered', {
+                id: occasion.id, time: peak ? 'peak' : 'off-peak',
+                chance: Math.round(chance * 1000) / 1000, taken,
+            });
+        }
+        if (occasion && taken) {
             return {
                 kind: 'occasion',
                 id: occasion.id,
@@ -616,7 +628,7 @@ export class EditorialContextStore {
             const belowLimit = !usage || usage.uses < item.max_uses_total;
             const cooledDown = !usage || now.toMillis() - DateTime.fromISO(usage.last_used_at).toMillis()
                 >= item.cooldown_hours * 60 * 60 * 1000;
-            return active && belowLimit && cooledDown && !this.isDeferred(item.id, now);
+            return active && belowLimit && cooledDown;
         });
         const story = chooseOne(eligibleNews, this.random);
         if (story && this.random() < story.probability) {
@@ -638,7 +650,6 @@ export class EditorialContextStore {
         const facts = this.document.facts.filter(item => {
             if (!editorialApplies(item, today, event)) return false;
             if (!activeOnDate(item.active_from, item.active_until, today)) return false;
-            if (this.isDeferred(item.id, now)) return false;
             const usage = this.usage.items[item.id];
             return !usage || now.toMillis() - DateTime.fromISO(usage.last_used_at).toMillis()
                 >= 72 * 60 * 60 * 1000;
@@ -655,13 +666,6 @@ export class EditorialContextStore {
         };
     }
 
-    private isDeferred(id: string, now: DateTime): boolean {
-        const deferredUntil = this.usage.deferrals[id];
-        if (!deferredUntil) return false;
-        const parsed = DateTime.fromISO(deferredUntil, { setZone: true });
-        return parsed.isValid && now.toMillis() < parsed.toMillis();
-    }
-
     private canUseOccasion(item: EditorialOccasion, today: string): boolean {
         const usage = this.usage.items[item.id];
         return !usage || usage.last_used_on !== today || usage.uses < item.max_uses_per_day;
@@ -670,7 +674,6 @@ export class EditorialContextStore {
     recordPost(selection: EditorialSelection | null, now: DateTime): void {
         this.usage.last_post_was_special = selection !== null;
         if (selection) {
-            delete this.usage.deferrals[selection.id];
             const usedAt = now.toUTC().toISO();
             const usedOn = now.toISODate();
             if (usedAt && usedOn) {
@@ -682,19 +685,6 @@ export class EditorialContextStore {
                 };
             }
         }
-        this.persistUsage();
-    }
-
-    recordDeferredPost(
-        selection: EditorialSelection,
-        now: DateTime,
-        deferHours: number = 6,
-    ): void {
-        this.usage.last_post_was_special = false;
-        this.usage.deferrals[selection.id] = now
-            .toUTC()
-            .plus({ hours: deferHours })
-            .toISO()!;
         this.persistUsage();
     }
 

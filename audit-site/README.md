@@ -18,9 +18,8 @@ The full definitions, data sources and limitations are in the
 The audit is independent and may differ from figures produced with different
 sampling or matching methods.
 
-Dated local committee briefings, when prepared, live under `docs/packs/` and
-carry their own HTML page, downloadable PDF and versioned JSON summary. The
-nightly publisher adds new packs without deleting older permanent addresses.
+`docs/packs/` keeps a page from a 2026 test of printable area summaries. It
+was a test only and isn't part of the audit.
 
 Contains public sector information licensed under the Open Government Licence
 v3.0. The Department for Transport and its agencies accept no responsibility

@@ -58,7 +58,7 @@ function renderRoutes(out, routeMatches, highlightIndex, handlers, startIndex) {
                 el("span", { class: "sr-badge sr-badge-route" }, [match.line]),
                 el("div", { class: "sr-main" }, [
                     el("div", { class: "sr-title sr-route-title" },
-                       [`Route ${match.line} — ${count}`]),
+                       [`Route ${match.line}: ${count}`]),
                     el("div", { class: "sr-sub" }, [subtitle]),
                 ]),
             ]),
@@ -118,7 +118,7 @@ function renderBuses(out, fleetMatches, highlightIndex, handlers, startIndex) {
             vehicle.livery_name,
             vehicle.name ? `"${vehicle.name}"` : null,
         ].filter(Boolean).join(" · ") || (vehicle.operator_name || "");
-        const nameRow = [vehicle.reg || "—"];
+        const nameRow = [vehicle.reg || "–"];
         if (vehicle.isLive)
             nameRow.push(el("span", { class: "sr-live" }, ["● LIVE"]));
         if (vehicle.withdrawn)

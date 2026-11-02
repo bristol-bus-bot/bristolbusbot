@@ -80,7 +80,7 @@ def test_fuzzy_time_window():
     # 9 minutes off: inside ±10 window
     m = match_fuzzy(cur(), "FBRI", "75", "outbound", WED_1115.replace(minute=24))
     assert m and m.trip_id == "T_OUT"
-    # 11 minutes off from T_OUT: outside its window — but the no-direction
+    # 11 minutes off from T_OUT: outside its window: but the no-direction
     # fallback legitimately catches the inbound 11:20 trip (audit behaviour:
     # direction is a preference, not a hard constraint)
     m11 = match_fuzzy(cur(), "FBRI", "75", "outbound", WED_1115.replace(minute=26))

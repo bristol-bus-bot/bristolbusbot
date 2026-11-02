@@ -43,6 +43,9 @@ install -m 0644 "$ASSET_DIR/app.js" docs/app.js
 install -m 0644 "$ASSET_DIR/styles.css" docs/styles.css
 install -m 0644 "$ASSET_DIR/favicon.svg" docs/favicon.svg
 install -m 0644 "$ASSET_DIR/places.json" docs/places.json
+install -m 0644 "$ASSET_DIR/robots.txt" docs/robots.txt
+install -m 0644 "$ASSET_DIR/sitemap.xml" docs/sitemap.xml
+install -m 0644 "$ASSET_DIR/og-card.png" docs/og-card.png
 install -d -m 0755 docs/fonts
 install -m 0644 "$ASSET_DIR/fonts/overpass-latin.woff2" docs/fonts/overpass-latin.woff2
 install -m 0644 "$ASSET_DIR/fonts/jetbrains-mono-latin.woff2" docs/fonts/jetbrains-mono-latin.woff2
@@ -73,7 +76,8 @@ fi
 CHANGED_PATHS=(
     LICENSE README.md AUDIT_METHODOLOGY.md
     docs/audit_data.json docs/index.html docs/app.js docs/styles.css
-    docs/favicon.svg docs/places.json docs/fonts
+    docs/favicon.svg docs/places.json docs/robots.txt docs/sitemap.xml
+    docs/og-card.png docs/fonts
 )
 if [ -f docs/audit_summary.json ]; then
     CHANGED_PATHS+=(docs/audit_summary.json)
@@ -89,7 +93,7 @@ if [ -d docs/segments ]; then
 fi
 
 if [ -n "$(git status --porcelain -- "${CHANGED_PATHS[@]}")" ]; then
-    git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/places.json docs/fonts
+    git add LICENSE README.md AUDIT_METHODOLOGY.md docs/audit_data.json docs/index.html docs/app.js docs/styles.css docs/favicon.svg docs/places.json docs/robots.txt docs/sitemap.xml docs/og-card.png docs/fonts
     if [ -f docs/audit_summary.json ]; then
         git add docs/audit_summary.json
     fi

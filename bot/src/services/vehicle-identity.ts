@@ -1,9 +1,15 @@
-/** Operator-scoped lookup for fleet records whose public codes can collide. */
+/**
+ * Operator-scoped lookup for fleet records whose public codes can collide.
+ * The site (site/app/services/fleet.py) and the audit check
+ * (pipeline/audit_vehicle_identity.py) follow the same rules; all three run
+ * shared/fixtures/vehicle_identity.json.
+ */
 
 export interface FleetIdentityIndex {
     results: any[];
     scoped: Map<string, any[]>;
     registrationsScoped: Map<string, any>;
+    byRegistration: Map<string, any[]>;
     byCode: Map<string, any[]>;
     codeOwners: Map<string, Set<string>>;
 }
@@ -44,6 +50,14 @@ function preferred(records: any[]): any | null {
         : null;
 }
 
+/** A registration with no operator must name one operator's one fleet number. */
+function preferredRegistration(records: any[]): any | null {
+    const active = records.filter(record => !record?.withdrawn);
+    const candidates = active.length ? active : records;
+    const identities = new Set(candidates.map(record => key(operator(record), code(record))));
+    return identities.size === 1 ? candidates[candidates.length - 1] : null;
+}
+
 function possibleCodes(vehicleRef: string): string[] {
     const raw = text(vehicleRef);
     if (!raw) return [];
@@ -57,6 +71,7 @@ export function emptyFleetIdentityIndex(): FleetIdentityIndex {
         results: [],
         scoped: new Map(),
         registrationsScoped: new Map(),
+        byRegistration: new Map(),
         byCode: new Map(),
         codeOwners: new Map(),
     };
@@ -85,6 +100,10 @@ export function buildFleetIdentityIndex(records: any[]): FleetIdentityIndex {
             }
         }
         if (noc && reg) index.registrationsScoped.set(key(noc, reg), record);
+        if (reg) {
+            if (!index.byRegistration.has(reg)) index.byRegistration.set(reg, []);
+            index.byRegistration.get(reg)!.push(record);
+        }
     }
     return index;
 }
@@ -96,14 +115,13 @@ export function resolveFleetVehicle(
 ): any | null {
     if (!index || !vehicleRef) return null;
     const noc = text(operatorRef).toUpperCase();
-    if (noc) {
-        // Some SIRI feeds prefix registrations with the operator code.
-        // Resolve both the complete reference and its suffix as registrations.
-        for (const value of possibleCodes(vehicleRef)) {
-            const direct = index.registrationsScoped.get(
-                key(noc, registration(value)));
-            if (direct) return direct;
-        }
+    // Some SIRI feeds prefix registrations with the operator code.
+    // Resolve both the complete reference and its suffix as registrations.
+    for (const value of possibleCodes(vehicleRef)) {
+        const direct = noc
+            ? index.registrationsScoped.get(key(noc, registration(value)))
+            : preferredRegistration(index.byRegistration.get(registration(value)) || []);
+        if (direct) return direct;
     }
     for (const fleetCode of possibleCodes(vehicleRef)) {
         if (!noc) break;
@@ -114,8 +132,11 @@ export function resolveFleetVehicle(
         const records = index.byCode.get(fleetCode) || [];
         const record = preferred(records);
         const owners = index.codeOwners.get(fleetCode) || new Set<string>();
+        // With an operator, only that operator's buses (or a record with no
+        // operator at all) can match: never another operator's withdrawn bus
+        // that happens to share the code.
         if (record && owners.size <= 1
-                && (!noc || owners.size === 0 || owners.has(noc))) {
+                && (!noc || owners.has(noc) || (!owners.size && !operator(record)))) {
             return record;
         }
     }

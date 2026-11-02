@@ -372,3 +372,77 @@ def test_routine_skip_resets_the_stuck_count():
         "last_ok_at": "2026-10-16T04:00:00Z", "last_success_at": "2026-10-16T04:00:00Z",
         "last_skipped_at": "2026-10-21T04:00:00Z"}}}}
     assert status_digest.timetable_failing_days(snapshot, date(2026, 10, 22)) == 1
+
+
+def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
+    from datetime import date
+    import json as _json
+    context = tmp_path / "editorial-context.json"
+    context.write_text(_json.dumps({"occasions": [
+        {"id": "easter-2027", "label": "Easter",
+         "schedule": {"kind": "date_range", "start": "2027-03-28", "end": "2027-03-28"}},
+        {"id": "diwali-2026", "label": "Diwali",
+         "schedule": {"kind": "date_range", "start": "2026-11-06", "end": "2026-11-10"}},
+        {"id": "diwali-2027", "label": "Diwali",
+         "schedule": {"kind": "date_range", "start": "2027-10-29", "end": "2027-10-29"}},
+        {"id": "halloween", "label": "Halloween",
+         "schedule": {"kind": "annual_date", "month": 10, "day": 31}},
+    ]}), encoding="utf-8")
+    assert status_digest.moving_occasion_lines(date(2027, 4, 27), context) == []
+    lines = status_digest.moving_occasion_lines(date(2027, 4, 28), context)
+    assert lines == ["Occasions needing next year's dates: Easter. "
+                     "Ask Claude to add them, checked against a source."]
+    assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []
+
+
+def test_daily_phone_summary_only_says_the_state(monkeypatch):
+    monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: ([], []))
+    assert status_digest.phone_summary({"status": "ok", "issues": []}) == (
+        "Bus bot: all fine", "Everything is working.", 2)
+    assert status_digest.phone_summary(
+        {"status": "degraded", "issues": ["job:timetable-automation"]}) == (
+        "Bus bot: a snag, nothing to do yet", "Details are in Slack.", 3)
+    waiting = {"status": "ok", "issues": [],
+               "blurb_generation": {"status": "pending_review", "pending_review": {"buses": 35}}}
+    assert status_digest.phone_summary(waiting) == (
+        "Bus bot: something needs your attention", "Details are in Slack.", 3)
+    monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: (
+        ["Timetable updates have failed every check for 3 days."], []))
+    assert status_digest.phone_summary({"status": "degraded", "issues": []})[2] == 4
+
+
+def test_daily_phone_summary_only_goes_to_an_ntfy_topic(tmp_path, monkeypatch):
+    sent = []
+
+    class Response:
+        def read(self):
+            return b""
+
+    monkeypatch.setattr(status_digest.urllib.request, "urlopen",
+                        lambda request, timeout: sent.append(json.loads(request.data)) or Response())
+    conf = tmp_path / "ntfy"
+    monkeypatch.setattr(status_digest, "PHONE_CONF", conf)
+    assert not status_digest._post_phone("t", "m", 2)
+    conf.write_text("https://example.com/busbot-alerts-abcdefghijkl\n")
+    assert not status_digest._post_phone("t", "m", 2)
+    conf.write_text("https://ntfy.sh/busbot-alerts-abcdefghijkl\n")
+    assert status_digest._post_phone("Bus bot: all fine", "m", 2)
+    assert sent == [{"topic": "busbot-alerts-abcdefghijkl", "title": "Bus bot: all fine",
+                     "message": "m", "priority": 2, "tags": ["bus"]}]
+
+
+def test_monday_update_lists_descriptions_published_that_week(tmp_path):
+    history = tmp_path / "history"
+    history.mkdir()
+    (history / "20261101T021500Z-aaaaaaaa.approved.json").write_text(json.dumps({
+        "created_at": "2026-11-01T02:15:00+00:00",
+        "additions": {"in_service": {"FBRI:303": "Known Model. Doing another shift."},
+                      "waiting": {}, "depot": {}}}))
+    (history / "20261001T021500Z-bbbbbbbb.approved.json").write_text(json.dumps({
+        "created_at": "2026-10-01T02:15:00+00:00",
+        "additions": {"in_service": {"FBRI:1": "Old line."}}}))
+    lines = status_digest.published_description_lines(date(2026, 11, 2), history)
+    assert lines[0] == "*Bus descriptions published this week (1)*"
+    assert "- FBRI:303 (in service): Known Model. Doing another shift." in lines
+    assert not any("Old line" in line for line in lines)
+    assert status_digest.published_description_lines(date(2026, 11, 3), history) == []

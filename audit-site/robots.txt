@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bristol-bus-bot.github.io/weca-bus-audit/sitemap.xml

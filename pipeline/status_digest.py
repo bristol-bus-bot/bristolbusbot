@@ -21,6 +21,8 @@ HOME = Path.home()
 LIVE_DB = Path(os.getenv(
     "BBB_LIVE_DB", "/var/lib/bristolbusbot/collector/live.db"))
 WEBHOOK_CONF = HOME / ".config" / "busbot-alerts" / "webhook"
+# Tom's phone (ntfy). Slack is the full update; the phone gets one line.
+PHONE_CONF = HOME / ".config" / "busbot-alerts" / "ntfy"
 BOT_DB = Path(os.getenv(
     "BBB_BOT_DB", "/var/lib/bristolbusbot/bot/app_data.db"))
 SITE_URL = "http://127.0.0.1:5002/healthz"
@@ -32,6 +34,11 @@ DAILY_STATE = Path(os.getenv(
     "/var/lib/bristolbusbot/monitoring/daily-digest-state.json"))
 CURRENT_RELEASES = Path(os.getenv(
     "BBB_CURRENT_RELEASES", str(HOME / "bristolbusbot" / "current")))
+DESCRIPTION_HISTORY = Path(os.getenv(
+    "BBB_BLURB_HISTORY", "/var/lib/bristolbusbot/blurb-pending/history"))
+EDITORIAL_CONTEXT = Path(os.getenv(
+    "BBB_EDITORIAL_CONTEXT",
+    "/var/lib/bristolbusbot-editorial/editorial-context.json"))
 
 
 def _post(text: str) -> bool:
@@ -44,6 +51,47 @@ def _post(text: str) -> bool:
         headers={"Content-Type": "application/json"})
     urllib.request.urlopen(req, timeout=15).read()
     return True
+
+
+ATTENTION = ("Bus bot: something needs your attention", "Details are in Slack.")
+
+
+def phone_summary(snapshot: dict, today: date | None = None) -> tuple[str, str, int]:
+    """(title, message, ntfy priority) for the daily phone note.
+
+    Anyone who knows the topic can read it, so it only ever says the state;
+    the details are in the Slack update. All fine is quiet."""
+    if recovery_status(snapshot, today)[0]:
+        return (*ATTENTION, 4)
+    blurbs = _dict(snapshot.get("blurb_generation"))
+    if blurbs.get("status") == "pending_review" or snapshot.get("status") == "warning":
+        return (*ATTENTION, 3)
+    issues = [str(issue) for issue in (snapshot.get("issues") or [])
+              if isinstance(snapshot.get("issues"), list)]
+    if snapshot.get("status") == "ok" and not issues:
+        return ("Bus bot: all fine", "Everything is working.", 2)
+    return ("Bus bot: a snag, nothing to do yet", "Details are in Slack.", 3)
+
+
+def _post_phone(title: str, message: str, priority: int) -> bool:
+    try:
+        url = PHONE_CONF.read_text(encoding="utf-8").splitlines()[0].strip()
+    except (OSError, IndexError):
+        return False
+    topic = url.removeprefix("https://ntfy.sh/").strip("/")
+    if not url.startswith("https://ntfy.sh/") \
+            or not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", topic):
+        return False
+    request = urllib.request.Request(
+        "https://ntfy.sh/", data=json.dumps({
+            "topic": topic, "title": title, "message": message,
+            "priority": priority, "tags": ["bus"],
+        }).encode(), headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(request, timeout=15).read()
+        return True
+    except OSError:
+        return False
 
 
 def collector_lines() -> list[str]:
@@ -100,7 +148,7 @@ def site_line() -> str:
     try:
         with urllib.request.urlopen(SITE_URL, timeout=10) as r:
             body = r.read(200).decode(errors="replace")
-        return f"*site*  :white_check_mark: healthz {r.status} — {body.strip()[:80]}"
+        return f"*site*  :white_check_mark: healthz {r.status}: {body.strip()[:80]}"
     except Exception as e:  # noqa: BLE001
         return f"*site*  :x: {e}"
 
@@ -563,6 +611,60 @@ def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str
     return warnings, freshness
 
 
+def moving_occasion_lines(today: date | None = None,
+                          path: Path | None = None) -> list[str]:
+    """Moving-date occasions (Easter, Diwali...) are one entry per year. When
+    the latest entry for one ended over 30 days ago, next year's is missing."""
+    today = today or date.today()
+    try:
+        document = json.loads((path or EDITORIAL_CONTEXT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    latest: dict[str, tuple[date, str]] = {}
+    for item in document.get("occasions", []) if isinstance(document, dict) else []:
+        schedule = _dict(_dict(item).get("schedule"))
+        if schedule.get("kind") != "date_range":
+            continue
+        name = re.sub(r"-\d{4}$", "", str(item.get("id", "")))
+        try:
+            end = date.fromisoformat(str(schedule.get("end")))
+        except ValueError:
+            continue
+        if name not in latest or end > latest[name][0]:
+            latest[name] = (end, str(item.get("label") or name))
+    overdue = sorted(label for end, label in latest.values() if (today - end).days > 30)
+    if not overdue:
+        return []
+    return [f"Occasions needing next year's dates: {', '.join(overdue)}. "
+            "Ask Claude to add them, checked against a source."]
+
+
+def published_description_lines(today: date | None = None,
+                                history: Path | None = None) -> list[str]:
+    """Mondays: the bus descriptions that went live in the last week, so Tom
+    can spot any to pull. They publish automatically after their checks."""
+    today = today or datetime.now(timezone.utc).date()
+    if today.weekday() != 0:
+        return []
+    lines = []
+    for path in sorted((history or DESCRIPTION_HISTORY).glob("*.approved.json")):
+        try:
+            batch = json.loads(path.read_text(encoding="utf-8"))
+            published = date.fromisoformat(str(batch.get("created_at", ""))[:10])
+        except (OSError, ValueError):
+            continue
+        if not 0 <= (today - published).days <= 7:
+            continue
+        for variant, items in _dict(batch.get("additions")).items():
+            for key, text in _dict(items).items():
+                lines.append(f"{key} ({str(variant).replace('_', ' ')}): {text}")
+    if not lines:
+        return []
+    return [f"*Bus descriptions published this week ({len(lines)})*",
+            *(f"- {line}" for line in lines[:60]),
+            "Ask Claude to pull any you don't like.", ""]
+
+
 def action_line(snapshot: dict, today: date | None = None) -> str:
     if recovery_status(snapshot, today)[0]:
         return '*You need to do:* Ask Claude to investigate the backup or timetable problem above; automatic retries have not fixed it.'
@@ -617,9 +719,11 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         "- Threads and new website ideas are optional and parked, not overdue "
         "core work.",
         "",
+        *published_description_lines(today),
         "*Today's checks*",
         *(f"- {line}" for line in freshness),
         *(f"- {line}" for line in today_lines(snapshot, today)),
+        *(f"- {line}" for line in moving_occasion_lines(today)),
         "",
         action_line(snapshot, today),
     ]
@@ -646,6 +750,8 @@ def main() -> None:
     except (OSError, json.JSONDecodeError, ValueError):
         previous = {}
     message = daily_message(snapshot, previous)
+    if _post_phone(*phone_summary(snapshot)):
+        print("daily phone summary sent")
     if _post(message):
         _write_state(snapshot)
         print("daily update posted")

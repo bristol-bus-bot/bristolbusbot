@@ -237,8 +237,13 @@ class Fleet:
             records = self._by_code.get(code, [])
             record = _preferred(records)
             owners = self._code_owners.get(code, set())
+            # With an operator, never another operator's withdrawn bus that
+            # happens to share the code (a record with no operator is fine).
+            # Same rules as the bot and the audit check; all three run
+            # shared/fixtures/vehicle_identity.json.
             if (record and len(owners) <= 1
-                    and (not operator or not owners or operator in owners)):
+                    and (not operator or operator in owners
+                         or (not owners and not _operator(record)))):
                 return record
         return None
 

@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-31T02:07:13Z",
+  "facts": [
+    {
+      "id": "bristol-single-fare-2026",
+      "scope": {
+        "operators": [
+          "FBRI"
+        ],
+        "localities": [
+          "Bristol"
+        ],
+        "excluded_routes": [
+          "A1",
+          "A2",
+          "A3",
+          "A4"
+        ]
+      },
+      "review_due": "2099-12-01",
+      "claim": "A First Bus adult single in Bristol is £2.60 from 1 January 2026.",
+      "prompt_hint": "Use the exact £2.60 fare only when a fare comparison genuinely fits the live bus event.",
+      "requirements": [
+        {
+          "label": "£2.60 fare",
+          "alternatives": [
+            "£2.60"
+          ]
+        },
+        {
+          "label": "adult single",
+          "alternatives": [
+            "adult single",
+            "single fare"
+          ]
+        },
+        {
+          "label": "Bristol scope",
+          "alternatives": [
+            "Bristol"
+          ]
+        }
+      ],
+      "active_from": "2026-01-01",
+      "active_until": "2099-12-31",
+      "source": {
+        "publisher": "First Bus",
+        "title": "Tap On, Tap Off fares",
+        "url": "https://www.firstbus.co.uk/bristol-bath-and-west/tickets/tap-tap",
+        "published_on": "2026-01-01",
+        "verified_on": "2026-09-15"
+      }
+    }
+  ],
+  "occasions": [
+    {
+      "id": "halloween",
+      "review_due": "2099-12-01",
+      "label": "Halloween",
+      "prompt_hint": "It's Halloween. Give the post a light spooky touch (haunted top decks, the bus that never comes, a ghostly timetable) while keeping every bus fact accurate. Never suggest a specific bus or journey is a 'ghost bus', cancelled or missing unless the data says so.",
+      "requirements": [
+        {
+          "label": "Halloween",
+          "alternatives": [
+            "Halloween"
+          ]
+        }
+      ],
+      "schedule": {
+        "kind": "annual_date",
+        "month": 13,
+        "day": 1
+      },
+      "probability": 0.4,
+      "max_uses_per_day": 5,
+      "source": {
+        "publisher": "Wikipedia",
+        "title": "Halloween",
+        "url": "https://en.wikipedia.org/wiki/Halloween",
+        "verified_on": "2026-10-31"
+      }
+    }
+  ],
+  "news": [
+    {
+      "id": "england-two-pound-bus-cap-2027",
+      "label": "England £2 bus fare cap announced",
+      "claim": "On 22 July 2026, the government announced that participating bus services in England outside London will have a £2 cap on single fares from 1 January 2027 until the end of 2027.",
+      "prompt_hint": "Use the exact dates. Do not say the cap applies now, and do not say today or yesterday. Bristol's current First Bus adult single is £2.60, from the separately sourced fare fact.",
+      "requirements": [
+        {
+          "label": "£2 cap",
+          "alternatives": [
+            "£2 cap",
+            "fares capped at £2",
+            "£2 fare cap"
+          ]
+        },
+        {
+          "label": "participating services",
+          "alternatives": [
+            "participating services",
+            "participating bus services"
+          ]
+        },
+        {
+          "label": "England outside London",
+          "alternatives": [
+            "England outside London"
+          ]
+        },
+        {
+          "label": "starts 1 January 2027",
+          "alternatives": [
+            "from 1 January 2027",
+            "starts 1 January 2027",
+            "starting 1 January 2027"
+          ]
+        },
+        {
+          "label": "ends with 2027",
+          "alternatives": [
+            "until the end of 2027",
+            "throughout 2027",
+            "until 31 December 2027"
+          ]
+        }
+      ],
+      "published_at": "2026-07-22T00:00:00Z",
+      "active_from": "2026-07-22T00:00:00Z",
+      "expires_at": "2099-12-31T00:00:00Z",
+      "probability": 0.1,
+      "max_uses_total": 2,
+      "cooldown_hours": 36,
+      "append_source_link": false,
+      "source": {
+        "publisher": "UK Government",
+        "title": "Cheaper travel for millions with a third off fares",
+        "url": "https://www.gov.uk/government/news/cheaper-travel-for-millions-with-a-third-off-fares",
+        "published_on": "2026-07-22",
+        "verified_on": "2026-07-23"
+      }
+    }
+  ]
+}

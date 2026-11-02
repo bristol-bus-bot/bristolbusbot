@@ -455,6 +455,8 @@ fi
 /usr/bin/systemctl enable --now bbb-data-health.timer
 /usr/bin/systemctl start bbb-collector-anomaly.service
 /usr/bin/systemctl enable --now bbb-collector-anomaly.timer
+# Publishes descriptions approved by their checks; does nothing otherwise.
+/usr/bin/systemctl enable --now bbb-blurb-promote.timer
 for timer in "$stage/systemd"/*.timer; do
     timer_name=$(basename "$timer")
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \

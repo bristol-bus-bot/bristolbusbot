@@ -423,7 +423,7 @@ def _stop(signum, frame):  # pragma: no cover
 def main() -> None:  # pragma: no cover - exercised by the smoke run
     import sqlite3
     logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     install_query_secret_filter()
     cfg = Config()
     cfg.require_key()

@@ -1,0 +1,12 @@
+[Unit]
+Description=Publish descriptions that passed their automatic checks
+
+[Timer]
+OnCalendar=*-*-* 02:45:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=5min
+Unit=bbb-blurb-promote.service
+
+[Install]
+WantedBy=timers.target

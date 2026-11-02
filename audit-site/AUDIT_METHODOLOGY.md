@@ -204,6 +204,29 @@ only medians over many journeys are used. These figures describe the
 timetable and the service. They are not a measure of drivers, who can only
 make up time by driving faster or pulling away before people have sat down.
 
+### Likely reasons
+
+The route panel suggests up to three likely reasons, each with its evidence.
+They are suggestions, not findings. Beyond a single stretch that loses time,
+three patterns are looked for:
+- **Time in the wrong place.** The stretch into a stop has more time than
+  buses need and the stretch out of it has too little, same direction and
+  time of day. Buses arrive early, wait, then run late. Shown when the
+  smaller of the two is at least 2 minutes.
+- **The timetable expects faster journeys after 10am.** A stretch gets at
+  least 2 minutes less from 10am than in the morning peak, but typical
+  journey times differ by 2 minutes or less, and the midday timing is short
+  by at least 3 minutes.
+- **Each trip starts later than the last.** Lateness at the first timing
+  point after the start of the route (the start itself is left out, because
+  buses wait there), for trips starting 7 to 10am against 1 to 7pm. For each
+  bus on each day with at least 4 trips, the later half of its trips is
+  compared with the earlier half; a rise of 2 minutes or more counts as
+  starting later. Shown when the afternoon is at least 3 minutes later than
+  the morning and at least 4 in 10 bus-days rose. This points to too little
+  time at the end of the route to catch up. Needs 20 trips in each period
+  and 10 bus-days.
+
 ## Bus records on the live map
 
 Each bus's Record tab on bristolbuses.live compares it, like for like, with
@@ -226,49 +249,20 @@ by area and by ward. This shows where service is better or worse, but a ward's
 figure only reflects the stops we observed there, so sparsely-measured wards are
 treated as indicative.
 
-## Dated local evidence packs
+Tapping a ward names the routes behind its figure: the three with the most
+readings there over the last 28 days, each with its on-time share in that
+ward and its share of the ward's readings. This comes from the same private
+route-by-ward rollup. A ward's route readings can add up
+to less than its total, because readings we couldn't tie to a route still
+count towards the ward. Where the three routes carry under half of a ward's
+readings, they are described as the busiest rather than the main cause.
 
-A local evidence pack uses the same daily rollups as the audit and selects the
-last three complete calendar months by default. It sums the underlying on-time
-and total reading counts before calculating a period percentage; it never
-averages already-rounded daily percentages. The preceding equal-length period
-is calculated in the same way. If the selected scope's first or last evidence
-falls more than 14 days inside that window, generation stops and asks for a
-shorter complete window rather than publishing a partial headline under a
-longer date label.
+## Test summaries (2026)
 
-For an area or ward, a small permanent private rollup also retains the route
-attached to each qualifying geographic reading. This prevents future packs
-depending on raw observations which are deleted after 95 days. The first
-backfill can only use raw days still retained, so a pack says explicitly when
-its route table covers less than 80% of the days behind the geographic headline.
-A route needs at least 200 readings in the selected period before the pack calls
-its result more than indicative. Operator identity is kept beside the route
-number so, for example, two operators using the same public route number are
-not silently combined. A route whose local evidence starts or ends more than
-14 days inside the selected window is labelled as a partial-period result and
-is not used to generate a route-level committee question.
-
-An earlier-period punctuality change is withheld when a known audit method
-change falls anywhere in the two periods being compared. In particular, packs
-whose comparison crosses 13 July 2026 do not turn the replacement collector's
-different timetable matching and stale-position handling into an apparent
-performance change. If an evidence period crosses a financial-year target
-change, the pack labels both targets and describes the headline card as the
-target at the end of the period.
-
-Registered timetable changes are a separate measure. They are included only
-when both comparison periods have complete stable route identity, repeated
-ordinary weekday patterns and a manually checked shared school-term or seasonal
-context. They describe scheduled journeys, not operated journeys or
-cancellations. If any check fails, the pack prints the reason and leaves the
-section out.
-
-The three suggested committee questions are templates tied to figures displayed
-in that exact pack. They are not findings in their own right and are reviewed by
-a person before the pack is shared. Each dated pack contains its exact period,
-generation time, sample sizes, limitations, source links and a machine-readable
-copy of the summary.
+Between August and October 2026 we tested a printable, dated summary for one
+area, built from the same daily figures as this audit. It was a test of the
+format only. It is not part of the audit, it is not distributed by this
+project, and nothing on this page depends on it.
 
 ## Fleet (model and electric)
 
@@ -296,6 +290,17 @@ new timetable edition. Routes that never meet are reported separately, labelled
 with their main area: "4 Bath", "4 Bristol", "U2 N Somerset". A reading whose
 trip is not in the day's schedule takes the area of its stop. Numbers used in
 one place only keep their plain label.
+
+## Where each route goes
+
+Each route's one-line description ("Bristol to Clevedon, via Failand and
+Tickenham") is built from the timetable, not written by hand. It uses the
+commonest journey pattern in the route's busier direction. The two ends are
+named by their town, and the towns of the timing points in between give the
+"via" (up to three). Towns are the NaPTAN locality of each stop; a stop
+missing from that list borrows the town of stops with the same name in its
+ward. Where one end is outside the West of England and has no town on record,
+the description starts "From" the end we can name.
 
 ## Frequent services
 
@@ -398,19 +403,19 @@ operators' route numbers are now tagged with the operator name, so "X1
 Taylors" is no longer merged with First's X1. Coverage withholding for
 duplicate timetable entries moved from the whole day to the affected route.
 
-**23 August 2026 - dated local evidence packs added.** This did not alter any
-punctuality result. It added a route-by-area/ward daily rollup for future local
-briefings and a generator which uses complete months, summed counts, explicit
-sample warnings and fail-closed timetable comparisons.
+**23 August 2026 - route-by-area/ward rollup added.** This did not alter any
+punctuality result. It added a private daily rollup of each route's readings by
+area and ward, now used by the ward panel, and a test of printable summaries
+(see "Test summaries").
 
-**23 August 2026 — incomplete collector days excluded from coverage.** Daily
+**23 August 2026: incomplete collector days excluded from coverage.** Daily
 coverage now has a separate collector-health gate using successful polls,
 continuity across the scheduled operating window and feed match rate. Failed
 days retain private diagnostic totals but publish no expected-versus-observed
 coverage. The daily rollup also moved later so journeys timetabled after 29:00
 have time to begin before the service day is closed.
 
-**16 August 2026 — origin layovers excluded and trip matching corrected.**
+**16 August 2026: origin layovers excluded and trip matching corrected.**
 The audit previously retained the closest GPS reading at the first timing point
 of a trip. This could be a bus waiting on its stand before departure and could
 therefore overstate early running. First timing points are now excluded from
@@ -428,11 +433,11 @@ bus service.
 The collector cutover retained only a partial raw record for 1 July while
 inheriting that day's complete summary. Recalculating it from those partial rows
 replaced 20,097 readings with 1,430 and produced a misleadingly high result.
-That service day is excluded from all public results and evidence packs until
+That service day is excluded from all public results until
 complete raw evidence can be restored. Publication checks also reject any day
 where the pooled totals contradict the sum of the operator totals.
 
-**Early July 2026 — collector transition; exact deployment chronology is
+**Early July 2026: collector transition; exact deployment chronology is
 incomplete.** An earlier account assigned the matching and stale-position
 changes to 13 July. Code commit `65899b8`, dated 5 July, already introduces
 stale `RecordedAtTime` filtering. A commit date does not establish its production
@@ -442,7 +447,7 @@ Treat comparisons spanning the early-July transition as method-sensitive;
 13 July remains a documented historical marker, not a verified deployment
 timestamp for all these changes.
 
-**16 August 2026 — timetable population changed.** Trip identities and
+**16 August 2026: timetable population changed.** Trip identities and
 scheduled departures differ across the timetable editions. A route-level
 comparison spanning this boundary is not automatically a like-for-like
 performance trend. Historical snapshots without a retained timetable file
@@ -456,7 +461,7 @@ and rollups can be recomputed; neither table is inherently write-once.
 Where retained sample support contradicts the published counts, derived
 results are withheld rather than silently rewritten.
 
-**14 July 2026 — timing points restored on TransXChange-sourced routes.**
+**14 July 2026: timing points restored on TransXChange-sourced routes.**
 Routes that enter the timetable via TransXChange rather than GTFS (42, 43,
 44, 45, 70, 74, 373, 376x, AZ1, AZ2, N43, X12 and the SB school services)
 carried no timing-point flags, because the conversion recognised only the
@@ -468,8 +473,8 @@ there.
 
 ## Journey sample qualification (export method 3)
 
-Stop readings from one journey are not independent bus journeys. The audit,
-site headline and evidence-pack code use the same journey support rules;
+Stop readings from one journey are not independent bus journeys. The audit
+and the site headline use the same journey support rules;
 weekly cards compose the retained daily support instead of applying a separate
 1,000-reading rule. Missing support, impossible counts and contradictions with
 the durable rollup cannot support a published result. Known contradictory days

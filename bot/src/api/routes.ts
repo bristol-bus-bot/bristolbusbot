@@ -57,7 +57,7 @@ export class APIRoutes {
         this.authToken = process.env.API_AUTH_TOKEN || null;
 
         if (!this.authToken) {
-            logger.warn('API_AUTH_TOKEN not set — control endpoints are disabled until it is configured.');
+            logger.warn('API_AUTH_TOKEN not set: control endpoints are disabled until it is configured.');
         }
 
         this.initializeRoutes();
@@ -116,14 +116,14 @@ export class APIRoutes {
         // Health endpoint - unauthenticated so external monitors can poll it
         this.router.get('/api/health', this.handleHealthCheck.bind(this));
 
-        // Logs endpoint — protected by auth token
+        // Logs endpoint: protected by auth token
         this.router.get('/api/logs', this.requireAuth.bind(this), logsCommandLimit,
             this.handleLogs.bind(this));
         
         // Runtime control endpoint.
         this.router.post('/api/restart', this.requireAuth.bind(this), this.handleRestart.bind(this));
 
-        // Database reload endpoint — protected by auth token
+        // Database reload endpoint: protected by auth token
         this.router.post('/api/reload-db', this.requireAuth.bind(this), this.handleReloadDatabase.bind(this));
 
         // Dashboard endpoints.
@@ -140,7 +140,7 @@ export class APIRoutes {
         // Recent posts - for live-buses integration
         this.router.get('/api/recent-posts', this.handleRecentPosts.bind(this));
 
-        // Test endpoint - trigger posting immediately — protected by auth token
+        // Test endpoint - trigger posting immediately: protected by auth token
         this.router.post('/api/test/post-now', this.requireAuth.bind(this), this.handleTestPostNow.bind(this));
     }
     

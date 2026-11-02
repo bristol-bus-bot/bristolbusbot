@@ -1,4 +1,4 @@
-// Event Reader — the bot's production input: the shared collector's
+// Event Reader. The bot's production input is the shared collector's
 // events table.
 //
 // The collector has already matched the vehicle, measured the delay
@@ -7,7 +7,7 @@
 //   1. polls live.db for unconsumed events (operator-filtered)
 //   2. maps rows to the BusEvent shape the persona code expects
 //   3. runs the same freshness + significance selection as direct ingest
-//   4. marks rows consumed (never deletes — the collector owns the table)
+//   4. marks rows consumed (never deletes: the collector owns the table)
 //
 // Downstream services receive the same BusEvent shape as direct ingest.
 
@@ -18,7 +18,6 @@ import { ApplicationState } from '../services/application-state.js';
 import { DelayAnalyzer } from '../services/delay-analyzer.js';
 import type { BusEvent } from '../types/bus-types.js';
 import { observationIssue } from '../services/story-brief.js';
-import { cleanStopName, getStopEnrichment } from '../utils/stop-name-cleaner.js';
 
 interface EventRow {
     trip_id?: string;
@@ -96,9 +95,10 @@ export class EventReader {
                 ORDER BY v.recorded_at DESC LIMIT 1000`)
                 .all(new Date(now - 90_000).toISOString()) as any[];
             return rows.filter(row => this.operators.has(row.operator_ref)).map(row => {
-                const name = getStopEnrichment()[row.stop_code]?.name || names.get(row.stop_code);
+                // The collector copies the timetable's name, which is already corrected.
+                const name = names.get(row.stop_code);
                 const event = this.toBusEvent({ ...row, id: undefined, source: 'live_snapshot',
-                    stop_name: name ? cleanStopName(name, row.stop_code) : null,
+                    stop_name: name || null,
                     corroboration: row.streak_count || 0 });
                 event.significance = Math.max(1, event.significance);
                 return event;

@@ -703,3 +703,98 @@ def test_gemini_non_stop_response_reports_safe_reason_and_token_counts(
             match=r"reason=MAX_TOKENS, output_tokens=20, thought_tokens=492"):
         client.generate(
             "in_service", {"OPAA:101": {"model": "Known Model"}}, 512)
+
+
+DIESEL_DECKER = {"double_decker": True, "electric": False, "coach": False,
+                 "fuel": "diesel", "registration": "BU09 JZT"}
+
+
+@pytest.mark.parametrize("variant,text", [
+    ("in_service", "Enviro400. Zero emissions, infinite local delays."),
+    ("in_service", "Enviro400. Replaced the Dart, kept the delay tradition."),
+    ("waiting", "Enviro400 double-decker waiting. Cold fury at the timetable."),
+    ("in_service", "Enviro400. Classic timetable disappointment."),
+])
+def test_descriptions_never_call_the_bus_late(variant, text):
+    with pytest.raises(blurbs.BlurbError, match="calls this bus late"):
+        blurbs.validate_grounding(text, DIESEL_DECKER, variant)
+
+
+def test_traffic_jokes_and_depot_lines_are_still_allowed():
+    blurbs.validate_grounding("Enviro400. Two decks, double the view of gridlock.",
+                              DIESEL_DECKER, "in_service")
+    blurbs.validate_grounding("Enviro400 at the depot after a late shift.",
+                              DIESEL_DECKER, "depot")
+
+
+def test_a_year_must_match_the_registration():
+    assert blurbs.registration_year("BU09 JZT") == 2009
+    assert blurbs.registration_year("YX26RXP") == 2026
+    assert blurbs.registration_year("SN69ZDV") == 2019
+    assert blurbs.registration_year("VJI3968") is None
+    with pytest.raises(blurbs.BlurbError, match="wrong year"):
+        blurbs.validate_grounding("Original 2005 Enviro400 double-decker.",
+                                  DIESEL_DECKER, "depot")
+    blurbs.validate_grounding("Original 2009 Enviro400 double-decker.",
+                              DIESEL_DECKER, "depot")
+
+
+class OneLineClient:
+    model = "test-model"
+
+    def __init__(self):
+        self.asked = []
+
+    def generate(self, variant, summaries, _maximum):
+        self.asked.append((variant, sorted(summaries)))
+        return ({key: "Known Model. doing another shift." for key in summaries},
+                {"input_tokens": 10, "output_tokens": 5})
+
+
+def test_automatic_runs_only_describe_buses_that_are_new(tmp_path):
+    paths = workflow_files(tmp_path)
+    pending, approval = tmp_path / "pending.json", tmp_path / "approval.json"
+    known = tmp_path / "known-buses.json"
+    limits = blurbs.Limits(40, 3, 50000, 12000, 18, 300000, 75000)
+    client = OneLineClient()
+    run = lambda: blurbs.generate_pending(  # noqa: E731
+        **paths, pending_path=pending, ledger_path=tmp_path / "usage.json",
+        limits=limits, client=client, auto=True, known_path=known,
+        approval_path=approval)
+
+    # First run: records the buses already in service and asks for nothing.
+    with pytest.raises(blurbs.NothingToDo, match="recorded 1 buses"):
+        run()
+    assert client.asked == [] and json.loads(known.read_text())["buses"] == ["OPAA:101"]
+    with pytest.raises(blurbs.NothingToDo, match="no eligible"):
+        run()
+    assert client.asked == []
+
+    # A new bus appears: only it is described, and the batch is approved.
+    fleet = json.loads(paths["fleet_path"].read_text())
+    fleet.append(fleet_record("OPAA", "303", "Known Model"))
+    write_json(paths["fleet_path"], fleet)
+    connection = sqlite3.connect(paths["live_db"])
+    connection.execute("INSERT INTO vehicles VALUES (?, ?, ?)",
+                       ("OPAA", "OPAA-303", datetime.now(timezone.utc).isoformat()))
+    connection.commit()
+    connection.close()
+    result = run()
+    assert {keys[0] for _variant, keys in client.asked} == {"OPAA:303"}
+    assert result["scope"]["selected_keys"] == ["OPAA:303"]
+    stored = json.loads(approval.read_text())
+    assert stored["approved_by"] == "automatic checks" and stored["batch_id"] == result["batch_id"]
+    assert json.loads(known.read_text())["buses"] == ["OPAA:101", "OPAA:303"]
+
+
+def test_nightly_promotion_with_nothing_approved_is_a_quiet_skip(tmp_path, monkeypatch):
+    monkeypatch.setattr(blurbs, "_running_as_root", lambda: True)
+    kwargs = dict(approval_path=tmp_path / "approval.json", paths={},
+                  incoming_root=tmp_path / "incoming", history=tmp_path / "history",
+                  state_path=tmp_path / "state.json",
+                  restart=lambda: None, healthy=lambda _expected: True)
+    with pytest.raises(blurbs.NothingToDo, match="no batch waiting"):
+        blurbs.promote_pending(pending_path=tmp_path / "pending.json", **kwargs)
+    (tmp_path / "pending.json").write_text("{}")
+    with pytest.raises(blurbs.NothingToDo, match="hasn't been approved"):
+        blurbs.promote_pending(pending_path=tmp_path / "pending.json", **kwargs)

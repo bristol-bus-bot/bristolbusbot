@@ -83,7 +83,7 @@
 .vc-action-blue { background: var(--tint-origin); color: var(--uk-blue); }
 .vc-action-bsky { background: rgba(0,133,255,.1); color: #0069c9;
                   font-weight: 600; }
-/* Flickr reg-plate search — links out so photographers keep attribution */
+/* Flickr reg-plate search: links out so photographers keep attribution */
 .vc-action-flickr { background: var(--surface-2); color: var(--fg-2);
                     font-weight: 600; }
 .vc-offduty { margin-top: 4px; padding: 9px 12px; background: var(--surface-2);

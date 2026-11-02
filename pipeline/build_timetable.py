@@ -348,7 +348,7 @@ def main():
     shutil.copy2(WECA_DB, staged_db)
 
     # Route shapes MUST come from the same GTFS extract the timetable was
-    # built from — shape_ids regenerate per BODS build, so importing from
+    # built from: shape_ids regenerate per BODS build, so importing from
     # any other download matches nothing (shape_ids are per-extract UUIDs).
     if (Path(GTFS_DIR) / "shapes.txt").exists():
         env_shapes = {**os.environ, "BBB_TIMETABLE_DB": str(staged_db),
@@ -375,6 +375,13 @@ def main():
         staged_db.unlink(missing_ok=True)
         logger.error(
             "Stop-search lookup generation failed - refusing to publish the candidate.")
+        return 2
+
+    # Best public stop names, once, so the bot, site, map and audit agree.
+    logger.info("Correcting stop names...")
+    if not run([PY, str(HERE / "prepare_stop_names.py"), str(staged_db)]):
+        staged_db.unlink(missing_ok=True)
+        logger.error("Stop-name correction failed - refusing to publish the candidate.")
         return 2
 
     try:

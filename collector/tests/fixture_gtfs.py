@@ -2,12 +2,12 @@
 
 Contents designed to exercise the matcher's edge cases:
 - FBRI route 75, weekday, outbound 11:15 + inbound 11:20 (direction scoping)
-- ABUS also runs a route '75' (operator scoping — same number, different NOC)
+- ABUS also runs a route '75' (operator scoping: same number, different NOC)
 - FBRI route N75 night trip departing '25:30:00' on the WEDNESDAY service
-  (i.e. 01:30 Thursday wall-clock — the pre-06:00 previous-day window)
+  (i.e. 01:30 Thursday wall-clock: the pre-06:00 previous-day window)
 - vehicle_journey_code on the 11:15 trip (exact-tier testing)
 - FBRI runs line '41' in TWO towns (a real 2026-07 matcher regression):
-  CITY trips near the S1-S3 stops, and FARTOWN trips ~18 km east — same
+  CITY trips near the S1-S3 stops, and FARTOWN trips ~18 km east: same
   NOC, same line number, overlapping departure windows
   (candidate-selection testing)
 """
@@ -57,7 +57,7 @@ def build() -> sqlite3.Connection:
         ("T_NIGHT","RN75","WK", "Night",    "", 0, "",   "", 0, None),
         # the two-towns shape: same NOC+line+direction, different towns.
         # FARTOWN's 16:05 is temporally CLOSER to a 16:06 origin than
-        # CITY's 16:08 — only geography can pick correctly.
+        # CITY's 16:08: only geography can pick correctly.
         ("T_41_CITY", "R41C", "WK", "City",    "", 1, "", "", 0, None),
         ("T_41_FAR",  "R41F", "WK", "Fartown", "", 1, "", "", 0, None),
     ])

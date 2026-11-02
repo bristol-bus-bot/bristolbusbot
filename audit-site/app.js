@@ -158,6 +158,21 @@ function inTen(pct) {
   return `${Math.round(finiteNumber(pct) / 10)} in 10`;
 }
 
+// The route's page on the live map site, which mirrors route_pages.py:
+// /routes/<operator>/<route>, e.g. /routes/first/4-bath. Only one operator's
+// own labels have a page (the network view tags labels with the operator).
+const ROUTE_PAGE_OPERATORS = { FBRI: "first" };
+function pageSlug(value) {
+  let text = String(value || "").toLowerCase().replace(/'/g, "");
+  if (text.startsWith("the ")) text = text.slice(4);
+  return text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function routePageUrl(operator, route) {
+  if (!operator || operator === "ALL" || !route) return null;
+  const operatorSlug = ROUTE_PAGE_OPERATORS[operator] || pageSlug(operatorName(operator));
+  return operatorSlug ? `https://bristolbuses.live/routes/${operatorSlug}/${pageSlug(route)}` : null;
+}
+
 function operatorName(code) {
   const meta = (state.data.operators || []).find((o) => o.code === code);
   return meta ? meta.name : code;
@@ -327,8 +342,8 @@ function journeysHTML(entry, dutyChecked) {
     <h3>Did the buses turn up?</h3>
     <div class="turnup">
       <div><b>${Math.round((100 * seen) / timetabled)}%</b><span>of ${timetabled.toLocaleString()} timetabled journeys seen running</span></div>
-      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span>very likely didn't run: the same bus was seen on the journeys either side</span></div>` : ""}
-      <div><b>${unseen.toLocaleString()}</b><span>not seen: cancelled or tracker off, we can't tell</span></div>
+      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span><strong>Very likely didn't run.</strong> We tracked the same bus on the journey before and the journey after, but not on this one.</span></div>` : ""}
+      <div><b>${unseen.toLocaleString()}</b><span><strong>Not seen.</strong> Either it was cancelled or the bus's tracker was off. We can't tell which.</span></div>
     </div>
     ${worstLine}
     <p class="faint small">Weekdays and weekends together, counting only days when our tracking was working properly.</p>`;
@@ -363,26 +378,115 @@ function strongestStretches(items, kinds) {
   return [...best.values()].sort((a, b) => Math.abs(gap(b)) - Math.abs(gap(a)));
 }
 
+/** A stop name with its town after it, when the town isn't already in the name. */
+function stopLabel(name, place) {
+  return place ? `${name} (${place})` : String(name ?? "");
+}
+
+function stopHTML(name, place) {
+  return place
+    ? `${escapeHTML(name)} <span class="place">(${escapeHTML(place)})</span>`
+    : escapeHTML(name);
+}
+
+/** "+6 min" for a stretch that takes longer than timetabled, "3 min spare" for one with slack. */
+function minutesPill(item) {
+  const minutes = Math.round(Math.abs(gap(item)));
+  return item.kind === "slack"
+    ? `<span class="pill-gap spare">${minutes} min spare</span>`
+    : `<span class="pill-gap">+${minutes} min</span>`;
+}
+
 function stretchHTML(item, scale, withRoute) {
   const when = `${dayTypeLabel(item.day_type)} ${FIT_BANDS[item.band] || item.band}`;
   const note = item.kind === "tight"
     ? `${when} · ${finiteNumber(item.share_pct)}% of ${finiteNumber(item.journeys).toLocaleString()} journeys lose 2+ min here`
     : `${when} · buses run early here and may have to wait`;
   const badge = withRoute ? `<span class="badge">${escapeHTML(splitRoute(item.route)[0])}</span> ` : "";
-  return `<li>${badge}<strong>${escapeHTML(item.from)} → ${escapeHTML(item.to)}</strong>
+  return `<li>${minutesPill(item)} ${badge}<strong>${stopHTML(item.from, item.from_place)} → ${stopHTML(item.to, item.to_place)}</strong>
     <span class="small"> ${escapeHTML(note)}</span>${minutesBars(item, scale)}</li>`;
 }
 
 // --- Likely reasons ------------------------------------------------------------------
 // Only from patterns with evidence behind them, and never stated as fact.
-function likelyReasons(route, hourly, segments) {
+/**
+ * Time in the wrong place: spare time on the stretch into a stop and too
+ * little on the stretch out of it, same direction and time of day. Buses
+ * arrive early, wait, then run late. Returns the clearest pair, or null.
+ */
+function timeInTheWrongPlace(items) {
+  let best = null;
+  for (const tight of items.filter((i) => i.kind === "tight")) {
+    for (const slack of items.filter((i) => i.kind === "slack")) {
+      if (slack.to_stop !== tight.from_stop || slack.direction !== tight.direction
+          || slack.band !== tight.band || slack.day_type !== tight.day_type) continue;
+      // At least 2 minutes to move on each side, or it isn't worth saying.
+      const size = Math.min(-gap(slack), gap(tight));
+      if (size >= 2 && (!best || size > best.size)) best = { slack, tight, size };
+    }
+  }
+  return best;
+}
+
+/**
+ * The timetable gives a stretch less time from 10am than in the morning peak,
+ * but buses take about as long: the off-peak timing starts too early.
+ */
+function tenAmCut(items) {
+  let best = null;
+  for (const midday of items.filter((i) => i.kind === "tight" && i.band === "interpeak")) {
+    const morning = items.find((i) => i.band === "am_peak" && i.from_stop === midday.from_stop
+      && i.to_stop === midday.to_stop && i.direction === midday.direction && i.day_type === midday.day_type);
+    if (!morning) continue;
+    const cut = finiteNumber(morning.timetable_min) - finiteNumber(midday.timetable_min);
+    const sameSpeed = Math.abs(finiteNumber(morning.typical_min) - finiteNumber(midday.typical_min)) <= 2;
+    if (cut >= 2 && gap(midday) >= 3 && sameSpeed && (!best || cut > best.cut)) best = { morning, midday, cut };
+  }
+  return best;
+}
+
+// Trips start later as the day goes on: no slack at the end of the route to recover.
+function startsLaterAndLater(row) {
+  const s = row?.start_lateness;
+  if (!s || !finiteNumber(s.bus_days)) return null;
+  const rise = finiteNumber(s.later_min) - finiteNumber(s.morning_min);
+  const share = finiteNumber(s.later_days) / finiteNumber(s.bus_days);
+  return rise >= 3 && share >= 0.4 ? { ...s, share } : null;
+}
+
+function likelyReasons(route, hourly, segments, row) {
   const out = [];
   const items = segments?.routes?.[route] || [];
-  const tight = strongestStretches(items, ["tight"]);
+  const covered = new Set();  // stops a reason already explains
+
+  const wrongPlace = timeInTheWrongPlace(items);
+  if (wrongPlace) {
+    const { slack, tight } = wrongPlace;
+    const stop = stopLabel(tight.from, tight.from_place);
+    out.push({ title: `Too much time before ${tight.from}, too little after`,
+      text: `The timetable gives buses ${Math.round(slack.timetable_min)} min to reach ${stop} when they need about ${Math.round(slack.typical_min)}, then ${Math.round(tight.timetable_min)} min from there to ${stopLabel(tight.to, tight.to_place)} when they need about ${Math.round(tight.typical_min)} (${dayTypeLabel(tight.day_type)} ${FIT_BANDS[tight.band] || tight.band}). Moving a few minutes from before ${tight.from} to after it would fit how buses really run.` });
+    covered.add(tight.from_stop);
+  }
+
+  const later = startsLaterAndLater(row);
+  if (later) {
+    out.push({ title: "Each trip starts later than the last",
+      text: `Trips starting 7 to 10am set off about ${Math.round(later.morning_min)} min late; from 1pm they set off about ${Math.round(later.later_min)} min late. On ${Math.round(10 * later.share)} in 10 days the same bus kept starting later, which points to too little time at the end of the route to catch up.` });
+  }
+
+  const cut = tenAmCut(items);
+  if (cut && !covered.has(cut.midday.from_stop)) {
+    const { morning, midday } = cut;
+    out.push({ title: "The timetable expects faster journeys after 10am, but they don't get faster",
+      text: `${stopLabel(midday.from, midday.from_place)} to ${stopLabel(midday.to, midday.to_place)} gets ${Math.round(morning.timetable_min)} min before 10am and ${Math.round(midday.timetable_min)} min after, yet buses take about ${Math.round(midday.typical_min)} either way (${dayTypeLabel(midday.day_type)}).` });
+    covered.add(midday.from_stop);
+  }
+
+  const tight = strongestStretches(items, ["tight"]).filter((t) => !covered.has(t.from_stop));
   if (tight.length) {
     const t = tight[0];
     out.push({ title: "The timetable doesn't allow enough time",
-      text: `Between ${t.from} and ${t.to}, buses get ${Math.round(t.timetable_min)} min but usually take about ${Math.round(t.typical_min)} (${dayTypeLabel(t.day_type)} ${FIT_BANDS[t.band] || t.band}).` });
+      text: `Between ${stopLabel(t.from, t.from_place)} and ${stopLabel(t.to, t.to_place)}, buses get ${Math.round(t.timetable_min)} min but usually take about ${Math.round(t.typical_min)} (${dayTypeLabel(t.day_type)} ${FIT_BANDS[t.band] || t.band}).` });
   }
   const byKind = hourly?.routes?.[route];
   const hours = byKind && bestAndWorstHour(hourCells(byKind, "weekday", hourly.min_readings));
@@ -399,7 +503,8 @@ function likelyReasons(route, hourly, segments) {
     }
   }
   const tightPlaces = new Set(tight.map((t) => `${t.from}|${t.to}`));
-  const wait = items.find((i) => i.kind === "waiting" && !tightPlaces.has(`${i.from}|${i.to}`));
+  const wait = items.find((i) => i.kind === "waiting" && !tightPlaces.has(`${i.from}|${i.to}`)
+    && !covered.has(i.from_stop));
   if (wait) {
     out.push({ title: `Buses wait at ${wait.from}`,
       text: "They usually arrive early and sit there, so the next stretch looks slow on paper." });
@@ -455,7 +560,15 @@ function renderHeadline(opData) {
   if (groups) text += " " + [
     ["frequent", "Frequent services"], ["non_frequent", "Non-frequent services"],
     ["unclassified", "Frequency unverified"],
-  ].filter(([key]) => groups[key]).map(([key, label]) => `${label}: ${groups[key].on_time_pct == null ? "–" : finiteNumber(groups[key].on_time_pct).toFixed(1) + "%"} from ${finiteNumber(groups[key].readings).toLocaleString()} readings`).join("; ") + ".";
+  ].filter(([key]) => groups[key] && finiteNumber(groups[key].readings)).map(([key, label]) => {
+    const group = groups[key];
+    const routes = group.routes == null ? ""
+      : group.routes_counted === group.routes ? `, ${group.routes} routes`
+      : `, ${group.routes_counted} of ${group.routes} routes (the rest have too few readings)`;
+    return group.on_time_pct == null
+      ? `${label}: not enough readings for a figure yet`
+      : `${label}: ${finiteNumber(group.on_time_pct).toFixed(1)}% on time${routes}`;
+  }).join("; ") + ".";
   $("evidence-text").textContent = text;
 
   $("genat").textContent = data.generated_at ? new Date(data.generated_at).toLocaleString("en-GB") : "–";
@@ -469,7 +582,10 @@ function sortedRoutes() {
   const query = $("q").value.trim().toLowerCase();
   const rows = state.rows.filter(hasReadings).filter((row) => {
     const label = String(row.route).toLowerCase();
-    return !query || label.startsWith(query) || label.includes(" " + query);
+    // A place name finds the routes that go there ("clevedon" finds the X6).
+    const where = String(row.description || "").toLowerCase();
+    return !query || label.startsWith(query) || label.includes(" " + query)
+      || (query.length >= 3 && where.includes(query));
   });
   const limited = (row) => (limitedEvidence(row) ? 1 : 0);
   const sorts = {
@@ -490,7 +606,7 @@ function renderRouteList() {
     const pct = finiteNumber(row.on_time_pct);
     const selected = String(state.selectedRoute) === String(row.route);
     return `<li><button type="button" class="route-row${limitedEvidence(row) ? " lim" : ""}${selected ? " sel" : ""}" data-route="${route}"
-      aria-pressed="${selected ? "true" : "false"}" aria-label="Route ${route}: ${pct.toFixed(1)}% on time${limitedEvidence(row) ? ", few readings" : ""}">
+      aria-pressed="${selected ? "true" : "false"}" aria-label="Route ${route}: ${pct.toFixed(1)}% on time${limitedEvidence(row) ? ", few readings" : ""}"${row.description ? ` title="${escapeHTML(row.description)}"` : ""}>
       <span class="rname"><span class="badge">${escapeHTML(number)}</span><small>${escapeHTML(operator)}</small></span>
       <span class="mini"><i style="width:${Math.min(100, pct)}%;background:${colour}"></i><b style="left:${state.target}%"></b></span>
       <span class="pct" style="color:${colour}">${Math.round(pct)}%</span>
@@ -534,7 +650,7 @@ async function renderRouteDetail() {
   const route = escapeHTML(row.route);
   const [number, operatorLabel] = splitRoute(row.route);
   const colour = verdict(row.on_time_pct);
-  const reasons = likelyReasons(row.route, hourly, segments);
+  const reasons = likelyReasons(row.route, hourly, segments, row);
   const byKind = hourly?.routes?.[row.route];
   const fit = strongestStretches(segments?.routes?.[row.route], ["tight", "slack"]).slice(0, 4);
   const scale = Math.max(1, ...fit.map((s) => Math.max(finiteNumber(s.timetable_min), finiteNumber(s.typical_min))));
@@ -546,6 +662,8 @@ async function renderRouteDetail() {
       ${limitedEvidence(row) ? '<span class="small faint">few readings: treat with care</span>' : ""}
       <button class="close" type="button" id="close">Close</button>
     </div>
+    ${row.description ? `<p class="route-desc">${escapeHTML(row.description)}</p>` : ""}
+    ${routePageUrl(state.operator, row.route) ? `<p class="route-desc"><a href="${escapeHTML(routePageUrl(state.operator, row.route))}">Route page on bristolbuses.live ↗</a></p>` : ""}
     <p class="summary">${escapeHTML(routeSummary(row, hourly))}</p>
     <h3>Likely reasons</h3>
     <div class="reasons">${reasons.length
@@ -557,6 +675,7 @@ async function renderRouteDetail() {
       <p class="faint small">Between timing points, last 28 days, only patterns seen in at least 3 of the 4 weeks.</p>` : ""}
     ${row.coverage_withheld ? '<p class="faint small">Journey coverage withheld: the timetable lists some of this route\'s journeys twice with identical times.</p>' : ""}
     <h3>The numbers</h3>
+    ${arrivalSplitHTML(row)}
     <div class="numbers">
       <div><span class="k">On time</span><span class="v">${finiteNumber(row.on_time_pct).toFixed(1)}%</span></div>
       <div><span class="k">Typical</span><span class="v">${format.delaySeconds(row.median_delay_s)}</span></div>
@@ -567,6 +686,24 @@ async function renderRouteDetail() {
   </div>`;
   wireHourControls(box, () => { renderRouteDetail(); renderNetworkHours(); });
   $("close").addEventListener("click", closeRoute);
+}
+
+/** Early, on time, late and very late as one bar, so "6 in 10 on time" says how the rest missed. */
+function arrivalSplitHTML(row) {
+  const readings = finiteNumber(row.readings_in_gate);
+  if (!readings) return "";
+  const veryLate = row.very_late == null ? null : Math.min(finiteNumber(row.very_late), finiteNumber(row.late));
+  const parts = [
+    ["early", "Early", "left more than a minute before the timetable", finiteNumber(row.early)],
+    ["ontime", "On time", "up to a minute early or under 6 minutes late", finiteNumber(row.on_time)],
+    ["late", "Late", veryLate == null ? "6 minutes or more" : "6 to 20 minutes", finiteNumber(row.late) - (veryLate || 0)],
+    ...(veryLate == null ? [] : [["verylate", "Very late", "20 minutes or more", veryLate]]),
+  ];
+  const pct = (n) => (100 * n) / readings;
+  return `<div class="split" role="img" aria-label="${escapeHTML(parts.map(([, label, , n]) => `${label} ${Math.round(pct(n))}%`).join(", "))}">${
+    parts.map(([key, label, , n]) => `<i class="${key}" style="width:${pct(n)}%" title="${escapeHTML(label)}: ${Math.round(pct(n))}%"></i>`).join("")}</div>
+    <ul class="split-legend">${parts.map(([key, label, what, n]) =>
+      `<li><i class="${key}"></i><strong>${Math.round(pct(n))}%</strong> ${escapeHTML(label.toLowerCase())} <span class="faint">(${escapeHTML(what)})</span></li>`).join("")}</ul>`;
 }
 
 // --- Network sections -----------------------------------------------------------------
@@ -662,7 +799,7 @@ async function renderMap(opData) {
       const [cx, cy] = point([lon, lat]);
       const r = 3 + 11 * Math.sqrt(finiteNumber(ward.readings_in_gate) / most);
       const text = `${areaText(ward.key, ward)}${limitedEvidence(ward) ? " (few readings)" : ""}`;
-      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${verdict(ward.on_time_pct)}" fill-opacity="${limitedEvidence(ward) ? 0.35 : 0.9}" tabindex="0" data-detail="${escapeHTML(text)}"><title>${escapeHTML(text)}</title></circle>`;
+      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${verdict(ward.on_time_pct)}" fill-opacity="${limitedEvidence(ward) ? 0.35 : 0.9}" tabindex="0" data-ward="${escapeHTML(ward.key)}" data-detail="${escapeHTML(text)}"><title>${escapeHTML(text)}</title></circle>`;
     }).join("");
   }
   svg.innerHTML = shapes + labels + dots;
@@ -670,10 +807,44 @@ async function renderMap(opData) {
     const show = () => {
       svg.querySelectorAll(".picked").forEach((s) => s.classList.remove("picked"));
       shape.classList.add("picked");
-      $("map-d").textContent = shape.dataset.detail;
+      const ward = shape.dataset.ward && (geography.ward || []).find((w) => w.key === shape.dataset.ward);
+      const why = ward ? wardRoutesHTML(ward) : "";
+      $("map-d").innerHTML = escapeHTML(shape.dataset.detail) + (why ? `.${why}` : "");
+      wireWardRoutes($("map-d"));
     };
     shape.addEventListener("click", show);
     shape.addEventListener("focus", show);
+  });
+}
+
+// "Mostly the X4 (4 in 10 here, 62% of readings) and the X5 (5 in 10, 30%)."
+// The routes behind a ward's figure, each linking to its route panel. Where
+// they carry under half its readings, they're only "the busiest".
+function wardRoutesHTML(ward) {
+  const total = finiteNumber(ward.readings_in_gate);
+  const routes = (ward.routes || []).filter((r) => total && finiteNumber(r.readings_in_gate) && r.on_time_pct != null);
+  if (!routes.length) return "";
+  const known = new Set(state.rows.map((r) => String(r.route)));
+  let covered = 0;
+  const parts = routes.map((r, i) => {
+    const name = known.has(String(r.route))
+      ? `<button type="button" class="ward-route" data-route="${escapeHTML(r.route)}">${escapeHTML(r.route)}</button>`
+      : escapeHTML(r.route);
+    const share = Math.round((100 * finiteNumber(r.readings_in_gate)) / total);
+    covered += share;
+    return `the ${name} (${inTen(r.on_time_pct)}${i ? "" : " here"}, ${share}%${i ? "" : " of readings"})`;
+  });
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  if (covered >= 50) return ` Mostly ${list}.`;
+  return parts.length === 1 ? ` The busiest route here is ${list}.` : ` The busiest routes here are ${list}.`;
+}
+
+function wireWardRoutes(box) {
+  box.querySelectorAll(".ward-route").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectRoute(button.dataset.route);
+      $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 }
 
@@ -681,9 +852,12 @@ function rankRow(row) {
   const key = escapeHTML(row.key);
   const colour = verdict(row.on_time_pct);
   const pct = finiteNumber(row.on_time_pct);
-  return `<li class="${limitedEvidence(row) ? "lim" : ""}" title="${key}: ${pct.toFixed(1)}% from ${finiteNumber(row.readings_in_gate).toLocaleString()} readings"><span>${key}</span>
+  const why = wardRoutesHTML(row);
+  const name = why ? `<button type="button" class="ward-name" aria-expanded="false">${key}</button>` : `<span>${key}</span>`;
+  return `<li class="${limitedEvidence(row) ? "lim" : ""}" title="${key}: ${pct.toFixed(1)}% from ${finiteNumber(row.readings_in_gate).toLocaleString()} readings">${name}
     <span class="mini"><i style="width:${Math.min(100, pct)}%;background:${colour}"></i><b style="left:${state.target}%"></b></span>
-    <span class="pct" style="color:${colour}">${Math.round(pct)}%</span></li>`;
+    <span class="pct" style="color:${colour}">${Math.round(pct)}%</span></li>`
+    + (why ? `<li class="ward-why" hidden>${key}: ${inTen(pct)} on time.${why}</li>` : "");
 }
 
 function renderWards(opData) {
@@ -695,6 +869,14 @@ function renderWards(opData) {
     : wards.filter((w) => !limitedEvidence(w)).sort((a, b) => a.on_time_pct - b.on_time_pct).slice(0, 6);
   $("wards").innerHTML = (query ? "" : '<li class="note small faint">Least punctual wards (search for yours)</li>')
     + (pick.map(rankRow).join("") || '<li class="note small faint">No ward matches.</li>');
+  $("wards").querySelectorAll(".ward-name").forEach((button) => {
+    button.addEventListener("click", () => {
+      const why = button.closest("li").nextElementSibling;
+      why.hidden = !why.hidden;
+      button.setAttribute("aria-expanded", String(!why.hidden));
+    });
+  });
+  wireWardRoutes($("wards"));
 }
 
 function renderPlaces(opData) {

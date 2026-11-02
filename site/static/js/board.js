@@ -116,7 +116,7 @@ export function renderBoard(liveData, schedData, ctx) {
         replaceContent(host, el("div", { class: "board-empty" },
             [
                 el("strong", {}, ["Nothing scheduled from here for a while."]),
-                el("span", {}, ["Not a fault — just the timetable being honest for once."]),
+                el("span", {}, ["Not a fault. Just the timetable being honest for once."]),
             ]));
         return;
     }

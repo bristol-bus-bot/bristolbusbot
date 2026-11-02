@@ -15,7 +15,7 @@ def test_gtfs_seconds_ordinary():
 
 
 def test_gtfs_seconds_past_midnight():
-    # 25:30 means 01:30 next day — must NOT wrap or raise
+    # 25:30 means 01:30 next day: must NOT wrap or raise
     assert gtfs_seconds("25:30:00") == 25 * 3600 + 30 * 60
 
 

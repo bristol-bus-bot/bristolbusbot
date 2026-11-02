@@ -1,4 +1,4 @@
-"""/api/departures/<stop_code> — the departure board's endpoint."""
+"""/api/departures/<stop_code>: the departure board's endpoint."""
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify

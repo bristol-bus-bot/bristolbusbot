@@ -26,7 +26,7 @@ def _static_asset_version(static_folder: str) -> str:
 def create_app(config: Config | None = None) -> Flask:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = Flask(__name__, template_folder="../templates",
                 static_folder="../static")
     app.config["BBB"] = config or Config()
@@ -47,6 +47,8 @@ def create_app(config: Config | None = None) -> Flask:
             "versioned_static", version=asset_version, filename=filename)
 
     app.jinja_env.globals["asset_url"] = asset_url
+    # Absolute links in page metadata use the configured production host.
+    app.jinja_env.globals["public_origin"] = "https://" + app.config["BBB"].public_hosts[0]
 
     from .services.fleet import Fleet
     cfg = app.config["BBB"]
@@ -59,6 +61,8 @@ def create_app(config: Config | None = None) -> Flask:
     from .services.audit_integration import AuditIntegration
     from .services.route_hours import RouteHours
     app.extensions["bbb_route_hours"] = RouteHours(cfg.audit_hourly_dir)
+    from .services.route_pages import RoutePages
+    app.extensions["bbb_route_pages"] = RoutePages(cfg.audit_site_dir)
     app.extensions["bbb_audit_integration"] = AuditIntegration(
         cfg.audit_integration_json, cfg.audit_max_age_seconds)
 

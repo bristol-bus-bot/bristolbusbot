@@ -22,6 +22,7 @@ from sample_quality import qualify_row
 from snapshot_quality import withheld_routes
 
 PERIOD_DAYS = 28
+WARD_ROUTES = 3
 DISTANCE_GATE_M = 150
 OPERATOR_ORDER = [NETWORK_LABEL] + SHOW_OPERATORS
 
@@ -131,6 +132,18 @@ def _routes(cur, window, operator, valid, medians):
             a["observed_trips"] += int(r["observed_trips"] or 0)
             a["coverage_days"] += 1
         a["days"] += 1
+    # 20+ minutes late, from the delay histogram the rollup already keeps.
+    very_late = defaultdict(int)
+    try:
+        for r in cur.execute(
+                f"""SELECT route, SUM(n) AS n FROM daily_delay_histogram
+                     WHERE operator = ? AND bucket = 'late_20plus' AND route IS NOT NULL
+                       AND service_date IN ({_placeholders(window)})
+                     GROUP BY route""",
+                (operator, *window)):
+            very_late[r["route"]] = int(r["n"] or 0)
+    except sqlite3.OperationalError:
+        pass
     frequent = {}
     try:
         for r in cur.execute(
@@ -155,6 +168,7 @@ def _routes(cur, window, operator, valid, medians):
             "median_delay_s": medians.get(route),
             "readings_in_gate": in_gate, "on_time": int(a["on_time"]),
             "early": int(a["early"]), "late": int(a["late"]),
+            "very_late": min(very_late[route], int(a["late"])),
             "expected_trips": int(a["expected_trips"]) if covered else None,
             "observed_trips": int(a["observed_trips"]) if covered else None,
             "coverage_pct": _pct(a["observed_trips"], a["expected_trips"]) if covered else None,
@@ -189,7 +203,34 @@ def _geography(cur, window, operator):
                 "median_delay_s": None, "mean_delay_s": None,
                 "_ran": sorted(set((r["ran"] or "").split(",")) - {""}),
             })
+    _ward_routes(cur, window, operator, geography["ward"])
     return geography
+
+
+def _ward_routes(cur, window, operator, wards, top=WARD_ROUTES):
+    """Add the routes behind each ward's figure: the busiest few by readings,
+    each with its on-time share in that ward, from the route-by-ward rollup."""
+    by_ward = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    try:
+        rows = cur.execute(
+            f"""SELECT geo_key, source_operator, route, SUM(readings_in_gate), SUM(on_time)
+                  FROM daily_geo_route_summary
+                 WHERE operator = ? AND geo_type = 'ward'
+                   AND service_date IN ({_placeholders(window)})
+                 GROUP BY geo_key, source_operator, route""",
+            (operator, *window)).fetchall()
+    except sqlite3.OperationalError:
+        return
+    pooled = operator == NETWORK_LABEL
+    for key, source, route, readings, on_time in rows:
+        acc = by_ward[key][public_route(source, route, pooled)]
+        acc[0] += int(readings or 0)
+        acc[1] += int(on_time or 0)
+    for ward in wards:
+        routes = sorted(by_ward.get(ward["key"], {}).items(), key=lambda item: -item[1][0])
+        ward["routes"] = [
+            {"route": route, "readings_in_gate": readings, "on_time_pct": _pct(on_time, readings)}
+            for route, (readings, on_time) in routes[:top] if readings]
 
 
 def _fleet(cur, window, operator):

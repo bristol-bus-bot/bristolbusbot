@@ -90,7 +90,10 @@ def test_hourly_strips_escape_text_and_only_load_local_files():
 
 def test_timetable_fit_escapes_stop_names_and_only_loads_local_files():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
-    assert "${escapeHTML(item.from)} → ${escapeHTML(item.to)}" in source
+    assert "${stopHTML(item.from, item.from_place)} → ${stopHTML(item.to, item.to_place)}" in source
+    # Stop names and their towns are escaped before they reach innerHTML.
+    assert "? `${escapeHTML(name)} <span class=\"place\">(${escapeHTML(place)})</span>`" in source
+    assert ": escapeHTML(name);" in source
     assert "${escapeHTML(splitRoute(item.route)[0])}" in source
     assert r"/^segments\/[A-Za-z0-9_-]+\.json$/.test(file)" in source
 
@@ -144,3 +147,27 @@ def test_page_asks_for_the_script_and_styles_by_version():
     assert 'href="styles.css?v=__ASSET_VERSION__"' in html
     assert 'src="app.js?v=__ASSET_VERSION__"' in html
     assert 'sed "s/__ASSET_VERSION__/$ASSET_VERSION/g" "$ASSET_DIR/index.html" > docs/index.html' in script
+
+
+def test_audit_site_has_search_basics_and_publishes_them():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="description"' in html
+    assert '<meta property="og:title"' in html
+    # Google Search Console ownership (URL-prefix property for the audit site).
+    assert '<meta name="google-site-verification" content="jJreNS1rfgwbymtiuRrzHCfHi8ZP4BG9JeubNYaZslE">' in html
+    assert '<link rel="canonical" href="https://bristol-bus-bot.github.io/weca-bus-audit/">' in html
+    assert "Sitemap: https://bristol-bus-bot.github.io/weca-bus-audit/sitemap.xml" in (
+        ROOT / "robots.txt").read_text(encoding="utf-8")
+    assert "<loc>https://bristol-bus-bot.github.io/weca-bus-audit/</loc>" in (
+        ROOT / "sitemap.xml").read_text(encoding="utf-8")
+    assert (ROOT / "og-card.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    script = (ROOT.parent / "deploy" / "publish_to_github.sh").read_text(encoding="utf-8")
+    for name in ("robots.txt", "sitemap.xml", "og-card.png"):
+        assert f'install -m 0644 "$ASSET_DIR/{name}" docs/{name}' in script
+        assert script.count(f"docs/{name}") >= 3
+
+
+def test_route_descriptions_are_escaped():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert '<p class="route-desc">${escapeHTML(row.description)}</p>' in source
+    assert 'title="${escapeHTML(row.description)}"' in source

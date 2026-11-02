@@ -491,7 +491,7 @@ def test_locality_refresh_is_timetable_triggered_exact_and_independently_promote
     ) in tmpfiles
 
 
-def test_blurb_generation_is_bounded_pending_only_and_human_promoted():
+def test_blurb_generation_is_bounded_and_published_after_its_checks():
     generation = (SYSTEMD / "bbb-blurb-generate.service").read_text(
         encoding="utf-8")
     timer = (SYSTEMD / "bbb-blurb-generate.timer").read_text(
@@ -503,18 +503,19 @@ def test_blurb_generation_is_bounded_pending_only_and_human_promoted():
         "ConditionPathExists=/etc/bristolbusbot/blurb-generation-enabled",
         "EnvironmentFile=-/etc/bristolbusbot/blurb.env",
         "--name blurb-generate --skip-exit-code 75",
-        "blurb_automation.py generate",
+        "blurb_automation.py generate --auto",
         "ReadOnlyPaths=/var/lib/bristolbusbot/enrichment",
         "ReadWritePaths=/var/lib/bristolbusbot/blurb-pending "
         "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot",
         "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
     ):
         assert setting in generation
-    assert "OnCalendar=Mon *-*-* 02:15:00" in timer
+    # Daily, for new buses only; the batch is approved by its checks.
+    assert "OnCalendar=*-*-* 02:15:00" in timer
     assert "OnSuccess=" not in generation
     for setting in (
         "User=root",
-        "--name blurb-promote",
+        "--name blurb-promote --skip-exit-code 75",
         "blurb_automation.py promote",
         "ReadWritePaths=/var/lib/bristolbusbot/enrichment "
         "/var/lib/bristolbusbot/blurb-pending "
@@ -524,7 +525,10 @@ def test_blurb_generation_is_bounded_pending_only_and_human_promoted():
         "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
     ):
         assert setting in promotion
-    assert not (SYSTEMD / "bbb-blurb-promote.timer").exists()
+    # Published half an hour after generation, by the root-only promotion.
+    promote_timer = (SYSTEMD / "bbb-blurb-promote.timer").read_text(encoding="utf-8")
+    assert "OnCalendar=*-*-* 02:45:00" in promote_timer
+    assert "Unit=bbb-blurb-promote.service" in promote_timer
 
 
 def test_blurb_enable_revalidates_or_seeds_configuration_first():

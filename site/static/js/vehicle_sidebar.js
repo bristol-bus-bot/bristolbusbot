@@ -158,7 +158,7 @@ function vehiclePanel(ctx) {
         content.push(el("div", { class: "vs-external-links" }, links));
     if (!bus) {
         content.push(el("div", { class: "vc-offduty" },
-            ["Not currently running — live journey information is unavailable."]));
+            ["Not currently running, so live journey information is unavailable."]));
     }
     return el("div", { class: "vs-vehicle" }, content);
 }

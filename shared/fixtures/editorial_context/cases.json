@@ -1,0 +1,42 @@
+[
+  {
+    "file": "good-minimal.json",
+    "valid": true,
+    "why": "one fact, one occasion and one news story"
+  },
+  {
+    "file": "good-occasion-cap-8.json",
+    "valid": true,
+    "why": "8 uses a day is the maximum"
+  },
+  {
+    "file": "bad-occasion-cap-9.json",
+    "valid": false,
+    "why": "9 uses a day is over the maximum"
+  },
+  {
+    "file": "bad-source-host.json",
+    "valid": false,
+    "why": "source host is not on the allowlist"
+  },
+  {
+    "file": "bad-probability.json",
+    "valid": false,
+    "why": "probability above 1"
+  },
+  {
+    "file": "bad-schedule-month.json",
+    "valid": false,
+    "why": "month 13"
+  },
+  {
+    "file": "bad-missing-requirements.json",
+    "valid": false,
+    "why": "requirements are mandatory"
+  },
+  {
+    "file": "bad-duplicate-id.json",
+    "valid": false,
+    "why": "two entries share an id"
+  }
+]

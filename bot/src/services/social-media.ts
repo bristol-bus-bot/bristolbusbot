@@ -520,7 +520,7 @@ export class SocialMediaManager {
     }
     
     /**
-     * Start the periodic posting service — processes the event collector
+     * Start the periodic posting service: processes the event collector
      * every 20 minutes.
      */
     startPeriodicPosting(): void {

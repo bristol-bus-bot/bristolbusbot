@@ -16,9 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy"))
 
 from timetable_control import VALIDATOR_ID, validate  # noqa: E402
+from timetable_service_profile import (  # noqa: E402
+    SERVICE_SUMMARY_FILENAME,
+    SERVICE_SUMMARY_VERSION,
+    ServiceProfileError,
+    load_service_summary,
+    read_service_tables,
+    write_service_summary,
+)
 
 
-MANIFEST_VERSION = 5
+# 6: every parcel carries service_summary.json.gz, the timetable's service
+# read once on GitHub, so the Pi compares summaries instead of databases.
+MANIFEST_VERSION = 6
 GTFS_REQUIRED = (
     "agency.txt",
     "routes.txt",
@@ -191,6 +201,9 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
     started = started.astimezone(timezone.utc)
     if started > finished:
         raise RuntimeError("build start timestamp is after build finish")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    summary = output.parent / SERVICE_SUMMARY_FILENAME
+    write_service_summary(summary, read_service_tables(database, deadline_seconds=30 * 60))
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "created_utc": finished.isoformat(),
@@ -210,6 +223,12 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
             "sha256": sha256_file(database),
         },
         "database": database_summary(database),
+        "service_summary": {
+            "filename": SERVICE_SUMMARY_FILENAME,
+            "version": SERVICE_SUMMARY_VERSION,
+            "bytes": summary.stat().st_size,
+            "sha256": sha256_file(summary),
+        },
         "validation": {
             "validator": VALIDATOR_ID,
             "minimum_service_days": minimum_service_days,
@@ -221,7 +240,6 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
             "attribution_file": "TIMETABLE_ARTIFACT_ATTRIBUTION.txt",
         },
     }
-    output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.name}.new-{os.getpid()}")
     temporary.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -229,8 +247,34 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
     return manifest
 
 
+def verify_service_summary(manifest: dict, folder: Path) -> Path:
+    """The summary beside the manifest is the one GitHub recorded."""
+    record = manifest.get("service_summary")
+    if not isinstance(record, dict) or record.get("filename") != SERVICE_SUMMARY_FILENAME \
+            or record.get("version") != SERVICE_SUMMARY_VERSION:
+        raise RuntimeError("manifest has no usable service summary record")
+    summary = folder / SERVICE_SUMMARY_FILENAME
+    if summary.is_symlink() or not summary.is_file():
+        raise RuntimeError("service summary is missing")
+    if record.get("bytes") != summary.stat().st_size \
+            or record.get("sha256") != sha256_file(summary):
+        raise RuntimeError("service summary does not match the manifest")
+    try:
+        load_service_summary(summary)
+    except ServiceProfileError as exc:
+        raise RuntimeError("service summary is unreadable") from exc
+    return summary
+
+
 def verify_manifest(*, database: Path, manifest_path: Path,
-                    minimum_service_days: int = 0) -> dict:
+                    minimum_service_days: int = 0, recheck: bool = True) -> dict:
+    """Check a parcel against its manifest.
+
+    recheck=True re-reads the database to repeat GitHub's validation (the
+    build does this before publishing). The Pi passes recheck=False: the
+    fingerprint proves the file is the one GitHub validated, so it trusts the
+    recorded result instead of re-reading half a gigabyte.
+    """
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("manifest_version") != MANIFEST_VERSION:
         raise RuntimeError(
@@ -254,6 +298,12 @@ def verify_manifest(*, database: Path, manifest_path: Path,
             or not isinstance(recorded_minimum, int)
             or recorded_minimum < minimum_service_days):
         raise RuntimeError("manifest validation window is too short")
+    verify_service_summary(manifest, manifest_path.parent)
+    if not recheck:
+        result = validation_record.get("result")
+        if not isinstance(result, dict):
+            raise RuntimeError("manifest has no validation result")
+        return result
     validation = validate(
         database, minimum_service_days=minimum_service_days,
         require_stop_routes=True)

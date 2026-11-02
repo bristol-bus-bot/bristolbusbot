@@ -186,6 +186,15 @@ function findNeighbourhood(lat: number, lon: number): { name: string; data: type
     return null;
 }
 
+/** Replace em-dashes with commas: "late [long dash] again" becomes "late, again". */
+export function emDashesToCommas(text: string): string {
+    return text
+        .replace(/\s*\u2014\s*/g, ', ')
+        .replace(/,\s*([,.!?;:])/g, '$1')
+        .replace(/^,\s*/, '')
+        .trim();
+}
+
 export class AICommentary {
     private aiConfig: any;
     private appState: ApplicationState;
@@ -834,7 +843,7 @@ Make no other historical claim. Weave in a restrained reference only if it fits 
                 ? getStopEnrichment()[context.event.lastStopCode]
                 : null;
 
-            // Detect geographic area — prefer enrichment's local_authority, fall back to stop code prefix
+            // Detect geographic area: prefer enrichment's local_authority, fall back to stop code prefix
             const getArea = (stopCode?: string): string => {
                 if (enrichedStop?.local_authority) {
                     const la = enrichedStop.local_authority;
@@ -1043,21 +1052,21 @@ EXAMPLE OPENINGS (for inspiration - vary from these):
 - "Route 24 languishes near Bedminster..."
 - "Near Clifton's boutiques, the A1..."
 
-${hook?.kind === 'fact' ? `TONE REMINDER (critical — re-read before writing):
+${hook?.kind === 'fact' ? `TONE REMINDER (critical: re-read before writing):
 - You are the underdog holding a corporate giant to account. Be pointed and specific with the financial data.
 - Name the approved figure accurately, but do not manufacture a contrast the evidence cannot support.
-- Still dry and wry — not shouty. Think dogged local journalist, not angry protester.
+- Still dry and wry, not shouty. Think dogged local journalist, not angry protester.
 - Short punchy sentences. Let the numbers do the outrage for you.
-- NO vague moralising — always anchor to the single approved fact.` : hook?.kind === 'news' ? `TONE REMINDER (critical — re-read before writing):
+- NO vague moralising: always anchor to the single approved fact.` : hook?.kind === 'news' ? `TONE REMINDER (critical: re-read before writing):
 - The current bus observation remains the main subject; the approved story is brief context.
 - Preserve the claim's material qualifications and timing. No predictions, invented reactions or political biography.
 - Find a genuine connection or punchline. A detached announcement in sentence two is a failed draft.
 - Dry and useful, not breathless breaking-news copy.
-- Never include a source URL or "Source:" line; sources are retained privately for verification.` : `TONE REMINDER (critical — re-read before writing):
+- Never include a source URL or "Source:" line; sources are retained privately for verification.` : `TONE REMINDER (critical: re-read before writing):
 - UNDERSTATE, don't overstate. Let the facts be absurd on their own.
 - NO lecturing, NO moralising, NO phrases like "private-sector lethargy", "profit extraction", "consistent unreliability".
 - Think deadpan local news column, not angry op-ed. Wry, clipped, observational.
-- If mentioning vehicle/weather/context, weave it in naturally — don't force a political point from it.
+- If mentioning vehicle/weather/context, weave it in naturally; don't force a political point from it.
 - Short punchy sentences beat long flowing ones. Be economical with words.`}
 
 OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required structure.`;
@@ -1418,6 +1427,10 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
 
         // Flatten whitespace
         t = t.replace(/\s+/g, ' ').trim();
+
+        // No em-dashes in posts (Tom's rule). The prompt asks for none; this
+        // catches any the model writes anyway.
+        t = emDashesToCommas(t);
 
         // Remove emojis & hashtags (keep clean tone)
         t = t.replace(/#[\p{L}\p{N}_]+/gu, '');

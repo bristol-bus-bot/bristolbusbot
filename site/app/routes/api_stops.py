@@ -1,6 +1,5 @@
 """/api/stops (map markers) and /api/scheduled-departures/<code> (board
-fallback). Stops are computed once and cached for the process lifetime —
-the timetable changes monthly, not per request."""
+fallback). Stops are computed once and cached for the process lifetime: the timetable changes monthly, not per request."""
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify

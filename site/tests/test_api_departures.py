@@ -17,8 +17,7 @@ def get(client, code):
 
 def test_departure_board_shape_and_eta(client):
     data = get(client, "0100C").get_json()
-    # cleaner corrections are keyed to real stop codes; fixture code 0100C
-    # is not curated, so the raw name passes through.
+    # names come from the timetable as built (corrected there, not here).
     assert data["stop_name"] == "Hengrove Leisure Pk"
     lines = {d["vehicleRef"]: d for d in data["departures"]}
     # the mid-route bus: ETA = 22:10 sched + 2 min delay = 22:12 -> 10 min
@@ -42,10 +41,3 @@ def test_bus_already_past_stop_not_shown(client):
 
 def test_unknown_stop_404(client):
     assert get(client, "nope").status_code == 404
-
-
-def test_stop_name_cleaner_curated_codes():
-    from app.services.stop_names import clean_stop_name
-    assert clean_stop_name("Hengrove Leisure Pk", "bstgpmt") == "Hengrove Leisure Park"
-    assert clean_stop_name("Post Office", "bthadgp") == "Compton Martin Post Office"
-    assert clean_stop_name("Cabot Circus", "anything") == "Cabot Circus"

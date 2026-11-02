@@ -20,7 +20,7 @@
 
 /* the LED board object: #departures-list holding .dep rows becomes a
    true dark display mounted on the light sidebar (daylight v2). Route
-   views (.rv-wrap) render into the same node and stay light — gated
+   views (.rv-wrap) render into the same node and stay light: gated
    via :has(). */
 #departures-list:has(> .dep) {
     background: var(--led-bg);
@@ -118,7 +118,7 @@
 
 /* route views (rv-*): sidebar takeovers for journey + route search */
 .rv-wrap { margin-bottom: 12px; }
-/* the head is a route BLIND — genuinely dark object, like the LED board */
+/* the head is a route BLIND: genuinely dark object, like the LED board */
 .rv-head { background: #24282e; border: none; box-shadow: var(--shadow-card);
            border-radius: var(--r-md); padding: 10px 14px; }
 /* route-search blind: solid signage blue (translucent wash was a dark-theme

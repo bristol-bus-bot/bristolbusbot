@@ -1,5 +1,5 @@
 """The small endpoints: fleet search, descriptions, route shapes, boundary,
-busbot posts, and /api/situations (new — the collector's disruptions).
+busbot posts, and /api/situations (new: the collector's disruptions).
 All static-ish payloads cached for the process lifetime."""
 from __future__ import annotations
 

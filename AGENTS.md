@@ -29,8 +29,8 @@ change you're committing. `.scratch/` is ignored by Git.
 
 ## Cleaning up
 
-- Delete your `.scratch/<task>/` folder once the work is merged, unless Tom
-  asks to keep it.
+- Delete your `.scratch/<task>/` folder once the work is merged, though confirm first with Tom
+  if the work in there merits keeping.
 - Don't delete other folders in `.scratch/` without asking. They may belong
   to another task.
 - Never delete databases, backups or `.env` files without checking with Tom

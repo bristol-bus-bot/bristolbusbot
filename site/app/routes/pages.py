@@ -6,11 +6,14 @@ import re
 import math
 from datetime import datetime
 
-from flask import Blueprint, abort, current_app, jsonify, render_template
+from xml.sax.saxutils import escape
+
+from flask import Blueprint, Response, abort, current_app, jsonify, render_template
 
 from .. import db
 from ..services import localities as loc_svc
 from ..services import buses as buses_svc
+from ..services.route_pages import period_label as route_period_label
 
 bp = Blueprint("pages", __name__)
 
@@ -100,6 +103,106 @@ def _kofi_url(value: str) -> str | None:
     return value if re.fullmatch(r"https://ko-fi\.com/[A-Za-z0-9_]{1,64}", value or "") else None
 
 
+def _public_origin() -> str:
+    return "https://" + current_app.config["BBB"].public_hosts[0]
+
+
+@bp.route("/privacy")
+def privacy():
+    return render_template("privacy.html", contact_email="hello@bristolbusbot.live")
+
+
+@bp.route("/robots.txt")
+def robots_txt():
+    body = "\n".join((
+        "User-agent: *",
+        "Disallow: /api/",
+        "Disallow: /assets/",
+        "",
+        f"Sitemap: {_public_origin()}/sitemap.xml",
+        "",
+    ))
+    response = Response(body, mimetype="text/plain")
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+# Route pages change once a night, so Cloudflare serves repeat visits.
+ROUTE_PAGE_CACHE = "public, max-age=0, s-maxage=3600"
+
+
+@bp.route("/routes")
+def routes_index():
+    pages = current_app.extensions["bbb_route_pages"]
+    groups: list[dict] = []
+    for entry in pages.routes():
+        if not groups or groups[-1]["operator"] != entry["operator"]:
+            groups.append({"operator": entry["operator"], "name": entry["operator_name"],
+                           "routes": []})
+        groups[-1]["routes"].append(entry)
+    response = Response(render_template("routes.html", groups=groups))
+    response.headers["Cache-Control"] = ROUTE_PAGE_CACHE
+    return response
+
+
+@bp.route("/routes/<operator_slug>/<route_slug>")
+def route_page(operator_slug: str, route_slug: str):
+    pages = current_app.extensions["bbb_route_pages"]
+    view = pages.page(operator_slug, route_slug)
+    if view is None:
+        abort(404)
+    audit = current_app.extensions["bbb_audit_integration"]
+    vehicles = audit.vehicles_on_route(view["operator"], view["label"])
+    response = Response(render_template(
+        "route.html", route=view, vehicles=vehicles,
+        period_label=route_period_label(str(view["period"].get("from") or ""),
+                                        str(view["period"].get("to") or "")),
+        audit_url="https://bristol-bus-bot.github.io/weca-bus-audit/",
+    ))
+    response.headers["Cache-Control"] = ROUTE_PAGE_CACHE
+    return response
+
+
+@bp.route("/sitemap.xml")
+def sitemap_xml():
+    """The homepage, the privacy page, every route page with figures, and every
+    vehicle profile that loads now.
+
+    Profiles come from the published audit integration, the same source the
+    profile pages use, so the sitemap never lists a page that would 404.
+    Routes without enough readings have a page but aren't listed."""
+    origin = _public_origin()
+    audit = current_app.extensions["bbb_audit_integration"]
+    urls = [(f"{origin}/", None), (f"{origin}/privacy", None)]
+    route_entries = current_app.extensions["bbb_route_pages"].routes()
+    if route_entries:
+        urls.append((f"{origin}/routes", None))
+    for entry in route_entries:
+        if entry["usable"]:
+            lastmod = str(entry["period"].get("to") or "")
+            lastmod = (f"{lastmod[:4]}-{lastmod[4:6]}-{lastmod[6:]}"
+                       if re.fullmatch(r"\d{8}", lastmod) else None)
+            urls.append((f"{origin}/routes/{entry['operator_slug']}/{entry['route_slug']}",
+                         lastmod))
+    for slug, through_date in audit.profile_slugs():
+        lastmod = None
+        if re.fullmatch(r"\d{8}", through_date):
+            lastmod = f"{through_date[:4]}-{through_date[4:6]}-{through_date[6:]}"
+        urls.append((f"{origin}/vehicles/{slug}", lastmod))
+    entries = "".join(
+        f"<url><loc>{escape(loc)}</loc>"
+        + (f"<lastmod>{lastmod}</lastmod>" if lastmod else "")
+        + "</url>"
+        for loc, lastmod in urls)
+    body = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f"{entries}</urlset>\n")
+    response = Response(body, mimetype="application/xml")
+    # Changes only when the audit is published, like the other static-ish data.
+    response.headers["Cache-Control"] = "public, max-age=900"
+    return response
+
+
 @bp.route("/vehicles/<slug>")
 def vehicle_profile(slug: str):
     audit = current_app.extensions["bbb_audit_integration"]
@@ -118,11 +221,13 @@ def vehicle_profile(slug: str):
     profile_view = {**profile, "delay_plot": _delay_plot(profile),
                     "plain_english": record_words.summary(profile)}
     profile_view["routes"] = []
+    route_pages = current_app.extensions["bbb_route_pages"]
     for route in profile.get("routes", []):
         route_view = {
             **route,
             "delay_bins_s": profile.get("delay_bins_s"),
             "comparison_text": record_words.route_comparison(route),
+            "page": route_pages.path_for(profile["operator"], str(route.get("route") or "")),
         }
         route_view["delay_plot"] = _delay_plot(route_view, compact=True)
         profile_view["routes"].append(route_view)

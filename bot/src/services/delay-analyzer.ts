@@ -3,7 +3,6 @@
 
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
-import { cleanStopName } from '../utils/stop-name-cleaner.js';
 import { ApplicationState } from './application-state.js';
 import { resolveFleetVehicle } from './vehicle-identity.js';
 import type { DatabaseManager } from './database-manager.js';
@@ -193,7 +192,7 @@ export class DelayAnalyzer {
         }
       }
 
-      // Skip buses parked at depots — no point doing schedule lookups for them
+      // Skip buses parked at depots: no point doing schedule lookups for them
       if (activity.vehicleLocation) {
         const depotName = this.checkDepot(activity.vehicleLocation.latitude, activity.vehicleLocation.longitude);
         if (depotName) {
@@ -293,10 +292,10 @@ export class DelayAnalyzer {
         return null;
       }
 
-      // Skip buses waiting at their first stop before departure — they're not early, just waiting
+      // Skip buses waiting at their first stop before departure: they're not early, just waiting
       if (closestStopIndex === 0 && rawDelay < 0) {
         if (counters) counters.waitingAtOrigin = (counters.waitingAtOrigin || 0) + 1;
-        logDetailed('info', `[WAITING] ${activity.lineRef} (${activity.vehicleRef}) at first stop ${selectedStop.stop_name}, ${Math.abs(rawDelay)}min before departure — skipping`);
+        logDetailed('info', `[WAITING] ${activity.lineRef} (${activity.vehicleRef}) at first stop ${selectedStop.stop_name}, ${Math.abs(rawDelay)}min before departure: skipping`);
         return null;
       }
 
@@ -327,7 +326,7 @@ export class DelayAnalyzer {
         delayMinutes: rawDelay,
         lastStopCode: selectedStop.stop,
         lastStopTime: selectedSchedLocal.toFormat('HH:mm:ss'),
-        lastStopName: cleanStopName(selectedStop.stop_name, selectedStop.stop)
+        lastStopName: selectedStop.stop_name
       };
 
       // Prediction
