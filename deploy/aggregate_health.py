@@ -1187,7 +1187,9 @@ def collector_anomaly_check() -> tuple[dict, list[str]]:
     try:
         report = json.loads(
             COLLECTOR_ANOMALY_REPORT.read_text(encoding="utf-8"))
-        if not isinstance(report, dict) or report.get("schema_version") != 1:
+        # Version 2 (August 2026) added poll metrics; the fields read here
+        # are the same in both.
+        if not isinstance(report, dict) or report.get("schema_version") not in (1, 2):
             raise ValueError("unsupported collector-anomaly report")
         generated_at = report.get("generated_at")
         age_h = age_seconds(str(generated_at)) / 3600 if generated_at else None
