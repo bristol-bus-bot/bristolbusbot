@@ -511,7 +511,7 @@ def test_blurb_generation_is_bounded_and_published_after_its_checks():
     ):
         assert setting in generation
     # Daily, for new buses only; the batch is approved by its checks.
-    assert "OnCalendar=*-*-* 02:15:00" in timer
+    assert "OnCalendar=*-*-* 01:30:00" in timer
     assert "OnSuccess=" not in generation
     for setting in (
         "User=root",
@@ -525,9 +525,9 @@ def test_blurb_generation_is_bounded_and_published_after_its_checks():
         "CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER",
     ):
         assert setting in promotion
-    # Published half an hour after generation, by the root-only promotion.
+    # Published 15 minutes after generation, by the root-only promotion.
     promote_timer = (SYSTEMD / "bbb-blurb-promote.timer").read_text(encoding="utf-8")
-    assert "OnCalendar=*-*-* 02:45:00" in promote_timer
+    assert "OnCalendar=*-*-* 01:45:00" in promote_timer
     assert "Unit=bbb-blurb-promote.service" in promote_timer
 
 
@@ -583,6 +583,32 @@ def test_heavy_io_jobs_share_one_lock_with_backup_precedence():
     assert 'chmod 0660 "$shared_lock"' in installer
     assert installer.index('chown "$deploy_user:$deploy_user" "$shared_lock"') \
         < installer.index("/usr/bin/systemd-tmpfiles --create")
+
+
+def test_no_heavy_job_is_scheduled_near_the_backup():
+    # The backup gives up at once if the shared lock is taken (flock -n), so
+    # a heavy job timed alongside it silently costs a night's backup.
+    def daily_minute(timer: str) -> int | None:
+        for line in timer.splitlines():
+            if line.startswith("OnCalendar=*-*-* "):
+                hour, minute = line.split()[1].split(":")[:2]
+                return int(hour) * 60 + int(minute)
+        return None
+
+    backup = daily_minute((SYSTEMD / "bbb-backup.timer").read_text(encoding="utf-8"))
+    for timer_path in SYSTEMD.glob("*.timer"):
+        if timer_path.name == "bbb-backup.timer":
+            continue
+        timer = timer_path.read_text(encoding="utf-8")
+        unit = next((line.split("=", 1)[1] for line in timer.splitlines()
+                     if line.startswith("Unit=")),
+                    timer_path.name.replace(".timer", ".service"))
+        service = SYSTEMD / unit
+        if not service.exists() or "heavy-io.lock" not in service.read_text(encoding="utf-8"):
+            continue
+        start = daily_minute(timer)
+        if start is not None:
+            assert abs(start - backup) >= 30, timer_path.name
 
 
 def test_editorial_fetch_and_promotion_are_split_and_sandboxed():

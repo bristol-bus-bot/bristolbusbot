@@ -2,7 +2,7 @@
 Description=Check daily for new buses needing descriptions
 
 [Timer]
-OnCalendar=*-*-* 02:15:00
+OnCalendar=*-*-* 01:30:00
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=5min

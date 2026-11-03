@@ -59,7 +59,7 @@ def test_collector_anomaly_findings_reach_aggregate_without_opening_incident(
         tmp_path, monkeypatch):
     report = tmp_path / "collector-anomaly.json"
     report.write_text(json.dumps({
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "read_only_report",
         "status": "attention",
