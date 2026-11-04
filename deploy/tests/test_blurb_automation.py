@@ -800,19 +800,19 @@ def test_nightly_promotion_with_nothing_approved_is_a_quiet_skip(tmp_path, monke
         blurbs.promote_pending(pending_path=tmp_path / "pending.json", **kwargs)
 
 
-def test_gemini_client_can_use_vertex_billed_to_the_cloud_account():
+def test_gemini_client_can_use_agent_platform_billed_to_the_cloud_account():
     default = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash")
     assert default.url() == ("https://generativelanguage.googleapis.com/v1beta/"
                              "models/gemini-3.6-flash:generateContent")
-    vertex = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex",
+    agent_platform = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "agent-platform",
                                  "bus-bot-123")
-    assert vertex.url() == (
+    assert agent_platform.url() == (
         "https://aiplatform.googleapis.com/v1/projects/bus-bot-123/locations/"
         "global/publishers/google/models/gemini-3.6-flash:generateContent")
-    regional = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex",
+    regional = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "agent-platform",
                                    "bus-bot-123", "europe-west2")
     assert regional.url().startswith("https://europe-west2-aiplatform.")
     with pytest.raises(blurbs.BlurbError):
-        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex", "")
+        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "agent-platform", "")
     with pytest.raises(blurbs.BlurbError):
-        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex", "a/b")
+        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "agent-platform", "a/b")

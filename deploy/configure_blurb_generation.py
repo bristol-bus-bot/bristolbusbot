@@ -89,8 +89,8 @@ def install(*, bot_env: Path, output: Path, owner: str) -> str:
         "BLURB_MAX_REQUESTS_PER_MONTH=18",
         "BLURB_MAX_INPUT_TOKENS_PER_MONTH=300000",
         "BLURB_MAX_OUTPUT_TOKENS_PER_MONTH=75000",
-        # Use the same Gemini service as the bot (Vertex AI or the Developer API).
-        *(f"{name}={source[name]}" for name in ("AI_PROVIDER", "VERTEX_PROJECT", "VERTEX_LOCATION")
+        # Use the same Gemini service as the bot (Agent Platform or the Developer API).
+        *(f"{name}={source[name]}" for name in ("AI_PROVIDER", "AGENT_PLATFORM_PROJECT", "AGENT_PLATFORM_LOCATION")
           if SAFE_MODEL.fullmatch(source.get(name, ""))),
         "",
     )).encode("utf-8")

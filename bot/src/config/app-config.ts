@@ -88,9 +88,9 @@ export function loadConfig(): AppConfig {
             model: process.env.AI_MODEL || 'gemini-3.6-flash',
             // The checker only says pass or fail, so it can use a cheaper model.
             verifierModel: process.env.AI_VERIFIER_MODEL || process.env.AI_MODEL || 'gemini-3.6-flash',
-            provider: process.env.AI_PROVIDER === 'vertex' ? 'vertex' : 'gemini',
-            vertexProject: process.env.VERTEX_PROJECT || '',
-            vertexLocation: process.env.VERTEX_LOCATION || 'global',
+            provider: process.env.AI_PROVIDER === 'agent-platform' ? 'agent-platform' : 'gemini',
+            agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT || '',
+            agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global',
             pipeline: AI_COMMENTARY_PIPELINE,
             dailyLimit: AI_DAILY_CALL_LIMIT,
             timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
@@ -187,8 +187,8 @@ export function validateConfig(config: AppConfig): void {
     if (!config.ai.apiKey) {
         console.warn('AI_API_KEY not configured - AI commentary will be disabled');
     }
-    if (config.ai.provider === 'vertex' && !config.ai.vertexProject) {
-        throw new Error('AI_PROVIDER=vertex needs VERTEX_PROJECT');
+    if (config.ai.provider === 'agent-platform' && !config.ai.agentPlatformProject) {
+        throw new Error('AI_PROVIDER=agent-platform needs AGENT_PLATFORM_PROJECT');
     }
 }
 

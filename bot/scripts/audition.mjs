@@ -38,8 +38,8 @@ const promptVersion = digest(['ai-commentary', 'story-brief', 'story-subject', '
 let ledger, lock, spent = 0, replayed = 0, fatal;
 const model = options.model || responses.model || baseline?.model || 'unconfigured', limit = Number(options['max-calls']);
 const verifierModel = options['verifier-model'];
-const endpoint = { apiKey: process.env.AI_API_KEY || '', provider: process.env.AI_PROVIDER === 'vertex' ? 'vertex' : 'gemini',
-    vertexProject: process.env.VERTEX_PROJECT, vertexLocation: process.env.VERTEX_LOCATION || 'global' };
+const endpoint = { apiKey: process.env.AI_API_KEY || '', provider: process.env.AI_PROVIDER === 'agent-platform' ? 'agent-platform' : 'gemini',
+    agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT, agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global' };
 try {
     if (options.live) {
         if (!process.env.AI_API_KEY || !options.model || !options.ledger || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000)

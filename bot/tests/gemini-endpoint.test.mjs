@@ -12,21 +12,21 @@ test('the Developer API stays the default endpoint, with the key in a header', (
   assert.ok(!url.includes(key));
 });
 
-test('Vertex uses the project path, global by default and regional hosts otherwise', () => {
-  const vertex = { apiKey: key, provider: 'vertex', vertexProject: 'bus-bot-123' };
-  assert.equal(geminiEndpoint(vertex, 'gemini-3.5-flash-lite').url,
+test('Agent Platform uses the project path, global by default and regional hosts otherwise', () => {
+  const agentPlatform = { apiKey: key, provider: 'agent-platform', agentPlatformProject: 'bus-bot-123' };
+  assert.equal(geminiEndpoint(agentPlatform, 'gemini-3.5-flash-lite').url,
     'https://aiplatform.googleapis.com/v1/projects/bus-bot-123/locations/global/publishers/google/models/gemini-3.5-flash-lite:generateContent');
-  assert.equal(geminiEndpoint({ ...vertex, vertexLocation: 'europe-west2' }, 'gemini-3.6-flash').url,
+  assert.equal(geminiEndpoint({ ...agentPlatform, agentPlatformLocation: 'europe-west2' }, 'gemini-3.6-flash').url,
     'https://europe-west2-aiplatform.googleapis.com/v1/projects/bus-bot-123/locations/europe-west2/publishers/google/models/gemini-3.6-flash:generateContent');
-  assert.throws(() => geminiEndpoint({ ...vertex, vertexProject: '' }, 'gemini-3.6-flash'));
-  assert.throws(() => geminiEndpoint({ ...vertex, vertexProject: 'a/../b' }, 'gemini-3.6-flash'));
-  assert.throws(() => geminiEndpoint(vertex, 'models/x:y'));
+  assert.throws(() => geminiEndpoint({ ...agentPlatform, agentPlatformProject: '' }, 'gemini-3.6-flash'));
+  assert.throws(() => geminiEndpoint({ ...agentPlatform, agentPlatformProject: 'a/../b' }, 'gemini-3.6-flash'));
+  assert.throws(() => geminiEndpoint(agentPlatform, 'models/x:y'));
 });
 
-test('Vertex takes responseFormat as a list; the Developer API as one object', () => {
+test('Agent Platform takes responseFormat as a list; the Developer API as one object', () => {
   const schema = { type: 'object' };
   const one = buildGeminiStructuredGenerationConfig(schema, 1, 'LOW');
-  const list = buildGeminiStructuredGenerationConfig(schema, 1, 'LOW', 'vertex');
+  const list = buildGeminiStructuredGenerationConfig(schema, 1, 'LOW', 'agent-platform');
   assert.deepEqual(one.responseFormat, { text: { mimeType: 'APPLICATION_JSON', schema } });
   assert.deepEqual(list.responseFormat, [{ text: { mimeType: 'APPLICATION_JSON', schema } }]);
   assert.deepEqual(list.thinkingConfig, { thinkingLevel: 'LOW' });

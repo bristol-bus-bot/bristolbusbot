@@ -94,7 +94,7 @@ export function buildGeminiStructuredGenerationConfig(
     return {
         temperature,
         thinkingConfig: { thinkingLevel },
-        responseFormat: provider === 'vertex' ? [responseFormat] : responseFormat,
+        responseFormat: provider === 'agent-platform' ? [responseFormat] : responseFormat,
     };
 }
 

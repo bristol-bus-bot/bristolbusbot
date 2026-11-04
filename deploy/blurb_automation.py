@@ -801,8 +801,8 @@ class UsageLedger:
 
 
 class GeminiClient:
-    """The Gemini Developer API by default; Vertex AI (billed to the Google
-    Cloud account) when provider is "vertex"."""
+    """The Gemini Developer API by default; Agent Platform (billed to the Google
+    Cloud account) when provider is "agent-platform"."""
 
     def __init__(self, api_key: str, model: str, provider: str = "gemini",
                  project: str = "", location: str = "global"):
@@ -812,15 +812,15 @@ class GeminiClient:
         self.model = _clean(model, 80)
         if not re.fullmatch(r"[A-Za-z0-9._-]{3,80}", self.model):
             raise BlurbError("Gemini model name is unsafe")
-        self.provider = "vertex" if provider == "vertex" else "gemini"
+        self.provider = "agent-platform" if provider == "agent-platform" else "gemini"
         self.project, self.location = project.strip(), (location.strip() or "global")
-        if self.provider == "vertex" and not all(
+        if self.provider == "agent-platform" and not all(
                 re.fullmatch(r"[A-Za-z0-9._-]{1,100}", value)
                 for value in (self.project, self.location)):
-            raise BlurbError("Vertex project or location is unsafe")
+            raise BlurbError("Agent Platform project or location is unsafe")
 
     def url(self) -> str:
-        if self.provider != "vertex":
+        if self.provider != "agent-platform":
             return ("https://generativelanguage.googleapis.com/v1beta/models/"
                     + self.model + ":generateContent")
         host = ("aiplatform.googleapis.com" if self.location == "global"
@@ -983,7 +983,7 @@ def generate_pending(*, fleet_path: Path = FLEET,
         "AI_MODEL", "gemini-flash-latest")
     client = client or GeminiClient(
         api_key, model, os.getenv("AI_PROVIDER", "gemini"),
-        os.getenv("VERTEX_PROJECT", ""), os.getenv("VERTEX_LOCATION", "global"))
+        os.getenv("AGENT_PLATFORM_PROJECT", ""), os.getenv("AGENT_PLATFORM_LOCATION", "global"))
     ledger = UsageLedger(ledger_path, limits)
     run_usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
     additions: dict[str, dict[str, str]] = {variant: {} for variant in VARIANTS}
