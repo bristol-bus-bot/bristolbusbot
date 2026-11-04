@@ -20,6 +20,11 @@ STATE = Path("/var/lib/bristolbusbot/monitoring")
 LIVE_DB = Path("/var/lib/bristolbusbot/collector/live.db")
 AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
 BOT_DB = Path("/var/lib/bristolbusbot/bot/app_data.db")
+BOT_PUBLICATIONS = Path(
+    "/var/lib/bristolbusbot/bot/editorial-usage.json.publications.json.report.json")
+# Four posts in a row (about 80 minutes) that the AI writer could not write.
+WRITER_FAILING_POSTS = 4
+WRITER_WINDOW_HOURS = 2
 SOCIAL_DB = Path("/var/lib/bristolbusbot/social/social.db")
 SOCIAL_CONFIG = Path("/etc/bristolbusbot/social.env")
 SOCIAL_TOKEN = Path("/etc/bristolbusbot/social-slack.token")
@@ -1204,6 +1209,27 @@ def collector_anomaly_check() -> tuple[dict, list[str]]:
         return {"status": "unavailable", "error": type(exc).__name__}, []
 
 
+def writer_check() -> tuple[dict, list[str]]:
+    """Every recent post a plain fallback because the AI writer failed, e.g.
+    the provider refusing calls. The bot keeps posting, so nothing else
+    notices."""
+    try:
+        report = json.loads(BOT_PUBLICATIONS.read_text(encoding="utf-8"))
+        recent = report.get("recent")
+        if not isinstance(recent, list):
+            raise ValueError("no recent publications")
+        window = [item for item in recent if isinstance(item, dict)
+                  and age_seconds(str(item.get("publishedAt"))) <= WRITER_WINDOW_HOURS * 3600]
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {"status": "unavailable", "error": type(exc).__name__}, []
+    failed = [item for item in window if item.get("fallback") is True
+              and item.get("fallbackReason") == "writer_rejected_or_failed"]
+    failing = len(window) >= WRITER_FAILING_POSTS and len(failed) == len(window)
+    result = {"status": "failing" if failing else "ok",
+              "recent_posts": len(window), "writer_fallbacks": len(failed)}
+    return result, (["bot:writer-failing"] if failing else [])
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -1569,6 +1595,7 @@ def plain_issue_area(issue: str) -> str:
         "publish:audit-data": "the public performance report",
         "feed:stale": "fresh live bus information",
         "disk:low": "Pi storage space",
+        "bot:writer-failing": "the AI post writer (recent posts are all plain fallbacks)",
         "timetable:provisional-holiday-due": "holiday timetables still incomplete within eight weeks",
         "timetable:operator-missing": "an operator missing from the live timetable",
         "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
@@ -1643,6 +1670,8 @@ def main() -> int:
     data_health, found = data_health_check()
     issues.extend(found)
     collector_anomaly, found = collector_anomaly_check()
+    issues.extend(found)
+    writer, found = writer_check()
     issues.extend(found)
 
     try:
@@ -1723,6 +1752,7 @@ def main() -> int:
         "social_deliveries": social_deliveries,
         "data_health": data_health,
         "collector_anomaly": collector_anomaly,
+        "writer": writer,
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
     }

@@ -34,6 +34,7 @@ export class PublicationLedger {
             key: subject?.key || '', factIds, fallback: !subject, fallbackReason, promptVersion: PROMPT_VERSION });
         this.records = this.records.slice(-10_000);
         this.save();
+        this.saveReport(now);
     }
     recentTexts(limit = 60): string[] { return this.records.slice(-limit).reverse().map(r => r.text); }
     /** Freeze one comparable 24–26-hour sample, never compare a week-old post with a new one. */
@@ -68,7 +69,10 @@ export class PublicationLedger {
         return { generatedAt: new Date(now).toISOString(), windowDays: 7, posts: week.length,
             fallbacks: week.filter(r => r.fallback).length, fallbackShare: week.length ? week.filter(r => r.fallback).length / week.length : null,
             sampleWindow: '24–26 hours after publication; missing samples excluded, never treated as zero', groups,
-            caveat: 'Descriptive counts, not proof that wording caused engagement. No liker identities stored.' };
+            caveat: 'Descriptive counts, not proof that wording caused engagement. No liker identities stored.',
+            // For the Pi health check: a run of writer fallbacks means the AI writer is down.
+            recent: this.records.slice(-6).map(r => ({ publishedAt: r.publishedAt, fallback: r.fallback,
+                ...(r.fallbackReason ? { fallbackReason: r.fallbackReason } : {}) })) };
     }
     private saveReport(now: number): void { if (this.file) this.write(`${this.file}.report.json`, this.report(now)); }
     private save(): void { if (this.file) this.write(this.file, { version: 1, records: this.records }); }

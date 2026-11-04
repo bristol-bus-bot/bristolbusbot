@@ -144,3 +144,15 @@ test('temporal towards phrases do not become destination claims',()=>{
   assert.equal(hasDestinationClaim('towards Bath'),true);
   assert.doesNotMatch(buildStoryPrompt(event,event.timestamp,null,[]),/GMT[+-]|BST/);
 });
+
+test('on Agent Platform a busy 429 gets the single retry; on the Developer API it does not',async()=>{
+  for(const [provider,expected] of [['agent-platform',2],[undefined,1]]){
+    const {ai,calls,run}=fixture(n=>{
+      if(n===1)throw new GeminiRequestError('Resource exhausted',429,false);
+      throw new GeminiRequestError('still down',401,false);
+    });
+    ai.aiConfig.provider=provider;
+    assert.equal(await run(),null);
+    assert.equal(calls.length,expected,String(provider));
+  }
+});
