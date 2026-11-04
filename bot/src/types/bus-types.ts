@@ -302,6 +302,10 @@ export interface AppConfig {
     ai: {
         apiKey: string;
         model: string;
+        verifierModel: string;
+        provider: 'gemini' | 'vertex';
+        vertexProject: string;
+        vertexLocation: string;
         pipeline: 'single' | 'legacy';
         dailyLimit: number;
         timeout: number;

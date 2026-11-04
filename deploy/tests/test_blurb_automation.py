@@ -798,3 +798,21 @@ def test_nightly_promotion_with_nothing_approved_is_a_quiet_skip(tmp_path, monke
     (tmp_path / "pending.json").write_text("{}")
     with pytest.raises(blurbs.NothingToDo, match="hasn't been approved"):
         blurbs.promote_pending(pending_path=tmp_path / "pending.json", **kwargs)
+
+
+def test_gemini_client_can_use_vertex_billed_to_the_cloud_account():
+    default = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash")
+    assert default.url() == ("https://generativelanguage.googleapis.com/v1beta/"
+                             "models/gemini-3.6-flash:generateContent")
+    vertex = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex",
+                                 "bus-bot-123")
+    assert vertex.url() == (
+        "https://aiplatform.googleapis.com/v1/projects/bus-bot-123/locations/"
+        "global/publishers/google/models/gemini-3.6-flash:generateContent")
+    regional = blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex",
+                                   "bus-bot-123", "europe-west2")
+    assert regional.url().startswith("https://europe-west2-aiplatform.")
+    with pytest.raises(blurbs.BlurbError):
+        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex", "")
+    with pytest.raises(blurbs.BlurbError):
+        blurbs.GeminiClient("k" * 32, "gemini-3.6-flash", "vertex", "a/b")

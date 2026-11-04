@@ -15,10 +15,10 @@ export function validateCases(input) {
         ids.add(item.id);
     }
 }
-export async function replay(input, respond, { onCase = () => { }, model = 'recorded' } = {}) {
+export async function replay(input, respond, { onCase = () => { }, model = 'recorded', verifierModel } = {}) {
     validateCases(input);
     const state = { recentPosts: [...(input.recentPosts || [])], enrichmentDataStatus: {} };
-    const ai = new AICommentary({ model, timeout: 75000 }, state, {});
+    const ai = new AICommentary({ model, verifierModel, timeout: 75000 }, state, {});
     ai.editorialContext = { recordPost() { } }; // Isolated, in-memory editorial accounting.
     ai.getSubjectHistory().publishedCount = input.publishedCount || 0;
     const prepare = ai.prepareWriterCandidate.bind(ai), prompt = ai.buildSingleWriterPrompt.bind(ai);
@@ -39,10 +39,10 @@ export async function replay(input, respond, { onCase = () => { }, model = 'reco
                 result.drafts.push({ post: checked.post, mechanical: checked.issues.length ? 'FAIL' : 'PASS', issues: checked.issues, verifier: 'not_run' });
                 return checked;
             };
-            ai.requestGeminiStructured = async (text, schema, temperature, thinkingLevel, timeoutMs) => {
+            ai.requestGeminiStructured = async (text, schema, temperature, thinkingLevel, timeoutMs, model) => {
                 const kind = schema.properties?.verdict ? 'verifier' : result.drafts.length ? 'repair' : 'writer';
                 const request = { id: `${item.id}:${result.calls.length + 1}`, caseId: item.id, kind,
-                    prompt: text, schema, temperature, thinkingLevel, timeoutMs,
+                    prompt: text, schema, temperature, thinkingLevel, timeoutMs, ...(model ? { model } : {}),
                     promptSha: digest({ prompt: text, schema, temperature, thinkingLevel }) };
                 const call = { ...request };
                 result.calls.push(call);

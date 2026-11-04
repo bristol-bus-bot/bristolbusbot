@@ -10,6 +10,7 @@ import { SubjectHistory } from './subject-history.js';
 import { depotGeography } from './depot-geography.js';
 import { PublicationLedger } from './publication-ledger.js';
 import { httpFetch } from '../utils/http-client.js';
+import { geminiEndpoint, type GeminiProvider } from './gemini-endpoint.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
@@ -86,17 +87,14 @@ export function buildGeminiStructuredGenerationConfig(
     schema: object,
     temperature: number,
     thinkingLevel: string,
+    provider: GeminiProvider = 'gemini',
 ): object {
+    // This field is an API enum, not a free-form MIME-type string.
+    const responseFormat = { text: { mimeType: 'APPLICATION_JSON', schema } };
     return {
         temperature,
         thinkingConfig: { thinkingLevel },
-        responseFormat: {
-            text: {
-                // This field is an API enum, not a free-form MIME-type string.
-                mimeType: 'APPLICATION_JSON',
-                schema,
-            },
-        },
+        responseFormat: provider === 'vertex' ? [responseFormat] : responseFormat,
     };
 }
 
@@ -425,13 +423,13 @@ export class AICommentary {
         // One transient retry across the whole story, never a restart of the pipeline.
         const deadline = Date.now() + 90_000;
         let transientRetryUsed = false;
-        const request: typeof this.requestGeminiStructured = async (prompt, schema, temperature, thinking) => {
+        const request: typeof this.requestGeminiStructured = async (prompt, schema, temperature, thinking, _timeoutMs, model) => {
             for (;;) {
                 const remaining = deadline - Date.now();
                 if (remaining <= 0) throw new Error('AI story time budget reached');
                 try {
                     return await this.requestGeminiStructured(prompt, schema, temperature, thinking,
-                        Math.min(this.aiConfig.timeout || 75_000, remaining));
+                        Math.min(this.aiConfig.timeout || 75_000, remaining), model);
                 } catch (error) {
                     if (!(error instanceof GeminiRequestError) || error.quotaExceeded
                         || ![502, 503, 504].includes(error.status || 0)
@@ -463,7 +461,8 @@ export class AICommentary {
                 if (prepared.post && !issues.length) {
                     const verifierPrompt = this.buildVerifierPrompt(writer.brief, prepared.post, Boolean(writerHook && writer.hookUsed));
                     this.appState.lastAICriticPrompt = verifierPrompt;
-                    const raw = await request(verifierPrompt, VERIFIER_RESPONSE_SCHEMA, 0, this.thinkingLevels.verifier);
+                    const raw = await request(verifierPrompt, VERIFIER_RESPONSE_SCHEMA, 0, this.thinkingLevels.verifier,
+                        undefined, this.aiConfig.verifierModel);
                     this.appState.lastAICriticOutput = raw;
                     const verified = parseEditorialVerifierOutput(raw);
                     if (verified.verdict === 'PASS') {
@@ -561,26 +560,24 @@ export class AICommentary {
         temperature: number,
         thinkingLevel: string,
         timeoutMs = this.aiConfig.timeout,
+        model: string = this.aiConfig.model,
     ): Promise<string> {
         this.appState.resetDailyCounters();
         if (this.aiConfig.dailyLimit > 0 && this.appState.aiCallsToday >= this.aiConfig.dailyLimit) {
             throw new Error('Daily AI request budget reached');
         }
         this.appState.incrementAICallCount();
-        const model = encodeURIComponent(this.aiConfig.model);
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const { url, headers } = geminiEndpoint(this.aiConfig, model);
         const response = await httpFetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': this.aiConfig.apiKey,
-            },
+            headers,
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 generationConfig: buildGeminiStructuredGenerationConfig(
                     schema,
                     temperature,
                     thinkingLevel,
+                    this.aiConfig.provider,
                 ),
             }),
             timeoutMs,
@@ -596,7 +593,7 @@ export class AICommentary {
             );
         }
         const payload = await response.json() as any;
-        logger.info('[AI_USAGE]', { model: this.aiConfig.model, usage: payload.usageMetadata || null });
+        logger.info('[AI_USAGE]', { model, usage: payload.usageMetadata || null });
         const parts = payload.candidates?.[0]?.content?.parts;
         const text = Array.isArray(parts)
             ? parts
@@ -775,7 +772,7 @@ Return only JSON with verdict (PASS or FAIL) and reasons.`;
         selectedHook?: EditorialSelection | null,
     ): Promise<AICommentaryResult | null> {
         const timer = new PerformanceTimer('ai_api_call', logger);
-        const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${this.aiConfig.model}:generateContent?key=${this.aiConfig.apiKey}`;
+        const { url: AI_STUDIO_URL, headers: endpointHeaders } = geminiEndpoint(this.aiConfig, this.aiConfig.model);
         const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
         const hook = selectedHook === undefined
             ? this.editorialContext.select(currentTime, this.appState.recentPosts, context.event)
@@ -1096,9 +1093,9 @@ OUTPUT: Only the 3 numbered options (1. 2. 3.), each following its required stru
 
             const draftResp = await httpFetch(AI_STUDIO_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: endpointHeaders,
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: draftPrompt }] }],
+                    contents: [{ role: 'user', parts: [{ text: draftPrompt }] }],
                     generationConfig: draftGenConfig
                 }),
                 timeoutMs: this.aiConfig.timeout
@@ -1236,9 +1233,9 @@ Start your response with the first word of the selected post.`;
 
                 const criticResp = await httpFetch(AI_STUDIO_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: endpointHeaders,
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: criticPrompt }] }],
+                        contents: [{ role: 'user', parts: [{ text: criticPrompt }] }],
                         generationConfig: criticGenConfig
                     }),
                     timeoutMs: this.aiConfig.timeout
