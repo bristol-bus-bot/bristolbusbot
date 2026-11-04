@@ -9,6 +9,7 @@ import { TrafficService } from './traffic-service.js';
 import { SubjectHistory } from './subject-history.js';
 import { depotGeography } from './depot-geography.js';
 import { PublicationLedger } from './publication-ledger.js';
+import { TrainingLog, type TrainingExample } from './training-log.js';
 import { httpFetch } from '../utils/http-client.js';
 import { geminiEndpoint, type GeminiProvider } from './gemini-endpoint.js';
 import { DateTime } from 'luxon';
@@ -207,6 +208,14 @@ export class AICommentary {
     getPublicationLedger(): PublicationLedger {
         return this.publicationLedger ||= new PublicationLedger(this.aiConfig.editorialUsagePath
             ? `${this.aiConfig.editorialUsagePath}.publications.json` : undefined);
+    }
+
+    private trainingLog?: TrainingLog;
+    private saveTrainingExample(example: Omit<TrainingExample, 'at' | 'model' | 'verifierModel'>): void {
+        this.trainingLog ||= new TrainingLog(this.aiConfig.editorialUsagePath
+            ? `${this.aiConfig.editorialUsagePath}.training.jsonl` : undefined);
+        this.trainingLog.record({ at: new Date().toISOString(), model: this.aiConfig.model,
+            verifierModel: this.aiConfig.verifierModel || this.aiConfig.model, ...example });
     }
 
     private getSubjectHistory(): SubjectHistory {
@@ -462,6 +471,9 @@ export class AICommentary {
                     corrections, subject, request, previousDraft);
                 const prepared = this.prepareWriterCandidate(writer, context, writerHook, subject, recentPosts);
                 let issues = prepared.issues;
+                const example = { subject: subject.kind, attempt, brief: writer.brief,
+                    draft: prepared.post || writer.post || '', hookUsed: Boolean(writer.hookUsed),
+                    mechanicalIssues: prepared.issues };
                 if (prepared.post && !issues.length) {
                     const verifierPrompt = this.buildVerifierPrompt(writer.brief, prepared.post, Boolean(writerHook && writer.hookUsed));
                     this.appState.lastAICriticPrompt = verifierPrompt;
@@ -469,6 +481,8 @@ export class AICommentary {
                         undefined, this.aiConfig.verifierModel);
                     this.appState.lastAICriticOutput = raw;
                     const verified = parseEditorialVerifierOutput(raw);
+                    this.saveTrainingExample({ ...example, verifier: { verdict: verified.verdict, reasons: verified.reasons },
+                        outcome: verified.verdict === 'PASS' ? 'passed' : 'verifier_fail' });
                     if (verified.verdict === 'PASS') {
                         return this.completeSingleWriterPost(prepared.post, context, writerHook,
                             Boolean(writerHook && writer.hookUsed), currentTime, timer,
@@ -476,6 +490,8 @@ export class AICommentary {
                                 ? { kind: 'service', key: '', context: {} } : subject);
                     }
                     issues = verified.reasons.length ? verified.reasons : ['verifier rejected the draft without a reason'];
+                } else {
+                    this.saveTrainingExample({ ...example, verifier: null, outcome: 'mechanical_fail' });
                 }
                 if (attempt === 1) {
                     logSummary('info', `[AI_SKIP] ${issues.join('; ')}`);
