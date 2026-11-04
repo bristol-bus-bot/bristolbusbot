@@ -801,13 +801,33 @@ class UsageLedger:
 
 
 class GeminiClient:
-    def __init__(self, api_key: str, model: str):
+    """The Gemini Developer API by default; Agent Platform (billed to the Google
+    Cloud account) when provider is "agent-platform"."""
+
+    def __init__(self, api_key: str, model: str, provider: str = "gemini",
+                 project: str = "", location: str = "global"):
         if len(api_key.strip()) < 20 or any(ch.isspace() for ch in api_key):
             raise BlurbError("Gemini API key is absent or malformed")
         self.api_key = api_key.strip()
         self.model = _clean(model, 80)
         if not re.fullmatch(r"[A-Za-z0-9._-]{3,80}", self.model):
             raise BlurbError("Gemini model name is unsafe")
+        self.provider = "agent-platform" if provider == "agent-platform" else "gemini"
+        self.project, self.location = project.strip(), (location.strip() or "global")
+        if self.provider == "agent-platform" and not all(
+                re.fullmatch(r"[A-Za-z0-9._-]{1,100}", value)
+                for value in (self.project, self.location)):
+            raise BlurbError("Agent Platform project or location is unsafe")
+
+    def url(self) -> str:
+        if self.provider != "agent-platform":
+            return ("https://generativelanguage.googleapis.com/v1beta/models/"
+                    + self.model + ":generateContent")
+        host = ("aiplatform.googleapis.com" if self.location == "global"
+                else self.location + "-aiplatform.googleapis.com")
+        return (f"https://{host}/v1/projects/{self.project}/locations/"
+                f"{self.location}/publishers/google/models/{self.model}"
+                ":generateContent")
 
     def generate(self, variant: str,
                  summaries: Mapping[str, Mapping[str, object]],
@@ -837,10 +857,8 @@ class GeminiClient:
                 "thinkingConfig": {"thinkingLevel": "MINIMAL"},
             },
         }
-        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-               + self.model + ":generateContent")
         request = urllib.request.Request(
-            url, data=json.dumps(payload).encode("utf-8"), method="POST",
+            self.url(), data=json.dumps(payload).encode("utf-8"), method="POST",
             headers={"Content-Type": "application/json",
                      "x-goog-api-key": self.api_key})
         try:
@@ -963,7 +981,9 @@ def generate_pending(*, fleet_path: Path = FLEET,
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("AI_API_KEY") or ""
     model = os.getenv("BLURB_GEMINI_MODEL") or os.getenv(
         "AI_MODEL", "gemini-flash-latest")
-    client = client or GeminiClient(api_key, model)
+    client = client or GeminiClient(
+        api_key, model, os.getenv("AI_PROVIDER", "gemini"),
+        os.getenv("AGENT_PLATFORM_PROJECT", ""), os.getenv("AGENT_PLATFORM_LOCATION", "global"))
     ledger = UsageLedger(ledger_path, limits)
     run_usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
     additions: dict[str, dict[str, str]] = {variant: {} for variant in VARIANTS}

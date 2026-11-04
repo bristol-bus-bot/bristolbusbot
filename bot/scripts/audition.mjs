@@ -7,18 +7,19 @@ process.env.ENABLE_CONSOLE_LOGS = 'true';
 process.env.LOG_LEVEL = 'error';
 const { replay, recordedResponder, comparisonPage, digest } = await import('./audition-core.mjs');
 const { buildGeminiStructuredGenerationConfig } = await import('../dist/services/ai-commentary.js');
+const { geminiEndpoint } = await import('../dist/services/gemini-endpoint.js');
 const args = process.argv.slice(2), [inputPath, outputDirectory] = args.splice(0, 2), options = {};
 while (args.length) {
     const key = args.shift();
     if (key === '--live')
         options.live = true;
-    else if (['--baseline', '--responses', '--model', '--max-calls', '--ledger'].includes(key) && args[0] && !args[0].startsWith('--'))
+    else if (['--baseline', '--responses', '--model', '--verifier-model', '--max-calls', '--ledger'].includes(key) && args[0] && !args[0].startsWith('--'))
         options[key.slice(2)] = args.shift();
     else
         throw new Error(`Unknown or incomplete argument: ${key}`);
 }
 if (!inputPath || !outputDirectory)
-    throw new Error('Usage: audition.mjs cases.json output-directory [--baseline run.json] [--responses run.json] [--live --model NAME --max-calls N --ledger FILE]');
+    throw new Error('Usage: audition.mjs cases.json output-directory [--baseline run.json] [--responses run.json] [--live --model NAME [--verifier-model NAME] --max-calls N --ledger FILE]');
 const read = p => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
 const input = read(inputPath), baseline = options.baseline ? read(options.baseline) : null, responses = options.responses ? read(options.responses) : { calls: [] };
 if (responses.fixtureSha && responses.fixtureSha !== digest(input))
@@ -36,13 +37,17 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const promptVersion = digest(['ai-commentary', 'story-brief', 'story-subject', 'subject-history', 'posting-fallback', 'editorial-commentary-policy'].map(n => fs.readFileSync(path.join(here, '../dist/services', n + '.js'), 'utf8')).join('\n'));
 let ledger, lock, spent = 0, replayed = 0, fatal;
 const model = options.model || responses.model || baseline?.model || 'unconfigured', limit = Number(options['max-calls']);
+const verifierModel = options['verifier-model'];
+const endpoint = { apiKey: process.env.AI_API_KEY || '', provider: process.env.AI_PROVIDER === 'agent-platform' ? 'agent-platform' : 'gemini',
+    agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT, agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global' };
 try {
     if (options.live) {
         if (!process.env.AI_API_KEY || !options.model || !options.ledger || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
             throw new Error('Live mode needs AI_API_KEY, --model, --ledger and an explicit 1–1000 call limit');
         lock = fs.openSync(options.ledger + '.lock', 'wx');
-        ledger = fs.existsSync(options.ledger) ? read(options.ledger) : { version: 1, model, limit, fixtureSha: digest(input), calls: [] };
-        if (ledger.model !== model || ledger.limit !== limit || ledger.fixtureSha !== digest(input))
+        ledger = fs.existsSync(options.ledger) ? read(options.ledger) : { version: 1, model, verifierModel, provider: endpoint.provider, limit, fixtureSha: digest(input), calls: [] };
+        if (ledger.model !== model || ledger.verifierModel !== verifierModel || (ledger.provider || 'gemini') !== endpoint.provider
+            || ledger.limit !== limit || ledger.fixtureSha !== digest(input))
             throw new Error('Ledger approval does not match this run');
     }
     const saved = recordedResponder(responses);
@@ -74,14 +79,15 @@ try {
             fatal = 'Approved model-call budget exhausted';
             return null;
         }
-        const entry = { ...request, complete: false };
+        const entry = { ...request, model: request.model || model, complete: false };
         ledger.calls.push(entry);
         atomic(options.ledger, ledger);
         spent++;
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.AI_API_KEY },
-                body: JSON.stringify({ contents: [{ parts: [{ text: request.prompt }] }], generationConfig: buildGeminiStructuredGenerationConfig(request.schema, request.temperature, request.thinkingLevel) }),
+            const { url, headers } = geminiEndpoint(endpoint, entry.model);
+            const response = await fetch(url, {
+                method: 'POST', headers,
+                body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: request.prompt }] }], generationConfig: buildGeminiStructuredGenerationConfig(request.schema, request.temperature, request.thinkingLevel, endpoint.provider) }),
                 signal: AbortSignal.timeout(Math.max(1, Math.min(request.timeoutMs || 75000, 75000)))
             });
             if (!response.ok) {
@@ -102,7 +108,7 @@ try {
         atomic(options.ledger, ledger);
         return { text: entry.text, usage: entry.usage, error: entry.error, httpStatus: entry.httpStatus, quotaExceeded: entry.quotaExceeded };
     };
-    const run = await replay(input, respond, { model, onCase: (result, results) => {
+    const run = await replay(input, respond, { model, verifierModel, onCase: (result, results) => {
             atomic(path.join(output, 'checkpoint.json'), { fixtureSha: digest(input), model, promptVersion, results, calls: results.flatMap(r => r.calls) });
             console.log(`${result.id}: ${result.status} (${result.calls.length} requests)`);
         } });
