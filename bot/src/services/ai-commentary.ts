@@ -431,12 +431,16 @@ export class AICommentary {
                     return await this.requestGeminiStructured(prompt, schema, temperature, thinking,
                         Math.min(this.aiConfig.timeout || 75_000, remaining), model);
                 } catch (error) {
-                    if (!(error instanceof GeminiRequestError) || error.quotaExceeded
-                        || ![502, 503, 504].includes(error.status || 0)
+                    // On Agent Platform pay-as-you-go a 429 means brief shared-capacity
+                    // contention, not a spent quota, so it gets the same single retry.
+                    const busy = error instanceof GeminiRequestError && error.status === 429
+                        && this.aiConfig.provider === 'agent-platform';
+                    if (!(error instanceof GeminiRequestError) || (error.quotaExceeded && !busy)
+                        || (![502, 503, 504].includes(error.status || 0) && !busy)
                         || transientRetryUsed || deadline - Date.now() < 5_000) throw error;
                     transientRetryUsed = true;
                     logSummary('info', '[AI_RETRY] Temporary provider failure; retrying this request once');
-                    await new Promise(resolve => setTimeout(resolve, 1_000));
+                    await new Promise(resolve => setTimeout(resolve, busy ? 3_000 : 1_000));
                 }
             }
         };

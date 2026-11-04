@@ -1268,3 +1268,33 @@ def test_notify_sends_urgent_alerts_to_slack_and_the_phone(tmp_path, monkeypatch
     sent.clear()
     aggregate_health.notify(":rotating_light: *Bristol Bus Bot needs attention*")
     assert [url for url, _ in sent] == [FAKE_HOOK]
+
+
+def test_writer_check_alerts_only_on_a_run_of_writer_fallbacks(tmp_path, monkeypatch):
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(aggregate_health, "BOT_PUBLICATIONS", report)
+    now = datetime.now(timezone.utc)
+
+    def write(items):
+        report.write_text(json.dumps({"recent": [
+            {"publishedAt": (now - timedelta(minutes=minutes)).isoformat(), **fields}
+            for minutes, fields in items]}), encoding="utf-8")
+
+    down = {"fallback": True, "fallbackReason": "writer_rejected_or_failed"}
+    write([(80, down), (60, down), (40, down), (20, down)])
+    result, issues = aggregate_health.writer_check()
+    assert issues == ["bot:writer-failing"] and result["writer_fallbacks"] == 4
+    assert "AI post writer" in aggregate_health.plain_issue_area("bot:writer-failing")
+
+    # One good post, or another kind of fallback, means the writer works.
+    write([(80, down), (60, down), (40, down), (20, {"fallback": False})])
+    assert aggregate_health.writer_check()[1] == []
+    write([(80, down), (60, down), (40, down),
+           (20, {"fallback": True, "fallbackReason": "observation_no_longer_publishable"})])
+    assert aggregate_health.writer_check()[1] == []
+    # Too few recent posts (bot quiet or just restarted) is not enough evidence.
+    write([(300, down), (200, down), (40, down), (20, down)])
+    assert aggregate_health.writer_check()[1] == []
+    report.unlink()
+    assert aggregate_health.writer_check() == (
+        {"status": "unavailable", "error": "FileNotFoundError"}, [])

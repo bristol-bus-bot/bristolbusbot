@@ -34,3 +34,14 @@ test('unwritable or corrupt ledger cannot turn successful publication into a ret
  assert.equal(new PublicationLedger(file).records.length,0);
  const l=new PublicationLedger(path.join(file,'nested'));assert.doesNotThrow(()=>l.record('Already posted','at://test/1'));assert.equal(l.records.length,1);
 });
+
+test('the report lists the latest posts for the health check and is saved after each post',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bbb-ledger-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'ledger.json'),now=Date.now(),l=new PublicationLedger(file);
+ for(let i=0;i<8;i++)l.record('Post '+i,'at://test/'+i,i===7?{kind:'service',key:'',context:{}}:undefined,[],i===7?undefined:'writer_rejected_or_failed',now-(8-i)*60000);
+ const saved=JSON.parse(fs.readFileSync(file+'.report.json','utf8'));
+ assert.equal(saved.recent.length,6);
+ assert.deepEqual(saved.recent.at(-1),{publishedAt:new Date(now-60000).toISOString(),fallback:false});
+ assert.deepEqual(saved.recent[0],{publishedAt:new Date(now-6*60000).toISOString(),fallback:true,fallbackReason:'writer_rejected_or_failed'});
+ assert.doesNotMatch(JSON.stringify(saved.recent),/Post /);
+});
