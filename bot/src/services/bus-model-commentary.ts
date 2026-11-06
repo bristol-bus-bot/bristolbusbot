@@ -3,9 +3,9 @@
 // note may contain only claims that were checked against a source on
 // 2026-10-18 (manufacturer or operator material, trade press such as Route One
 // and Coach & Bus Week, or the model's Wikipedia article and its references).
-// Claims that sources contradicted or did not support were removed rather than
-// softened. Keep notes to one or two plain sentences and add no opinions: the
-// writer will repeat them as fact. "Unknown" deliberately has no note.
+// A claim its sources contradict or do not support has no place here, softened
+// or otherwise. Keep notes to one or two plain sentences and add no opinions:
+// the writer will repeat them as fact. "Unknown" deliberately has no note.
 
 export const BUS_MODEL_BLURBS: Record<string, string> = {
   "Volvo B9TL Wright Eclipse Gemini": "Wrightbus's Eclipse Gemini double-deck body first appeared in 2001 on Volvo's B7TL chassis, and was built on the B9TL from 2006.",

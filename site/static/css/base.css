@@ -82,9 +82,6 @@
         .dep-row-live:hover { background: rgba(0,112,60,0.12) !important; }
         .dep-row-live:active { background: rgba(0,112,60,0.2) !important; }
 
-        /* search input focus */
-        /* search focus ring now lives in chrome.css (input is borderless) */
-
         /* livery header band on popup */
         .popup-livery-header {
             height: 44px;
@@ -189,7 +186,7 @@
             #header-stats .stat-label { display: none !important; }
             #header-stats .depot-stat { border-left: none !important; padding-left: 0 !important; }
 
-            /* Hide toggles from header (moved to map FABs) */
+            /* Hide the header layer toggles */
             #header-toggles { display: none !important; }
 
             /* Hide timestamp and social handle; keep social icons. */

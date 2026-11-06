@@ -29,8 +29,7 @@
 
 /* Search focus ring. */
 #stop-search:focus { box-shadow: 0 0 0 2px rgba(0, 112, 60, 0.35); }
-/* One quiet bridge to the independent audit; deliberately separate from the
-   live counters and grouped with the timestamp and social link. */
+/* Link to the independent audit, grouped with the timestamp and social links. */
 .audit-headline-link {
     color: #005ea5;
     font-family: var(--font-sans);

@@ -1,5 +1,5 @@
-/* Departure board and stop-sign components. The board remains a deliberately
-   dark object within the daylight interface. */
+/* Departure board and stop-sign components. The board is a dark object
+   within the daylight interface. */
 
 /* stop header sign (road-sign object: 3px sign border rule) */
 .stop-sign { background: var(--uk-green); border: 2px solid var(--uk-grey);
@@ -18,10 +18,9 @@
         background: var(--uk-blue); color: #fff; font-size: 11px; font-weight: 700; }
 .chip-more { font-size: 11px; color: rgba(255,255,255,.4); align-self: center; }
 
-/* the LED board object: #departures-list holding .dep rows becomes a
-   true dark display mounted on the light sidebar (daylight v2). Route
-   views (.rv-wrap) render into the same node and stay light: gated
-   via :has(). */
+/* the LED board object: #departures-list holding .dep rows is a dark
+   display mounted on the light sidebar. Route views (.rv-wrap) render
+   into the same node and stay light: gated via :has(). */
 #departures-list:has(> .dep) {
     background: var(--led-bg);
     border-radius: var(--r-lg);
@@ -118,11 +117,10 @@
 
 /* route views (rv-*): sidebar takeovers for journey + route search */
 .rv-wrap { margin-bottom: 12px; }
-/* the head is a route BLIND: genuinely dark object, like the LED board */
+/* the head is a route BLIND: a dark object, like the LED board */
 .rv-head { background: #24282e; border: none; box-shadow: var(--shadow-card);
            border-radius: var(--r-md); padding: 10px 14px; }
-/* route-search blind: solid signage blue (translucent wash was a dark-theme
-   trick; white text needs a real ground) */
+/* route-search blind: solid signage blue, so white text has a real ground */
 .rv-head-search { background: linear-gradient(135deg, #1d70b8, #155a94); }
 .rv-head-top { display: flex; align-items: center;
                justify-content: space-between; margin-bottom: 6px; }
