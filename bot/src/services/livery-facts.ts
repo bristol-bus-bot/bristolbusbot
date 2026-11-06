@@ -1,10 +1,9 @@
 // Checked livery facts, keyed by the fleet file's livery ID (livery.id).
-// From Tom's livery research spreadsheet (Research tab, 15 Sep 2026). Every
-// claim was re-checked against its source on 2026-10-21: unsupported claims,
-// enthusiast-wiki and photo-page sources, volatile figures and one region
-// mismatch were removed; corrected wording replaces the original where the
-// source said something different. A fact describes the livery or its
-// operator, never this particular bus's history. 53 facts, 47 liveries.
+// From Tom's livery research spreadsheet (Research tab, 15 Sep 2026), with
+// every claim checked against its source on 2026-10-21. A fact needs a
+// source that is not an enthusiast wiki or a photo page, carries no volatile
+// figures, and describes the livery or its operator, never this particular
+// bus's history. 53 facts, 47 liveries.
 
 export interface LiveryFact { claim: string; qualification: string; source: string }
 

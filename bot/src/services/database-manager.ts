@@ -186,7 +186,7 @@ export class DatabaseManager {
         });
     }
 
-    /** Add provenance columns to installations created before map highlighting. */
+    /** Add any provenance columns an older installation is missing. */
     private migrateEngagementAnalytics(): Promise<void> {
         const expected: Record<string, string> = {
             collector_event_id: 'INTEGER',
@@ -256,7 +256,6 @@ export class DatabaseManager {
             if (Array.isArray(rawBusData)) {
                 records = rawBusData;
             } else {
-                // This handles the case where the file might be { "results": [...] } in the future
                 logger.warn(`[BUS_DETAILS] 'fbribuses.json' is not a root-level array. Looking for a 'results' property.`);
                 records = rawBusData.results || [];
             }

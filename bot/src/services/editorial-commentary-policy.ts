@@ -237,9 +237,9 @@ export function containsSourceReference(value: string): boolean {
 const COMPUTER_JARGON = /\b(usb(?:-[ac])?|ports?|sockets?|kernel|stack|modem|ram|cpu|gpu|cache|firmware|ethernet|wi[- ]?fi|bluetooth)\b/gi;
 
 /**
- * The persona is a Raspberry Pi, but computer jargon makes poor bus posts. It is
- * sent back for a rewrite rather than deleted, which used to leave broken text
- * ("complete with -C sockets"). Words describing the bus's own supplied
+ * The persona is a Raspberry Pi, but computer jargon makes poor bus posts. A post
+ * carrying it is sent back for a rewrite rather than having the words deleted,
+ * which would leave broken text. Words describing the bus's own supplied
  * on-board features (USB charging, power sockets, wi-fi) are allowed.
  */
 export function jargonIssues(post: string, suppliedFeatures: string[] = []): string[] {

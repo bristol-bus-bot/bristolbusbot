@@ -38,7 +38,8 @@ export function vehicleCard(data, mode) {
     const full = mode !== "compact";
     const embedded = mode === "embedded";
 
-    // header: livery band = operator identity (kept saturated on purpose: // the one non-flat element, same in both sizes)
+    // header: livery band = operator identity (the one saturated,
+    // non-flat element, same in both sizes)
     const headKids = [];
     if (full) {
         headKids.push(el("span", { class: "vc-fleet" }, [`#${data.fleetCode}`]));

@@ -77,7 +77,7 @@ class Fleet:
         if isinstance(raw, list):
             self._records = [item for item in raw if isinstance(item, dict)]
         elif isinstance(raw, dict):
-            # Retain compatibility with the old lookup-shaped fixture/file.
+            # Also accept a lookup-shaped file, keyed by fleet code.
             self._records = []
             for key, item in raw.items():
                 if isinstance(item, dict):

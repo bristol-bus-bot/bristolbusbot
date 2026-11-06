@@ -219,7 +219,7 @@ details p, details ul { margin: 10px 0 0; color: var(--fg-2); }
   .fit .mins { grid-template-columns: 76px 1fr 56px; }
 }
 
-/* Route panel: how the arrivals split (planning #83) */
+/* Route panel: how the arrivals split */
 .split { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-2); margin: 4px 0 8px; }
 .split i { display: block; height: 100%; }
 .split .early, .split-legend .early { background: var(--link); }
@@ -234,5 +234,5 @@ details p, details ul { margin: 10px 0 0; color: var(--fg-2); }
 /* A stop's town, lighter than its name */
 .place { color: var(--fg-2); font-weight: 400; }
 
-/* Where the route goes (planning #87) */
+/* Where the route goes */
 .route-desc { margin: 8px 0 0; color: var(--fg-2); font-size: 0.95rem; }

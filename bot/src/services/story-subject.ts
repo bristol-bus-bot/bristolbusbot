@@ -267,9 +267,10 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
     // When the planned subject is unavailable (depot, wider and traffic often
     // are), fill the slot with the colour subject furthest below its share of
     // the last full cycle. Livery is available for almost every bus, so
-    // "first available" used to hand it most spare slots. A subject that has
-    // already had its share waits; the bus's timing is the default. Notable
-    // traffic is rare and time-sensitive, so it may also take a spare slot.
+    // picking the first available subject would hand it most spare slots. A
+    // subject that has already had its share waits; the bus's timing is the
+    // default. Notable traffic is rare and time-sensitive, so it may also
+    // take a spare slot.
     const slotOf = (kind: string) => isVehicleAspect(kind) ? 'vehicle' : kind === 'wider?' ? 'wider' : kind;
     const recentSlots = history.slice(-cycle.length).map(item => slotOf(item.kind));
     const share = (kind: StorySubject) => cycle.filter(item => slotOf(item) === slotOf(kind)).length;

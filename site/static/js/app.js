@@ -74,7 +74,7 @@
             return best;
         }
 
-        // Small, deliberately quiet marker for stops, unless the feed publishes
+        // Small, quiet marker for stops, unless the feed publishes
         // a notice for the stop: then it grows and carries a warning mark.
         let stopNotices = {};  // stop_code -> 'current' | 'uncertain' | 'upcoming'
         function createStopIcon(isSelected, stopCode) {
@@ -116,7 +116,7 @@
             return { idx: minIdx, dist: Math.sqrt(minDist) };
         }
 
-        // Get all shape variants matching operator + line + direction (keys now include variant: OPERATOR_line_dir_var)
+        // Get all shape variants matching operator + line + direction (keys are OPERATOR_line_dir_var)
         function getShapeVariants(line, directionId, operator) {
             if (!line || !routeShapesData) return [];
             const prefix = operator ? `${operator}_${line}_${directionId || 0}_` : null;
@@ -533,9 +533,9 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 10000);
             try {
-                // no-cache: Cloudflare once told browsers to keep this for 4
-                // hours; always check with the server (an unchanged answer is a
-                // cheap 304 thanks to the ETag).
+                // no-cache: always check with the server, so a cache in
+                // between cannot serve hours-old positions (an unchanged
+                // answer is a cheap 304 thanks to the ETag).
                 const res = await fetch('/api/buses', { signal: controller.signal, cache: 'no-cache' });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();

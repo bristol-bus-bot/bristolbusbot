@@ -38,7 +38,7 @@ class Config:
     fetch_timeout_s: float = field(default_factory=lambda: _f("BBB_FETCH_TIMEOUT_S", 30))
     max_journey_age_h: float = field(default_factory=lambda: _f("BBB_MAX_JOURNEY_AGE_H", 2))
     # SIRI keeps re-broadcasting parked vehicles with old RecordedAtTime;
-    # positions older than this are ghosts, not buses (the frozen-centre bug)
+    # positions older than this are ghosts, not buses
     max_recorded_age_s: float = field(default_factory=lambda: _f("BBB_MAX_RECORDED_AGE_S", 300))
 
     # Off by default: journey refs are often not real journey codes

@@ -276,8 +276,8 @@ def test_newer_copy_is_never_retired_in_favour_of_an_older_one(tmp_path):
 def test_duplicate_writes_never_delete_calendar_dates_one_date_at_a_time(tmp_path, monkeypatch):
     # A fresh build has no ANALYZE statistics, so SQLite plans a per-date
     # DELETE on the date index and rescans every row for that date. With
-    # hundreds of thousands of exclusions that exceeded the 45-minute CI limit
-    # (run 36482544509). Writes must be bulk inserts instead.
+    # hundreds of thousands of exclusions that exceeds the 45-minute CI limit.
+    # Writes must be bulk inserts instead.
     index = index_of(journey('VJ1259', SEP27, MON_WED))
     db = duplicate_db(tmp_path / 'd.db', [('orphan', 'old', 'VJ739', CALLS),
                                           ('lineage', 'new', 'VJ1259', CALLS)])
