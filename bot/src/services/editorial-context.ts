@@ -32,7 +32,7 @@ export function isOccasionPeak(now: DateTime): boolean {
 }
 
 const ALLOWED_SOURCE_HOSTS = [
-    // Reputable news and reference sites, reviewed by hand. Each claim
+    // Reputable news and reference sites (Tom, 27 Sep 2026, PV-11). Each claim
     // is still checked individually; an allowed host is not evidence.
     'wikipedia.org',
     'bbc.co.uk',

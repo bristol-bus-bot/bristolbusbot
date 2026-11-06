@@ -424,7 +424,7 @@ def test_bristol_local_date_handles_dst_instants():
 def test_exact_22_and_29_july_artifacts_pass_semantic_policy(tmp_path):
     # The 29 July candidate lists 951 FlixBus journeys more than once a day,
     # which policy service-window-v4 refuses. Once the build's duplicate-journey
-    # step has cleaned them, the same artifacts must pass.
+    # step (#202) has cleaned them, the same artifacts must pass.
     with pytest.raises(ServiceProfileError) as error:
         compare_databases(EXACT_CURRENT, EXACT_CANDIDATE, start_date=START,
                           deadline_seconds=10 * 60)

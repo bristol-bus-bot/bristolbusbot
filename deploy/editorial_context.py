@@ -18,7 +18,7 @@ ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,79}")
 MAX_OCCASION_USES_PER_DAY = 8
 
 ALLOWED_SOURCE_HOSTS = {
-    # Reputable news and reference sites, reviewed by hand.
+    # Reputable news and reference sites (Tom, 27 Sep 2026, PV-11).
     "wikipedia.org",
     "bbc.co.uk",
     "bbc.com",
