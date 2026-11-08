@@ -203,6 +203,25 @@ def test_missing_near_term_day_fails_with_date_and_metric(tmp_path):
     assert failure.value.code == "candidate_service_collapse"
     assert failure.value.context["date"] == START.isoformat()
     assert failure.value.context["metric"] == "trips"
+    losses = failure.value.context["operators"]
+    assert [item["operator"] for item in losses] == ["MAIN"]
+    assert losses[0]["candidate"] == 0 and losses[0]["current"] > 0
+
+
+def test_short_day_names_the_operators_losing_most_first(tmp_path):
+    services = [
+        {"operator": "BIG", "route": "1", "trips": 100},
+        {"operator": "SMALL", "route": "2", "trips": 20},
+        {"operator": "KEPT", "route": "3", "trips": 30},
+    ]
+    removed = [("S0", START.strftime("%Y%m%d"), 2),
+               ("S1", START.strftime("%Y%m%d"), 2)]
+
+    with pytest.raises(ServiceProfileError) as failure:
+        compare(tmp_path, services, services, candidate_exceptions=removed)
+
+    names = [item["operator"] for item in failure.value.context["operators"]]
+    assert names == ["BIG", "SMALL"]
 
 
 def test_material_operator_cannot_be_hidden_by_an_unrelated_operator(tmp_path):

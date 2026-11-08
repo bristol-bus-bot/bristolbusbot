@@ -648,6 +648,22 @@ def _gate(metric: str, current: int, candidate: int, ratio: float,
     }
 
 
+def _biggest_losses(live_day: Mapping[str, object], new_day: Mapping[str, object],
+                    metric: str, limit: int = 5) -> list[dict[str, object]]:
+    """The operators losing the most service on one day, worst first."""
+    live = live_day.get("operators") or {}
+    new = new_day.get("operators") or {}
+    losses = []
+    for operator, volume in live.items():
+        current = int(volume.get(metric, 0))
+        candidate = int(new.get(operator, {}).get(metric, 0))
+        if candidate < current:
+            losses.append({"operator": str(operator), "current": current,
+                           "candidate": candidate})
+    losses.sort(key=lambda item: (item["candidate"] - item["current"], item["operator"]))
+    return losses[:limit]
+
+
 def _compatible_transfers(current: ServiceProfile, candidate: ServiceProfile,
                           operator: str,
                           used: set[tuple[str, str, int]]) \
@@ -716,7 +732,8 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
                 date=live_day["date"])
             near_term.append(gate)
             if not gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
-                failures.append(gate)
+                failures.append(dict(gate, operators=_biggest_losses(
+                    live_day, new_day, metric)))
 
     totals: list[dict[str, object]] = []
     for metric in ("trips", "stop_times"):
@@ -937,7 +954,7 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
             key: first[key]
             for key in (
                 "kind", "metric", "date", "operator", "current",
-                "candidate", "minimum", "ratio",
+                "candidate", "minimum", "ratio", "operators",
             ) if key in first
         }
         context["policy_version"] = policy.version

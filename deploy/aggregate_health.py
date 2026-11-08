@@ -1404,6 +1404,39 @@ def timetable_failure_message(kind: str,
     return "\n".join((*lines, escalation))
 
 
+def _short_day_sentence(context: dict[str, object]) -> str:
+    """Name the short day, how short it is and who loses most, in plain words."""
+    try:
+        when = datetime.strptime(str(context.get("date")), "%Y-%m-%d")
+        day = f"{when:%A} {when.day} {when:%B %Y}"
+    except ValueError:
+        return ("One day in the proposed timetable contained noticeably less "
+                "service than the current version, so the safety check stopped it.")
+    current, candidate = context.get("current"), context.get("candidate")
+    if isinstance(current, int) and isinstance(candidate, int) and current > 0:
+        share = f"{round(100 * candidate / current)}%"
+        if context.get("metric") == "trips":
+            amount = (f"{candidate:,} journeys instead of {current:,} "
+                      f"({share} of the current timetable)")
+        else:
+            amount = f"only {share} of the current timetable's service"
+    else:
+        amount = "noticeably less service than the current timetable"
+    sentence = f"{day} in the proposed timetable has {amount}, so the safety check stopped it."
+    losses = []
+    for item in (context.get("operators") or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        try:
+            before, after = int(item["current"]), int(item["candidate"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        losses.append(f"{item.get('operator', '?')} {before:,} to {after:,}")
+    if losses:
+        sentence += " Biggest drops: " + ", ".join(losses) + "."
+    return sentence
+
+
 def _timetable_failure_message(kind: str,
                                attempt: dict[str, object]) -> str:
     code = str(attempt.get("failure_code") or "unknown_failure")
@@ -1452,14 +1485,15 @@ def _timetable_failure_message(kind: str,
     if code == "candidate_service_collapse":
         return "\n".join((
             ":warning: *A new timetable was rejected safely*",
-            "What happened: One day in the proposed timetable contained "
-            "noticeably less service than the current version, so the safety "
-            "check stopped it.",
+            "What happened: " + _short_day_sentence(context),
             "What the bot did: Kept the current working timetable. The map, "
             "website and bot are still running.",
             "What happens next: The Pi will try a fresh download automatically "
-            "at the next scheduled check.",
-            "*You need to do:* Nothing now.",
+            "at the next scheduled check. Unless that day really is a holiday "
+            "or strike, the source data is probably wrong, and the same data "
+            "will fail the same way until it is fixed or the day has passed.",
+            "*You need to do:* Nothing now. If this repeats, ask Claude to "
+            "check the source data for that day.",
         ))
     if code == "candidate_future_coverage_cliff":
         return "\n".join((
