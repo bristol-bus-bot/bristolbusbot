@@ -256,7 +256,7 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
             rows = cur.fetchall()
             if not rows:
                 continue
-            # nearest departure-time gap first (was: arbitrary LIMIT 1)
+            # nearest departure-time gap first
             def gap(row):
                 secs = _gtfs_secs(row[2])
                 return abs(secs - target_secs) if secs is not None else 10**9

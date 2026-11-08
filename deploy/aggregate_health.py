@@ -68,8 +68,8 @@ JOB_MAX_AGE_HOURS = {
     "audit-publish": 30,
     "audit-snapshot": 30,
     "staleness": 2,
-    # The human digest now runs once each morning. Allow one missed-day window
-    # before opening an incident instead of applying its old twice-daily age.
+    # The human digest runs once each morning. Allow one missed-day window
+    # before opening an incident.
     "digest": 30,
     "data-health": 30,
     "collector-anomaly": 30,
@@ -1849,11 +1849,11 @@ def main() -> int:
             automation_attempt.get("outcome") == "rollback_failed")
         now = utcnow()
         # The incident closes and reopens around every scheduled run, so the
-        # streak start is kept until a check genuinely succeeds. Weeks of daily
-        # "nothing to do" messages were the failure this escalation prevents.
+        # streak start is kept until a check genuinely succeeds. Without that,
+        # a run of daily "nothing to do" messages never escalates.
         if not failing_since:
-            # Start the streak at the last good check when one is recorded, so
-            # a failure already running when this is installed is counted.
+            # Start the streak at the last good check when one is recorded,
+            # so a failure already in progress is counted from there.
             delivery = timetable_automation.get("delivery")
             delivery = delivery if isinstance(delivery, dict) else {}
             job = delivery.get("job")

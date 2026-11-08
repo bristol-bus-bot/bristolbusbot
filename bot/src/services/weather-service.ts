@@ -158,7 +158,7 @@ export class WeatherService {
                 parts.push(`visibility ${visKm}km`);
             }
 
-            // Preserve the legacy Bristol air-quality option without applying it to Bath or Wells.
+            // Air quality is a Bristol-only option: never applied to Bath or Wells.
             const airQuality = includeAirQuality && !location ? await this.getAirQuality() : null;
             if (airQuality) {
                 parts.push(airQuality);

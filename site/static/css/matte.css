@@ -1,6 +1,4 @@
-/* Production implementation of the matte-signage refresh.
-   Existing class names and behaviour are retained; this final layer supplies
-   the coherent visual system for both the map and vehicle profile page. */
+/* Matte-signage visual system for the map and the vehicle profile page. */
 
 * {
   box-sizing: border-box;
@@ -992,7 +990,7 @@ body {
   font-size: var(--t-small);
 }
 
-/* Unified vehicle sidebar ---------------------------------------------- */
+/* Vehicle sidebar ------------------------------------------------------ */
 
 .vehicle-sidebar {
   overflow: hidden;
@@ -1815,7 +1813,7 @@ span.vs-stop-name {
 
 /* ---- Site title and the "About this map" panel (planning #90) ---- */
 
-/* The logo is the page's one heading; it must look exactly as before. */
+/* The logo is the page's one heading, styled as a logo not a heading. */
 .site-title {
   margin: 0;
   font: inherit;

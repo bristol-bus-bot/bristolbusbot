@@ -271,8 +271,8 @@ def run_local(command: list[str], *, cwd: Path = REPO,
 
 def run_gates(component: str) -> None:
     python = test_python()
-    # The system temp folder, not the repo: on Windows a failed clean-up used
-    # to leave .bbb-pytest-* folders cluttering the checkout.
+    # The system temp folder, not the repo, so a failed clean-up on Windows
+    # cannot leave .bbb-pytest-* folders in the checkout.
     with tempfile.TemporaryDirectory(prefix="bbb-pytest-", ignore_cleanup_errors=True) as test_temp:
         pytest_env = {
             **os.environ,

@@ -1,4 +1,4 @@
-/* Unified vehicle experience inside the existing departures sidebar. */
+/* Vehicle details inside the departures sidebar. */
 .vehicle-sidebar { overflow: hidden; border: 1px solid var(--line); border-radius: 16px;
                    background: var(--surface-1); box-shadow: var(--shadow-card); }
 .vs-head { height: auto !important; padding: 0 !important; background: var(--surface-1); }

@@ -104,7 +104,7 @@ def test_eurocoaches_yard_detected():
     from app.services.depots import check_depot
     # centroid of the surveyed yard outline
     assert check_depot(51.45592, -2.56926) == "Eurocoaches Yard"
-    # The old circle included this point south of the reviewed yard.
+    # Just south of the reviewed yard, so outside it.
     assert check_depot(51.455401562115725, -2.56966093589615) is None
     # Bedminster Parade, ~400 m away: not a depot
     assert check_depot(51.4520, -2.5900) is None

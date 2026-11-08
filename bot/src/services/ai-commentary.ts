@@ -303,7 +303,6 @@ export class AICommentary {
         // Check and reset daily counters if needed.
         this.appState.resetDailyCounters();
 
-        // Daily limit removed - natural rate limiting via 20-minute posting interval is sufficient
         logSummary('info', `🎯 AI: Call ${this.appState.aiCallsToday + 1} for ${busEvent.line} ${busEvent.eventType}`);
         logDetailed('info', `[AI_ATTEMPT] Starting AI generation for ${busEvent.eventType} event on route ${busEvent.line}`);
 
@@ -501,7 +500,7 @@ export class AICommentary {
                 corrections = issues;
                 previousDraft = writer.post;
                 if (subject.kind === 'wider' && prepared.issues.length) {
-                    // Retain the existing escape from forced or mechanically invalid facts.
+                    // Escape from forced or mechanically invalid facts.
                     subject = chooseSubject(context.event, context.weatherContext, null,
                         history.publishedCount, history.history, recentPosts, context.trafficContext,
                         { widerLibrarySize: librarySize });
@@ -782,10 +781,7 @@ Return only JSON with verdict (PASS or FAIL) and reasons.`;
         );
     }
 
-    /**
-     * Retained as an emergency deployment switch while the single-writer
-     * pipeline proves itself in production.
-     */
+    /** Fallback writer path, kept as an emergency deployment switch. */
     private async callGeminiAPILegacy(
         context: AICommentaryContext,
         retryCount: number = 0,
@@ -1474,13 +1470,11 @@ if (parts.length >= 2) {
 
     if (formulaicPatterns.some(p => p.test(secondSentence))) {
         logSummary('warn', `⚠️ Formulaic second sentence: "${secondSentence.slice(0, 40)}..."`);
-        // Uncomment next line to reject these (aggressive - test first):
-        // return null;
     }
 
     t = `${firstSentence} ${secondSentence}`;
 } else {
-    // Better fallback that ensures route number is included
+    // Fallback that always includes the route number
     const delayText = context.event.eventType === 'delay' ? 
         `${context.event.delayMinutes} minutes late` :
         context.event.eventType === 'early' ? 

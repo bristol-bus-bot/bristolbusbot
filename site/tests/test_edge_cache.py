@@ -29,9 +29,8 @@ def test_buses_keep_their_etag_and_304_with_the_edge_header(client):
 
 
 def test_the_map_always_asks_for_fresh_live_data():
-    # Cloudflare's browser cache setting once turned max-age=0 into 4 hours
-    # and the home-screen app showed hours-old positions. The map must not
-    # depend on that setting.
+    # A browser cache setting that turns max-age=0 into hours would leave the
+    # home-screen app showing stale positions. The map must not depend on it.
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1] / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert "fetch('/api/buses', { signal: controller.signal, cache: 'no-cache' })" in source

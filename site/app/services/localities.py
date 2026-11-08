@@ -69,8 +69,8 @@ def routes_per_stop(gtfs_conn) -> dict[str, list[str]]:
             for code, routes in grouped.items()
         }
 
-    # Compatibility for the previous rollback database during the one-time
-    # schema transition. All newly generated candidates require stop_routes.
+    # Fallback for a timetable database without a stop_routes table. Every
+    # newly generated candidate has one.
     logger.warning(
         "legacy timetable has no stop_routes table; using slow fallback query")
     rows = gtfs_conn.execute(f"""
