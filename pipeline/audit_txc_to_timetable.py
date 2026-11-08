@@ -130,7 +130,7 @@ def main():
         return None
 
     # Open-ended TXC editions follow the regional GTFS service horizon. A fixed
-    # default (previously 20270101) silently ended supplemented routes early.
+    # default date would silently end supplemented routes early.
     horizon = cur.execute(
         "SELECT MAX(c.end_date) FROM calendar c JOIN trips t USING(service_id) "
         "JOIN routes r USING(route_id) JOIN agency a USING(agency_id) "

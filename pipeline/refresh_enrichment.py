@@ -185,7 +185,7 @@ def run_step(label: str, argv: list[str]) -> bool:
 
 
 def distribute() -> None:
-    """The old direct-to-release description copy is deliberately retired."""
+    """Refuse direct-to-release copying of descriptions."""
     raise RuntimeError(
         "description distribution requires Pi pending review and approval")
 

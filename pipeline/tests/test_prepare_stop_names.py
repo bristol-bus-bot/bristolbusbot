@@ -51,7 +51,7 @@ def test_the_timetable_keeps_the_published_name_and_reruns_from_it(tmp_path):
     assert rows == [("1", "Tickenham School", "School"), ("2", "High Street", "High Street"), ("3", None, None)]
 
 
-# Carried over from the site, which used to correct names itself.
+# Location-correction cases, shared with the site's own fixtures.
 LOCATION_CASES = json.loads(
     (Path(__file__).parent / "fixtures_stop_name_locations.json").read_text(encoding="utf-8"))["stops"]
 

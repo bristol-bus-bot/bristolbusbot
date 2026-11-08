@@ -60,8 +60,8 @@ def day_consistency_reasons(
         for operator in operator_list
         if operator in by_operator
     ]
-    # Legacy/test databases can contain only the pooled row.  They predate the
-    # operator split, so there is no independent total to check.
+    # Some databases hold only the pooled row, with no per-operator rows to
+    # check an independent total against.
     if not concrete:
         return []
     for field in ADDITIVE_OVERALL_FIELDS:

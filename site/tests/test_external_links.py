@@ -26,10 +26,10 @@ def test_header_uses_icons_with_text_labels(client):
     page = client.get("/").data
     assert b'id="github-header-link" href="https://github.com/bristol-bus-bot/bristolbusbot"' in page
     assert b'aria-label="Source code on GitHub"' in page
-    # Bluesky is an icon now: no handle text, but still a label for screen readers.
+    # Bluesky is an icon: no handle text, but a label for screen readers.
     assert b"@bristolbusbot.live</span>" not in page
     assert b'aria-label="Bristol Bus Bot on Bluesky"' in page
-    # The layer toggles keep the ids app.js uses, and gain labels.
+    # The layer toggles carry the ids app.js uses, and labels.
     assert b'id="toggle-polylines-btn" class="toggle-btn" type="button"' in page
     assert b'aria-label="Show routes"' in page and b'aria-label="Show boundary"' in page
     assert b'id="toggle-boundary-btn"' in page

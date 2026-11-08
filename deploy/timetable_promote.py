@@ -45,8 +45,8 @@ MINIMUM_SERVICE_DAYS = 14
 COPY_CHUNK = 1024 * 1024
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 # The Pi's audit database integrity scan takes about 75 seconds. Give each
-# complete check room to finish while keeping the total retry budget below
-# the former six attempts of 45 seconds plus five-second delays (300 seconds).
+# complete check room to finish while keeping the total retry budget under
+# 300 seconds.
 COLLECTOR_VERIFY_TIMEOUT_SECONDS = 140
 COLLECTOR_VERIFY_ATTEMPTS = 2
 HEALTH_USER_AGENT = "bristolbusbot-timetable-promoter/1"
