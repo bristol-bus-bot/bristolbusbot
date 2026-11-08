@@ -566,11 +566,36 @@ def test_timetable_messages_explain_success_and_safe_rollback():
         },
     })
     assert "rejected safely" in daily_collapse
-    assert "one day" in daily_collapse.lower()
+    assert "Monday 7 September 2026" in daily_collapse
+    assert "83% of the current timetable" in daily_collapse
     assert "still running" in daily_collapse
     assert "Nothing now" in daily_collapse
     assert "candidate_service_collapse" not in daily_collapse
     assert "270526" not in daily_collapse
+
+    named = aggregate_health.timetable_failure_message("shadow", {
+        "outcome": "failure",
+        "failure_code": "candidate_service_collapse",
+        "context": {
+            "kind": "near_term_day", "metric": "trips", "date": "2026-12-01",
+            "current": 7304, "candidate": 5942, "minimum": 6209,
+            "operators": [
+                {"operator": "FBRI", "current": 6044, "candidate": 5405},
+                {"operator": "SSWL", "current": 351, "candidate": 0},
+            ],
+        },
+    })
+    assert "Tuesday 1 December 2026" in named
+    assert "5,942 journeys instead of 7,304 (81% of the current timetable)" in named
+    assert "Biggest drops: FBRI 6,044 to 5,405, SSWL 351 to 0." in named
+    assert "source data is probably wrong" in named
+
+    unreadable = aggregate_health.timetable_failure_message("shadow", {
+        "outcome": "failure",
+        "failure_code": "candidate_service_collapse",
+        "context": {"date": "not a date", "operators": "junk"},
+    })
+    assert "One day in the proposed timetable" in unreadable
 
 
 def test_general_health_alerts_translate_internal_issue_keys():
