@@ -401,7 +401,8 @@ def main():
         print(f"audit.db not found at {AUDIT_DB}")
         return 1
 
-    conn = sqlite3.connect(AUDIT_DB)
+    # The export only reads; a read-only open cannot take the write lock.
+    conn = sqlite3.connect(f"file:{AUDIT_DB}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 

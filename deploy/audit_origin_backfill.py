@@ -40,8 +40,10 @@ def load_origins(paths: list[Path]) -> tuple[dict[str, int], set[str]]:
 def backfill(audit_path: Path, timetable_paths: list[Path], *,
              apply: bool = False, minimum_match_pct: float = 0.0) -> dict:
     origins, conflicts = load_origins(timetable_paths)
-    connection = sqlite3.connect(audit_path)
+    connection = sqlite3.connect(audit_path, timeout=60)
     connection.execute("PRAGMA busy_timeout=60000")
+    # Per connection, like every audit.db writer (see pipeline/audit_writer.py).
+    connection.execute("PRAGMA synchronous=NORMAL")
     try:
         columns = {row[1] for row in connection.execute(
             "PRAGMA table_info(timepoint_observations)")}

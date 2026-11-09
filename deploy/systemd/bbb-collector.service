@@ -13,6 +13,8 @@ Group=@BBB_DEPLOY_USER@
 WorkingDirectory=@BBB_DEPLOY_BASE@/current/collector
 EnvironmentFile=/etc/bristolbusbot/collector.env
 Environment=PYTHONDONTWRITEBYTECODE=1
+# Print every thread's Python stack if the watchdog kills it with SIGABRT.
+Environment=PYTHONFAULTHANDLER=1
 ExecStart=@BBB_DEPLOY_BASE@/current/collector/venv/bin/python -m collector.run
 Restart=always
 RestartSec=5s

@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import sqlite3
+
+import audit_writer
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -719,10 +721,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args(argv)
     datetime.strptime(args.through, "%Y%m%d")
-    conn = sqlite3.connect(args.audit_db)
     # The collector writes to this database all day; wait for it rather than
     # failing the nightly job on a busy moment.
-    conn.execute("PRAGMA busy_timeout=120000")
+    conn = audit_writer.connect(args.audit_db)
     try:
         payload = build_payload(conn, args.through, bot_db=args.bot_db)
     finally:

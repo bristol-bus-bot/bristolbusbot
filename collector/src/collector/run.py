@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import json
 import signal
+import sqlite3
 import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -49,8 +50,124 @@ def _shifted(moment: datetime, seconds: int) -> datetime:
             + timedelta(seconds=seconds)).astimezone(moment.tzinfo)
 
 
+class AuditBacklog:
+    """audit.db writes from polls that found the database busy.
+
+    Readings and poll records are kept in poll order and written at the start
+    of the next poll that gets the lock. Replaying readings late is safe
+    because upsert_observation keeps the closest reading per trip and stop.
+    The cap stops a lock that never clears from filling the Pi's memory;
+    the oldest entries go first.
+    """
+
+    MAX_ITEMS = 5000
+
+    def __init__(self) -> None:
+        self.items: list[tuple] = []
+        self.dropped = 0
+
+    def extend(self, items: list[tuple]) -> None:
+        self.items.extend(items)
+        overflow = len(self.items) - self.MAX_ITEMS
+        if overflow > 0:
+            del self.items[:overflow]
+            self.dropped += overflow
+            logger.warning("audit backlog full: dropped %s oldest held writes",
+                           overflow)
+
+
+def _is_busy(exc: BaseException) -> bool:
+    return isinstance(exc, sqlite3.OperationalError) and (
+        "locked" in str(exc) or "busy" in str(exc))
+
+
+def _write_audit(audit_conn, backlog: AuditBacklog, ops: list[tuple],
+                 evidence: list[dict], poll_at_iso: str, ok: bool,
+                 counters: dict, target_tz) -> bool:
+    """Write one poll's audit rows after live.db has been committed.
+
+    Everything goes in one transaction. Only its first write can find the
+    database busy; once it holds the lock, later statements do not wait. So a
+    busy database costs at most one busy-timeout wait per poll. Returns False
+    when the rows were held back for the next poll.
+    """
+    held = backlog.items
+    try:
+        cur = audit_conn.cursor()
+        for item in held + ops:
+            _apply_audit_op(cur, audit_conn, item, target_tz)
+        for record in evidence:
+            _write_evidence(audit_conn, record, counters)
+        audit_db.log_poll(audit_conn, poll_at_iso, ok, counters)
+        audit_conn.commit()
+    except sqlite3.OperationalError as exc:
+        if not _is_busy(exc):
+            raise
+        # Close the implicit transaction now; a stale read view would make
+        # later writes on this connection fail at once without waiting.
+        audit_conn.rollback()
+        # Matching evidence is a debugging sample: drop it rather than hold it.
+        counters["evidence_dropped"] += len(evidence)
+        counters["evidence_errors"] += len(evidence)
+        backlog.items = held
+        backlog.extend([*ops, ("poll", poll_at_iso, ok, dict(counters))])
+        logger.warning(
+            "audit.db busy (%s): holding %s writes for the next poll", exc,
+            len(backlog.items))
+        return False
+    if held:
+        logger.info("audit.db: wrote %s held writes", len(held))
+    backlog.items = []
+    return True
+
+
+def _apply_audit_op(cur, conn, item, target_tz) -> None:
+    kind = item[0]
+    if kind == "obs":
+        audit_db.upsert_observation(cur, item[1])
+    elif kind == "clock":
+        audit_db.apply_clock_reading(cur, *item[1:], target_tz)
+    elif kind == "poll":
+        audit_db.log_poll(conn, item[1], item[2], item[3])
+    else:  # pragma: no cover - programming error
+        raise ValueError(f"unknown audit write {kind!r}")
+
+
+def _write_evidence(audit_conn, record: dict, counters: dict) -> None:
+    """Store one evidence receipt. Only a busy database escapes to the caller."""
+    audit_conn.execute("SAVEPOINT evidence")
+    try:
+        status = audit_db.write_matching_evidence(audit_conn, record)
+    except Exception as exc:
+        audit_conn.execute("ROLLBACK TO evidence")
+        audit_conn.execute("RELEASE evidence")
+        if _is_busy(exc):
+            raise
+        # Debug evidence must never interrupt the live collector.
+        counters["evidence_dropped"] += 1
+        counters["evidence_errors"] += 1
+        logger.exception("could not save matching evidence for vehicle %s",
+                         record.get("vehicle_ref"))
+        return
+    audit_conn.execute("RELEASE evidence")
+    if status in {"written", "total_pruned"}:
+        counters["evidence_written"] += 1
+    elif status in {"duplicate", "journey_duplicate"}:
+        counters["evidence_deduplicated"] += 1
+    elif status == "operator_out_of_scope":
+        counters["evidence_dropped"] += 1
+        counters["evidence_scope_dropped"] += 1
+    elif status in {"daily_limit", "cell_limit", "reserved_slot",
+                    "operator_cell_limit"}:
+        counters["evidence_dropped"] += 1
+        counters["evidence_quota_dropped"] += 1
+    else:
+        counters["evidence_dropped"] += 1
+        counters["evidence_errors"] += 1
+
+
 def _apply_clock_change(clock_trips, service_date, match, est, reading,
-                        estimate_reason, reading_reason, audit_cur, target_tz):
+                        estimate_reason, reading_reason, audit_ops, target_tz):
     """Resolve change-night readings to the standard or the clock reading.
 
     See clock_change. Off change nights every offset is zero and nothing
@@ -69,8 +186,8 @@ def _apply_clock_change(clock_trips, service_date, match, est, reading,
     decision = (clock_trips.observe(service_date, match.trip_id, *probe)
                 if probe else before)
     if decision == "clock" and before != "clock":
-        audit_db.apply_clock_reading(audit_cur, service_date, match.trip_id,
-                                     match.schedule, target_tz)
+        audit_ops.append(("clock", service_date, match.trip_id,
+                          list(match.schedule)))
     if est is not None and est.clock_offset_s:
         shift = est.clock_offset_s if decision == "clock" else 0
         delay = est.delay_s - shift
@@ -147,22 +264,33 @@ def _measurement_clues(snap, match, service_midnight_dt, est, reading) -> dict:
     }
 
 
+CONNECT_TIMEOUT_S = 5
+
+
 def make_session() -> requests.Session:
+    """One attempt per fetch, no retries inside a poll.
+
+    The main loop already tries again 30 s later. Retrying inside one poll
+    (with back-off and Retry-After) let a single slow fetch run past 90 s,
+    and with SIRI-SX in the same pass that outlasted the 120 s watchdog
+    (6 Nov 2026).
+    """
     from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
     s = requests.Session()
-    retry = Retry(total=2, backoff_factor=1.0,
-                  status_forcelist=[429, 500, 502, 503, 504],
-                  respect_retry_after_header=True)
-    s.mount("https://", HTTPAdapter(max_retries=retry))
+    s.mount("https://", HTTPAdapter(max_retries=0))
     return s
+
+
+def _timeout(cfg: Config) -> tuple[float, float]:
+    """Connect timeout, then the per-read timeout from BBB_FETCH_TIMEOUT_S."""
+    return (CONNECT_TIMEOUT_S, cfg.fetch_timeout_s)
 
 
 def fetch_vm(session: requests.Session, cfg: Config) -> str | None:
     try:
         r = session.get(
             f"{SIRI_VM_URL}?boundingBox={quote(cfg.bounding_box)}&api_key={cfg.bods_api_key}",
-            timeout=cfg.fetch_timeout_s)
+            timeout=_timeout(cfg))
         r.raise_for_status()
         return r.text
     except requests.RequestException as e:
@@ -173,7 +301,7 @@ def fetch_vm(session: requests.Session, cfg: Config) -> str | None:
 def fetch_sx(session: requests.Session, cfg: Config) -> bytes | None:
     try:
         r = session.get(f"{SIRI_SX_URL}?api_key={cfg.bods_api_key}",
-                        timeout=cfg.fetch_timeout_s)
+                        timeout=_timeout(cfg))
         r.raise_for_status()
         return r.content
     except requests.RequestException as e:
@@ -183,11 +311,19 @@ def fetch_sx(session: requests.Session, cfg: Config) -> bytes | None:
 
 def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
              cfg: Config, target_tz, now_utc: datetime | None = None,
-             clock_trips: ClockChangeTrips | None = None) -> dict:
+             clock_trips: ClockChangeTrips | None = None,
+             backlog: AuditBacklog | None = None) -> dict:
     """One SIRI-VM poll. Returns counters (also written to both DBs).
+
+    live.db is committed first, so the map updates even when audit.db is busy.
+    audit.db rows are collected during the loop and written afterwards; a busy
+    audit.db holds them in `backlog` for the next poll (`audit_written` False).
     `now_utc` is injectable so tests are independent of the wall clock."""
     poll_at = now_utc or datetime.now(timezone.utc)
     clock_trips = clock_trips or CLOCK_CHANGE_TRIPS
+    backlog = backlog if backlog is not None else AuditBacklog()
+    audit_ops: list[tuple] = []
+    evidence: list[dict] = []
     xml = fetch()
     counters = {"vehicles_total": 0, "candidates": 0, "matched": 0,
                 "obs_written": 0, "dropped_insane": 0, "events": 0,
@@ -198,9 +334,10 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
 
     if xml is None:
         live_db.record_poll(live_conn, "siri_vm", ok=False)
-        audit_db.log_poll(audit_conn, poll_at.isoformat(), False, counters)
-        live_conn.commit(); audit_conn.commit()
-        return {"ok": False, **counters}
+        live_conn.commit()
+        written = _write_audit(audit_conn, backlog, [], [], poll_at.isoformat(),
+                               False, counters, target_tz)
+        return {"ok": False, "audit_written": written, **counters}
 
     acts = activities_from_xmltodict(xmltodict.parse(xml))
     counters["vehicles_total"] = len(acts)
@@ -256,21 +393,21 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                     service_midnight_dt)
                 est, reading, estimate_reason, reading_reason =                     _apply_clock_change(
                         clock_trips, service_date, match, est, reading,
-                        estimate_reason, reading_reason, audit_conn.cursor(),
+                        estimate_reason, reading_reason, audit_ops,
                         target_tz)
                 if "sanity_rejected" in {estimate_reason, reading_reason}:
                     # One matched vehicle is counted once even when both the
                     # live and audit calculations reject the same timestamp.
                     counters["dropped_insane"] += 1
                 if reading is not None:
-                    audit_db.upsert_observation(audit_conn.cursor(), (
+                    audit_ops.append(("obs", (
                         service_date, snap.operator_ref,
                         match.route_short_name, match.trip_id, snap.journey_ref,
                         reading.stop_sequence, reading.stop_code,
                         reading.scheduled_local.isoformat(),
                         reading.observed_delay_s, int(reading.on_time),
                         reading.gps_distance_m, snap.recorded_utc.isoformat(),
-                        snap.vehicle_ref, int(reading.is_origin), match.tier))
+                        snap.vehicle_ref, int(reading.is_origin), match.tier)))
                     counters["obs_written"] += 1
 
         decision = live_db.upsert_vehicle(live_conn, snap, est, match,
@@ -308,7 +445,7 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                     origin_local, (snap.lat, snap.lon), service_date)
                 clues = _measurement_clues(
                     snap, match, service_midnight_dt, est, reading)
-                status = audit_db.write_matching_evidence(audit_conn, {
+                evidence.append({
                     "captured_at": poll_at.isoformat(),
                     "service_date": service_date,
                     "reasons": evidence_reasons,
@@ -334,32 +471,19 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                     **clues,
                     **explanation,
                 })
-                if status in {"written", "total_pruned"}:
-                    counters["evidence_written"] += 1
-                elif status in {"duplicate", "journey_duplicate"}:
-                    counters["evidence_deduplicated"] += 1
-                elif status == "operator_out_of_scope":
-                    counters["evidence_dropped"] += 1
-                    counters["evidence_scope_dropped"] += 1
-                elif status in {"daily_limit", "cell_limit", "reserved_slot",
-                                "operator_cell_limit"}:
-                    counters["evidence_dropped"] += 1
-                    counters["evidence_quota_dropped"] += 1
-                else:
-                    counters["evidence_dropped"] += 1
-                    counters["evidence_errors"] += 1
             except Exception:
                 # Debug evidence must never interrupt the live collector.
                 counters["evidence_dropped"] += 1
                 counters["evidence_errors"] += 1
                 logger.exception(
-                    "could not save matching evidence for vehicle %s",
+                    "could not prepare matching evidence for vehicle %s",
                     snap.vehicle_ref)
 
     live_db.record_poll(live_conn, "siri_vm", ok=True)
-    audit_db.log_poll(audit_conn, poll_at.isoformat(), True, counters)
-    live_conn.commit(); audit_conn.commit()
-    return {"ok": True, **counters}
+    live_conn.commit()
+    written = _write_audit(audit_conn, backlog, audit_ops, evidence,
+                           poll_at.isoformat(), True, counters, target_tz)
+    return {"ok": True, "audit_written": written, **counters}
 
 
 def sx_cycle(fetch, live_conn, boundary: BoundaryFilter, observed_nocs: set) -> dict:
@@ -421,7 +545,6 @@ def _stop(signum, frame):  # pragma: no cover
 
 
 def main() -> None:  # pragma: no cover - exercised by the smoke run
-    import sqlite3
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     install_query_secret_filter()
@@ -441,6 +564,7 @@ def main() -> None:  # pragma: no cover - exercised by the smoke run
                 cfg.poll_interval_s, cfg.sx_poll_interval_s, cfg.enable_exact_match)
     last_sx = 0.0
     last_prune = 0.0
+    backlog = AuditBacklog()
     while _running:
         t0 = time.time()
         if t0 - last_prune >= 3600:  # hourly; first cycle too
@@ -450,20 +574,24 @@ def main() -> None:  # pragma: no cover - exercised by the smoke run
                             pruned, live_db.EVENT_RETENTION_DAYS)
             last_prune = t0
         r = vm_cycle(lambda: fetch_vm(session, cfg), tt.cursor(), live_conn,
-                     audit_conn, boundary, cfg, target_tz)
-        logger.info("vm: ok=%s total=%s in-area=%s matched=%s obs=%s events=%s",
+                     audit_conn, boundary, cfg, target_tz, backlog=backlog)
+        logger.info("vm: ok=%s total=%s in-area=%s matched=%s obs=%s events=%s"
+                    " audit=%s",
                     r.get("ok"), r.get("vehicles_total"), r.get("candidates"),
-                    r.get("matched"), r.get("obs_written"), r.get("events"))
+                    r.get("matched"), r.get("obs_written"), r.get("events"),
+                    "written" if r.get("audit_written") else "held")
+        # Each ping follows a feed attempt that returned and committed, so a
+        # hung request, parser or SQLite operation still cannot falsely keep
+        # the service alive. Pinging after each fetch pass gives SIRI-VM and
+        # SIRI-SX their own 120 s allowance instead of sharing one.
+        notify_watchdog()
         if time.time() - last_sx >= cfg.sx_poll_interval_s:
             nocs = {row[0] for row in live_conn.execute(
                 "SELECT DISTINCT operator_ref FROM vehicles")}
             rs = sx_cycle(lambda: fetch_sx(session, cfg), live_conn, boundary, nocs)
             logger.info("sx: %s", rs)
             last_sx = time.time()
-        # This runs on the collector's main loop only after the feed attempt
-        # returned and its database writes committed. A hung request, parser
-        # or SQLite operation therefore cannot falsely keep the service alive.
-        notify_watchdog()
+            notify_watchdog()
         elapsed = time.time() - t0
         for _ in range(max(1, int(cfg.poll_interval_s - elapsed))):
             if not _running:

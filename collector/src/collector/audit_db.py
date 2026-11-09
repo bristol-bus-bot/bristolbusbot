@@ -115,9 +115,27 @@ def _ensure_column(conn: sqlite3.Connection, table: str, name: str,
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
 
 
-def connect(path: str = ":memory:") -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
+# Other jobs (rollup, snapshot, integration) take audit.db's write lock for a
+# few seconds each. Waiting up to this long rides that out, while keeping a
+# whole poll (fetch, this wait, processing) well inside the 120 s watchdog.
+BUSY_TIMEOUT_S = 20
+
+
+def tune_writer(conn: sqlite3.Connection) -> sqlite3.Connection:
+    """Settings every connection that writes audit.db should use.
+
+    synchronous is per connection (it is not stored in the file). In WAL mode
+    NORMAL cannot corrupt the database; a power cut can lose only the commits
+    since the last checkpoint.
+    """
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
+
+def connect(path: str = ":memory:") -> sqlite3.Connection:
+    conn = sqlite3.connect(path, timeout=BUSY_TIMEOUT_S)
+    tune_writer(conn)
     conn.executescript(SCHEMA)
     # CREATE TABLE IF NOT EXISTS does not upgrade an existing durable DB.
     # These additive migrations are safe for the collector's live database.

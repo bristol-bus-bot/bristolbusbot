@@ -7,7 +7,7 @@ import pytest
 from collector import audit_db
 from collector.clock_change import ClockChangeTrips
 from collector.delay import live_estimate_result, settled_reading_result
-from collector.run import _apply_clock_change
+from collector.run import _apply_audit_op, _apply_clock_change
 from collector.timeparse import clock_change_offset_s, gtfs_seconds
 
 LDN = ZoneInfo("Europe/London")
@@ -75,9 +75,13 @@ def _poll(match, service_day, lat, recorded, trips, audit):
     reading, reading_reason = settled_reading_result(
         lat, -2.5800, recorded, match.schedule, midnight)
     service_date = midnight.strftime("%Y%m%d")
+    audit_ops = []
     est, reading, est_reason, reading_reason = _apply_clock_change(
         trips, service_date, match, est, reading, est_reason, reading_reason,
-        audit.cursor(), LDN)
+        audit_ops, LDN)
+    # The collector defers audit.db writes until after the poll, in order.
+    for op in audit_ops:
+        _apply_audit_op(audit.cursor(), audit, op, LDN)
     if reading is not None:
         audit_db.upsert_observation(audit.cursor(), (
             service_date, "FBRI", "A1", match.trip_id, "2605",
