@@ -1,6 +1,7 @@
 // Posting, rate limiting and engagement tracking for social platforms.
 
-import { BskyAgent, RichText } from '@atproto/api';
+import { RichText } from '@atproto/api';
+import { BlueskyClient, isNetworkError } from './bluesky-client.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
@@ -19,7 +20,7 @@ export class SocialMediaManager {
     private appState: ApplicationState;
     private databaseManager: DatabaseManager | null = null;
     private aiCommentary: AICommentary | null = null;
-    private bskyAgent: BskyAgent;
+    private bluesky: BlueskyClient;
     private postingInterval: NodeJS.Timeout | null = null;
     private currentFallbackReason?: string;
     private followerInterval: NodeJS.Timeout | null = null;
@@ -49,7 +50,12 @@ export class SocialMediaManager {
         this.socialConfig = socialConfig;
         this.appState = appState;
 
-        this.bskyAgent = new BskyAgent({ service: 'https://bsky.social' });
+        this.bluesky = new BlueskyClient({
+            handle: this.socialConfig.handle || '',
+            appPassword: this.socialConfig.appPassword || '',
+            sessionPath: this.socialConfig.sessionPath,
+            onPasswordLogin: () => this.appState.incrementBlueskyLogin(),
+        });
 
         logger.info('Social Media Manager initialized', {
             bluesky: {
@@ -157,28 +163,37 @@ export class SocialMediaManager {
                 const MAX_RETRIES = 3;
                 const RETRY_DELAYS = [5000, 10000, 20000]; // 5s, 10s, 20s
                 let lastError: any = null;
+                const firstAttemptAt = new Date();
 
                 for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                     try {
-                        // Login to Bluesky with timeout handling
-                        await this.bskyAgent.login({
-                            identifier: this.socialConfig.handle,
-                            password: this.socialConfig.appPassword
-                        });
+                        // One saved session for every attempt: no password login per post.
+                        await this.bluesky.ensureSession();
 
-                        // Detect URL/mention facets so an approved source URL is
-                        // a real clickable link rather than decorative text.
-                        const richText = new RichText({ text: finalPostText });
-                        await richText.detectFacets(this.bskyAgent);
+                        // A network error can hide a post that did reach Bluesky.
+                        // Look for it before posting the same text again.
+                        let postUri = '';
+                        if (attempt > 1 && lastError && isNetworkError(lastError)) {
+                            postUri = await this.bluesky.findRecentOwnPost(finalPostText, firstAttemptAt) || '';
+                            if (postUri) {
+                                logger.warn('[POST_RETRY] The earlier attempt was published; not posting it again', { postUri });
+                            }
+                        }
 
-                        // Make the actual post and capture the response URI
-                        const postResponse = await this.bskyAgent.post({
-                            text: richText.text,
-                            facets: richText.facets,
-                        });
+                        if (!postUri) {
+                            // Detect URL/mention facets so an approved source URL is
+                            // a real clickable link rather than decorative text.
+                            const richText = new RichText({ text: finalPostText });
+                            await richText.detectFacets(this.bluesky.agent);
+
+                            const postResponse = await this.bluesky.agent.post({
+                                text: richText.text,
+                                facets: richText.facets,
+                            });
+                            postUri = postResponse?.uri || '';
+                        }
 
                         // Extract the post rkey from the AT Protocol URI (at://did:plc:xxx/app.bsky.feed.post/rkey)
-                        const postUri = postResponse?.uri || '';
                         const postRkey = postUri.split('/').pop() || '';
                         const postUrl = postRkey ? `https://bsky.app/profile/${this.socialConfig.handle}/post/${postRkey}` : '';
 
@@ -210,16 +225,9 @@ export class SocialMediaManager {
 
                     } catch (error: any) {
                         lastError = error;
-                        const isNetworkError = error.message?.includes('fetch failed') ||
-                                              error.message?.includes('ECONNRESET') ||
-                                              error.message?.includes('ETIMEDOUT') ||
-                                              error.message?.includes('socket hang up') ||
-                                              error.message?.includes('network') ||
-                                              error.code === 'ECONNRESET' ||
-                                              error.code === 'ETIMEDOUT';
 
                         // If it's not a network error (e.g., authentication issue), don't retry
-                        if (!isNetworkError) {
+                        if (!isNetworkError(error)) {
                             logger.error("--- Non-network error posting to Bluesky (not retrying): ---", {
                                 err: {
                                     status: 1,
@@ -513,7 +521,7 @@ export class SocialMediaManager {
             },
             dailyStats: this.getDailyStats(),
             agent: {
-                connected: !!this.bskyAgent,
+                connected: Boolean(this.bluesky.agent.session),
                 service: 'https://bsky.social'
             }
         };
@@ -669,7 +677,9 @@ public async processEventCollector(): Promise<void> {
     async updateFollowerCounts(): Promise<void> {
         try {
             await this.aiCommentary?.getPublicationLedger().collectMetrics(async uris => {
-                const result = await this.bskyAgent.getPosts({ uris });
+                if (!this.bluesky.configured) return [];
+                await this.bluesky.ensureSession();
+                const result = await this.bluesky.agent.getPosts({ uris });
                 return result.data.posts;
             });
         } catch { logger.warn('Publication metrics unavailable; posting is unaffected'); }
@@ -691,16 +701,11 @@ public async processEventCollector(): Promise<void> {
                 return;
             }
 
-            // Ensure we're logged in
-            if (!this.bskyAgent.session) {
-                await this.bskyAgent.login({
-                    identifier: this.socialConfig.handle,
-                    password: this.socialConfig.appPassword
-                });
-            }
+            // Resume or start the shared session (no login when one exists).
+            await this.bluesky.ensureSession();
 
             // Fetch profile to get follower count
-            const profile = await this.bskyAgent.getProfile({ actor: this.socialConfig.handle });
+            const profile = await this.bluesky.agent.getProfile({ actor: this.socialConfig.handle });
 
             if (profile.success && profile.data.followersCount !== undefined) {
                 const previousCount = this.appState.blueskyFollowerCount;
@@ -762,20 +767,14 @@ public async processEventCollector(): Promise<void> {
      */
     async fetchRecentPostsFromBluesky(limit: number = 5): Promise<string[]> {
         try {
-            if (!this.bskyAgent) {
+            if (!this.bluesky.configured) {
                 return [];
             }
 
-            // Ensure we're authenticated
-            if (!this.bskyAgent.session) {
-                await this.bskyAgent.login({
-                    identifier: this.socialConfig.handle,
-                    password: this.socialConfig.appPassword
-                });
-            }
+            await this.bluesky.ensureSession();
 
             // Fetch author feed
-            const feed = await this.bskyAgent.getAuthorFeed({
+            const feed = await this.bluesky.agent.getAuthorFeed({
                 actor: this.socialConfig.handle,
                 limit
             });

@@ -32,7 +32,7 @@
   "author": "bristol-bus-bot",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@atproto/api": "^0.12.0",
+    "@atproto/api": "^0.30.3",
     "@types/better-sqlite3": "^7.6.13",
     "agentkeepalive": "^4.5.0",
     "better-sqlite3": "^12.11.1",

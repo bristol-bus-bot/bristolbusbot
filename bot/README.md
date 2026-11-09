@@ -36,6 +36,22 @@ BBB_LOCAL_FLAVOUR_JSON=/var/lib/bristolbusbot/enrichment/local_flavour.json
 BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_details.json
 ```
 
+## Bluesky session
+
+The bot logs in to Bluesky with its app password once, saves the session to
+`bluesky-session.json` beside `app_data.db` (override with `BSKY_SESSION_PATH`),
+and resumes it after a restart; the library refreshes the access token. A
+password login (`createSession`) happens only when there is no usable saved
+session. Bluesky allows 300 a day, so each one is logged as `[BLUESKY_LOGIN]`
+and counted in `/api/health` as `blueskyLoginsToday`. Before retrying a post
+after a network error, the bot checks its latest posts for the same text, so a
+post that reached Bluesky is not published twice. The session file holds live
+tokens: it is written atomically with mode 0600 and is ignored by Git. Delete it
+(and restart) to force a fresh login, for example after revoking the app password.
+
+Test mode never contacts Bluesky, so it does not exercise this code. Test it
+against a separate test account, never the live one.
+
 ## Post subject cycle
 
 Posts rotate through an eight-slot cycle. The default is
