@@ -45,6 +45,24 @@ release manifest, atomically switches code, restarts only the collector and
 requires database checks plus a fresh successful SIRI poll. The staleness and
 status-digest jobs are systemd timers.
 
+## Busy audit.db and the watchdog
+
+Other jobs (the 07:00 rollup, snapshot and integration) hold `audit.db`'s
+write lock for a few seconds at a time. Each poll commits `live.db` first, so
+the map and the bot never wait for `audit.db`. The poll's readings, clock-change
+corrections, matching evidence and `poll_log` row are then written in one
+transaction that waits up to 20 s for the lock. If the lock is still held, the
+readings and the poll record are kept in memory (oldest dropped after 5,000)
+and written by the next poll that gets the lock; that poll's matching evidence
+is counted in `evidence_errors` and dropped. The journal's `vm:` line ends
+`audit=held` for such a poll.
+
+Fetches make one attempt (5 s to connect, `BBB_FETCH_TIMEOUT_S`, default 20 s,
+per read) with no retries inside a poll; the next poll is the retry. The
+systemd watchdog (120 s) is notified after the SIRI-VM pass and again after the
+SIRI-SX pass, and `PYTHONFAULTHANDLER=1` prints the Python stack to the journal
+if the watchdog ever kills the collector.
+
 ## Journey checks
 
 Journey age expires at the later of the configured two-hour limit or a valid

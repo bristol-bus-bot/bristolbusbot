@@ -72,6 +72,12 @@ less than 95% complete. These are **candidate duty gaps, not cancellations**.
 None of these tables is read by `audit_export.py`, the audit website or the
 test summary generator.
 
+Attended restatements and `--backfill-*` runs take `audit.db`'s write lock once
+per day they rewrite. The collector holds its readings in memory while the lock
+is held and writes them afterwards, but a long attended run still delays the
+audit's raw data, so avoid running one across the 07:00 rollup or the 02:15
+backup. Every job that writes `audit.db` opens it through `audit_writer.py`.
+
 Use `audit_rollup.py --backfill-duty-gaps` only after snapshots genuinely carry
 the block and end-time fields. It selects only complete retained dates with raw
 observations and never reconstructs older duties from a newer timetable.

@@ -18,6 +18,8 @@ import hashlib
 import json
 import sqlite3
 
+import audit_writer
+
 
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS expected_snapshot_quality (
@@ -227,7 +229,7 @@ def main(argv=None) -> int:
         return 2
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.getenv('BBB_AUDIT_DB', os.path.join(here, 'audit.db'))
-    conn = sqlite3.connect(path)
+    conn = audit_writer.connect(path)
     try:
         for day in args[1:]:
             with conn:

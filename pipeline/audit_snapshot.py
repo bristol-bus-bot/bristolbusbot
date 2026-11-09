@@ -8,6 +8,8 @@ service date. It reads timetable.db and writes expected trips to audit.db.
 import os
 import sys
 import sqlite3
+
+import audit_writer
 import hashlib
 from datetime import datetime
 from dateutil import tz
@@ -202,7 +204,7 @@ def build_snapshot(date_str):
     if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
         raise RuntimeError('timetable changed during snapshot; no audit rows replaced')
 
-    audit_conn = sqlite3.connect(AUDIT_DB)
+    audit_conn = audit_writer.connect(AUDIT_DB)
     init_expected_table(audit_conn)
     audit_cur = audit_conn.cursor()
 
@@ -272,7 +274,7 @@ def main():
     n = build_snapshot(date_str)
     print(f"  wrote {n} expected trips -> {AUDIT_DB} (table: expected_trips)")
     if n:
-        conn = sqlite3.connect(AUDIT_DB)
+        conn = audit_writer.connect(AUDIT_DB)
         cur = conn.cursor()
         cur.execute(
             """SELECT operator, COUNT(*) c FROM expected_trips

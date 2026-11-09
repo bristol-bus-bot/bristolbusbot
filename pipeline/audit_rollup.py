@@ -19,6 +19,7 @@ Run from the bristol-live-buses folder:
 """
 
 import os
+import audit_writer
 from snapshot_quality import denominator_reasons, withheld_routes
 from sample_quality import write_day as write_sample_support
 import sys
@@ -79,12 +80,8 @@ PEAK_BANDS = ["am_peak", "interpeak", "pm_peak", "evening"]
 
 def connect_audit_db(path=None):
     """Wait out one short collector write instead of failing the rollup."""
-    conn = sqlite3.connect(
-        path or AUDIT_DB,
-        timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
-    )
-    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
-    return conn
+    return audit_writer.connect(path or AUDIT_DB,
+                                busy_timeout_s=SQLITE_BUSY_TIMEOUT_MS / 1000)
 
 
 def migrate_overall_pk(cur):

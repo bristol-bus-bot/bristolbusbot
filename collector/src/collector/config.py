@@ -35,7 +35,7 @@ class Config:
 
     poll_interval_s: float = field(default_factory=lambda: _f("BBB_POLL_INTERVAL_S", 30))
     sx_poll_interval_s: float = field(default_factory=lambda: _f("BBB_SX_POLL_INTERVAL_S", 300))
-    fetch_timeout_s: float = field(default_factory=lambda: _f("BBB_FETCH_TIMEOUT_S", 30))
+    fetch_timeout_s: float = field(default_factory=lambda: _f("BBB_FETCH_TIMEOUT_S", 20))
     max_journey_age_h: float = field(default_factory=lambda: _f("BBB_MAX_JOURNEY_AGE_H", 2))
     # SIRI keeps re-broadcasting parked vehicles with old RecordedAtTime;
     # positions older than this are ghosts, not buses
