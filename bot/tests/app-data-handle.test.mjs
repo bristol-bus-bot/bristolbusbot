@@ -71,3 +71,22 @@ test('the bot depends on one SQLite library', () => {
     assert.equal('@types/sqlite3' in (pkg.devDependencies || {}), false);
     assert.ok(pkg.dependencies['better-sqlite3']);
 });
+
+test('stop names are loaded once from the timetable, one per stop code (#114)', async () => {
+    const { timetablePath, appDataPath } = files();
+    const extra = new Database(timetablePath);
+    extra.exec("INSERT INTO stops VALUES ('3','A','Bristol Bus Station Bay 2')");  // a second name for code A
+    extra.close();
+    const manager = new DatabaseManager({ timetablePath, appDataPath, maxConnections: 1 });
+    await manager.initialize();
+    try {
+        await manager.loadStopNames();
+        const { ApplicationState } = await import('../dist/services/application-state.js');
+        const names = ApplicationState.getInstance().stopNamesByCode;
+        assert.equal(names.get('B'), 'Elm Road');
+        assert.equal(names.get('A'), 'Bristol Bus Station');   // lowest stop_id wins, every time
+        assert.equal(names.size, 2);
+    } finally {
+        await manager.close();
+    }
+});
