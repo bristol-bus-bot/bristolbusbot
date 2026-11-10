@@ -297,7 +297,9 @@ class BristolBusBot {
             const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
             this.eventReader = new EventReader(
                 liveDbPath, this.appState, this.delayAnalyzer, operators,
-                30_000, maxAgeMin, () => this.systemdWatchdog.progress());
+                30_000, maxAgeMin, () => this.systemdWatchdog.progress(),
+                process.env.EVENT_CURSOR_PATH
+                    || join(dirname(this.config.database.appDataPath), 'event-cursor.json'));
             this.eventReader.start();
             this.socialMediaManager.setObservationValidator(
                 event => this.eventReader?.isObservationCurrent(event) ?? false);

@@ -56,7 +56,9 @@ ProtectKernelTunables=yes
 ProtectProc=invisible
 ProtectSystem=strict
 ReadOnlyPaths=/var/lib/bristolbusbot/enrichment
-ReadWritePaths=/var/lib/bristolbusbot/bot /var/lib/bristolbusbot/collector
+# The bot only reads the collector's live.db; the collector is its only writer.
+ReadOnlyPaths=/var/lib/bristolbusbot/collector
+ReadWritePaths=/var/lib/bristolbusbot/bot
 CapabilityBoundingSet=
 AmbientCapabilities=
 LockPersonality=yes

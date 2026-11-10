@@ -306,20 +306,25 @@ def upsert_vehicle(conn: sqlite3.Connection, snap, est, match, *,
 EVENT_RETENTION_DAYS = 7
 
 
-def prune_consumed_events(conn: sqlite3.Connection,
-                          retention_days: int = EVENT_RETENTION_DAYS) -> int:
-    """Delete events the bot has already consumed once they pass the
-    retention window. The events table is a message queue, not a log: a
-    consumed row's job is done and nothing reads it again. The window keeps
-    a week of the bot's inbox around for debugging. Unconsumed rows are
-    never deleted, whatever their age. Returns the number of rows removed."""
+def prune_old_events(conn: sqlite3.Connection,
+                     retention_days: int = EVENT_RETENTION_DAYS) -> int:
+    """Delete events older than the retention window.
+
+    The events table is the bot's inbox. The bot reads live.db read-only and
+    keeps its own position, so age alone decides: a week of events is kept for
+    debugging. (Until Nov 2026 the bot marked rows consumed, and only marked
+    rows were pruned, so a stopped bot let the table grow without limit.) The
+    bot ignores events older than ten minutes anyway. Returns the number of
+    rows removed."""
     cutoff = (datetime.now(timezone.utc)
               - timedelta(days=retention_days)).isoformat()
     with conn:
-        cur = conn.execute(
-            "DELETE FROM events WHERE consumed_by_bot_at IS NOT NULL "
-            "AND created_at < ?", (cutoff,))
+        cur = conn.execute("DELETE FROM events WHERE created_at < ?", (cutoff,))
     return cur.rowcount
+
+
+# Older name, kept for any caller not yet updated.
+prune_consumed_events = prune_old_events
 
 
 def record_poll(conn: sqlite3.Connection, name: str, ok: bool) -> None:
