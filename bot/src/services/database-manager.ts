@@ -1,6 +1,7 @@
 // Bristol Bus Bot - Database Manager Service
 // Handles both timetable.db (read-only) and app_data.db (read-write)
 
+import type { AppConfig } from '../types/bus-types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -27,6 +28,36 @@ export interface EngagementRecord {
     significance: number;
     postUri?: string;
     event?: BusEvent;
+}
+
+/** One engagement_analytics row as read by getRecentPosts. */
+interface EngagementRow {
+    collector_event_id: number | null;
+    operator_ref: string | null;
+    vehicle_ref: string;
+    line: string | null;
+    journey_ref: string | null;
+    origin_aimed_departure: string | null;
+    event_timestamp: string | null;
+    delay_seconds: number | null;
+    direction: string | null;
+    stop_code: string | null;
+    stop_name: string | null;
+    source: string | null;
+    corroboration: number | null;
+    low_confidence: number | null;
+    post_uri: string;
+    post_content: string;
+    post_type: string;
+    significance_score: number | null;
+    timestamp: string;
+}
+
+export interface DatabaseHealth {
+    timetable: { connected: boolean; path: string; readonly: true };
+    appData: { connected: boolean; path: string; readonly: false };
+    isReloading: boolean;
+    lastHealthCheck: string;
 }
 
 export interface RecentPost {
@@ -66,13 +97,13 @@ export interface RecentPost {
 const APP_DATA_BUSY_TIMEOUT_MS = 2000;
 
 export class DatabaseManager {
-    private databaseConfig: any;
+    private databaseConfig: AppConfig['database'];
     private appState: ApplicationState;
 
     private timetableDb: Database.Database | null = null;  // Read-only access to static timetable data
     private appDataDb: Database.Database | null = null;    // Read-write access to dynamic application data
     
-    constructor(databaseConfig: any) {
+    constructor(databaseConfig: AppConfig['database']) {
         this.databaseConfig = databaseConfig;
         this.appState = ApplicationState.getInstance();
         
@@ -230,7 +261,7 @@ export class DatabaseManager {
             const rawBusData = JSON.parse(rawFleetBytes.toString('utf-8'));
 
             // Accept either a root-level array or a { results: [...] } wrapper.
-            let records: any[];
+            let records: unknown[];  // raw fleet JSON; validated by buildFleetIdentityIndex
             if (Array.isArray(rawBusData)) {
                 records = rawBusData;
             } else {
@@ -437,7 +468,7 @@ export class DatabaseManager {
                         post_content, post_type, significance_score, timestamp
                    FROM engagement_analytics
                   WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
-                  ORDER BY timestamp DESC LIMIT ?;`).all(limit) as any[];
+                  ORDER BY timestamp DESC LIMIT ?;`).all(limit) as EngagementRow[];
             return rows.map(r => ({
                 collectorEventId: r.collector_event_id,
                 operatorRef: r.operator_ref || '',
@@ -543,7 +574,7 @@ export class DatabaseManager {
     /**
      * Get database health status
      */
-    getDatabaseHealth(): any {
+    getDatabaseHealth(): DatabaseHealth {
         return {
             timetable: {
                 connected: Boolean(this.timetableDb?.open),
@@ -600,7 +631,7 @@ export class DatabaseManager {
     /**
      * Get service status
      */
-    getStatus(): any {
+    getStatus(): { name: string; status: string; health: DatabaseHealth; config: Record<string, unknown> } {
         return {
             name: 'Database Manager',
             status: 'running',

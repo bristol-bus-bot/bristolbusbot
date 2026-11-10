@@ -6,6 +6,20 @@ import type { AppConfig } from '../types/bus-types.js';
 /**
  * Load application configuration from environment variables.
  */
+/**
+ * A whole-number setting from the environment. A malformed value stops the
+ * bot at start-up with a clear message instead of quietly becoming NaN.
+ */
+function intSetting(name: string, fallback: number, min = 0): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < min) {
+        throw new Error(`${name}=${raw} is not valid: it must be a whole number of at least ${min}`);
+    }
+    return value;
+}
+
 export function loadConfig(): AppConfig {
     const isTestMode = process.env.TEST_MODE?.toLowerCase() === 'true';
     const TARGET_TIMEZONE = 'Europe/London';
@@ -19,7 +33,7 @@ export function loadConfig(): AppConfig {
     // Timing constants with environment overrides. Timeouts are generous
     // because the Pi's network path to BODS can be slow.
     const SUMMARY_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
-    const DAILY_CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL || '86400000', 10);
+    const DAILY_CLEANUP_INTERVAL_MS = intSetting('CLEANUP_INTERVAL', 86400000);
     
     // File paths; environment overrides, working-directory defaults.
     const TIMETABLE_DB_FILE = process.env.TIMETABLE_DB_PATH
@@ -42,16 +56,16 @@ export function loadConfig(): AppConfig {
     const MAX_JOURNEY_AGE_HOURS = 2;
     
     // AI constants with environment variable override for Pi optimization
-    const AI_DAILY_CALL_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '2000', 10);
+    const AI_DAILY_CALL_LIMIT = intSetting('AI_DAILY_LIMIT', 2000);
     
     // Social media constants with environment variable override for Pi optimization
-    const BLUESKY_POST_LIMIT = parseInt(process.env.BLUESKY_DAILY_LIMIT || '300', 10);
+    const BLUESKY_POST_LIMIT = intSetting('BLUESKY_DAILY_LIMIT', 300);
     
     return {
         testMode: isTestMode,
         
         server: {
-            port: parseInt(process.env.PORT || '3010', 10),
+            port: intSetting('PORT', 3010),
             host: '127.0.0.1'
         },
         
@@ -70,7 +84,7 @@ export function loadConfig(): AppConfig {
             agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT || '',
             agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global',
             dailyLimit: AI_DAILY_CALL_LIMIT,
-            timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
+            timeout: intSetting('AI_TIMEOUT', 75000), // Increased from 30s to 75s for Pi network
             editorialContextPath: EDITORIAL_CONTEXT_FILE,
             editorialUsagePath: EDITORIAL_USAGE_FILE,
         },

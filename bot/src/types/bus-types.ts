@@ -276,7 +276,7 @@ export interface AppConfig {
         appPassword: string;
         testMode: boolean;
         dailyLimit: number;
-        postLimit?: number;
+        postLimit: number;
     };
     processing: {
         lateThreshold: number;

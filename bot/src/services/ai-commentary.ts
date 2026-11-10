@@ -2,6 +2,7 @@
 // Focused, sardonic personas + strong vehicle/ weather grounding for Gemini
 // Keeps retry + timeout logic Pi-friendly and uses BUS_MODEL_BLURBS
 
+import type { AppConfig } from '../types/bus-types.js';
 import { buildStoryPrompt, factualStoryIssues, observationIssue, openingIssues } from './story-brief.js';
 import { spokenDestination, destinationMentioned } from './journey-context.js';
 import { chooseSubject, isDaytime, SUBJECT_CYCLE, WIDER_LIBRARY_MINIMUM, type SubjectChoice } from './story-subject.js';
@@ -192,7 +193,7 @@ export function emDashesToCommas(text: string): string {
 }
 
 export class AICommentary {
-    private aiConfig: any;
+    private aiConfig: AppConfig['ai'];
     private appState: ApplicationState;
     private weatherService: WeatherService;
     private socialMediaManager: any | null = null;    private pendingPublications = new Map<string, { hook: EditorialSelection | null; used: boolean; subject?: SubjectChoice }>();
@@ -238,7 +239,7 @@ export class AICommentary {
         verifier: "LOW",
     };
 
-    constructor(aiConfig: any, appState: ApplicationState, weatherService: WeatherService,
+    constructor(aiConfig: AppConfig['ai'], appState: ApplicationState, weatherService: WeatherService,
         private readonly trafficService?: TrafficService) {
         this.aiConfig = { ...aiConfig };
         this.appState = appState;

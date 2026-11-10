@@ -68,3 +68,17 @@ test('the old explicit single setting still starts; a leftover legacy setting st
   withEnv({ ...base, AI_COMMENTARY_PIPELINE: 'legacy' },
     () => assert.throws(() => validateConfig(loadConfig()), /legacy writer has been removed/));
 });
+
+
+test('a malformed number setting stops the bot with a clear message (#106)', () => {
+  for (const [name, value] of [['AI_DAILY_LIMIT', 'abc'], ['BLUESKY_DAILY_LIMIT', '-5'],
+                               ['AI_TIMEOUT', '7.5'], ['PORT', '30 10']]) {
+    withEnv({ [name]: value }, () => assert.throws(
+      () => loadConfig(), new RegExp(`${name}=.* is not valid`), name));
+  }
+  withEnv({ AI_DAILY_LIMIT: '1500', BLUESKY_DAILY_LIMIT: undefined }, () => {
+    const config = loadConfig();
+    assert.equal(config.ai.dailyLimit, 1500);
+    assert.equal(config.social.dailyLimit, 300);
+  });
+});
