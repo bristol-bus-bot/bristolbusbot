@@ -33,6 +33,14 @@ if LIBRARY.is_dir() and str(LIBRARY) not in sys.path:
     sys.path.insert(0, str(LIBRARY))
 import data_health  # noqa: E402
 
+# The bus-description jobs use the bot's writer model unless told otherwise.
+# A named version, never a "-latest" alias: an alias moves when Google ships
+# a new model and can change the descriptions' tone or break their checks
+# with no code change. Named versions are retired on Google's published
+# schedule, so move this (and the bot's default in bot/src/config/app-config.ts,
+# which a deploy test keeps equal) deliberately.
+DEFAULT_BLURB_MODEL = "gemini-3.6-flash"
+
 
 ENRICHMENT = Path("/var/lib/bristolbusbot/enrichment")
 PENDING_ROOT = Path("/var/lib/bristolbusbot/blurb-pending")
@@ -979,8 +987,8 @@ def generate_pending(*, fleet_path: Path = FLEET,
         raise NothingToDo("no eligible missing descriptions" + note)
 
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("AI_API_KEY") or ""
-    model = os.getenv("BLURB_GEMINI_MODEL") or os.getenv(
-        "AI_MODEL", "gemini-flash-latest")
+    model = (os.getenv("BLURB_GEMINI_MODEL") or os.getenv("AI_MODEL")
+             or DEFAULT_BLURB_MODEL)
     client = client or GeminiClient(
         api_key, model, os.getenv("AI_PROVIDER", "gemini"),
         os.getenv("AGENT_PLATFORM_PROJECT", ""), os.getenv("AGENT_PLATFORM_LOCATION", "global"))

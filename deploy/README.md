@@ -441,3 +441,22 @@ unreadable is an error. The token expiry is read first from
 `/etc/bristolbusbot/timetable-delivery.env`, which the configuration helper now
 writes readable (it holds only the date; the token itself stays root-only), so
 a renewal clears the warning at the next health pass.
+
+## Bus-description model
+
+The nightly bus-description jobs read their Gemini model from
+`/etc/bristolbusbot/blurb.env` (`BLURB_GEMINI_MODEL`). `--install-layout`
+creates that file once from `bot.env` and then preserves it, so after changing
+`AI_MODEL` in `bot.env`, copy the new model across with:
+
+```sh
+sudo /usr/local/sbin/bbb-configure-blurb-generation --owner <deploy user> --sync-model
+```
+
+It rewrites only the model line, atomically, keeping the file's owner and
+mode. Defaults are always a named model (never a `-latest` alias); a deploy
+test keeps the description jobs' default equal to the bot's. Named Gemini
+versions are retired on Google's published schedule: when moving the bot's
+default, move these with it. A failing description run, including "model not
+found", appears in aggregate health and the twice-daily digest as
+`job:blurb-generation`.
