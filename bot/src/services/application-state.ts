@@ -48,6 +48,8 @@ export class ApplicationState {
     };
     public routeDetails: { [routeNumber: string]: any } = {};  // Route/stop details for AI context
     public terminusStopNames: Set<string> = new Set();
+    // Stop code -> the timetable's (already corrected) stop name, loaded once.
+    public stopNamesByCode: Map<string, string> = new Map();
     public zenComments: any = {};
     public wittyCommentData: { [key: string]: string[] } = { on_time: ["running normally."] };
     

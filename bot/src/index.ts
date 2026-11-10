@@ -190,6 +190,7 @@ class BristolBusBot {
             await this.databaseManager.loadBusDetailsLookup();
             await this.databaseManager.loadRouteDetails();
             await this.databaseManager.loadTerminusStops();
+            await this.databaseManager.loadStopNames();
 
             logger.info('Initial data loaded successfully', {
                 busDetailsLoaded: this.appState.busDetailsLookup?.results?.length || 0,

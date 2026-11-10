@@ -86,19 +86,15 @@ export class EventReader {
     /** Include fresh normal running, even when it produced no exception event. */
     getCurrentStories(now = Date.now()): BusEvent[] {
         try {
-            const names = new Map<string, string>();
-            const recentStops = this.db.prepare('SELECT stop_code, stop_name FROM events ORDER BY id DESC LIMIT 5000')
-                .all() as { stop_code: string; stop_name: string }[];
-            for (const row of recentStops) {
-                if (row.stop_name && !names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
-            }
+            // Loaded once from the timetable at start-up (the collector copies
+            // the same corrected names into its events).
+            const names = this.appState?.stopNamesByCode ?? new Map<string, string>();
             const rows = this.db.prepare(`SELECT v.*, v.recorded_at AS created_at
                 FROM vehicles v WHERE v.recorded_at >= ? AND v.delay_seconds IS NOT NULL
                 AND v.event_type IN ('delayed', 'early', 'punctual')
                 ORDER BY v.recorded_at DESC LIMIT 1000`)
                 .all(new Date(now - 90_000).toISOString()) as any[];
             return rows.filter(row => this.operators.has(row.operator_ref)).map(row => {
-                // The collector copies the timetable's name, which is already corrected.
                 const name = names.get(row.stop_code);
                 const event = this.toBusEvent({ ...row, id: undefined, source: 'live_snapshot',
                     stop_name: name || null,

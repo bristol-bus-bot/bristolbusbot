@@ -117,8 +117,11 @@ test('collector recheck rejects stale positions, changed runs, depots, confidenc
     UPDATE vehicles SET event_type='punctual', delay_seconds=0;`);
   reader.delayAnalyzer = { calculateEventSignificance: () => ({ type: 'ignore', score: 0 }),
     extractBusDetails: () => undefined };
+  reader.appState = { ...(reader.appState || {}), stopNamesByCode: new Map([['bst-test', 'Two Mile Hill']]) };
   const [normal] = reader.getCurrentStories(now);
   assert.equal(normal.eventType, 'punctual');
+  // The name comes from the timetable map loaded at start-up, not an events scan.
+  assert.equal(normal.lastStopName, 'Two Mile Hill');
   assert.equal(normal.source, 'live_snapshot');
   assert.equal(normal.collectorEventId, undefined, 'snapshot must not claim an old exception event id');
   assert.equal(normal.timestamp, '2026-09-13T11:59:50Z');

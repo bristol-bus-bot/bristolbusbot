@@ -352,6 +352,29 @@ export class DatabaseManager {
         }
     }
     
+    /**
+     * Load every stop's name from the timetable once. The collector copies the
+     * same corrected names into its events, so this matches what the event
+     * stream says, and also names stops with no recent events. The timetable
+     * changes only at promotion, which restarts the bot.
+     */
+    async loadStopNames(): Promise<void> {
+        const names = new Map<string, string>();
+        try {
+            if (this.timetableDb?.open) {
+                const rows = this.timetableDb.prepare(
+                    `SELECT stop_code, stop_name FROM stops
+                      WHERE stop_code IS NOT NULL AND stop_name IS NOT NULL
+                      ORDER BY stop_code, stop_id`).all() as Array<{ stop_code: string; stop_name: string }>;
+                for (const row of rows) if (!names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
+            }
+            logger.info(`Loaded ${names.size} stop names from the timetable.`);
+        } catch (error: any) {
+            logger.error('Error loading stop names', { err: error });
+        }
+        this.appState.stopNamesByCode = names;
+    }
+
     async enrichStoryJourney(event: BusEvent): Promise<BusEvent> {
         if (!this.timetableDb || this.appState.dbIsReloading || !event.collectorTripId) return event;
         let stops: JourneyStop[] = [];
@@ -500,6 +523,7 @@ export class DatabaseManager {
             
             await this.connectTimetableDb();
             await this.loadTerminusStops();
+            await this.loadStopNames();
             
             logger.info('Timetable data reloaded successfully. App data connection preserved.');
             
