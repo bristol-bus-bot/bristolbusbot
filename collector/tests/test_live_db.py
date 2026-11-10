@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 
 from collector.delay import LiveEstimate
 from collector.live_db import (CORROBORATION_EXTREME, connect, decide_event,
-                               prune_consumed_events, record_poll,
+                               prune_consumed_events, prune_old_events,
+                               record_poll,
                                upsert_vehicle)
 from collector.matching import Match
 from collector.siri import VehicleSnapshot
@@ -170,18 +171,17 @@ def _insert_event(conn, created_at, consumed_at):
          51.45, -2.58, None, 0, consumed_at))
 
 
-def test_prune_removes_only_old_consumed_events():
+def test_prune_removes_old_events_by_age_alone():
+    """The bot no longer marks rows, so age alone decides (#101)."""
     from datetime import timedelta
     conn = connect()
     now = datetime.now(timezone.utc)
     old = (now - timedelta(days=10)).isoformat()
     fresh = (now - timedelta(hours=1)).isoformat()
-    _insert_event(conn, old, consumed_at=old)      # old + consumed: pruned
-    _insert_event(conn, old, consumed_at=None)     # old, never consumed: kept
-    _insert_event(conn, fresh, consumed_at=fresh)  # fresh + consumed: kept
-    assert prune_consumed_events(conn) == 1
-    rows = conn.execute(
-        "SELECT created_at, consumed_by_bot_at FROM events ORDER BY id").fetchall()
-    assert len(rows) == 2
-    assert rows[0][1] is None          # the unconsumed old row survived
-    assert rows[1][0] == fresh         # the fresh consumed row survived
+    _insert_event(conn, old, consumed_at=old)      # old: pruned
+    _insert_event(conn, old, consumed_at=None)     # old, never marked: pruned too
+    _insert_event(conn, fresh, consumed_at=None)   # fresh: kept
+    assert prune_old_events(conn) == 2
+    rows = [tuple(row) for row in conn.execute("SELECT created_at FROM events")]
+    assert rows == [(fresh,)]
+    assert prune_consumed_events is prune_old_events
