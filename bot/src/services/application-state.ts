@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { logger, TARGET_TIMEZONE } from '../utils/logging.js';
-import type { BusEvent, DelayHistory, NetworkStatus, SystemMetrics, SIRIVehicleActivity } from '../types/bus-types.js';
+import type { BusEvent, DelayHistory, NetworkStatus, SystemMetrics } from '../types/bus-types.js';
 import { emptyFleetIdentityIndex, type FleetIdentityIndex } from './vehicle-identity.js';
 
 export interface EnrichmentDataFileStatus {
@@ -53,10 +53,6 @@ export class ApplicationState {
     
     // Delay tracking
     public delayHistoryMap: Map<string, DelayHistory> = new Map();
-
-    // Vehicle memory: keeps recently seen vehicles so brief feed dropouts
-    // don't make dashboard/map entries flicker in and out.
-    public vehicleMemory: Map<string, { activity: SIRIVehicleActivity, lastSeen: number }> = new Map();
 
     // Dashboard data - Two-step AI generation
     public lastAIPrompt: string | null = null;
@@ -557,41 +553,6 @@ export class ApplicationState {
         });
     }
     
-    /**
-     * Update vehicle memory with new activities. Tracks all vehicles from
-     * the raw SIRI feed so brief dropouts don't cause map flickering.
-     */
-    public updateVehicleMemory(activities: SIRIVehicleActivity[]): void {
-        const now = Date.now();
-        activities.forEach(act => {
-            if (act.vehicleRef) {
-                this.vehicleMemory.set(act.vehicleRef, {
-                    activity: act,
-                    lastSeen: now
-                });
-            }
-        });
-    }
-
-    /**
-     * Prune vehicles not seen for maxAgeMs (default 10 minutes).
-     */
-    public pruneVehicleMemory(maxAgeMs: number = 600000): void {
-        const now = Date.now();
-        for (const [ref, data] of this.vehicleMemory.entries()) {
-            if (now - data.lastSeen > maxAgeMs) {
-                this.vehicleMemory.delete(ref);
-            }
-        }
-    }
-
-    /**
-     * Get all tracked vehicles for dashboard/map display.
-     */
-    public getAllTrackedVehicles(): SIRIVehicleActivity[] {
-        return Array.from(this.vehicleMemory.values()).map(v => v.activity);
-    }
-
     /**
      * Get current state summary for logging
      */

@@ -45,3 +45,14 @@ export class SystemdWatchdog {
         return true;
     }
 }
+
+
+/**
+ * While event ingest is paused (Christmas Day and Boxing Day have no buses)
+ * nothing else reports progress, so the once-a-minute holiday check does.
+ * While ingest runs, only completed ingest cycles keep the service alive.
+ */
+export function pausedIngestKeepalive(watchdog: SystemdWatchdog,
+                                      ingestRunning: () => boolean): () => boolean {
+    return () => (ingestRunning() ? false : watchdog.progress());
+}

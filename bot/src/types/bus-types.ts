@@ -93,45 +93,6 @@ export interface DelayReport {
     significance: number;
 }
 
-// SIRI-VM data structures
-export interface SIRIVehicleActivity {
-    vehicleRef: string;
-    lineRef: string;
-    directionRef: string;
-    datedJourneyRef: string;
-    operatorRef: string;
-    originAimedDepartureTime: string;
-    recordedAtTime: string;
-    validUntilTime: string;
-    vehicleLocation?: {
-        longitude: number;
-        latitude: number;
-    };
-    monitored: boolean;
-    monitoredCall?: SIRIMonitoredCall;
-    onwardCalls?: SIRIOnwardCall[];
-}
-
-export interface SIRIMonitoredCall {
-    stopPointRef: string;
-    stopPointName: string;
-    vehicleAtStop: boolean;
-    aimedArrivalTime?: string;
-    expectedArrivalTime?: string;
-    aimedDepartureTime?: string;
-    expectedDepartureTime?: string;
-    extensions?: any;
-}
-
-export interface SIRIOnwardCall {
-    stopPointRef: string;
-    stopPointName: string;
-    aimedArrivalTime?: string;
-    expectedArrivalTime?: string;
-    aimedDepartureTime?: string;
-    expectedDepartureTime?: string;
-}
-
 // Database entities
 export interface DatabaseStop {
     stop_id: number;
@@ -291,14 +252,6 @@ export interface AppConfig {
         appDataPath: string;
         maxConnections: number;
     };
-    siri: {
-        apiKey: string;
-        operatorRef: string;
-        boundingBox: string;
-        timeout: number;
-        requestUrl?: string;
-        targetOperator?: string;
-    };
     ai: {
         apiKey: string;
         model: string;
@@ -340,7 +293,6 @@ export interface AppConfig {
         clusterThreshold: number;
     };
     monitoring: {
-        fetchInterval: number;
         summaryInterval: number;
         metricsInterval: number;
         enableMetrics: boolean;
@@ -384,13 +336,6 @@ export class BusMonitoringError extends Error {
     ) {
         super(message);
         this.name = 'BusMonitoringError';
-    }
-}
-
-export class SIRIError extends BusMonitoringError {
-    constructor(message: string, context?: any) {
-        super(message, 'SIRI_ERROR', context);
-        this.name = 'SIRIError';
     }
 }
 
