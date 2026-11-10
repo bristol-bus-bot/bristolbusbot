@@ -1,6 +1,6 @@
-// Load environment variables before application imports.
-import dotenv from 'dotenv';
-dotenv.config();
+// Configuration.
+// Settings come from the environment: systemd's EnvironmentFile on the Pi,
+// `node --env-file-if-exists=.env` (npm start) for local runs.
 
 // Check for summary mode command line argument
 const isSummaryMode = process.argv.includes('--summary') || process.argv.includes('-s');
