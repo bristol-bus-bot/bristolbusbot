@@ -48,17 +48,23 @@ test('a leftover direct-SIRI ingest setting stops the bot at start-up', () => {
 });
 
 
-test('single-writer Gemini 3.6 is the default with an explicit legacy escape hatch', () => {
+test('single-writer Gemini 3.6 is the only commentary pipeline', () => {
   withEnv({
     AI_MODEL: undefined,
     AI_COMMENTARY_PIPELINE: undefined,
   }, () => {
     const config = loadConfig();
     assert.equal(config.ai.model, 'gemini-3.6-flash');
-    assert.equal(config.ai.pipeline, 'single');
+    assert.equal('pipeline' in config.ai, false);
   });
+});
 
-  withEnv({
-    AI_COMMENTARY_PIPELINE: 'legacy',
-  }, () => assert.equal(loadConfig().ai.pipeline, 'legacy'));
+
+test('the old explicit single setting still starts; a leftover legacy setting stops the bot', () => {
+  const base = { INGEST_MODE: 'events', BSKY_HANDLE: 'example.test',
+                 BSKY_APP_PASSWORD: 'test-only-value' }; // scan-secrets: allow
+  withEnv({ ...base, AI_COMMENTARY_PIPELINE: 'single' },
+    () => assert.doesNotThrow(() => validateConfig(loadConfig())));
+  withEnv({ ...base, AI_COMMENTARY_PIPELINE: 'legacy' },
+    () => assert.throws(() => validateConfig(loadConfig()), /legacy writer has been removed/));
 });

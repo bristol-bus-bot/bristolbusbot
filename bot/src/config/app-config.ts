@@ -43,9 +43,6 @@ export function loadConfig(): AppConfig {
     
     // AI constants with environment variable override for Pi optimization
     const AI_DAILY_CALL_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '2000', 10);
-    const AI_COMMENTARY_PIPELINE = process.env.AI_COMMENTARY_PIPELINE === 'legacy'
-        ? 'legacy'
-        : 'single';
     
     // Social media constants with environment variable override for Pi optimization
     const BLUESKY_POST_LIMIT = parseInt(process.env.BLUESKY_DAILY_LIMIT || '300', 10);
@@ -72,7 +69,6 @@ export function loadConfig(): AppConfig {
             provider: process.env.AI_PROVIDER === 'agent-platform' ? 'agent-platform' : 'gemini',
             agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT || '',
             agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global',
-            pipeline: AI_COMMENTARY_PIPELINE,
             dailyLimit: AI_DAILY_CALL_LIMIT,
             timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
             editorialContextPath: EDITORIAL_CONTEXT_FILE,
@@ -137,6 +133,12 @@ export function loadConfig(): AppConfig {
 export function validateConfig(config: AppConfig): void {
     // The bot only reads the collector's events. Any other ingest mode is a
     // leftover setting and must not be silently ignored.
+    // The single writer is the only commentary pipeline. "single" (the old
+    // explicit value) is still accepted; anything else is a leftover setting.
+    const pipeline = (process.env.AI_COMMENTARY_PIPELINE || 'single').toLowerCase();
+    if (pipeline !== 'single') {
+        throw new Error(`AI_COMMENTARY_PIPELINE=${process.env.AI_COMMENTARY_PIPELINE} is not supported; the legacy writer has been removed`);
+    }
     const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
     if (ingestMode !== 'events') {
         throw new Error(`INGEST_MODE=${process.env.INGEST_MODE} is not supported; the bot reads collector events only (INGEST_MODE=events)`);
