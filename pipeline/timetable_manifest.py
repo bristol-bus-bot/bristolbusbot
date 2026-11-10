@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -210,6 +211,12 @@ def create_manifest(*, database: Path, output: Path, gtfs: Path,
         "build": {
             "started_utc": started.isoformat(),
             "finished_utc": finished.isoformat(),
+            # The database is built here and opened on the Pi, whose SQLite
+            # may differ; the Pi records its own versions beside these.
+            "runtime": {
+                "python": platform.python_version(),
+                "sqlite": sqlite3.sqlite_version,
+            },
         },
         "builder": {
             "commit": builder_commit,
