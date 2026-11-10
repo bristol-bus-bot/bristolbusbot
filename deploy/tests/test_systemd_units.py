@@ -76,7 +76,7 @@ def test_bot_unit_allows_only_its_two_writable_databases():
     for setting in (
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
-        "WatchdogSec=300s",
+        "WatchdogSec=120s",
         "NotifyAccess=all",
         "ProtectSystem=strict",
         "ProtectHome=read-only",

@@ -11,21 +11,13 @@ export function loadConfig(): AppConfig {
     const TARGET_TIMEZONE = 'Europe/London';
 
     // API credentials come from the environment only; there are no defaults.
-    const apiKey = process.env.BODS_API_KEY;
     const bskyHandle = process.env.BSKY_HANDLE;
     const bskyAppPassword = process.env.BSKY_APP_PASSWORD;
     const AI_API_KEY = process.env.AI_API_KEY;
     const weatherApiKey = process.env.WEATHER_API_KEY;
     
-    // Operator and area configuration 
-    const operatorRefForApiQuery = 'FBRI';
-    const target_operator = 'O1';
-    const boundingBox = '-2.8319664502,51.3170328857,-2.3362655622,51.6102366333';
-    
     // Timing constants with environment overrides. Timeouts are generous
     // because the Pi's network path to BODS can be slow.
-    const FETCH_INTERVAL_MS = parseInt(process.env.SIRI_VM_POLL_INTERVAL || '120000', 10);
-    const FETCH_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT || '60000', 10);
     const SUMMARY_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
     const DAILY_CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL || '86400000', 10);
     
@@ -58,8 +50,6 @@ export function loadConfig(): AppConfig {
     // Social media constants with environment variable override for Pi optimization
     const BLUESKY_POST_LIMIT = parseInt(process.env.BLUESKY_DAILY_LIMIT || '300', 10);
     
-    const requestUrl = `https://data.bus-data.dft.gov.uk/api/v1/datafeed/?boundingBox=${encodeURIComponent(boundingBox)}&operatorRef=${encodeURIComponent(operatorRefForApiQuery)}&api_key=${apiKey}`;
-    
     return {
         testMode: isTestMode,
         
@@ -72,15 +62,6 @@ export function loadConfig(): AppConfig {
             timetablePath: TIMETABLE_DB_FILE,
             appDataPath: APP_DATA_DB_FILE,
             maxConnections: 10
-        },
-        
-        siri: {
-            apiKey: apiKey || '',
-            operatorRef: operatorRefForApiQuery,
-            boundingBox: boundingBox,
-            timeout: FETCH_TIMEOUT_MS,
-            requestUrl: requestUrl,
-            targetOperator: target_operator
         },
         
         ai: {
@@ -134,7 +115,6 @@ export function loadConfig(): AppConfig {
         },
         
         monitoring: {
-            fetchInterval: FETCH_INTERVAL_MS,
             summaryInterval: SUMMARY_INTERVAL_MS,
             metricsInterval: 60000, // 1 minute
             enableMetrics: true
@@ -155,17 +135,17 @@ export function loadConfig(): AppConfig {
 
 /** Validate required configuration values. */
 export function validateConfig(config: AppConfig): void {
-    const directSiriIngest = (process.env.INGEST_MODE || 'events').toLowerCase() === 'siri';
+    // The bot only reads the collector's events. Any other ingest mode is a
+    // leftover setting and must not be silently ignored.
+    const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
+    if (ingestMode !== 'events') {
+        throw new Error(`INGEST_MODE=${process.env.INGEST_MODE} is not supported; the bot reads collector events only (INGEST_MODE=events)`);
+    }
     const requiredFields = [
         { field: 'social.handle', value: config.social.handle, name: 'BSKY_HANDLE' },
         { field: 'social.appPassword', value: config.social.appPassword, name: 'BSKY_APP_PASSWORD' },
         { field: 'weather.apiKey', value: config.weather.apiKey, name: 'WEATHER_API_KEY' }
     ];
-    if (directSiriIngest) {
-        requiredFields.push({
-            field: 'siri.apiKey', value: config.siri.apiKey, name: 'BODS_API_KEY'
-        });
-    }
 
     const missingFields = requiredFields
         .filter(req => !req.value)
@@ -203,7 +183,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
             return {
                 monitoring: {
                     enableMetrics: true,
-                    fetchInterval: 120000, // 2 minutes
                     summaryInterval: 1200000, // 20 minutes
                     metricsInterval: 60000 // 1 minute
                 }
@@ -214,7 +193,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
                 testMode: true,
                 monitoring: {
                     enableMetrics: true,
-                    fetchInterval: 300000, // 5 minutes for dev
                     summaryInterval: 600000, // 10 minutes for dev
                     metricsInterval: 60000 // 1 minute
                 }
@@ -225,7 +203,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
                 testMode: true,
                 monitoring: {
                     enableMetrics: false,
-                    fetchInterval: 60000, // 1 minute for testing
                     summaryInterval: 120000, // 2 minutes for testing
                     metricsInterval: 60000 // 1 minute
                 }
@@ -245,9 +222,6 @@ export const CONSTANTS = {
 } as const;
 
 // Export individual configuration sections for service-specific use
-export function getSIRIConfig(config: AppConfig) {
-    return config.siri;
-}
 
 export function getDatabaseConfig(config: AppConfig) {
     return config.database;

@@ -22,25 +22,28 @@ function withEnv(values, callback) {
 }
 
 
-test('shared event ingest does not require a duplicate BODS credential', () => {
+test('the bot needs no BODS credential: the collector is the only BODS client', () => {
   withEnv({
     INGEST_MODE: 'events',
     BODS_API_KEY: undefined,
     BSKY_HANDLE: 'example.test',
     BSKY_APP_PASSWORD: 'test-only-value', // scan-secrets: allow
-  }, () => assert.doesNotThrow(() => validateConfig(loadConfig())));
+  }, () => {
+    const config = loadConfig();
+    assert.doesNotThrow(() => validateConfig(config));
+    assert.equal('siri' in config, false);
+  });
 });
 
 
-test('explicit direct SIRI ingest still requires BODS credentials', () => {
+test('a leftover direct-SIRI ingest setting stops the bot at start-up', () => {
   withEnv({
     INGEST_MODE: 'siri',
-    BODS_API_KEY: undefined,
     BSKY_HANDLE: 'example.test',
     BSKY_APP_PASSWORD: 'test-only-value', // scan-secrets: allow
   }, () => assert.throws(
     () => validateConfig(loadConfig()),
-    /BODS_API_KEY/,
+    /INGEST_MODE=siri is not supported/,
   ));
 });
 

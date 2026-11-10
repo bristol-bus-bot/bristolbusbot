@@ -11,7 +11,6 @@ import { DateTime } from 'luxon';
 import { loadConfig } from './config/app-config.js';
 import { ApplicationState } from './services/application-state.js';
 import { DatabaseManager } from './services/database-manager.js';
-import { SIRIMonitor } from './services/siri-monitor.js';
 import { DelayAnalyzer } from './services/delay-analyzer.js';
 import { AICommentary } from './services/ai-commentary.js';
 import { SocialMediaManager } from './services/social-media.js';
@@ -23,7 +22,7 @@ import { TrafficService } from './services/traffic-service.js';
 import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
-import { SystemdWatchdog } from './services/systemd-watchdog.js';
+import { SystemdWatchdog, pausedIngestKeepalive } from './services/systemd-watchdog.js';
 import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
 import { HolidaySchedule } from './services/holiday-schedule.js';
 import { dirname, join } from 'path';
@@ -38,7 +37,6 @@ class BristolBusBot {
     private config: any;
     private appState: ApplicationState;
     private databaseManager!: DatabaseManager;
-    private siriMonitor!: SIRIMonitor;
     private delayAnalyzer!: DelayAnalyzer;
     private aiCommentary!: AICommentary;
     private socialMediaManager!: SocialMediaManager;
@@ -111,9 +109,6 @@ class BristolBusBot {
         this.healthMonitor = new HealthMonitor(this.appState);
         
         // Business logic services
-        this.siriMonitor = new SIRIMonitor(
-            this.config.siri, this.appState,
-            () => this.systemdWatchdog.progress());
         this.delayAnalyzer = new DelayAnalyzer(this.config.processing, this.appState);
         this.weatherService = new WeatherService(this.config.weather);
         this.aiCommentary = new AICommentary(this.config.ai, this.appState, this.weatherService,
@@ -125,11 +120,8 @@ class BristolBusBot {
         this.apiRoutes = new APIRoutes(this.appState, this.healthMonitor);
         
         // Set up dependency injection - services need database access
-        this.siriMonitor.setDatabaseManager(this.databaseManager);
         this.delayAnalyzer.setDatabaseManager(this.databaseManager);
 
-        // Connect SIRI monitor to delay analyzer for schedule matching
-        this.siriMonitor.setDelayAnalyzer(this.delayAnalyzer);
         this.socialMediaManager.setDatabaseManager(this.databaseManager);
         this.socialMediaManager.setAICommentary(this.aiCommentary);
         this.aiCommentary.setSocialMediaManager(this.socialMediaManager); // AI needs social media to fetch recent posts
@@ -157,7 +149,6 @@ class BristolBusBot {
             // Initialize all services in proper order
             await this.databaseManager.initialize();
             await this.healthMonitor.initialize();
-            await this.siriMonitor.initialize();
             await this.delayAnalyzer.initialize();
             await this.weatherService.initialize();
             await this.aiCommentary.initialize();
@@ -239,7 +230,7 @@ class BristolBusBot {
     }
     
     /**
-     * Start main monitoring loop - the core SIRI monitoring cycle
+     * Start the main loop: holiday pauses and daily clean-up around event ingest.
      */
     private startMonitoringLoop(): void {
         logger.info('🔍 Starting main bus monitoring loop...');
@@ -271,7 +262,12 @@ class BristolBusBot {
                 },
             });
         void this.holidaySchedule.tick();
-        setInterval(() => void this.holidaySchedule?.tick(), 60_000);
+        const keepPausedIngestAlive = pausedIngestKeepalive(
+            this.systemdWatchdog, () => this.eventReader !== null);
+        setInterval(() => {
+            void this.holidaySchedule?.tick();
+            keepPausedIngestAlive();
+        }, 60_000);
 
         // Set up daily cleanup interval
         setInterval(async () => {
@@ -283,18 +279,15 @@ class BristolBusBot {
         }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
 
         logger.info('Monitoring loop started successfully', {
-            siriInterval: this.config.monitoring.fetchInterval,
             cleanupInterval: '24 hours'
         });
     }
 
     /** Start reading bus events (normal days). */
     private startIngest(): void {
-        // Event ingest is the production default. Direct SIRI ingest is an
-        // explicit diagnostic mode so it cannot create a second poller by
-        // accident.
-        const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
-        if (ingestMode === 'events') {
+        // The bot reads the collector's events; the collector is the only
+        // process that talks to BODS.
+        {
             const liveDbPath = process.env.LIVE_DB_PATH
                 || '/var/lib/bristolbusbot/collector/live.db';
             // Every local bus operator by default (coaches and ferries are
@@ -322,8 +315,6 @@ class BristolBusBot {
                     snapshotPath, stateDbPath);
                 this.rareWorkingShadowReader.start();
             }
-        } else {
-            this.siriMonitor.startMonitoring();
         }
     }
 
@@ -333,7 +324,6 @@ class BristolBusBot {
         this.eventReader = null;
         this.rareWorkingShadowReader?.stop();
         this.rareWorkingShadowReader = null;
-        this.siriMonitor?.stopMonitoring();
     }
 
     /**
@@ -348,7 +338,7 @@ class BristolBusBot {
             nodeEnv: process.env.NODE_ENV,
             services: {
                 database: 'ready',
-                siriMonitor: 'monitoring',
+                eventIngest: 'collector events',
                 aiCommentary: 'ready',
                 socialMedia: this.config.testMode ? 'test-mode' : 'ready',
                 patternDetector: 'ready',
@@ -356,7 +346,6 @@ class BristolBusBot {
                 expressServer: 'listening'
             },
             monitoring: {
-                siriPollInterval: `${this.config.monitoring.fetchInterval / 1000}s`,
                 aiDailyLimit: this.config.ai.dailyLimit,
                 socialDailyLimit: this.config.social.dailyLimit
             }
@@ -380,7 +369,6 @@ class BristolBusBot {
         
         try {
             // Stop monitoring
-            this.siriMonitor.stopMonitoring();
             if (this.eventReader) this.eventReader.stop();
             if (this.rareWorkingShadowReader) this.rareWorkingShadowReader.stop();
             
@@ -388,7 +376,6 @@ class BristolBusBot {
             await Promise.all([
                 this.databaseManager.close(),
                 this.healthMonitor.close(),
-                this.siriMonitor.close(),
                 this.delayAnalyzer.close(),
                 this.aiCommentary.close(),
                 this.socialMediaManager.close(),
