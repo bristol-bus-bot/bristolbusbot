@@ -6,6 +6,7 @@
 const isSummaryMode = process.argv.includes('--summary') || process.argv.includes('-s');
 
 // Application imports.
+import type { AppConfig } from './types/bus-types.js';
 import express from 'express';
 import { DateTime } from 'luxon';
 import { loadConfig } from './config/app-config.js';
@@ -34,7 +35,7 @@ class BristolBusBot {
     private eventReader: EventReader | null = null;
     private rareWorkingShadowReader: RareWorkingShadowReader | null = null;
     private holidaySchedule: HolidaySchedule | null = null;
-    private config: any;
+    private config: AppConfig;
     private appState: ApplicationState;
     private databaseManager!: DatabaseManager;
     private delayAnalyzer!: DelayAnalyzer;

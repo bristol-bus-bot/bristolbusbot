@@ -1,6 +1,7 @@
 // Significance scoring and freshness rules for collector events. Delays come
 // from the collector as observed; nothing here smooths or predicts them.
 
+import type { AppConfig } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
 import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
@@ -18,11 +19,11 @@ import type {
  * history used to decide whether a delay is worth reporting.
  */
 export class DelayAnalyzer {
-  private processingConfig: any;
+  private processingConfig: AppConfig['processing'];
   private appState: ApplicationState;
   private databaseManager!: DatabaseManager;
 
-  constructor(processingConfig: any, appState: ApplicationState) {
+  constructor(processingConfig: AppConfig['processing'], appState: ApplicationState) {
     this.processingConfig = processingConfig;
     this.appState = appState;
 
