@@ -27,16 +27,24 @@ interface IntegrationSnapshot {
 
 export class RareWorkingShadowReader {
     private readonly stateDb: Database.Database;
+    /** True when this reader opened the handle itself and so closes it. */
+    private readonly ownsStateDb: boolean;
     private readonly snapshotPath: string;
     private readonly intervalMs: number;
     private timer: NodeJS.Timeout | null = null;
 
-    constructor(snapshotPath: string, stateDbPath: string,
+    /**
+     * `stateDb` is normally the bot's one shared app_data.db handle (from
+     * DatabaseManager), so the process never holds two handles that compete
+     * for the same file's lock. A path is still accepted for tests and tools.
+     */
+    constructor(snapshotPath: string, stateDb: string | Database.Database,
                 intervalMs = 5 * 60_000) {
         this.snapshotPath = snapshotPath;
         this.intervalMs = intervalMs;
-        this.stateDb = new Database(stateDbPath);
-        this.stateDb.pragma('busy_timeout = 10000');
+        this.ownsStateDb = typeof stateDb === 'string';
+        this.stateDb = typeof stateDb === 'string' ? new Database(stateDb) : stateDb;
+        if (this.ownsStateDb) this.stateDb.pragma('busy_timeout = 2000');
         this.stateDb.exec(`
             CREATE TABLE IF NOT EXISTS rare_working_shadow_seen (
                 event_id TEXT PRIMARY KEY,
@@ -54,7 +62,8 @@ export class RareWorkingShadowReader {
 
     stop(): void {
         if (this.timer) clearInterval(this.timer);
-        this.stateDb.close();
+        this.timer = null;
+        if (this.ownsStateDb) this.stateDb.close();
     }
 
     pollOnce(): number {

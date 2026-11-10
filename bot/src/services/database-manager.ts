@@ -1,7 +1,7 @@
 // Bristol Bus Bot - Database Manager Service
 // Handles both timetable.db (read-only) and app_data.db (read-write)
 
-import sqlite3 from 'sqlite3';
+import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'node:crypto';
@@ -55,13 +55,22 @@ export interface RecentPost {
  * Database Manager Service
  * Owns the bot's SQLite connections: the timetable is opened read-only
  * (the pipeline owns its contents); app_data.db is the bot's own store.
+ *
+ * One better-sqlite3 library throughout. Its queries run on the main thread,
+ * so they are kept small (the heaviest measured on the Pi is ~15 ms, once at
+ * start-up). app_data.db has exactly one handle in the process, shared with
+ * the rare-working shadow reader, so the bot never competes with itself for
+ * that file's lock. It stays in rollback-journal mode: the social curation
+ * service may read only the file itself, which a WAL database would not allow.
  */
+const APP_DATA_BUSY_TIMEOUT_MS = 2000;
+
 export class DatabaseManager {
     private databaseConfig: any;
     private appState: ApplicationState;
 
-    private timetableDb: sqlite3.Database | null = null;  // Read-only access to static timetable data
-    private appDataDb: sqlite3.Database | null = null;    // Read-write access to dynamic application data
+    private timetableDb: Database.Database | null = null;  // Read-only access to static timetable data
+    private appDataDb: Database.Database | null = null;    // Read-write access to dynamic application data
     
     constructor(databaseConfig: any) {
         this.databaseConfig = databaseConfig;
@@ -105,88 +114,68 @@ export class DatabaseManager {
      * Connect to the timetable database (read-only).
      */
     private connectTimetableDb(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.timetableDb = new sqlite3.Database(
-                this.databaseConfig.timetablePath, 
-                sqlite3.OPEN_READONLY, 
-                (err) => {
-                    if (err) {
-                        logger.error(`FATAL: Could not connect to timetable database: ${err.message}`, { 
-                            err,
-                            path: this.databaseConfig.timetablePath 
-                        });
-                        reject(err);
-                    } else {
-                        logger.info('Successfully connected to the timetable database (READ-ONLY).');
-                        resolve();
-                    }
-                }
-            );
-        });
+        try {
+            this.timetableDb = new Database(this.databaseConfig.timetablePath,
+                { readonly: true, fileMustExist: true });
+            logger.info('Successfully connected to the timetable database (READ-ONLY).');
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error(`FATAL: Could not connect to timetable database: ${err.message}`, {
+                err, path: this.databaseConfig.timetablePath });
+            return Promise.reject(err);
+        }
     }
-    
+
     /**
      * Connect to the app data database (read-write, created if absent).
      */
     private connectAppDataDb(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.appDataDb = new sqlite3.Database(
-                this.databaseConfig.appDataPath, 
-                sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, 
-                (err) => {
-                    if (err) {
-                        logger.error(`FATAL: Could not connect to app data database: ${err.message}`, { 
-                            err,
-                            path: this.databaseConfig.appDataPath 
-                        });
-                        reject(err);
-                    } else {
-                        logger.info('Successfully connected to the app data database (READ-WRITE).');
-                        resolve();
-                    }
-                }
-            );
-        });
+        try {
+            this.appDataDb = new Database(this.databaseConfig.appDataPath);
+            // Short: a wait blocks the event loop. Other processes only read it.
+            this.appDataDb.pragma(`busy_timeout = ${APP_DATA_BUSY_TIMEOUT_MS}`);
+            logger.info('Successfully connected to the app data database (READ-WRITE).');
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error(`FATAL: Could not connect to app data database: ${err.message}`, {
+                err, path: this.databaseConfig.appDataPath });
+            return Promise.reject(err);
+        }
     }
-    
+
+    /**
+     * The process's one app_data.db handle, for anything else in the bot that
+     * uses the same file (the rare-working shadow reader). Null until initialised.
+     */
+    getAppDataDb(): Database.Database | null {
+        return this.appDataDb;
+    }
+
     /**
      * Create app data tables and indexes if they do not already exist.
      */
     private initializeAppDataDatabase(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (!this.appDataDb) {
-                reject(new Error('App data database not connected'));
-                return;
-            }
-            
-            this.appDataDb.serialize(() => {
-                const createStmts = [
-                    `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT, collector_event_id INTEGER, operator_ref TEXT, line TEXT, journey_ref TEXT, origin_aimed_departure TEXT, event_timestamp TEXT, delay_seconds INTEGER, direction TEXT, stop_code TEXT, stop_name TEXT, source TEXT, corroboration INTEGER, low_confidence INTEGER);`,
-                    // The old direct-SIRI mode's smoothed-delay tables. Older
-                    // copies of their data remain in the encrypted backups.
-                    `DROP TABLE IF EXISTS historical_delays;`,
-                    `DROP TABLE IF EXISTS kalman_state;`,
-                    `DROP TABLE IF EXISTS delay_reports;`
-                ];
-                
-                this.appDataDb!.exec(createStmts.join('\n'), (err) => {
-                    if (err) {
-                        logger.error("Error initializing app data database tables and indexes.", { err });
-                        return reject(err);
-                    }
-                    this.migrateEngagementAnalytics()
-                        .then(() => {
-                            logger.info("App data database tables and indexes are ready.");
-                            resolve();
-                        })
-                        .catch(reject);
-                });
-            });
-        });
+        if (!this.appDataDb) return Promise.reject(new Error('App data database not connected'));
+        try {
+            this.appDataDb.exec([
+                `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT, collector_event_id INTEGER, operator_ref TEXT, line TEXT, journey_ref TEXT, origin_aimed_departure TEXT, event_timestamp TEXT, delay_seconds INTEGER, direction TEXT, stop_code TEXT, stop_name TEXT, source TEXT, corroboration INTEGER, low_confidence INTEGER);`,
+                // The old direct-SIRI mode's smoothed-delay tables. Older
+                // copies of their data remain in the encrypted backups.
+                `DROP TABLE IF EXISTS historical_delays;`,
+                `DROP TABLE IF EXISTS kalman_state;`,
+                `DROP TABLE IF EXISTS delay_reports;`,
+            ].join('\n'));
+            this.migrateEngagementAnalytics();
+            logger.info("App data database tables and indexes are ready.");
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error("Error initializing app data database tables and indexes.", { err });
+            return Promise.reject(err);
+        }
     }
 
     /** Add any provenance columns an older installation is missing. */
-    private migrateEngagementAnalytics(): Promise<void> {
+    private migrateEngagementAnalytics(): void {
         const expected: Record<string, string> = {
             collector_event_id: 'INTEGER',
             operator_ref: 'TEXT',
@@ -202,29 +191,19 @@ export class DatabaseManager {
             corroboration: 'INTEGER',
             low_confidence: 'INTEGER',
         };
-        return new Promise((resolve, reject) => {
-            this.appDataDb!.all('PRAGMA table_info(engagement_analytics)', (err, rows: any[]) => {
-                if (err) return reject(err);
-                const present = new Set((rows || []).map(row => row.name));
-                const additions = Object.entries(expected)
-                    .filter(([name]) => !present.has(name))
-                    .map(([name, type]) => `ALTER TABLE engagement_analytics ADD COLUMN ${name} ${type}`);
-                const statements = [
-                    ...additions,
-                    'CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp)',
-                    'CREATE INDEX IF NOT EXISTS idx_engagement_vehicle_journey ON engagement_analytics(operator_ref, vehicle_ref, timestamp)',
-                ];
-                this.appDataDb!.exec(statements.join(';\n'), migrationErr => {
-                    if (migrationErr) return reject(migrationErr);
-                    if (additions.length) logger.info('Added engagement provenance columns', {
-                        count: additions.length,
-                    });
-                    resolve();
-                });
-            });
-        });
+        const rows = this.appDataDb!.prepare('PRAGMA table_info(engagement_analytics)').all() as Array<{ name: string }>;
+        const present = new Set(rows.map(row => row.name));
+        const additions = Object.entries(expected)
+            .filter(([name]) => !present.has(name))
+            .map(([name, type]) => `ALTER TABLE engagement_analytics ADD COLUMN ${name} ${type}`);
+        this.appDataDb!.exec([
+            ...additions,
+            'CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp)',
+            'CREATE INDEX IF NOT EXISTS idx_engagement_vehicle_journey ON engagement_analytics(operator_ref, vehicle_ref, timestamp)',
+        ].join(';\n'));
+        if (additions.length) logger.info('Added engagement provenance columns', { count: additions.length });
     }
-    
+
     /**
      * Load the fleet details lookup from fbribuses.json.
      */
@@ -337,7 +316,7 @@ export class DatabaseManager {
         try {
             logger.info("Loading terminus stops...");
             
-            if (!this.timetableDb || !(this.timetableDb as any).open) { 
+            if (!this.timetableDb || !this.timetableDb.open) { 
                 logger.warn("Terminus stops load skipped: Timetable DB not connected."); 
                 this.appState.terminusStopNames = new Set(); 
                 return; 
@@ -353,10 +332,8 @@ export class DatabaseManager {
                 stop_name LIKE '%Terminal%'
             );`;
             
-            const rows = await new Promise<Array<{ common_name: string }>>((resolve, reject) => 
-                this.timetableDb!.all(query, [], (e, r: any[]) => e ? reject(e) : resolve(r))
-            );
-            
+            const rows = this.timetableDb.prepare(query).all() as Array<{ common_name: string }>;
+
             this.appState.terminusStopNames = new Set(rows.map(r => r.common_name));
             
             logger.info(`Loaded ${this.appState.terminusStopNames.size} unique terminus stop names.`);
@@ -377,13 +354,14 @@ export class DatabaseManager {
     
     async enrichStoryJourney(event: BusEvent): Promise<BusEvent> {
         if (!this.timetableDb || this.appState.dbIsReloading || !event.collectorTripId) return event;
-        const stops = await new Promise<JourneyStop[]>(resolve => {
-            this.timetableDb!.all(`SELECT st.stop_sequence, s.stop_code, s.stop_name
+        let stops: JourneyStop[] = [];
+        try {
+            stops = this.timetableDb.prepare(`SELECT st.stop_sequence, s.stop_code, s.stop_name
                 FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
                 JOIN trips t ON t.trip_id = st.trip_id JOIN routes r ON r.route_id = t.route_id
-                WHERE st.trip_id = ? AND r.route_short_name = ? ORDER BY st.stop_sequence`,
-                [event.collectorTripId, event.line], (error, rows: JourneyStop[]) => resolve(error ? [] : rows));
-        });
+                WHERE st.trip_id = ? AND r.route_short_name = ? ORDER BY st.stop_sequence`)
+                .all(event.collectorTripId, event.line) as JourneyStop[];
+        } catch { stops = []; }
         return { ...event, journeyContext: matchedJourneyContext(event, stops) };
     }
 
@@ -394,15 +372,15 @@ export class DatabaseManager {
     async storeEngagementRecord(record: EngagementRecord): Promise<void> {
         if (!this.appDataDb) return;
         const event = record.event;
-        await new Promise<void>((resolve, reject) => {
-            this.appDataDb!.run(
+        try {
+            this.appDataDb.prepare(
                 `INSERT INTO engagement_analytics
                  (post_content, post_type, significance_score, timestamp,
                   vehicle_ref, post_uri, collector_event_id, operator_ref,
                   line, journey_ref, origin_aimed_departure, event_timestamp,
                   delay_seconds, direction, stop_code, stop_name, source,
                   corroboration, low_confidence)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`).run(
                 [record.postContent, record.postType, record.significance,
                  DateTime.now().toISO() ?? '', event?.vehicleRef || null,
                  record.postUri || null, event?.collectorEventId ?? null,
@@ -414,12 +392,10 @@ export class DatabaseManager {
                  event?.direction || null, event?.lastStopCode || null,
                  event?.lastStopName || null,
                  event?.source || null, event?.corroboration ?? null,
-                 event ? (event.lowConfidence ? 1 : 0) : null],
-                err => err ? reject(err) : resolve()
-            );
-        }).catch((error: any) => {
+                 event ? (event.lowConfidence ? 1 : 0) : null]);
+        } catch (error: any) {
             logger.error('Failed to store engagement record', { error: error.message });
-        });
+        }
     }
     
     /**
@@ -430,46 +406,36 @@ export class DatabaseManager {
         try {
             if (!this.appDataDb) return [];
 
-            return new Promise<any[]>((resolve) => {
-                this.appDataDb!.all(
-                    `SELECT collector_event_id, operator_ref, vehicle_ref, line,
-                            journey_ref, origin_aimed_departure, event_timestamp,
-                            delay_seconds, direction, stop_code, stop_name,
-                            source, corroboration, low_confidence, post_uri,
-                            post_content, post_type, significance_score, timestamp
-                       FROM engagement_analytics
-                      WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
-                      ORDER BY timestamp DESC LIMIT ?;`,
-                    [limit],
-                    (err, rows: any[]) => {
-                        if (err) {
-                            logger.error('Failed to fetch recent posts', { err });
-                            return resolve([]);
-                        }
-                        resolve((rows || []).map(r => ({
-                            collectorEventId: r.collector_event_id,
-                            operatorRef: r.operator_ref || '',
-                            vehicleRef: r.vehicle_ref,
-                            line: r.line || '',
-                            journeyRef: r.journey_ref || '',
-                            originAimedDeparture: r.origin_aimed_departure || '',
-                            eventTimestamp: r.event_timestamp || '',
-                            delaySeconds: r.delay_seconds,
-                            direction: r.direction || '',
-                            stopCode: r.stop_code || '',
-                            stopName: r.stop_name || '',
-                            source: r.source || '',
-                            corroboration: r.corroboration,
-                            lowConfidence: Boolean(r.low_confidence),
-                            postUri: r.post_uri,
-                            postContent: r.post_content,
-                            postType: r.post_type,
-                            significance: r.significance_score,
-                            timestamp: r.timestamp
-                        })));
-                    }
-                );
-            });
+            const rows = this.appDataDb.prepare(
+                `SELECT collector_event_id, operator_ref, vehicle_ref, line,
+                        journey_ref, origin_aimed_departure, event_timestamp,
+                        delay_seconds, direction, stop_code, stop_name,
+                        source, corroboration, low_confidence, post_uri,
+                        post_content, post_type, significance_score, timestamp
+                   FROM engagement_analytics
+                  WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
+                  ORDER BY timestamp DESC LIMIT ?;`).all(limit) as any[];
+            return rows.map(r => ({
+                collectorEventId: r.collector_event_id,
+                operatorRef: r.operator_ref || '',
+                vehicleRef: r.vehicle_ref,
+                line: r.line || '',
+                journeyRef: r.journey_ref || '',
+                originAimedDeparture: r.origin_aimed_departure || '',
+                eventTimestamp: r.event_timestamp || '',
+                delaySeconds: r.delay_seconds,
+                direction: r.direction || '',
+                stopCode: r.stop_code || '',
+                stopName: r.stop_name || '',
+                source: r.source || '',
+                corroboration: r.corroboration,
+                lowConfidence: Boolean(r.low_confidence),
+                postUri: r.post_uri,
+                postContent: r.post_content,
+                postType: r.post_type,
+                significance: r.significance_score,
+                timestamp: r.timestamp
+            }));
         } catch (error: any) {
             logger.error('Error getting recent posts', { error: error.message });
             return [];
@@ -483,7 +449,7 @@ export class DatabaseManager {
         const timer = new PerformanceTimer('database_cleanup', logger);
         
         try {
-            if (this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
+            if (this.appState.dbIsReloading || !this.appDataDb || !this.appDataDb.open) {
                 return;
             }
             
@@ -495,21 +461,13 @@ export class DatabaseManager {
             
             for (const table of tables) {
                 const sql = `DELETE FROM ${table} WHERE timestamp < ?`;
-                const result = await new Promise<number>((resolve) => {
-                    this.appDataDb!.run(sql, [thirtyDaysAgo], function(err) {
-                        if (err) {
-                            logger.error(`Failed to clean up old data from ${table}`, { err });
-                            resolve(0);
-                        } else {
-                            const changes = this.changes;
-                            if (changes > 0) {
-                                logger.info(`Cleaned up ${changes} old records from ${table}.`);
-                            }
-                            resolve(changes);
-                        }
-                    });
-                });
-                totalCleaned += result;
+                try {
+                    const changes = this.appDataDb.prepare(sql).run(thirtyDaysAgo).changes;
+                    if (changes > 0) logger.info(`Cleaned up ${changes} old records from ${table}.`);
+                    totalCleaned += changes;
+                } catch (err: any) {
+                    logger.error(`Failed to clean up old data from ${table}`, { err });
+                }
             }
             
             timer.complete({
@@ -535,14 +493,9 @@ export class DatabaseManager {
             this.appState.dbIsReloading = true;
             
             // Only close and reconnect the timetable database - app data stays connected
-            if (this.timetableDb && (this.timetableDb as any).open) {
+            if (this.timetableDb?.open) {
                 logger.info('Closing timetable database for reload...');
-                await new Promise<void>((resolve) => {
-                    this.timetableDb!.close((err) => {
-                        if (err) logger.error('Error closing timetable database', { err });
-                        resolve();
-                    });
-                });
+                try { this.timetableDb.close(); } catch (err) { logger.error('Error closing timetable database', { err }); }
             }
             
             await this.connectTimetableDb();
@@ -569,12 +522,12 @@ export class DatabaseManager {
     getDatabaseHealth(): any {
         return {
             timetable: {
-                connected: !!this.timetableDb && (this.timetableDb as any).open,
+                connected: Boolean(this.timetableDb?.open),
                 path: this.databaseConfig.timetablePath,
                 readonly: true
             },
             appData: {
-                connected: !!this.appDataDb && (this.appDataDb as any).open,
+                connected: Boolean(this.appDataDb?.open),
                 path: this.databaseConfig.appDataPath,
                 readonly: false
             },
@@ -592,41 +545,25 @@ export class DatabaseManager {
         try {
             logger.info('Closing database connections...');
             
-            const promises: Promise<void>[] = [];
-            
-            // Close timetable database
-            if (this.timetableDb && (this.timetableDb as any).open) {
-                logger.info('Closing timetable database connection...');
-                promises.push(new Promise<void>((resolve) => {
-                    this.timetableDb!.close((err) => {
-                        if (err) logger.error('Error closing timetable database', { err });
-                        else logger.info('Timetable database connection closed.');
-                        resolve();
-                    });
-                }));
+            let closed = 0;
+            for (const [name, db] of [['timetable', this.timetableDb], ['app data', this.appDataDb]] as const) {
+                if (!db?.open) continue;
+                try {
+                    db.close();
+                    closed += 1;
+                    logger.info(`${name} database connection closed.`);
+                } catch (err) {
+                    logger.error(`Error closing ${name} database`, { err });
+                }
             }
-            
-            // Close app data database
-            if (this.appDataDb && (this.appDataDb as any).open) {
-                logger.info('Closing app data database connection...');
-                promises.push(new Promise<void>((resolve) => {
-                    this.appDataDb!.close((err) => {
-                        if (err) logger.error('Error closing app data database', { err });
-                        else logger.info('App data database connection closed.');
-                        resolve();
-                    });
-                }));
-            }
-            
-            await Promise.all(promises);
-            
+
             this.timetableDb = null;
             this.appDataDb = null;
             
             logger.info('All database connections closed.');
             
             timer.complete({
-                connectionsClosed: promises.length
+                connectionsClosed: closed
             });
             
         } catch (error: any) {

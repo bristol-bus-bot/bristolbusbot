@@ -309,10 +309,11 @@ class BristolBusBot {
             if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
                 const snapshotPath = process.env.AUDIT_INTEGRATION_PATH
                     || '/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json';
-                const stateDbPath = process.env.APP_DATA_DB_PATH
-                    || '/var/lib/bristolbusbot/bot/app_data.db';
+                // Share the bot's one app_data.db handle rather than open a second.
+                const stateDb = this.databaseManager.getAppDataDb()
+                    ?? (process.env.APP_DATA_DB_PATH || '/var/lib/bristolbusbot/bot/app_data.db');
                 this.rareWorkingShadowReader = new RareWorkingShadowReader(
-                    snapshotPath, stateDbPath);
+                    snapshotPath, stateDb);
                 this.rareWorkingShadowReader.start();
             }
         }
