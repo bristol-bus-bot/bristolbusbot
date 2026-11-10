@@ -641,7 +641,8 @@ def backup_snapshot(source_path: Path, snapshot: Path) -> dict:
         source_page_size = source.execute("PRAGMA page_size").fetchone()[0]
         destination = sqlite3.connect(snapshot)
         try:
-            source.backup(destination, pages=4096, sleep=0.05)
+            # One step: a stepped copy restarts whenever the collector writes.
+            source.backup(destination, pages=-1)
             destination.execute("PRAGMA journal_mode=DELETE")
         finally:
             destination.close()
