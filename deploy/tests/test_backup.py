@@ -538,3 +538,32 @@ def test_restic_failure_cleans_plaintext_staging_and_pings_fail(
         backup.run_backup(config, integrity_check=False)
     assert states == ["start", "fail"]
     assert not (config.staging_root / "payload").exists()
+
+
+def test_sqlite_snapshot_copies_in_one_step_so_writers_cannot_restart_it(tmp_path: Path):
+    """A stepped copy restarts on every collector write; one step cannot (#125)."""
+    assert backup.SQLITE_BACKUP_PAGES_PER_STEP == -1
+    database = tmp_path / "busy.db"
+    connection = sqlite_source(database)
+    connection.execute("CREATE TABLE IF NOT EXISTS big (payload BLOB)")
+    connection.executemany("INSERT INTO big VALUES (?)",
+                           [(b"x" * 4000,) for _ in range(3000)])  # > 4096 pages
+    connection.commit()
+    calls = []
+    original = backup.time.monotonic
+
+    def counting_clock():
+        calls.append(1)
+        return original()
+
+    backup.time.monotonic, saved = counting_clock, backup.time.monotonic
+    try:
+        staged = tmp_path / "staged.db"
+        backup.backup_sqlite(database, staged, integrity_check=False, timeout_seconds=60)
+    finally:
+        backup.time.monotonic = saved
+        connection.close()
+    # One deadline read when starting, one progress call after the single step.
+    assert len(calls) == 2
+    with closing(sqlite3.connect(staged)) as restored:
+        assert restored.execute("SELECT COUNT(*) FROM big").fetchone()[0] >= 3000
