@@ -31,6 +31,8 @@ export class ApplicationState {
     public aiCallsToday: number = 0;
     public lastAIResetDate: string;
     public summariesPosted: number = 0;
+    // Bluesky password logins (createSession) today; Bluesky allows 300 a day.
+    public blueskyLoginsToday: number = 0;
     // Optional file that keeps today's counters across restarts.
     private counterFile?: string;
     
@@ -152,6 +154,7 @@ export class ApplicationState {
             this.postsTodayCount = count(data.postsToday);
             this.aiCallsToday = count(data.aiCallsToday);
             this.summariesPosted = count(data.summariesPosted);
+            this.blueskyLoginsToday = count(data.blueskyLogins);
             this.lastResetDate = today;
             this.lastAIResetDate = today;
             logger.info(`[STATE_CHANGE] Restored today's counters: Posts ${this.postsTodayCount}, AI calls ${this.aiCallsToday}, Summaries ${this.summariesPosted}`);
@@ -171,6 +174,7 @@ export class ApplicationState {
                 postsToday: this.postsTodayCount,
                 aiCallsToday: this.aiCallsToday,
                 summariesPosted: this.summariesPosted,
+                blueskyLogins: this.blueskyLoginsToday,
             }), { mode: 0o600 });
             renameSync(`${file}.new`, file);
         } catch {
@@ -266,6 +270,13 @@ export class ApplicationState {
     /**
      * Increment the daily post counter.
      */
+    public incrementBlueskyLogin(): void {
+        this.resetDailyCounters();
+        this.blueskyLoginsToday++;
+        this.saveCounters();
+        logger.info(`[STATE_CHANGE] Bluesky password logins today: ${this.blueskyLoginsToday}`);
+    }
+
     public incrementPostCount(): void {
         const previousCount = this.postsTodayCount;
         this.postsTodayCount++;
@@ -351,6 +362,7 @@ export class ApplicationState {
             this.postsTodayCount = 0;
             this.aiCallsToday = 0;
             this.summariesPosted = 0;
+            this.blueskyLoginsToday = 0;
 
             // Update date tracking (single field for both counters)
             this.lastResetDate = currentDate;

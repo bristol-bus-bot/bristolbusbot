@@ -105,6 +105,9 @@ export function loadConfig(): AppConfig {
             handle: bskyHandle || '',
             appPassword: bskyAppPassword || '',
             testMode: isTestMode,
+            // Saved Bluesky session, so restarts resume instead of logging in.
+            sessionPath: process.env.BSKY_SESSION_PATH
+                || path.join(path.dirname(APP_DATA_DB_FILE), 'bluesky-session.json'),
             dailyLimit: BLUESKY_POST_LIMIT,
             postLimit: 300
         },

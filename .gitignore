@@ -68,3 +68,7 @@ docs/DOMAIN.md
 /.scratch/
 # Local assistant pointer to AGENTS.md; kept out of the public repo.
 /CLAUDE.md
+
+# Saved Bluesky session (bot); holds live tokens.
+bluesky-session.json
+bluesky-session.json.new

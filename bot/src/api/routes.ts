@@ -182,7 +182,8 @@ export class APIRoutes {
                 details: {
                     stats: {
                         postsToday: this.appState.postsTodayCount,
-                        aiCallsToday: this.appState.aiCallsToday
+                        aiCallsToday: this.appState.aiCallsToday,
+                        blueskyLoginsToday: this.appState.blueskyLoginsToday
                     },
                     process: {
                         pid: process.pid,

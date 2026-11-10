@@ -277,6 +277,7 @@ export interface AppConfig {
         testMode: boolean;
         dailyLimit: number;
         postLimit: number;
+        sessionPath?: string;
     };
     processing: {
         lateThreshold: number;
