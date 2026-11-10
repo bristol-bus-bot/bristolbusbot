@@ -1,10 +1,11 @@
-// Shared HTTP client with keep-alive, concurrency limiting, and exponential backoff
-// Tuned for Raspberry Pi stability and low resource usage
+// Shared HTTP client: a capped keep-alive connection pool, concurrency
+// limiting and exponential backoff, tuned for the Raspberry Pi.
+//
+// undici is Node's own HTTP client (the engine behind built-in fetch). Its
+// Agent keeps the per-host socket cap the bot has had since the Pi's
+// connection-tracking trouble; built-in fetch on its own has no cap.
 
-import fetch, { type RequestInit, type Response } from 'node-fetch';
-import http from 'http';
-import https from 'https';
-import Agent from 'agentkeepalive';
+import { Agent, fetch, type RequestInit, type Response } from 'undici';
 import { logger } from './logging.js';
 
 // Env helpers
@@ -14,8 +15,7 @@ const toInt = (v: string | undefined, d: number) => {
 };
 
 // Tunables (override via env on Pi)
-const HTTP_MAX_SOCKETS = toInt(process.env.HTTP_MAX_SOCKETS, 4); // Pi Zero: very low
-const HTTP_MAX_FREE = toInt(process.env.HTTP_MAX_FREE_SOCKETS, 2);
+const HTTP_MAX_SOCKETS = toInt(process.env.HTTP_MAX_SOCKETS, 4); // per host; Pi: very low
 const HTTP_TIMEOUT = toInt(process.env.HTTP_TIMEOUT_MS, 60000);
 const HTTP_FREE_TTL = toInt(process.env.HTTP_FREE_TTL_MS, 30000);
 const HTTP_SOCKET_TTL = toInt(process.env.HTTP_SOCKET_TTL_MS, 60000);
@@ -23,23 +23,13 @@ const HTTP_MAX_CONCURRENT = toInt(process.env.HTTP_MAX_CONCURRENT, 2);
 const HTTP_RETRIES = toInt(process.env.HTTP_RETRIES, 2);
 const HTTP_RETRY_BASE_MS = toInt(process.env.HTTP_RETRY_BASE_MS, 1000);
 
-// Keep-alive agents for HTTP/HTTPS
-const httpAgent: http.Agent = new Agent({
-  keepAlive: true,
-  maxSockets: HTTP_MAX_SOCKETS,
-  maxFreeSockets: HTTP_MAX_FREE,
-  timeout: HTTP_TIMEOUT,
-  freeSocketTimeout: HTTP_FREE_TTL,
-  socketActiveTTL: HTTP_SOCKET_TTL
-});
-
-const httpsAgent: https.Agent = new Agent.HttpsAgent({
-  keepAlive: true,
-  maxSockets: HTTP_MAX_SOCKETS,
-  maxFreeSockets: HTTP_MAX_FREE,
-  timeout: HTTP_TIMEOUT,
-  freeSocketTimeout: HTTP_FREE_TTL,
-  socketActiveTTL: HTTP_SOCKET_TTL
+// One pool for every request the bot makes through httpFetch.
+const dispatcher = new Agent({
+  connections: HTTP_MAX_SOCKETS,
+  keepAliveTimeout: HTTP_FREE_TTL,
+  keepAliveMaxTimeout: HTTP_SOCKET_TTL,
+  headersTimeout: HTTP_TIMEOUT,
+  bodyTimeout: HTTP_TIMEOUT,
 });
 
 // Simple concurrency gate to avoid request storms
@@ -87,41 +77,25 @@ async function withBackoff<T>(fn: () => Promise<T>, retries = HTTP_RETRIES): Pro
   throw lastError || new Error('HTTP backoff exhausted');
 }
 
-// Timeout wrapper using AbortController
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ms);
-  return (promise as any)(controller.signal)
-    .finally(() => clearTimeout(timeout))
-    .catch((err: any) => {
-      if (err?.name === 'AbortError') {
-        const e = new Error(`${label} timed out after ${ms}ms`);
-        (e as any).code = 'ETIMEDOUT';
-        throw e;
-      }
-      throw err;
-    });
-}
-
 // Main fetch helper
 export async function httpFetch(url: string, options: RequestInit & { timeoutMs?: number; retries?: number } = {}): Promise<Response> {
-  const isHttps = url.startsWith('https://');
-  const agent = isHttps ? httpsAgent : httpAgent;
-  const timeoutMs = options.timeoutMs ?? HTTP_TIMEOUT;
+  const { timeoutMs = HTTP_TIMEOUT, retries, ...init } = options;
 
   await limiter.acquire();
   try {
     return await withBackoff(async () => {
-      const doFetch = (signal: AbortSignal) => fetch(url, { ...options, agent: agent as any, signal });
-      // Use AbortController for timeout per attempt
-      return await new Promise<Response>((resolve, reject) => {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), timeoutMs);
-        doFetch(controller.signal)
-          .then(res => { clearTimeout(t); resolve(res); })
-          .catch(err => { clearTimeout(t); reject(err); });
-      });
-    }, options.retries ?? HTTP_RETRIES);
+      try {
+        // A fresh timeout per attempt.
+        return await fetch(url, { ...init, dispatcher, signal: AbortSignal.timeout(timeoutMs) });
+      } catch (err: any) {
+        if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+          const e = new Error(`HTTP request timed out after ${timeoutMs}ms`);
+          (e as any).code = 'ETIMEDOUT';
+          throw e;
+        }
+        throw err;
+      }
+    }, retries ?? HTTP_RETRIES);
   } finally {
     limiter.release();
   }
@@ -130,7 +104,6 @@ export async function httpFetch(url: string, options: RequestInit & { timeoutMs?
 export function getHttpClientStats() {
   return {
     maxSockets: HTTP_MAX_SOCKETS,
-    maxFreeSockets: HTTP_MAX_FREE,
     timeoutMs: HTTP_TIMEOUT,
     freeSocketTtlMs: HTTP_FREE_TTL,
     socketTtlMs: HTTP_SOCKET_TTL,
