@@ -151,6 +151,10 @@ def test_create_and_verify_manifest(tmp_path):
     summary = tmp_path / manifest["service_summary"]["filename"]
     assert summary.is_file() and manifest["service_summary"]["bytes"] == summary.stat().st_size
     assert manifest["build"]["started_utc"] == "2026-07-17T00:00:00+00:00"
+    # The builder's versions, so the Pi can compare them with its own (#111).
+    import platform, sqlite3
+    assert manifest["build"]["runtime"] == {
+        "python": platform.python_version(), "sqlite": sqlite3.sqlite_version}
     assert manifest["artifact"]["filename"] == "timetable.db"
     assert manifest["database"]["timetable_shape_keys"] == \
         manifest["database"]["route_shape_keys"]
