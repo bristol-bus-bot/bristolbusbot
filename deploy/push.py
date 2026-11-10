@@ -335,6 +335,7 @@ def copy_tree(source: Path, destination: Path) -> None:
 def populate_release(component: str, root: Path) -> None:
     if component == "collector":
         copy_file(REPO / "collector/pyproject.toml", root / "pyproject.toml")
+        copy_file(REPO / "collector/requirements.lock", root / "requirements.lock")
         copy_tree(REPO / "collector/src", root / "src")
         copy_file(REPO / "pipeline/check_collector_freshness.py",
                   root / "check_collector_freshness.py")
@@ -342,7 +343,7 @@ def populate_release(component: str, root: Path) -> None:
                   root / "compare_collectors.py")
         copy_file(REPO / "pipeline/status_digest.py", root / "status_digest.py")
     elif component == "site":
-        for name in ("pyproject.toml", "wsgi.py"):
+        for name in ("pyproject.toml", "wsgi.py", "requirements.lock"):
             copy_file(REPO / "site" / name, root / name)
         for name in ("app", "templates", "static"):
             copy_tree(REPO / "site" / name, root / name)
@@ -367,7 +368,8 @@ def populate_release(component: str, root: Path) -> None:
         copy_tree(REPO / "social/fonts", root / "fonts")
         copy_tree(REPO / "social/examples", root / "examples")
     elif component == "pipeline":
-        for pattern in ("*.py", "*.json", "*.geojson", "requirements-runtime.txt"):
+        for pattern in ("*.py", "*.json", "*.geojson", "requirements-runtime.txt",
+                        "requirements.lock"):
             for path in (REPO / "pipeline").glob(pattern):
                 if path.name == "fbribuses.json":
                     continue
@@ -630,14 +632,37 @@ def notify(remote: Remote, message: str) -> None:
     )
 
 
+# Each Python venv installs only what its committed, hashed lock names (built
+# for the Pi: Linux ARM64, Python 3.13). Local packages are then installed
+# without dependencies or build isolation, so pip downloads nothing else.
+LOCKED_INSTALL = "venv/bin/pip install -q --require-hashes --no-deps -r requirements.lock"
+LOCAL_INSTALL = "venv/bin/pip install -q --no-deps --no-build-isolation"
+# The venv is built from the Pi's system python3, which apt updates. Record the
+# interpreter, its SQLite and the installed libraries beside release.json, so a
+# change after an OS upgrade can be told apart from a library change.
+RUNTIME_RECORD = (
+    "venv/bin/python -c "
+    + shlex.quote(
+        "import json, platform, sqlite3, sys; "
+        "from importlib import metadata; "
+        "json.dump({'python': platform.python_version(), "
+        "'sqlite': sqlite3.sqlite_version, 'machine': platform.machine(), "
+        "'libc': '-'.join(platform.libc_ver()), "
+        "'packages': sorted({f\"{d.metadata['Name']}=={d.version}\" "
+        "for d in metadata.distributions()})}, "
+        "open('runtime.json', 'w'), indent=2, sort_keys=True)")
+)
+
+
 def setup_command(component: str, release_dir: PurePosixPath) -> str:
     cd = f"cd {q(release_dir)}"
     if component == "collector":
-        return f"{cd} && python3 -m venv venv && venv/bin/pip install -q ."
+        return (f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
+                f"{LOCAL_INSTALL} . && {RUNTIME_RECORD}")
     if component == "site":
         return (
-            f"{cd} && python3 -m venv venv && "
-            "venv/bin/pip install -q ./_collector . gunicorn"
+            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
+            f"{LOCAL_INSTALL} ./_collector . && {RUNTIME_RECORD}"
         )
     if component == "bot":
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
@@ -645,8 +670,8 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
     if component == "pipeline":
         return (
-            f"{cd} && python3 -m venv venv && "
-            "venv/bin/pip install -q -r requirements-runtime.txt && "
+            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
+            f"{RUNTIME_RECORD} && "
             "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
             "load_geo_index()' && "
             f"BBB_FLEET_FILE={q(DURABLE_FLEET_FILE)} "

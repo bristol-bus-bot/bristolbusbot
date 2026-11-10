@@ -1,0 +1,4 @@
+# Build tools locked alongside each Python component's runtime libraries, so
+# the Pi installs local packages with --no-build-isolation and downloads
+# nothing outside the lock. See deploy/README.md "Python locks".
+setuptools
