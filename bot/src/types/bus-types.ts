@@ -259,7 +259,6 @@ export interface AppConfig {
         provider: 'gemini' | 'agent-platform';
         agentPlatformProject: string;
         agentPlatformLocation: string;
-        pipeline: 'single' | 'legacy';
         dailyLimit: number;
         timeout: number;
         editorialContextPath: string;
