@@ -6,28 +6,34 @@ import type { AppConfig } from '../types/bus-types.js';
 /**
  * Load application configuration from environment variables.
  */
+/**
+ * A whole-number setting from the environment. A malformed value stops the
+ * bot at start-up with a clear message instead of quietly becoming NaN.
+ */
+function intSetting(name: string, fallback: number, min = 0): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < min) {
+        throw new Error(`${name}=${raw} is not valid: it must be a whole number of at least ${min}`);
+    }
+    return value;
+}
+
 export function loadConfig(): AppConfig {
     const isTestMode = process.env.TEST_MODE?.toLowerCase() === 'true';
     const TARGET_TIMEZONE = 'Europe/London';
 
     // API credentials come from the environment only; there are no defaults.
-    const apiKey = process.env.BODS_API_KEY;
     const bskyHandle = process.env.BSKY_HANDLE;
     const bskyAppPassword = process.env.BSKY_APP_PASSWORD;
     const AI_API_KEY = process.env.AI_API_KEY;
     const weatherApiKey = process.env.WEATHER_API_KEY;
     
-    // Operator and area configuration 
-    const operatorRefForApiQuery = 'FBRI';
-    const target_operator = 'O1';
-    const boundingBox = '-2.8319664502,51.3170328857,-2.3362655622,51.6102366333';
-    
     // Timing constants with environment overrides. Timeouts are generous
     // because the Pi's network path to BODS can be slow.
-    const FETCH_INTERVAL_MS = parseInt(process.env.SIRI_VM_POLL_INTERVAL || '120000', 10);
-    const FETCH_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT || '60000', 10);
     const SUMMARY_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
-    const DAILY_CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL || '86400000', 10);
+    const DAILY_CLEANUP_INTERVAL_MS = intSetting('CLEANUP_INTERVAL', 86400000);
     
     // File paths; environment overrides, working-directory defaults.
     const TIMETABLE_DB_FILE = process.env.TIMETABLE_DB_PATH
@@ -50,21 +56,16 @@ export function loadConfig(): AppConfig {
     const MAX_JOURNEY_AGE_HOURS = 2;
     
     // AI constants with environment variable override for Pi optimization
-    const AI_DAILY_CALL_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '2000', 10);
-    const AI_COMMENTARY_PIPELINE = process.env.AI_COMMENTARY_PIPELINE === 'legacy'
-        ? 'legacy'
-        : 'single';
+    const AI_DAILY_CALL_LIMIT = intSetting('AI_DAILY_LIMIT', 2000);
     
     // Social media constants with environment variable override for Pi optimization
-    const BLUESKY_POST_LIMIT = parseInt(process.env.BLUESKY_DAILY_LIMIT || '300', 10);
-    
-    const requestUrl = `https://data.bus-data.dft.gov.uk/api/v1/datafeed/?boundingBox=${encodeURIComponent(boundingBox)}&operatorRef=${encodeURIComponent(operatorRefForApiQuery)}&api_key=${apiKey}`;
+    const BLUESKY_POST_LIMIT = intSetting('BLUESKY_DAILY_LIMIT', 300);
     
     return {
         testMode: isTestMode,
         
         server: {
-            port: parseInt(process.env.PORT || '3010', 10),
+            port: intSetting('PORT', 3010),
             host: '127.0.0.1'
         },
         
@@ -72,15 +73,6 @@ export function loadConfig(): AppConfig {
             timetablePath: TIMETABLE_DB_FILE,
             appDataPath: APP_DATA_DB_FILE,
             maxConnections: 10
-        },
-        
-        siri: {
-            apiKey: apiKey || '',
-            operatorRef: operatorRefForApiQuery,
-            boundingBox: boundingBox,
-            timeout: FETCH_TIMEOUT_MS,
-            requestUrl: requestUrl,
-            targetOperator: target_operator
         },
         
         ai: {
@@ -91,9 +83,8 @@ export function loadConfig(): AppConfig {
             provider: process.env.AI_PROVIDER === 'agent-platform' ? 'agent-platform' : 'gemini',
             agentPlatformProject: process.env.AGENT_PLATFORM_PROJECT || '',
             agentPlatformLocation: process.env.AGENT_PLATFORM_LOCATION || 'global',
-            pipeline: AI_COMMENTARY_PIPELINE,
             dailyLimit: AI_DAILY_CALL_LIMIT,
-            timeout: parseInt(process.env.AI_TIMEOUT || '75000', 10), // Increased from 30s to 75s for Pi network
+            timeout: intSetting('AI_TIMEOUT', 75000), // Increased from 30s to 75s for Pi network
             editorialContextPath: EDITORIAL_CONTEXT_FILE,
             editorialUsagePath: EDITORIAL_USAGE_FILE,
         },
@@ -137,7 +128,6 @@ export function loadConfig(): AppConfig {
         },
         
         monitoring: {
-            fetchInterval: FETCH_INTERVAL_MS,
             summaryInterval: SUMMARY_INTERVAL_MS,
             metricsInterval: 60000, // 1 minute
             enableMetrics: true
@@ -158,17 +148,23 @@ export function loadConfig(): AppConfig {
 
 /** Validate required configuration values. */
 export function validateConfig(config: AppConfig): void {
-    const directSiriIngest = (process.env.INGEST_MODE || 'events').toLowerCase() === 'siri';
+    // The bot only reads the collector's events. Any other ingest mode is a
+    // leftover setting and must not be silently ignored.
+    // The single writer is the only commentary pipeline. "single" (the old
+    // explicit value) is still accepted; anything else is a leftover setting.
+    const pipeline = (process.env.AI_COMMENTARY_PIPELINE || 'single').toLowerCase();
+    if (pipeline !== 'single') {
+        throw new Error(`AI_COMMENTARY_PIPELINE=${process.env.AI_COMMENTARY_PIPELINE} is not supported; the legacy writer has been removed`);
+    }
+    const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
+    if (ingestMode !== 'events') {
+        throw new Error(`INGEST_MODE=${process.env.INGEST_MODE} is not supported; the bot reads collector events only (INGEST_MODE=events)`);
+    }
     const requiredFields = [
         { field: 'social.handle', value: config.social.handle, name: 'BSKY_HANDLE' },
         { field: 'social.appPassword', value: config.social.appPassword, name: 'BSKY_APP_PASSWORD' },
         { field: 'weather.apiKey', value: config.weather.apiKey, name: 'WEATHER_API_KEY' }
     ];
-    if (directSiriIngest) {
-        requiredFields.push({
-            field: 'siri.apiKey', value: config.siri.apiKey, name: 'BODS_API_KEY'
-        });
-    }
 
     const missingFields = requiredFields
         .filter(req => !req.value)
@@ -206,7 +202,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
             return {
                 monitoring: {
                     enableMetrics: true,
-                    fetchInterval: 120000, // 2 minutes
                     summaryInterval: 1200000, // 20 minutes
                     metricsInterval: 60000 // 1 minute
                 }
@@ -217,7 +212,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
                 testMode: true,
                 monitoring: {
                     enableMetrics: true,
-                    fetchInterval: 300000, // 5 minutes for dev
                     summaryInterval: 600000, // 10 minutes for dev
                     metricsInterval: 60000 // 1 minute
                 }
@@ -228,7 +222,6 @@ export function getEnvironmentConfig(): Partial<AppConfig> {
                 testMode: true,
                 monitoring: {
                     enableMetrics: false,
-                    fetchInterval: 60000, // 1 minute for testing
                     summaryInterval: 120000, // 2 minutes for testing
                     metricsInterval: 60000 // 1 minute
                 }
@@ -248,9 +241,6 @@ export const CONSTANTS = {
 } as const;
 
 // Export individual configuration sections for service-specific use
-export function getSIRIConfig(config: AppConfig) {
-    return config.siri;
-}
 
 export function getDatabaseConfig(config: AppConfig) {
     return config.database;

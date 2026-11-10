@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import sqlite3
@@ -878,6 +879,13 @@ class TimetableDelivery:
                 "validation": validation,
                 "comparison": comparison,
                 "tnds_status": manifest["sources"]["tnds"]["status"],
+                # Builder and Pi side by side, so a SQLite or Python mismatch
+                # is visible in the shadow record rather than as odd queries.
+                "runtime": {
+                    "builder": (manifest.get("build") or {}).get("runtime"),
+                    "pi": {"python": platform.python_version(),
+                           "sqlite": sqlite3.sqlite_version},
+                },
             }
         except Exception:
             remove_shadow_tree(incoming, root)

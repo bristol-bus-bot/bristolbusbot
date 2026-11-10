@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import sqlite3 from 'sqlite3';
+import Database from 'better-sqlite3';
 import { selectStory } from '../dist/services/story-selection.js';
 import { matchedJourneyContext } from '../dist/services/journey-context.js';
 import { DatabaseManager } from '../dist/services/database-manager.js';
@@ -56,9 +56,9 @@ test('journey position uses the matched trip point, including loop stops and non
 });
 
 test('database lookup uses only the collector-selected trip and matching route', async t => {
-  const db = new sqlite3.Database(':memory:');
+  const db = new Database(':memory:');
   t.after(() => db.close());
-  await new Promise((resolve, reject) => db.exec(`
+  db.exec(`
     CREATE TABLE routes(route_id TEXT, route_short_name TEXT);
     CREATE TABLE trips(trip_id TEXT, route_id TEXT);
     CREATE TABLE stops(stop_id TEXT, stop_code TEXT, stop_name TEXT);
@@ -67,7 +67,7 @@ test('database lookup uses only the collector-selected trip and matching route',
     INSERT INTO trips VALUES ('trip-42','r42'),('trip-43','r43');
     INSERT INTO stops VALUES ('a','start','Start'),('b','loop','Loop Road');
     INSERT INTO stop_times VALUES ('trip-42','a',10),('trip-42','b',30),('trip-43','b',30);
-  `, error => error ? reject(error) : resolve()));
+  `);
   const manager = Object.create(DatabaseManager.prototype);
   manager.timetableDb = db;
   manager.appState = { dbIsReloading: false };

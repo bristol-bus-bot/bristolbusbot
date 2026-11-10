@@ -1,5 +1,6 @@
 // Posting, rate limiting and engagement tracking for social platforms.
 
+import type { AppConfig } from '../types/bus-types.js';
 import { RichText } from '@atproto/api';
 import { BlueskyClient, isNetworkError } from './bluesky-client.js';
 import { DateTime } from 'luxon';
@@ -16,7 +17,7 @@ import { selectStory, type PublishedStory } from './story-selection.js';
  * Handle Bluesky publishing and optional platform integrations.
  */
 export class SocialMediaManager {
-    private socialConfig: any;
+    private socialConfig: AppConfig['social'];
     private appState: ApplicationState;
     private databaseManager: DatabaseManager | null = null;
     private aiCommentary: AICommentary | null = null;
@@ -46,7 +47,7 @@ export class SocialMediaManager {
         this.publicationValidator = validate;
     }
 
-    constructor(socialConfig: any, appState: ApplicationState) {
+    constructor(socialConfig: AppConfig['social'], appState: ApplicationState) {
         this.socialConfig = socialConfig;
         this.appState = appState;
 

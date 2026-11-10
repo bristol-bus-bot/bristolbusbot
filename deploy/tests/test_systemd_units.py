@@ -71,16 +71,17 @@ def test_collector_unit_has_exact_writable_state_and_network_access():
     assert "IPAddressDeny=any" not in source
 
 
-def test_bot_unit_allows_only_its_two_writable_databases():
+def test_bot_unit_writes_only_its_own_state_and_reads_the_collector():
     source = (SYSTEMD / "bbb-bot.service").read_text(encoding="utf-8")
     for setting in (
         "User=@BBB_DEPLOY_USER@",
         "Restart=always",
-        "WatchdogSec=300s",
+        "WatchdogSec=120s",
         "NotifyAccess=all",
         "ProtectSystem=strict",
         "ProtectHome=read-only",
-        "ReadWritePaths=/var/lib/bristolbusbot/bot /var/lib/bristolbusbot/collector",
+        "ReadWritePaths=/var/lib/bristolbusbot/bot\n",
+        "ReadOnlyPaths=/var/lib/bristolbusbot/collector\n",
         "Environment=RUNTIME_MANAGER=systemd",
         "Environment=ENABLE_FILE_LOGS=false",
         "Environment=RARE_WORKING_SHADOW=true",

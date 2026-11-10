@@ -568,9 +568,9 @@ def main() -> None:  # pragma: no cover - exercised by the smoke run
     while _running:
         t0 = time.time()
         if t0 - last_prune >= 3600:  # hourly; first cycle too
-            pruned = live_db.prune_consumed_events(live_conn)
+            pruned = live_db.prune_old_events(live_conn)
             if pruned:
-                logger.info("events: pruned %s consumed rows older than %s days",
+                logger.info("events: pruned %s rows older than %s days",
                             pruned, live_db.EVENT_RETENTION_DAYS)
             last_prune = t0
         r = vm_cycle(lambda: fetch_vm(session, cfg), tt.cursor(), live_conn,

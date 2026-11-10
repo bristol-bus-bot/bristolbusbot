@@ -581,6 +581,15 @@ def copy_source(source: Path, destination: Path) -> None:
     raise BackupError(f"unsupported source type: {source}")
 
 
+# Copy each database in one step. SQLite restarts a stepped online backup
+# from the beginning whenever another connection writes to the source, and
+# the collector writes audit.db every 30 s, so a stepped copy of a large file
+# could restart many times (590 s instead of about 110 s on 8 Nov 2026). One
+# step reads a single consistent snapshot and, in WAL mode, does not block
+# the collector. The progress check still runs once, after the copy.
+SQLITE_BACKUP_PAGES_PER_STEP = -1
+
+
 def backup_sqlite(
     source: Path,
     destination: Path,
@@ -601,7 +610,8 @@ def backup_sqlite(
         with closing(sqlite3.connect(uri, uri=True, timeout=30)) as live:
             live.execute("PRAGMA query_only = ON")
             with closing(sqlite3.connect(destination)) as staged:
-                live.backup(staged, pages=4096, progress=progress, sleep=0.01)
+                live.backup(staged, pages=SQLITE_BACKUP_PAGES_PER_STEP,
+                            progress=progress)
                 staged.commit()
         pragma = "integrity_check" if integrity_check else "quick_check"
         with closing(sqlite3.connect(destination)) as staged:

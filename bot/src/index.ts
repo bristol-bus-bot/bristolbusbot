@@ -1,17 +1,17 @@
-// Load environment variables before application imports.
-import dotenv from 'dotenv';
-dotenv.config();
+// Configuration.
+// Settings come from the environment: systemd's EnvironmentFile on the Pi,
+// `node --env-file-if-exists=.env` (npm start) for local runs.
 
 // Check for summary mode command line argument
 const isSummaryMode = process.argv.includes('--summary') || process.argv.includes('-s');
 
 // Application imports.
+import type { AppConfig } from './types/bus-types.js';
 import express from 'express';
 import { DateTime } from 'luxon';
 import { loadConfig } from './config/app-config.js';
 import { ApplicationState } from './services/application-state.js';
 import { DatabaseManager } from './services/database-manager.js';
-import { SIRIMonitor } from './services/siri-monitor.js';
 import { DelayAnalyzer } from './services/delay-analyzer.js';
 import { AICommentary } from './services/ai-commentary.js';
 import { SocialMediaManager } from './services/social-media.js';
@@ -23,7 +23,7 @@ import { TrafficService } from './services/traffic-service.js';
 import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
-import { SystemdWatchdog } from './services/systemd-watchdog.js';
+import { SystemdWatchdog, pausedIngestKeepalive } from './services/systemd-watchdog.js';
 import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
 import { HolidaySchedule } from './services/holiday-schedule.js';
 import { dirname, join } from 'path';
@@ -35,10 +35,9 @@ class BristolBusBot {
     private eventReader: EventReader | null = null;
     private rareWorkingShadowReader: RareWorkingShadowReader | null = null;
     private holidaySchedule: HolidaySchedule | null = null;
-    private config: any;
+    private config: AppConfig;
     private appState: ApplicationState;
     private databaseManager!: DatabaseManager;
-    private siriMonitor!: SIRIMonitor;
     private delayAnalyzer!: DelayAnalyzer;
     private aiCommentary!: AICommentary;
     private socialMediaManager!: SocialMediaManager;
@@ -111,9 +110,6 @@ class BristolBusBot {
         this.healthMonitor = new HealthMonitor(this.appState);
         
         // Business logic services
-        this.siriMonitor = new SIRIMonitor(
-            this.config.siri, this.appState,
-            () => this.systemdWatchdog.progress());
         this.delayAnalyzer = new DelayAnalyzer(this.config.processing, this.appState);
         this.weatherService = new WeatherService(this.config.weather);
         this.aiCommentary = new AICommentary(this.config.ai, this.appState, this.weatherService,
@@ -125,11 +121,8 @@ class BristolBusBot {
         this.apiRoutes = new APIRoutes(this.appState, this.healthMonitor);
         
         // Set up dependency injection - services need database access
-        this.siriMonitor.setDatabaseManager(this.databaseManager);
         this.delayAnalyzer.setDatabaseManager(this.databaseManager);
 
-        // Connect SIRI monitor to delay analyzer for schedule matching
-        this.siriMonitor.setDelayAnalyzer(this.delayAnalyzer);
         this.socialMediaManager.setDatabaseManager(this.databaseManager);
         this.socialMediaManager.setAICommentary(this.aiCommentary);
         this.aiCommentary.setSocialMediaManager(this.socialMediaManager); // AI needs social media to fetch recent posts
@@ -157,7 +150,6 @@ class BristolBusBot {
             // Initialize all services in proper order
             await this.databaseManager.initialize();
             await this.healthMonitor.initialize();
-            await this.siriMonitor.initialize();
             await this.delayAnalyzer.initialize();
             await this.weatherService.initialize();
             await this.aiCommentary.initialize();
@@ -199,6 +191,7 @@ class BristolBusBot {
             await this.databaseManager.loadBusDetailsLookup();
             await this.databaseManager.loadRouteDetails();
             await this.databaseManager.loadTerminusStops();
+            await this.databaseManager.loadStopNames();
 
             logger.info('Initial data loaded successfully', {
                 busDetailsLoaded: this.appState.busDetailsLookup?.results?.length || 0,
@@ -239,7 +232,7 @@ class BristolBusBot {
     }
     
     /**
-     * Start main monitoring loop - the core SIRI monitoring cycle
+     * Start the main loop: holiday pauses and daily clean-up around event ingest.
      */
     private startMonitoringLoop(): void {
         logger.info('🔍 Starting main bus monitoring loop...');
@@ -271,7 +264,12 @@ class BristolBusBot {
                 },
             });
         void this.holidaySchedule.tick();
-        setInterval(() => void this.holidaySchedule?.tick(), 60_000);
+        const keepPausedIngestAlive = pausedIngestKeepalive(
+            this.systemdWatchdog, () => this.eventReader !== null);
+        setInterval(() => {
+            void this.holidaySchedule?.tick();
+            keepPausedIngestAlive();
+        }, 60_000);
 
         // Set up daily cleanup interval
         setInterval(async () => {
@@ -283,18 +281,15 @@ class BristolBusBot {
         }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
 
         logger.info('Monitoring loop started successfully', {
-            siriInterval: this.config.monitoring.fetchInterval,
             cleanupInterval: '24 hours'
         });
     }
 
     /** Start reading bus events (normal days). */
     private startIngest(): void {
-        // Event ingest is the production default. Direct SIRI ingest is an
-        // explicit diagnostic mode so it cannot create a second poller by
-        // accident.
-        const ingestMode = (process.env.INGEST_MODE || 'events').toLowerCase();
-        if (ingestMode === 'events') {
+        // The bot reads the collector's events; the collector is the only
+        // process that talks to BODS.
+        {
             const liveDbPath = process.env.LIVE_DB_PATH
                 || '/var/lib/bristolbusbot/collector/live.db';
             // Every local bus operator by default (coaches and ferries are
@@ -304,7 +299,9 @@ class BristolBusBot {
             const maxAgeMin = parseInt(process.env.INGEST_MAX_AGE_MIN || '10', 10);
             this.eventReader = new EventReader(
                 liveDbPath, this.appState, this.delayAnalyzer, operators,
-                30_000, maxAgeMin, () => this.systemdWatchdog.progress());
+                30_000, maxAgeMin, () => this.systemdWatchdog.progress(),
+                process.env.EVENT_CURSOR_PATH
+                    || join(dirname(this.config.database.appDataPath), 'event-cursor.json'));
             this.eventReader.start();
             this.socialMediaManager.setObservationValidator(
                 event => this.eventReader?.isObservationCurrent(event) ?? false);
@@ -316,14 +313,13 @@ class BristolBusBot {
             if ((process.env.RARE_WORKING_SHADOW || '').toLowerCase() === 'true') {
                 const snapshotPath = process.env.AUDIT_INTEGRATION_PATH
                     || '/var/lib/bristolbusbot/pipeline/audit_site/audit_integration.json';
-                const stateDbPath = process.env.APP_DATA_DB_PATH
-                    || '/var/lib/bristolbusbot/bot/app_data.db';
+                // Share the bot's one app_data.db handle rather than open a second.
+                const stateDb = this.databaseManager.getAppDataDb()
+                    ?? (process.env.APP_DATA_DB_PATH || '/var/lib/bristolbusbot/bot/app_data.db');
                 this.rareWorkingShadowReader = new RareWorkingShadowReader(
-                    snapshotPath, stateDbPath);
+                    snapshotPath, stateDb);
                 this.rareWorkingShadowReader.start();
             }
-        } else {
-            this.siriMonitor.startMonitoring();
         }
     }
 
@@ -333,7 +329,6 @@ class BristolBusBot {
         this.eventReader = null;
         this.rareWorkingShadowReader?.stop();
         this.rareWorkingShadowReader = null;
-        this.siriMonitor?.stopMonitoring();
     }
 
     /**
@@ -348,7 +343,7 @@ class BristolBusBot {
             nodeEnv: process.env.NODE_ENV,
             services: {
                 database: 'ready',
-                siriMonitor: 'monitoring',
+                eventIngest: 'collector events',
                 aiCommentary: 'ready',
                 socialMedia: this.config.testMode ? 'test-mode' : 'ready',
                 patternDetector: 'ready',
@@ -356,7 +351,6 @@ class BristolBusBot {
                 expressServer: 'listening'
             },
             monitoring: {
-                siriPollInterval: `${this.config.monitoring.fetchInterval / 1000}s`,
                 aiDailyLimit: this.config.ai.dailyLimit,
                 socialDailyLimit: this.config.social.dailyLimit
             }
@@ -380,7 +374,6 @@ class BristolBusBot {
         
         try {
             // Stop monitoring
-            this.siriMonitor.stopMonitoring();
             if (this.eventReader) this.eventReader.stop();
             if (this.rareWorkingShadowReader) this.rareWorkingShadowReader.stop();
             
@@ -388,7 +381,6 @@ class BristolBusBot {
             await Promise.all([
                 this.databaseManager.close(),
                 this.healthMonitor.close(),
-                this.siriMonitor.close(),
                 this.delayAnalyzer.close(),
                 this.aiCommentary.close(),
                 this.socialMediaManager.close(),

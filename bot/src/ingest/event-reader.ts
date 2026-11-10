@@ -4,12 +4,11 @@
 // The collector has already matched the vehicle, measured the delay
 // (observed and corroborated across polls) and enriched with stop names. This
 // reader:
-//   1. polls live.db for unconsumed events (operator-filtered)
+//   1. reads live.db read-only for events after its saved position
 //   2. maps rows to the BusEvent shape the persona code expects
-//   3. runs the same freshness + significance selection as direct ingest
-//   4. marks rows consumed (never deletes: the collector owns the table)
-//
-// Downstream services receive the same BusEvent shape as direct ingest.
+//   3. runs the freshness + significance selection
+//   4. remembers its position in its own state file. It never writes to
+//      live.db: the collector is that database's only writer.
 
 import Database from 'better-sqlite3';
 import { DateTime } from 'luxon';
@@ -17,6 +16,7 @@ import { logger, logSummary, logDetailed, logAlways, TARGET_TIMEZONE } from '../
 import { ApplicationState } from '../services/application-state.js';
 import { DelayAnalyzer } from '../services/delay-analyzer.js';
 import type { BusEvent } from '../types/bus-types.js';
+import { EventCursor, type EventCursorState } from './event-cursor.js';
 import { observationIssue } from '../services/story-brief.js';
 
 interface EventRow {
@@ -50,17 +50,20 @@ export class EventReader {
     private readonly intervalMs: number;
 
     private readonly maxAgeMinutes: number;
+    private readonly cursor: EventCursor;
+    private position: EventCursorState | null;
 
     constructor(liveDbPath: string, appState: ApplicationState,
                 delayAnalyzer: DelayAnalyzer,
                 operators: string[] = ['FBRI'], intervalMs = 30_000,
                 maxAgeMinutes = 10,
-                private readonly onCycleComplete: () => void = () => undefined) {
-        // NOT readonly: consuming an event writes consumed_by_bot_at.
-        // That column is the reader's ONLY write; everything else is the
-        // collector's.
-        this.db = new Database(liveDbPath);
-        this.db.pragma('busy_timeout = 10000');
+                private readonly onCycleComplete: () => void = () => undefined,
+                cursorPath?: string) {
+        // Read-only, like the website: the collector is live.db's only writer,
+        // and a reader in WAL mode never waits for it.
+        this.db = new Database(liveDbPath, { readonly: true, fileMustExist: true });
+        this.cursor = new EventCursor(cursorPath);
+        this.position = this.cursor.load();
         this.appState = appState;
         this.delayAnalyzer = delayAnalyzer;
         this.operators = new Set(operators);
@@ -83,19 +86,15 @@ export class EventReader {
     /** Include fresh normal running, even when it produced no exception event. */
     getCurrentStories(now = Date.now()): BusEvent[] {
         try {
-            const names = new Map<string, string>();
-            const recentStops = this.db.prepare('SELECT stop_code, stop_name FROM events ORDER BY id DESC LIMIT 5000')
-                .all() as { stop_code: string; stop_name: string }[];
-            for (const row of recentStops) {
-                if (row.stop_name && !names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
-            }
+            // Loaded once from the timetable at start-up (the collector copies
+            // the same corrected names into its events).
+            const names = this.appState?.stopNamesByCode ?? new Map<string, string>();
             const rows = this.db.prepare(`SELECT v.*, v.recorded_at AS created_at
                 FROM vehicles v WHERE v.recorded_at >= ? AND v.delay_seconds IS NOT NULL
                 AND v.event_type IN ('delayed', 'early', 'punctual')
                 ORDER BY v.recorded_at DESC LIMIT 1000`)
                 .all(new Date(now - 90_000).toISOString()) as any[];
             return rows.filter(row => this.operators.has(row.operator_ref)).map(row => {
-                // The collector copies the timetable's name, which is already corrected.
                 const name = names.get(row.stop_code);
                 const event = this.toBusEvent({ ...row, id: undefined, source: 'live_snapshot',
                     stop_name: name || null,
@@ -182,43 +181,66 @@ export class EventReader {
         };
     }
 
+    /**
+     * The id to read after. A saved position is trusted only while its event
+     * still exists with the same created_at; otherwise the table has been
+     * emptied or rebuilt and ids have restarted, so reading starts again from
+     * the beginning (the age gate drops anything old). With no saved position
+     * the reader starts after the newest event: it does not replay history.
+     */
+    private startingId(): number {
+        if (this.position) {
+            const saved = this.db.prepare('SELECT created_at FROM events WHERE id = ?')
+                .get(this.position.lastEventId) as { created_at: string } | undefined;
+            if (saved && saved.created_at === this.position.lastCreatedAt) return this.position.lastEventId;
+            if (this.position.lastEventId === 0) return 0;
+            logSummary('info', '[EVENT_CURSOR] Saved event is gone (events table emptied or rebuilt); reading from the start');
+            this.position = { lastEventId: 0, lastCreatedAt: null };
+            this.cursor.save(this.position);
+            return 0;
+        }
+        const newest = this.db.prepare('SELECT id, created_at FROM events ORDER BY id DESC LIMIT 1')
+            .get() as { id: number; created_at: string } | undefined;
+        this.position = newest
+            ? { lastEventId: newest.id, lastCreatedAt: newest.created_at }
+            : { lastEventId: 0, lastCreatedAt: null };
+        this.cursor.save(this.position);
+        logSummary('info', `[EVENT_CURSOR] No saved position; starting after event ${this.position.lastEventId}`);
+        return this.position.lastEventId;
+    }
+
     private cycle(): void {
         let completed = false;
         try {
-            // Apply the age gate before drafting so a restart or outage cannot
-            // turn a stale backlog into current posts. Stale rows are consumed
-            // without being passed to the commentary service.
-            const cutoffIso = DateTime.now()
-                .minus({ minutes: this.maxAgeMinutes }).toUTC().toISO();
-            const stale = this.db.prepare(
-                `UPDATE events SET consumed_by_bot_at = ?
-                 WHERE consumed_by_bot_at IS NULL AND created_at < ?`)
-                .run(new Date().toISOString(), cutoffIso).changes;
-            if (stale > 0) {
-                logSummary('info', `⏭️  skipped ${stale} stale event(s) older than ${this.maxAgeMinutes}min`);
-            }
+            const after = this.startingId();
 
             const rows = this.db.prepare(
-                `SELECT * FROM events WHERE consumed_by_bot_at IS NULL
-                 ORDER BY id ASC LIMIT 200`).all() as EventRow[];
+                'SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT 200').all(after) as EventRow[];
             if (!rows.length) {
                 completed = true;
                 return;
             }
 
-            const markConsumed = this.db.prepare(
-                'UPDATE events SET consumed_by_bot_at = ? WHERE id = ?');
-            const now = new Date().toISOString();
+            // Save the new position before handing anything on, so a crash
+            // part-way through loses an event rather than posting it twice.
+            const last = rows[rows.length - 1]!;
+            this.position = { lastEventId: last.id, lastCreatedAt: last.created_at };
+            this.cursor.save(this.position);
+
+            // Apply the age gate before drafting so a restart or outage cannot
+            // turn a stale backlog into current posts.
+            const cutoffIso = DateTime.now()
+                .minus({ minutes: this.maxAgeMinutes }).toUTC().toISO() ?? '';
             const reportable: BusEvent[] = [];
+            let stale = 0;
 
             for (const row of rows) {
-                markConsumed.run(now, row.id);
+                if (row.created_at < cutoffIso) { stale += 1; continue; }
                 if (!this.operators.has(row.operator_ref)) continue;
 
                 const busEvent = this.toBusEvent(row);
                 if (busEvent.significance === 0) continue;
 
-                // Apply the same freshness selection as direct SIRI ingest.
                 if (busEvent.eventType === 'delay') {
                     const history = this.delayAnalyzer.updateDelayHistory(busEvent);
                     if (this.delayAnalyzer.shouldReportDelay(busEvent, history)) {
@@ -232,6 +254,9 @@ export class EventReader {
                 }
             }
 
+            if (stale > 0) {
+                logSummary('info', `⏭️  skipped ${stale} stale event(s) older than ${this.maxAgeMinutes}min`);
+            }
             if (reportable.length) {
                 this.appState.addBusEvents(reportable);
                 logSummary('info', `📋 COLLECTED (events): ${reportable.length} of ${rows.length} rows → collector total ${this.appState.busEventCollector.length}`);

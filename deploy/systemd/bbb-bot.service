@@ -27,11 +27,10 @@ Environment=BBB_ROUTE_DETAILS_JSON=/var/lib/bristolbusbot/enrichment/route_detai
 ExecStart=/usr/bin/node @BBB_DEPLOY_BASE@/current/bot/dist/index.js
 Restart=always
 RestartSec=5s
-# The Node main loop launches systemd-notify only after an ingest cycle. The
+# The Node main loop launches systemd-notify after each ingest cycle (every
+# 30 s), and once a minute while ingest is paused on 25-26 December. The
 # short-lived helper therefore needs permission to deliver that progress.
-# Five minutes also leaves room for the deliberately slower direct-SIRI
-# diagnostic mode's bounded retries; production event ingest reports every 30s.
-WatchdogSec=300s
+WatchdogSec=120s
 NotifyAccess=all
 TimeoutStopSec=90s
 KillSignal=SIGTERM
@@ -57,7 +56,9 @@ ProtectKernelTunables=yes
 ProtectProc=invisible
 ProtectSystem=strict
 ReadOnlyPaths=/var/lib/bristolbusbot/enrichment
-ReadWritePaths=/var/lib/bristolbusbot/bot /var/lib/bristolbusbot/collector
+# The bot only reads the collector's live.db; the collector is its only writer.
+ReadOnlyPaths=/var/lib/bristolbusbot/collector
+ReadWritePaths=/var/lib/bristolbusbot/bot
 CapabilityBoundingSet=
 AmbientCapabilities=
 LockPersonality=yes

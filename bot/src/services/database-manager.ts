@@ -1,7 +1,8 @@
 // Bristol Bus Bot - Database Manager Service
 // Handles both timetable.db (read-only) and app_data.db (read-write)
 
-import sqlite3 from 'sqlite3';
+import type { AppConfig } from '../types/bus-types.js';
+import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'node:crypto';
@@ -27,6 +28,36 @@ export interface EngagementRecord {
     significance: number;
     postUri?: string;
     event?: BusEvent;
+}
+
+/** One engagement_analytics row as read by getRecentPosts. */
+interface EngagementRow {
+    collector_event_id: number | null;
+    operator_ref: string | null;
+    vehicle_ref: string;
+    line: string | null;
+    journey_ref: string | null;
+    origin_aimed_departure: string | null;
+    event_timestamp: string | null;
+    delay_seconds: number | null;
+    direction: string | null;
+    stop_code: string | null;
+    stop_name: string | null;
+    source: string | null;
+    corroboration: number | null;
+    low_confidence: number | null;
+    post_uri: string;
+    post_content: string;
+    post_type: string;
+    significance_score: number | null;
+    timestamp: string;
+}
+
+export interface DatabaseHealth {
+    timetable: { connected: boolean; path: string; readonly: true };
+    appData: { connected: boolean; path: string; readonly: false };
+    isReloading: boolean;
+    lastHealthCheck: string;
 }
 
 export interface RecentPost {
@@ -55,15 +86,24 @@ export interface RecentPost {
  * Database Manager Service
  * Owns the bot's SQLite connections: the timetable is opened read-only
  * (the pipeline owns its contents); app_data.db is the bot's own store.
+ *
+ * One better-sqlite3 library throughout. Its queries run on the main thread,
+ * so they are kept small (the heaviest measured on the Pi is ~15 ms, once at
+ * start-up). app_data.db has exactly one handle in the process, shared with
+ * the rare-working shadow reader, so the bot never competes with itself for
+ * that file's lock. It stays in rollback-journal mode: the social curation
+ * service may read only the file itself, which a WAL database would not allow.
  */
+const APP_DATA_BUSY_TIMEOUT_MS = 2000;
+
 export class DatabaseManager {
-    private databaseConfig: any;
+    private databaseConfig: AppConfig['database'];
     private appState: ApplicationState;
 
-    private timetableDb: sqlite3.Database | null = null;  // Read-only access to static timetable data
-    private appDataDb: sqlite3.Database | null = null;    // Read-write access to dynamic application data
+    private timetableDb: Database.Database | null = null;  // Read-only access to static timetable data
+    private appDataDb: Database.Database | null = null;    // Read-write access to dynamic application data
     
-    constructor(databaseConfig: any) {
+    constructor(databaseConfig: AppConfig['database']) {
         this.databaseConfig = databaseConfig;
         this.appState = ApplicationState.getInstance();
         
@@ -105,89 +145,68 @@ export class DatabaseManager {
      * Connect to the timetable database (read-only).
      */
     private connectTimetableDb(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.timetableDb = new sqlite3.Database(
-                this.databaseConfig.timetablePath, 
-                sqlite3.OPEN_READONLY, 
-                (err) => {
-                    if (err) {
-                        logger.error(`FATAL: Could not connect to timetable database: ${err.message}`, { 
-                            err,
-                            path: this.databaseConfig.timetablePath 
-                        });
-                        reject(err);
-                    } else {
-                        logger.info('Successfully connected to the timetable database (READ-ONLY).');
-                        resolve();
-                    }
-                }
-            );
-        });
+        try {
+            this.timetableDb = new Database(this.databaseConfig.timetablePath,
+                { readonly: true, fileMustExist: true });
+            logger.info('Successfully connected to the timetable database (READ-ONLY).');
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error(`FATAL: Could not connect to timetable database: ${err.message}`, {
+                err, path: this.databaseConfig.timetablePath });
+            return Promise.reject(err);
+        }
     }
-    
+
     /**
      * Connect to the app data database (read-write, created if absent).
      */
     private connectAppDataDb(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.appDataDb = new sqlite3.Database(
-                this.databaseConfig.appDataPath, 
-                sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, 
-                (err) => {
-                    if (err) {
-                        logger.error(`FATAL: Could not connect to app data database: ${err.message}`, { 
-                            err,
-                            path: this.databaseConfig.appDataPath 
-                        });
-                        reject(err);
-                    } else {
-                        logger.info('Successfully connected to the app data database (READ-WRITE).');
-                        resolve();
-                    }
-                }
-            );
-        });
+        try {
+            this.appDataDb = new Database(this.databaseConfig.appDataPath);
+            // Short: a wait blocks the event loop. Other processes only read it.
+            this.appDataDb.pragma(`busy_timeout = ${APP_DATA_BUSY_TIMEOUT_MS}`);
+            logger.info('Successfully connected to the app data database (READ-WRITE).');
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error(`FATAL: Could not connect to app data database: ${err.message}`, {
+                err, path: this.databaseConfig.appDataPath });
+            return Promise.reject(err);
+        }
     }
-    
+
+    /**
+     * The process's one app_data.db handle, for anything else in the bot that
+     * uses the same file (the rare-working shadow reader). Null until initialised.
+     */
+    getAppDataDb(): Database.Database | null {
+        return this.appDataDb;
+    }
+
     /**
      * Create app data tables and indexes if they do not already exist.
      */
     private initializeAppDataDatabase(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (!this.appDataDb) {
-                reject(new Error('App data database not connected'));
-                return;
-            }
-            
-            this.appDataDb.serialize(() => {
-                const createStmts = [
-                    `CREATE TABLE IF NOT EXISTS historical_delays (id INTEGER PRIMARY KEY AUTOINCREMENT, journey_code TEXT NOT NULL, stop_code TEXT NOT NULL, delay_minutes INTEGER NOT NULL, timestamp TEXT NOT NULL);`,
-                    `CREATE TABLE IF NOT EXISTS kalman_state (journey_code TEXT PRIMARY KEY, variance REAL NOT NULL, estimate REAL NOT NULL, last_updated TEXT NOT NULL);`,
-                    `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT, collector_event_id INTEGER, operator_ref TEXT, line TEXT, journey_ref TEXT, origin_aimed_departure TEXT, event_timestamp TEXT, delay_seconds INTEGER, direction TEXT, stop_code TEXT, stop_name TEXT, source TEXT, corroboration INTEGER, low_confidence INTEGER);`,
-                    `CREATE TABLE IF NOT EXISTS delay_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, route_id TEXT NOT NULL, delay_minutes INTEGER NOT NULL, last_stop_name TEXT, trend TEXT, report_time TEXT NOT NULL);`,
-                    `CREATE INDEX IF NOT EXISTS idx_historical_delays ON historical_delays(journey_code, stop_code, timestamp);`,
-                    `CREATE INDEX IF NOT EXISTS idx_kalman_state_last_updated ON kalman_state(last_updated);`,
-                    `CREATE INDEX IF NOT EXISTS idx_delay_reports ON delay_reports(route_id, report_time);`
-                ];
-                
-                this.appDataDb!.exec(createStmts.join('\n'), (err) => {
-                    if (err) {
-                        logger.error("Error initializing app data database tables and indexes.", { err });
-                        return reject(err);
-                    }
-                    this.migrateEngagementAnalytics()
-                        .then(() => {
-                            logger.info("App data database tables and indexes are ready.");
-                            resolve();
-                        })
-                        .catch(reject);
-                });
-            });
-        });
+        if (!this.appDataDb) return Promise.reject(new Error('App data database not connected'));
+        try {
+            this.appDataDb.exec([
+                `CREATE TABLE IF NOT EXISTS engagement_analytics (id INTEGER PRIMARY KEY AUTOINCREMENT, post_content TEXT, post_type TEXT, significance_score INTEGER, timestamp TEXT, vehicle_ref TEXT, post_uri TEXT, collector_event_id INTEGER, operator_ref TEXT, line TEXT, journey_ref TEXT, origin_aimed_departure TEXT, event_timestamp TEXT, delay_seconds INTEGER, direction TEXT, stop_code TEXT, stop_name TEXT, source TEXT, corroboration INTEGER, low_confidence INTEGER);`,
+                // The old direct-SIRI mode's smoothed-delay tables. Older
+                // copies of their data remain in the encrypted backups.
+                `DROP TABLE IF EXISTS historical_delays;`,
+                `DROP TABLE IF EXISTS kalman_state;`,
+                `DROP TABLE IF EXISTS delay_reports;`,
+            ].join('\n'));
+            this.migrateEngagementAnalytics();
+            logger.info("App data database tables and indexes are ready.");
+            return Promise.resolve();
+        } catch (err: any) {
+            logger.error("Error initializing app data database tables and indexes.", { err });
+            return Promise.reject(err);
+        }
     }
 
     /** Add any provenance columns an older installation is missing. */
-    private migrateEngagementAnalytics(): Promise<void> {
+    private migrateEngagementAnalytics(): void {
         const expected: Record<string, string> = {
             collector_event_id: 'INTEGER',
             operator_ref: 'TEXT',
@@ -203,29 +222,19 @@ export class DatabaseManager {
             corroboration: 'INTEGER',
             low_confidence: 'INTEGER',
         };
-        return new Promise((resolve, reject) => {
-            this.appDataDb!.all('PRAGMA table_info(engagement_analytics)', (err, rows: any[]) => {
-                if (err) return reject(err);
-                const present = new Set((rows || []).map(row => row.name));
-                const additions = Object.entries(expected)
-                    .filter(([name]) => !present.has(name))
-                    .map(([name, type]) => `ALTER TABLE engagement_analytics ADD COLUMN ${name} ${type}`);
-                const statements = [
-                    ...additions,
-                    'CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp)',
-                    'CREATE INDEX IF NOT EXISTS idx_engagement_vehicle_journey ON engagement_analytics(operator_ref, vehicle_ref, timestamp)',
-                ];
-                this.appDataDb!.exec(statements.join(';\n'), migrationErr => {
-                    if (migrationErr) return reject(migrationErr);
-                    if (additions.length) logger.info('Added engagement provenance columns', {
-                        count: additions.length,
-                    });
-                    resolve();
-                });
-            });
-        });
+        const rows = this.appDataDb!.prepare('PRAGMA table_info(engagement_analytics)').all() as Array<{ name: string }>;
+        const present = new Set(rows.map(row => row.name));
+        const additions = Object.entries(expected)
+            .filter(([name]) => !present.has(name))
+            .map(([name, type]) => `ALTER TABLE engagement_analytics ADD COLUMN ${name} ${type}`);
+        this.appDataDb!.exec([
+            ...additions,
+            'CREATE INDEX IF NOT EXISTS idx_engagement_analytics ON engagement_analytics(timestamp)',
+            'CREATE INDEX IF NOT EXISTS idx_engagement_vehicle_journey ON engagement_analytics(operator_ref, vehicle_ref, timestamp)',
+        ].join(';\n'));
+        if (additions.length) logger.info('Added engagement provenance columns', { count: additions.length });
     }
-    
+
     /**
      * Load the fleet details lookup from fbribuses.json.
      */
@@ -252,7 +261,7 @@ export class DatabaseManager {
             const rawBusData = JSON.parse(rawFleetBytes.toString('utf-8'));
 
             // Accept either a root-level array or a { results: [...] } wrapper.
-            let records: any[];
+            let records: unknown[];  // raw fleet JSON; validated by buildFleetIdentityIndex
             if (Array.isArray(rawBusData)) {
                 records = rawBusData;
             } else {
@@ -338,7 +347,7 @@ export class DatabaseManager {
         try {
             logger.info("Loading terminus stops...");
             
-            if (!this.timetableDb || !(this.timetableDb as any).open) { 
+            if (!this.timetableDb || !this.timetableDb.open) { 
                 logger.warn("Terminus stops load skipped: Timetable DB not connected."); 
                 this.appState.terminusStopNames = new Set(); 
                 return; 
@@ -354,10 +363,8 @@ export class DatabaseManager {
                 stop_name LIKE '%Terminal%'
             );`;
             
-            const rows = await new Promise<Array<{ common_name: string }>>((resolve, reject) => 
-                this.timetableDb!.all(query, [], (e, r: any[]) => e ? reject(e) : resolve(r))
-            );
-            
+            const rows = this.timetableDb.prepare(query).all() as Array<{ common_name: string }>;
+
             this.appState.terminusStopNames = new Set(rows.map(r => r.common_name));
             
             logger.info(`Loaded ${this.appState.terminusStopNames.size} unique terminus stop names.`);
@@ -377,486 +384,41 @@ export class DatabaseManager {
     }
     
     /**
-     * Look up the scheduled stop list for a journey: first by trip id,
-     * then by a ±2 minute departure-time window. Handles GTFS 24+ hour
-     * times for overnight services.
+     * Load every stop's name from the timetable once. The collector copies the
+     * same corrected names into its events, so this matches what the event
+     * stream says, and also names stops with no recent events. The timetable
+     * changes only at promotion, which restarts the bot.
      */
-    async querySchedule(
-        datedJourneyRef: string | null,
-        opCode: string,
-        lineName: string,
-        dirRef: string,
-        originAimedDepartureTime: string
-    ): Promise<any[] | null> {
-        const timer = new PerformanceTimer('schedule_query', logger);
-
+    async loadStopNames(): Promise<void> {
+        const names = new Map<string, string>();
         try {
-            if (this.appState.dbIsReloading || !this.timetableDb || !(this.timetableDb as any).open) {
-                return null;
+            if (this.timetableDb?.open) {
+                const rows = this.timetableDb.prepare(
+                    `SELECT stop_code, stop_name FROM stops
+                      WHERE stop_code IS NOT NULL AND stop_name IS NOT NULL
+                      ORDER BY stop_code, stop_id`).all() as Array<{ stop_code: string; stop_name: string }>;
+                for (const row of rows) if (!names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
             }
-
-            const fields = `st.arrival_time as arr, st.departure_time as dep, s.stop_code as stop, s.stop_name as stop_name, s.stop_lat as latitude, s.stop_lon as longitude`;
-
-            const originDateTime = DateTime.fromISO(originAimedDepartureTime, { zone: 'UTC' }).setZone(TARGET_TIMEZONE);
-            const targetDayOfWeek = originDateTime.toFormat('ccc'); // e.g., 'Sat' or 'Sun' from the live data
-            const hour = originDateTime.hour;
-            const dayMapping: Record<string, string> = {
-                'Sun': 'sunday', 'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
-                'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday'
-            };
-            const exactServiceDays = [originDateTime];
-            if (hour >= 0 && hour < 6) {
-                exactServiceDays.unshift(originDateTime.minus({ days: 1 }));
-            }
-
-            // Try with trip_id (GTFS equivalent of datedJourneyRef)
-            // Attempt with FBRI operator first, then without (SIRI operator refs don't always match GTFS)
-            if (datedJourneyRef) {
-                for (const agencyFilter of ['FBRI', null]) {
-                    const agencyClause = agencyFilter
-                        ? `a.agency_noc = '${agencyFilter}' AND`
-                        : '';
-                    for (const serviceDay of exactServiceDays) {
-                        const dayColumn = dayMapping[serviceDay.toFormat('ccc')];
-                        if (!dayColumn) continue;
-                        const dateStr = serviceDay.toFormat('yyyyMMdd');
-                        const trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
-                            `SELECT DISTINCT t.trip_id FROM trips t
-                             JOIN routes r ON t.route_id = r.route_id
-                             JOIN agency a ON r.agency_id = a.agency_id
-                             WHERE ${agencyClause}
-                             (t.trip_id = ? OR (
-                                 t.vehicle_journey_code = ?
-                                 AND r.route_short_name = ?
-                             ))
-                             AND (
-                                 EXISTS (
-                                     SELECT 1 FROM calendar c
-                                     WHERE c.service_id=t.service_id
-                                       AND c.${dayColumn}=1
-                                       AND c.start_date<=? AND c.end_date>=?
-                                       AND t.service_id NOT IN (
-                                           SELECT service_id FROM calendar_dates
-                                           WHERE date=? AND exception_type=2
-                                       )
-                                 )
-                                 OR EXISTS (
-                                     SELECT 1 FROM calendar_dates cd
-                                     WHERE cd.service_id=t.service_id
-                                       AND cd.date=? AND cd.exception_type=1
-                                 )
-                             )
-                             ORDER BY CASE WHEN t.trip_id=? THEN 0 ELSE 1 END
-                             LIMIT 1;`,
-                            [
-                                datedJourneyRef, datedJourneyRef, lineName,
-                                dateStr, dateStr, dateStr, dateStr,
-                                datedJourneyRef
-                            ],
-                            (e, r: any) => res(e ? null : (r || null))
-                        ));
-                        if (!trip) continue;
-                        const rows = await new Promise<any[]>((res) => this.timetableDb!.all(
-                            `SELECT ${fields} FROM stop_times st
-                             JOIN stops s ON st.stop_id = s.stop_id
-                             WHERE st.trip_id = ?
-                             ORDER BY st.stop_sequence ASC;`,
-                            [trip.trip_id],
-                            (e, r: any[]) => res(e ? [] : r)
-                        ));
-
-                        if (rows.length > 0) {
-                            timer.complete({
-                                method: agencyFilter ? 'trip_id' : 'trip_id_no_operator',
-                                rowsFound: rows.length,
-                                dayOfWeek: targetDayOfWeek
-                            });
-                            return rows;
-                        }
-                    }
-                }
-            }
-
-            // Fallback to time-based lookup
-            const depTimeKey = originDateTime.toFormat('HH:mm:ss');
-            const lower = originDateTime.minus({ minutes: 2 }).toFormat('HH:mm:ss'); // TIME_WINDOW_MINUTES = 2
-            const upper = originDateTime.plus({ minutes: 2 }).toFormat('HH:mm:ss');
-
-            // GTFS uses 24+ hour notation for services past midnight (e.g., 24:20:00 = 00:20)
-            // For times between 00:00-05:59, also search for 24+ hour equivalents
-            const minute = originDateTime.minute;
-            const second = originDateTime.second;
-            const searchTimes: Array<{key: string, lower: string, upper: string, dayOfWeek: string, serviceDate: string}> = [{
-                key: depTimeKey,
-                lower,
-                upper,
-                dayOfWeek: targetDayOfWeek,
-                serviceDate: originDateTime.toFormat('yyyyMMdd')
-            }];
-
-            if (hour >= 0 && hour < 6) {
-                // Convert to GTFS 24+ hour format
-                const gtfsHour = hour + 24;
-                const gtfsDepTimeKey = `${gtfsHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
-
-                // Calculate lower bound (subtract 2 minutes)
-                const lowerDateTime = originDateTime.minus({ minutes: 2 });
-                const gtfsLowerHour = lowerDateTime.hour + 24;
-                const gtfsLower = `${gtfsLowerHour.toString().padStart(2, '0')}:${lowerDateTime.minute.toString().padStart(2, '0')}:${lowerDateTime.second.toString().padStart(2, '0')}`;
-
-                // Calculate upper bound (add 2 minutes)
-                const upperDateTime = originDateTime.plus({ minutes: 2 });
-                const gtfsUpperHour = upperDateTime.hour + 24;
-                const gtfsUpper = `${gtfsUpperHour.toString().padStart(2, '0')}:${upperDateTime.minute.toString().padStart(2, '0')}:${upperDateTime.second.toString().padStart(2, '0')}`;
-
-                // GTFS service day: times 24:00+ belong to previous calendar day
-                const gtfsDayOfWeek = originDateTime.minus({ days: 1 }).toFormat('ccc');
-                searchTimes.push({
-                    key: gtfsDepTimeKey,
-                    lower: gtfsLower,
-                    upper: gtfsUpper,
-                    dayOfWeek: gtfsDayOfWeek,
-                    serviceDate: originDateTime.minus({ days: 1 }).toFormat('yyyyMMdd')
-                });
-            }
-
-            // Try with FBRI operator first, then without operator filter
-            // SIRI OperatorRef often doesn't match GTFS agency_noc, so fallback catches more routes
-            for (const agencyFilter of ['FBRI', null]) {
-                const agencyClause = agencyFilter
-                    ? `a.agency_noc = '${agencyFilter}' AND`
-                    : '';
-
-                let trip: { trip_id: string } | null = null;
-                for (const timeSet of searchTimes) {
-                    const dayColumn = dayMapping[timeSet.dayOfWeek];
-                    if (!dayColumn) continue;
-
-                    // Try calendar table first (weekly patterns)
-                    const calendarSql = `SELECT DISTINCT t.trip_id
-                         FROM trips t
-                         JOIN routes r ON t.route_id = r.route_id
-                         JOIN agency a ON r.agency_id = a.agency_id
-                         JOIN calendar c ON t.service_id = c.service_id
-                         JOIN stop_times st ON t.trip_id = st.trip_id
-                         WHERE ${agencyClause}
-                         r.route_short_name = ?
-                         AND st.departure_time BETWEEN ? AND ?
-                         AND c.${dayColumn} = 1
-                         AND c.start_date <= ? AND c.end_date >= ?
-                         AND t.service_id NOT IN (
-                             SELECT service_id FROM calendar_dates
-                             WHERE date = ? AND exception_type = 2
-                         )
-                         ORDER BY ABS(strftime('%s', '1970-01-01 ' || st.departure_time) - strftime('%s', '1970-01-01 ' || ?)) ASC
-                         LIMIT 1;`;
-
-                    trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
-                        calendarSql,
-                        [
-                            lineName, timeSet.lower, timeSet.upper,
-                            timeSet.serviceDate, timeSet.serviceDate,
-                            timeSet.serviceDate, timeSet.key
-                        ],
-                        (e, r: any) => res(e ? null : (r || null))
-                    ));
-
-                    if (trip) break; // Found a match in calendar, stop searching
-
-                    // If no match in calendar, try calendar_dates (specific date exceptions/additions)
-                    const calendarDatesSql = `SELECT DISTINCT t.trip_id
-                         FROM trips t
-                         JOIN routes r ON t.route_id = r.route_id
-                         JOIN agency a ON r.agency_id = a.agency_id
-                         JOIN calendar_dates cd ON t.service_id = cd.service_id
-                         JOIN stop_times st ON t.trip_id = st.trip_id
-                         WHERE ${agencyClause}
-                         r.route_short_name = ?
-                         AND st.departure_time BETWEEN ? AND ?
-                         AND cd.date = ?
-                         AND cd.exception_type = 1
-                         ORDER BY ABS(strftime('%s', '1970-01-01 ' || st.departure_time) - strftime('%s', '1970-01-01 ' || ?)) ASC
-                         LIMIT 1;`;
-
-                    trip = await new Promise<{ trip_id: string } | null>((res) => this.timetableDb!.get(
-                        calendarDatesSql,
-                        [
-                            lineName, timeSet.lower, timeSet.upper,
-                            timeSet.serviceDate, timeSet.key
-                        ],
-                        (e, r: any) => res(e ? null : (r || null))
-                    ));
-
-                    if (trip) break; // Found a match in calendar_dates, stop searching
-                }
-
-                if (trip) {
-                    const stops = await new Promise<any[]>((res) => this.timetableDb!.all(
-                        `SELECT ${fields} FROM stop_times st
-                         JOIN stops s ON st.stop_id = s.stop_id
-                         WHERE st.trip_id = ?
-                         ORDER BY st.stop_sequence ASC;`,
-                        [trip.trip_id],
-                        (e, r: any[]) => res(e ? [] : r)
-                    ));
-
-                    if (stops.length > 0) {
-                        const method = agencyFilter ? 'time_fallback' : 'time_fallback_no_operator';
-                        logDetailed('info', `Used ${method} schedule for Line: ${lineName}, Time: ${depTimeKey} on ${targetDayOfWeek}`);
-
-                        timer.complete({
-                            method,
-                            rowsFound: stops.length,
-                            dayOfWeek: targetDayOfWeek,
-                            depTime: depTimeKey
-                        });
-                        return stops;
-                    }
-                }
-            }
-
-            logger.warn(`No schedule found for Op:${opCode}, Line:${lineName}, Time:${depTimeKey}, Day:${targetDayOfWeek}`);
-            timer.complete({
-                method: 'not_found',
-                rowsFound: 0
-            });
-            return null;
-
+            logger.info(`Loaded ${names.size} stop names from the timetable.`);
         } catch (error: any) {
-            timer.fail(error);
-            logger.error(`Error during schedule lookup`, { err: error });
-            return null;
+            logger.error('Error loading stop names', { err: error });
         }
-    }
-    
-    /**
-     * Fuzzy trip matching: find a trip id by line and first-stop departure
-     * time window. Handles GTFS 24-hour notation for overnight services.
-     */
-    async queryTripFuzzy(lineName: string, directionRef: string, originTime: string): Promise<string | null> {
-        if (this.appState.dbIsReloading || !this.timetableDb) return null;
-
-        const originDateTime = DateTime.fromISO(originTime, { zone: 'UTC' }).setZone(TARGET_TIMEZONE);
-
-        // Create time windows for BOTH standard and GTFS 24-hour formats
-        const hour = originDateTime.hour;
-
-        // Standard time window (e.g., 01:30 ± 15 mins)
-        const standardLower = originDateTime.minus({ minutes: 15 }).toFormat('HH:mm:ss');
-        const standardUpper = originDateTime.plus({ minutes: 15 }).toFormat('HH:mm:ss');
-        const standardDay = originDateTime.toFormat('ccc'); // e.g., 'Mon'
-
-        // Day mapping (same as querySchedule)
-        const dayMapping: Record<string, string> = {
-            'Sun': 'sunday', 'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
-            'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday'
-        };
-
-        const standardDayColumn = dayMapping[standardDay];
-        if (!standardDayColumn) return null;
-
-        // Try with FBRI operator first, then without (SIRI operator refs don't always match GTFS)
-        for (const agencyFilter of ['FBRI', null]) {
-            const agencyClause = agencyFilter
-                ? `a.agency_noc = '${agencyFilter}' AND`
-                : '';
-
-            // Try standard time first
-            const standardQuery = `
-                SELECT t.trip_id
-                FROM trips t
-                JOIN routes r ON t.route_id = r.route_id
-                JOIN agency a ON r.agency_id = a.agency_id
-                JOIN stop_times st ON t.trip_id = st.trip_id
-                JOIN calendar c ON t.service_id = c.service_id
-                WHERE ${agencyClause}
-                r.route_short_name = ?
-                AND st.stop_sequence = 1
-                AND st.departure_time BETWEEN ? AND ?
-                AND c.${standardDayColumn} = 1
-                LIMIT 1
-            `;
-
-            const standardResult = await new Promise<string | null>((resolve) => {
-                this.timetableDb!.get(standardQuery, [lineName, standardLower, standardUpper], (err, row: any) => {
-                    resolve((err || !row) ? null : row.trip_id);
-                });
-            });
-
-            if (standardResult) {
-                if (!agencyFilter) logSummary('info', `[FUZZY_NO_OPERATOR] Matched ${lineName} without operator filter`);
-                return standardResult;
-            }
-
-            // GTFS OVERNIGHT HANDLING: If time is 00:00-05:59, also try 24+ hour format
-            if (hour >= 0 && hour < 6) {
-                // Calculate GTFS time windows (add 24 hours to hour component)
-                const lowerDateTime = originDateTime.minus({ minutes: 15 });
-                const gtfsLowerHour = lowerDateTime.hour + 24;
-                const gtfsLower = `${gtfsLowerHour.toString().padStart(2, '0')}:${lowerDateTime.minute.toString().padStart(2, '0')}:${lowerDateTime.second.toString().padStart(2, '0')}`;
-
-                const upperDateTime = originDateTime.plus({ minutes: 15 });
-                const gtfsUpperHour = upperDateTime.hour + 24;
-                const gtfsUpper = `${gtfsUpperHour.toString().padStart(2, '0')}:${upperDateTime.minute.toString().padStart(2, '0')}:${upperDateTime.second.toString().padStart(2, '0')}`;
-
-                // GTFS service day: 24:00+ times belong to PREVIOUS calendar day
-                const gtfsDay = originDateTime.minus({ days: 1 }).toFormat('ccc');
-                const gtfsDayColumn = dayMapping[gtfsDay];
-
-                if (gtfsDayColumn) {
-                    const gtfsQuery = `
-                        SELECT t.trip_id
-                        FROM trips t
-                        JOIN routes r ON t.route_id = r.route_id
-                        JOIN agency a ON r.agency_id = a.agency_id
-                        JOIN stop_times st ON t.trip_id = st.trip_id
-                        JOIN calendar c ON t.service_id = c.service_id
-                        WHERE ${agencyClause}
-                        r.route_short_name = ?
-                        AND st.stop_sequence = 1
-                        AND st.departure_time BETWEEN ? AND ?
-                        AND c.${gtfsDayColumn} = 1
-                        LIMIT 1
-                    `;
-
-                const gtfsResult = await new Promise<string | null>((resolve) => {
-                    this.timetableDb!.get(gtfsQuery, [lineName, gtfsLower, gtfsUpper], (err, row: any) => {
-                        resolve((err || !row) ? null : row.trip_id);
-                    });
-                });
-
-                    if (gtfsResult) {
-                        if (!agencyFilter) logSummary('info', `[FUZZY_GTFS_NO_OPERATOR] Matched overnight ${lineName} without operator filter`);
-                        logSummary('info', `[FUZZY_GTFS] Found overnight service using 24+ hour format (${gtfsLower}-${gtfsUpper} on ${gtfsDay})`);
-                        return gtfsResult;
-                    }
-                }
-            }
-        } // end operator fallback loop
-
-        return null;
-    }
-
-    /**
-     * Fuzzy schedule matching: get the full stop list for a fuzzy-matched trip.
-     */
-    async queryScheduleFuzzy(lineRef: string, directionRef: string, originTime: string): Promise<any[]> {
-        const tripId = await this.queryTripFuzzy(lineRef, directionRef, originTime);
-        if (!tripId) return [];
-
-        const fields = `st.arrival_time as arr, st.departure_time as dep, s.stop_code as stop, s.stop_name as stop_name, s.stop_lat as latitude, s.stop_lon as longitude`;
-
-        return new Promise<any[]>((resolve) => {
-            this.timetableDb!.all(
-                `SELECT ${fields} FROM stop_times st
-                 JOIN stops s ON st.stop_id = s.stop_id
-                 WHERE st.trip_id = ?
-                 ORDER BY st.stop_sequence ASC`,
-                [tripId],
-                (err, rows) => resolve(err ? [] : rows)
-            );
-        });
+        this.appState.stopNamesByCode = names;
     }
 
     async enrichStoryJourney(event: BusEvent): Promise<BusEvent> {
         if (!this.timetableDb || this.appState.dbIsReloading || !event.collectorTripId) return event;
-        const stops = await new Promise<JourneyStop[]>(resolve => {
-            this.timetableDb!.all(`SELECT st.stop_sequence, s.stop_code, s.stop_name
+        let stops: JourneyStop[] = [];
+        try {
+            stops = this.timetableDb.prepare(`SELECT st.stop_sequence, s.stop_code, s.stop_name
                 FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
                 JOIN trips t ON t.trip_id = st.trip_id JOIN routes r ON r.route_id = t.route_id
-                WHERE st.trip_id = ? AND r.route_short_name = ? ORDER BY st.stop_sequence`,
-                [event.collectorTripId, event.line], (error, rows: JourneyStop[]) => resolve(error ? [] : rows));
-        });
+                WHERE st.trip_id = ? AND r.route_short_name = ? ORDER BY st.stop_sequence`)
+                .all(event.collectorTripId, event.line) as JourneyStop[];
+        } catch { stops = []; }
         return { ...event, journeyContext: matchedJourneyContext(event, stops) };
     }
 
-    /**
-     * Record a historical delay observation.
-     */
-    async recordHistoricalDelay(journeyCode: string, stopCode: string, delayMinutes: number, timestamp: string): Promise<void> {
-        try {
-            if (this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
-                return;
-            }
-            
-            this.appDataDb.run(
-                `INSERT INTO historical_delays (journey_code, stop_code, delay_minutes, timestamp) VALUES (?, ?, ?, ?);`, 
-                [journeyCode, stopCode, delayMinutes, timestamp], 
-                (err) => {
-                    if (err && !err.message.includes("no such table")) {
-                        logger.error("[History] Failed to insert record.", { err });
-                    }
-                }
-            );
-            
-        } catch (error: any) {
-            logger.error('Error recording historical delay', { error: error.message });
-        }
-    }
-    
-    /**
-     * Get historical delays for journey and stop
-     * Used by delay predictor for Kalman filtering
-     */
-    async getHistoricalDelays(journeyCode: string, stopCode: string): Promise<number[]> {
-        try {
-            if (!journeyCode || !stopCode || this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
-                return [];
-            }
-            
-            const currentDayOfWeek = DateTime.now().setZone(TARGET_TIMEZONE).weekday;
-            
-            return new Promise<number[]>((resolve) => {
-                this.appDataDb!.all(
-                    `SELECT delay_minutes, timestamp FROM historical_delays WHERE journey_code = ? AND stop_code = ? ORDER BY timestamp DESC LIMIT 50;`, 
-                    [journeyCode, stopCode], 
-                    (err, rows: any[]) => {
-                        if (err) { 
-                            logger.error("[History] Failed to fetch historical delays.", { err }); 
-                            return resolve([]); 
-                        }
-                        
-                        const filtered = rows.filter(r => DateTime.fromISO(r.timestamp).weekday === currentDayOfWeek);
-                        resolve(filtered.slice(0, 10).map(r => r.delay_minutes));
-                    }
-                );
-            });
-            
-        } catch (error: any) {
-            logger.error('Error getting historical delays', { error: error.message });
-            return [];
-        }
-    }
-    
-    /**
-     * Store a delay report row.
-     */
-    async storeDelayReport(routeId: string, delayMinutes: number, lastStopName: string | null, trend: string): Promise<void> {
-        try {
-            if (!this.appDataDb) {
-                return;
-            }
-            
-            const stmt = this.appDataDb.prepare(
-                `INSERT INTO delay_reports (route_id, delay_minutes, last_stop_name, trend, report_time) 
-                 VALUES (?, ?, ?, ?, ?)`
-            );
-            
-            stmt.run(
-                routeId,
-                delayMinutes,
-                lastStopName || null,
-                trend,
-                DateTime.now().setZone(TARGET_TIMEZONE).toISO() ?? ''
-            );
-            
-            stmt.finalize();
-            
-        } catch (error: any) {
-            logger.warn("Failed to store delay report", { err: error });
-        }
-    }
-    
     /**
      * Store engagement analytics
      * Used for tracking social media post performance
@@ -864,15 +426,15 @@ export class DatabaseManager {
     async storeEngagementRecord(record: EngagementRecord): Promise<void> {
         if (!this.appDataDb) return;
         const event = record.event;
-        await new Promise<void>((resolve, reject) => {
-            this.appDataDb!.run(
+        try {
+            this.appDataDb.prepare(
                 `INSERT INTO engagement_analytics
                  (post_content, post_type, significance_score, timestamp,
                   vehicle_ref, post_uri, collector_event_id, operator_ref,
                   line, journey_ref, origin_aimed_departure, event_timestamp,
                   delay_seconds, direction, stop_code, stop_name, source,
                   corroboration, low_confidence)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`).run(
                 [record.postContent, record.postType, record.significance,
                  DateTime.now().toISO() ?? '', event?.vehicleRef || null,
                  record.postUri || null, event?.collectorEventId ?? null,
@@ -884,12 +446,10 @@ export class DatabaseManager {
                  event?.direction || null, event?.lastStopCode || null,
                  event?.lastStopName || null,
                  event?.source || null, event?.corroboration ?? null,
-                 event ? (event.lowConfidence ? 1 : 0) : null],
-                err => err ? reject(err) : resolve()
-            );
-        }).catch((error: any) => {
+                 event ? (event.lowConfidence ? 1 : 0) : null]);
+        } catch (error: any) {
             logger.error('Failed to store engagement record', { error: error.message });
-        });
+        }
     }
     
     /**
@@ -900,46 +460,36 @@ export class DatabaseManager {
         try {
             if (!this.appDataDb) return [];
 
-            return new Promise<any[]>((resolve) => {
-                this.appDataDb!.all(
-                    `SELECT collector_event_id, operator_ref, vehicle_ref, line,
-                            journey_ref, origin_aimed_departure, event_timestamp,
-                            delay_seconds, direction, stop_code, stop_name,
-                            source, corroboration, low_confidence, post_uri,
-                            post_content, post_type, significance_score, timestamp
-                       FROM engagement_analytics
-                      WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
-                      ORDER BY timestamp DESC LIMIT ?;`,
-                    [limit],
-                    (err, rows: any[]) => {
-                        if (err) {
-                            logger.error('Failed to fetch recent posts', { err });
-                            return resolve([]);
-                        }
-                        resolve((rows || []).map(r => ({
-                            collectorEventId: r.collector_event_id,
-                            operatorRef: r.operator_ref || '',
-                            vehicleRef: r.vehicle_ref,
-                            line: r.line || '',
-                            journeyRef: r.journey_ref || '',
-                            originAimedDeparture: r.origin_aimed_departure || '',
-                            eventTimestamp: r.event_timestamp || '',
-                            delaySeconds: r.delay_seconds,
-                            direction: r.direction || '',
-                            stopCode: r.stop_code || '',
-                            stopName: r.stop_name || '',
-                            source: r.source || '',
-                            corroboration: r.corroboration,
-                            lowConfidence: Boolean(r.low_confidence),
-                            postUri: r.post_uri,
-                            postContent: r.post_content,
-                            postType: r.post_type,
-                            significance: r.significance_score,
-                            timestamp: r.timestamp
-                        })));
-                    }
-                );
-            });
+            const rows = this.appDataDb.prepare(
+                `SELECT collector_event_id, operator_ref, vehicle_ref, line,
+                        journey_ref, origin_aimed_departure, event_timestamp,
+                        delay_seconds, direction, stop_code, stop_name,
+                        source, corroboration, low_confidence, post_uri,
+                        post_content, post_type, significance_score, timestamp
+                   FROM engagement_analytics
+                  WHERE vehicle_ref IS NOT NULL AND post_uri IS NOT NULL
+                  ORDER BY timestamp DESC LIMIT ?;`).all(limit) as EngagementRow[];
+            return rows.map(r => ({
+                collectorEventId: r.collector_event_id,
+                operatorRef: r.operator_ref || '',
+                vehicleRef: r.vehicle_ref,
+                line: r.line || '',
+                journeyRef: r.journey_ref || '',
+                originAimedDeparture: r.origin_aimed_departure || '',
+                eventTimestamp: r.event_timestamp || '',
+                delaySeconds: r.delay_seconds,
+                direction: r.direction || '',
+                stopCode: r.stop_code || '',
+                stopName: r.stop_name || '',
+                source: r.source || '',
+                corroboration: r.corroboration,
+                lowConfidence: Boolean(r.low_confidence),
+                postUri: r.post_uri,
+                postContent: r.post_content,
+                postType: r.post_type,
+                significance: r.significance_score,
+                timestamp: r.timestamp
+            }));
         } catch (error: any) {
             logger.error('Error getting recent posts', { error: error.message });
             return [];
@@ -947,94 +497,31 @@ export class DatabaseManager {
     }
 
     /**
-     * Load Kalman state for journey
-     */
-    async loadKalmanState(journeyCode: string): Promise<{ variance: number; estimate: number } | null> {
-        try {
-            if (this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
-                return null;
-            }
-            
-            return new Promise((resolve) => {
-                this.appDataDb!.get(
-                    `SELECT variance, estimate FROM kalman_state WHERE journey_code = ?;`, 
-                    [journeyCode], 
-                    (err, row: any) => {
-                        if (err) { 
-                            logger.error("[Kalman] Error loading state", { err }); 
-                            resolve(null); 
-                        } else {
-                            resolve(row ? { variance: row.variance, estimate: row.estimate } : null);
-                        }
-                    }
-                );
-            });
-            
-        } catch (error: any) {
-            logger.error('Error loading Kalman state', { error: error.message });
-            return null;
-        }
-    }
-    
-    /**
-     * Save Kalman state for journey
-     */
-    async saveKalmanState(journeyCode: string, variance: number, estimate: number): Promise<void> {
-        try {
-            if (this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
-                return;
-            }
-            
-            this.appDataDb.run(
-                `INSERT OR REPLACE INTO kalman_state (journey_code, variance, estimate, last_updated) VALUES (?, ?, ?, ?);`, 
-                [journeyCode, variance, estimate, DateTime.now().toISO() ?? ''], 
-                (err) => {
-                    if (err) {
-                        logger.error("[Kalman] Error saving state", { err });
-                    }
-                }
-            );
-            
-        } catch (error: any) {
-            logger.error('Error saving Kalman state', { error: error.message });
-        }
-    }
-    
-    /**
      * Daily cleanup: delete app-data rows older than 30 days.
      */
     async cleanupOldData(): Promise<void> {
         const timer = new PerformanceTimer('database_cleanup', logger);
         
         try {
-            if (this.appState.dbIsReloading || !this.appDataDb || !(this.appDataDb as any).open) {
+            if (this.appState.dbIsReloading || !this.appDataDb || !this.appDataDb.open) {
                 return;
             }
             
             logger.info("Running daily cleanup of old app data records...");
             const thirtyDaysAgo = DateTime.now().minus({ days: 30 }).toISO() ?? '';
-            const tables = ['historical_delays', 'engagement_analytics', 'kalman_state'];
-            const timeColumn = (table: string) => table === 'kalman_state' ? 'last_updated' : 'timestamp';
+            const tables = ['engagement_analytics'];
             
             let totalCleaned = 0;
             
             for (const table of tables) {
-                const sql = `DELETE FROM ${table} WHERE ${timeColumn(table)} < ?`;
-                const result = await new Promise<number>((resolve) => {
-                    this.appDataDb!.run(sql, [thirtyDaysAgo], function(err) {
-                        if (err) {
-                            logger.error(`Failed to clean up old data from ${table}`, { err });
-                            resolve(0);
-                        } else {
-                            const changes = this.changes;
-                            if (changes > 0) {
-                                logger.info(`Cleaned up ${changes} old records from ${table}.`);
-                            }
-                            resolve(changes);
-                        }
-                    });
-                });
-                totalCleaned += result;
+                const sql = `DELETE FROM ${table} WHERE timestamp < ?`;
+                try {
+                    const changes = this.appDataDb.prepare(sql).run(thirtyDaysAgo).changes;
+                    if (changes > 0) logger.info(`Cleaned up ${changes} old records from ${table}.`);
+                    totalCleaned += changes;
+                } catch (err: any) {
+                    logger.error(`Failed to clean up old data from ${table}`, { err });
+                }
             }
             
             timer.complete({
@@ -1060,18 +547,14 @@ export class DatabaseManager {
             this.appState.dbIsReloading = true;
             
             // Only close and reconnect the timetable database - app data stays connected
-            if (this.timetableDb && (this.timetableDb as any).open) {
+            if (this.timetableDb?.open) {
                 logger.info('Closing timetable database for reload...');
-                await new Promise<void>((resolve) => {
-                    this.timetableDb!.close((err) => {
-                        if (err) logger.error('Error closing timetable database', { err });
-                        resolve();
-                    });
-                });
+                try { this.timetableDb.close(); } catch (err) { logger.error('Error closing timetable database', { err }); }
             }
             
             await this.connectTimetableDb();
             await this.loadTerminusStops();
+            await this.loadStopNames();
             
             logger.info('Timetable data reloaded successfully. App data connection preserved.');
             
@@ -1091,15 +574,15 @@ export class DatabaseManager {
     /**
      * Get database health status
      */
-    getDatabaseHealth(): any {
+    getDatabaseHealth(): DatabaseHealth {
         return {
             timetable: {
-                connected: !!this.timetableDb && (this.timetableDb as any).open,
+                connected: Boolean(this.timetableDb?.open),
                 path: this.databaseConfig.timetablePath,
                 readonly: true
             },
             appData: {
-                connected: !!this.appDataDb && (this.appDataDb as any).open,
+                connected: Boolean(this.appDataDb?.open),
                 path: this.databaseConfig.appDataPath,
                 readonly: false
             },
@@ -1117,41 +600,25 @@ export class DatabaseManager {
         try {
             logger.info('Closing database connections...');
             
-            const promises: Promise<void>[] = [];
-            
-            // Close timetable database
-            if (this.timetableDb && (this.timetableDb as any).open) {
-                logger.info('Closing timetable database connection...');
-                promises.push(new Promise<void>((resolve) => {
-                    this.timetableDb!.close((err) => {
-                        if (err) logger.error('Error closing timetable database', { err });
-                        else logger.info('Timetable database connection closed.');
-                        resolve();
-                    });
-                }));
+            let closed = 0;
+            for (const [name, db] of [['timetable', this.timetableDb], ['app data', this.appDataDb]] as const) {
+                if (!db?.open) continue;
+                try {
+                    db.close();
+                    closed += 1;
+                    logger.info(`${name} database connection closed.`);
+                } catch (err) {
+                    logger.error(`Error closing ${name} database`, { err });
+                }
             }
-            
-            // Close app data database
-            if (this.appDataDb && (this.appDataDb as any).open) {
-                logger.info('Closing app data database connection...');
-                promises.push(new Promise<void>((resolve) => {
-                    this.appDataDb!.close((err) => {
-                        if (err) logger.error('Error closing app data database', { err });
-                        else logger.info('App data database connection closed.');
-                        resolve();
-                    });
-                }));
-            }
-            
-            await Promise.all(promises);
-            
+
             this.timetableDb = null;
             this.appDataDb = null;
             
             logger.info('All database connections closed.');
             
             timer.complete({
-                connectionsClosed: promises.length
+                connectionsClosed: closed
             });
             
         } catch (error: any) {
@@ -1164,7 +631,7 @@ export class DatabaseManager {
     /**
      * Get service status
      */
-    getStatus(): any {
+    getStatus(): { name: string; status: string; health: DatabaseHealth; config: Record<string, unknown> } {
         return {
             name: 'Database Manager',
             status: 'running',

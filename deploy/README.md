@@ -42,6 +42,38 @@ render private values only into temporary upload payloads.
 `--refresh-timetable --no-download` reuses the existing local GTFS input.
 `--all` deliberately does not rebuild or replace the timetable.
 
+## Python locks
+
+The collector, site and pipeline venvs on the Pi install only what their
+committed lock names: `collector/requirements.lock`, `site/requirements.lock`
+(the site plus its collector snapshot and gunicorn) and
+`pipeline/requirements.lock`. Each lock pins every library, including
+dependencies of dependencies and the `setuptools` used to install the local
+packages, with SHA-256 hashes. The Pi installs with
+`pip install --require-hashes --no-deps -r requirements.lock`, then the local
+packages with `--no-deps --no-build-isolation`, so a deploy downloads nothing
+outside the lock. Because each release has its own venv, a rollback restores
+the exact libraries as well as the code.
+
+Each release also gets a `runtime.json` beside `release.json`, recording the
+Pi's Python version, its SQLite version, the machine and the installed
+packages. The venv is built from the system `python3`, which apt updates, so
+this shows whether a change came from an OS upgrade or from a library.
+
+The locks are resolved for the Pi (Linux ARM64, Python 3.13), not for the
+machine that runs the command. After changing a dependency in a
+`pyproject.toml` or `pipeline/requirements-runtime.txt`, regenerate from the
+repository root with the command in the lock's own header, for example:
+
+```powershell
+.venv\Scripts\python.exe -m uv pip compile site/pyproject.toml collector/pyproject.toml deploy/python-build-tools.in --python-version 3.13 --python-platform aarch64-manylinux_2_28 --generate-hashes -o site/requirements.lock
+```
+
+Keep the header: Dependabot regenerates the locks from it. A deploy test fails
+if a declared dependency is missing from its lock. If the Pi's Python moves to
+a new minor version, update `--python-version` in all three headers and
+regenerate.
+
 ## What a code deployment does
 
 1. Runs that component's local tests and build, then the repository secret and
@@ -409,3 +441,22 @@ unreadable is an error. The token expiry is read first from
 `/etc/bristolbusbot/timetable-delivery.env`, which the configuration helper now
 writes readable (it holds only the date; the token itself stays root-only), so
 a renewal clears the warning at the next health pass.
+
+## Bus-description model
+
+The nightly bus-description jobs read their Gemini model from
+`/etc/bristolbusbot/blurb.env` (`BLURB_GEMINI_MODEL`). `--install-layout`
+creates that file once from `bot.env` and then preserves it, so after changing
+`AI_MODEL` in `bot.env`, copy the new model across with:
+
+```sh
+sudo /usr/local/sbin/bbb-configure-blurb-generation --owner <deploy user> --sync-model
+```
+
+It rewrites only the model line, atomically, keeping the file's owner and
+mode. Defaults are always a named model (never a `-latest` alias); a deploy
+test keeps the description jobs' default equal to the bot's. Named Gemini
+versions are retired on Google's published schedule: when moving the bot's
+default, move these with it. A failing description run, including "model not
+found", appears in aggregate health and the twice-daily digest as
+`job:blurb-generation`.

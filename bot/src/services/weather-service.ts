@@ -1,5 +1,6 @@
 // Bristol Bus Bot - Weather Service
 
+import type { AppConfig } from '../types/bus-types.js';
 import { httpFetch } from '../utils/http-client.js';
 import { logger } from '../utils/logging.js';
 import { DateTime } from 'luxon';
@@ -52,13 +53,13 @@ interface AirQualityResponse {
 }
 
 export class WeatherService {
-    private weatherConfig: any;
+    private weatherConfig: AppConfig['weather'];
     private weatherCache = new Map<string, { fetched: number; observed: number; text: string }>();
     private lastAirQualityFetch: number = 0;
     private cachedAirQuality: string | null = null;
     private cacheDuration: number = 10 * 60 * 1000; // 10 minutes
 
-    constructor(weatherConfig: any, private readonly fetcher: typeof httpFetch = httpFetch) {
+    constructor(weatherConfig: AppConfig['weather'], private readonly fetcher: typeof httpFetch = httpFetch) {
         this.weatherConfig = weatherConfig;
         logger.info('Weather Service initialized', {
             hasApiKey: !!weatherConfig.apiKey,
