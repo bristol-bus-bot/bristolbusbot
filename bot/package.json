@@ -5,11 +5,12 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "prebuild": "npm run clean",
     "build": "tsc",
     "start": "node dist/index.js",
     "start:summary": "node dist/index.js --summary",
     "dev": "tsc --watch & node --watch dist/index.js",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "test-mode": "cross-env TEST_MODE=true NODE_ENV=test npm start",
     "test-summary": "cross-env TEST_MODE=true NODE_ENV=test npm run start:summary",
     "windows-test": "cross-env TEST_MODE=true NODE_ENV=test PORT=3001 npm run build && npm start",
