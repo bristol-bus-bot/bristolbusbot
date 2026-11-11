@@ -350,13 +350,9 @@ An optional `review_due` date suppresses the item after that local calendar day,
 without suppressing ordinary posts. Deploy the compatible bot and validator
 before merging context that depends on new constraints.
 
-The existing six-hour news proposal job reads the West of England authority's
-news RSS feed, First Bus's press feed and GOV.UK transport announcements. Local
-stories are preferred; unrelated regional PR is filtered out. It makes no AI
-calls and never approves or publishes its own proposals. Review the full source,
-claim, scope and effective dates in each approval PR. Discovery timestamps alone
-are not evidence of editorial verification. A failed source leaves the other
-sources usable; failure of every source fails the discovery job.
+News items are written by hand in a PR to `bot/data/editorial-context.json`;
+there is no automatic news discovery (the proposal workflow was removed in Nov
+2026). Review the source, claim, scope and effective dates in each PR.
 
 Deploy the compatible bot before installing this layout for the first time:
 
