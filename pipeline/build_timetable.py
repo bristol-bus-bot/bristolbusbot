@@ -10,10 +10,12 @@ import tempfile
 import logging
 import subprocess
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, timezone
 
 from timetable_editions import normalize_database as normalize_route_editions
 from timetable_calendar_evidence import reconcile_database as reconcile_calendar_sources
+from source_corrections import apply_corrections as apply_source_corrections
+from source_corrections import load_corrections as load_source_corrections
 from timetable_duplicate_evidence import reconcile_database as reconcile_duplicate_sources
 from timetable_journey_dedupe import collapse_same_day_copies
 from timetable_evidence_storage import compact_evidence
@@ -277,6 +279,24 @@ def main():
     except Exception:
         logger.exception("First source index failed - refusing the candidate")
         return 2
+
+    # Reviewed, dated corrections for known BODS GTFS faults (source_corrections.json).
+    # An expired entry refuses the build so it cannot outlive the fault.
+    try:
+        corrections = load_source_corrections(datetime.now(timezone.utc).date())
+        correction_result = {}
+        if corrections:
+            connection = sqlite3.connect(WECA_DB)
+            try:
+                with connection:
+                    correction_result = apply_source_corrections(connection, corrections)
+            finally:
+                connection.close()
+    except Exception:
+        logger.exception("Source date corrections failed - refusing the candidate")
+        return 2
+    if corrections:
+        logger.info("Source date corrections (calendars restored per date): %s", correction_result)
 
     logger.info("Checking removal exceptions against exact First source journeys...")
     try:
