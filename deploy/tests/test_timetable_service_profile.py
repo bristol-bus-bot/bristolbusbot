@@ -591,3 +591,43 @@ def test_vanished_operator_is_reported_without_blocking_everyone_else(tmp_path):
     assert missing == [{"code": "operator_missing", "operator": "SDVN",
                         "current": 28, "candidate": 0, "metric": "trips",
                         "routes": ["SDVN-1"]}]
+
+
+def _yyyymmdd(day):
+    return day.strftime("%Y%m%d")
+
+
+def test_route_continuing_past_where_the_live_timetable_ends_it_is_not_inflation(tmp_path):
+    """FSRV route 273, Nov 2026: the live timetable stops it mid-month and the
+    new data carries it on. On those days only route 231 is compared."""
+    from datetime import timedelta
+    live = [{"operator": "FSRV", "route": "231", "trips": 20},
+            {"operator": "FSRV", "route": "273", "trips": 20,
+             "end": _yyyymmdd(START + timedelta(days=3))}]
+    candidate = [{"operator": "FSRV", "route": "231", "trips": 20},
+                 {"operator": "FSRV", "route": "273", "trips": 20}]
+    result = compare(tmp_path, live, candidate)
+    assert result["status"] == "pass"
+    assert all(gate["passed"] for gate in result["inflation"])
+
+
+def test_a_genuinely_doubled_route_still_fails_like_for_like(tmp_path):
+    live = [{"operator": "FSRV", "route": "231", "trips": 20},
+            {"operator": "FSRV", "route": "273", "trips": 20}]
+    candidate = live + [{"operator": "FSRV", "route": "231", "trips": 20,
+                         "service_id": "stale-copy"}]
+    with pytest.raises(ServiceProfileError) as error:
+        compare(tmp_path, live, candidate)
+    assert error.value.code == "candidate_service_inflation"
+    assert error.value.context["operator"] == "FSRV"
+
+
+def test_a_doubled_route_on_a_day_with_a_new_route_still_fails(tmp_path):
+    """Before v6 a new route excused the whole day and hid the duplication."""
+    live = [{"operator": "FBRI", "route": "D1x", "trips": 20}]
+    candidate = live + [{"operator": "FBRI", "route": "D1x", "trips": 20,
+                         "service_id": "stale-copy"},
+                        {"operator": "FBRI", "route": "NEW1", "trips": 20}]
+    with pytest.raises(ServiceProfileError) as error:
+        compare(tmp_path, live, candidate)
+    assert error.value.code == "candidate_service_inflation"

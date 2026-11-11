@@ -42,7 +42,7 @@ MAX_SERVICE_SUMMARY_BYTES = 32 * 1024 * 1024
 class AcceptancePolicy:
     """All acceptance thresholds live in one recorded policy."""
 
-    version: str = "service-window-v5"
+    version: str = "service-window-v6"  # v6: like-for-like inflation check
     near_term_days: int = 28
     minimum_forward_days: int = 180
     maximum_forward_days: int = 400
@@ -570,6 +570,8 @@ def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
         active = _active_services(service_day, calendars, exceptions)
         trips = stop_times = 0
         routes: set[tuple[str, str]] = set()
+        # Per-route trips for the near-term days, for like-for-like comparisons.
+        route_trips: dict[tuple[str, str], int] = defaultdict(int)
         day_operators: dict[str, dict[str, int]] = defaultdict(
             lambda: {"trips": 0, "stop_times": 0})
         # The same public journey can be listed under several calendars that
@@ -591,6 +593,7 @@ def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
                     target["trips"] += volume.trips
                     target["stop_times"] += volume.stop_times
                 if offset < policy.near_term_days:
+                    route_trips[(volume.operator, volume.route)] += volume.trips
                     for target in (
                         operator_totals[volume.operator],
                         route_totals[(volume.operator, volume.route)],
@@ -604,6 +607,7 @@ def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
             "trips": trips,
             "stop_times": stop_times,
             "routes": routes,
+            "route_trips": dict(route_trips),
             "operators": dict(day_operators),
             "duplicates": dict(day_duplicates),
             "active_service_ids": len(active),
@@ -861,28 +865,35 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         failures.insert(0, dict(worst, date=worst["examples"][0]["date"],
                                 candidate=worst["examples"][0]["candidate"]))
 
-    # Inflation: operators present in both profiles whose near-term daily trips
-    # exceed the live timetable by more than the ratio on several days. Days on
-    # which the candidate adds routes the live timetable lacks are not counted.
-    live_routes_by_operator = defaultdict(set)
-    for operator, route in live_routes:
-        live_routes_by_operator[operator].add(route)
+    # Inflation, like for like: for each operator and near-term day, compare
+    # only the routes that both timetables run that day. A route the live
+    # timetable does not run that day (a new route, or one the live timetable
+    # has already ended) is left out of that day's comparison rather than
+    # excusing the whole day, so a doubled route is still caught on a day
+    # when a new route also appears.
     inflation = []
     for operator in sorted(current.operator_totals):
         if int(current.operator_totals[operator]["stop_times"]) < substantial_minimum:
             continue
         days = []
         for offset in range(policy.near_term_days):
-            live_trips = int(current.daily[offset]["operators"].get(operator, {}).get("trips", 0))
-            new_trips = int(candidate.daily[offset]["operators"].get(operator, {}).get("trips", 0))
-            new_routes = {route for op, route in candidate.daily[offset]["routes"]
-                          if op == operator} - live_routes_by_operator[operator]
-            if live_trips and not new_routes and new_trips > live_trips * policy.inflation_ratio:
+            live_routes_today = {route: trips for (op, route), trips
+                                 in current.daily[offset].get("route_trips", {}).items()
+                                 if op == operator}
+            new_routes_today = {route: trips for (op, route), trips
+                                in candidate.daily[offset].get("route_trips", {}).items()
+                                if op == operator}
+            shared = sorted(set(live_routes_today) & set(new_routes_today))
+            live_trips = sum(live_routes_today[route] for route in shared)
+            new_trips = sum(new_routes_today[route] for route in shared)
+            if live_trips and new_trips > live_trips * policy.inflation_ratio:
                 days.append({"date": current.daily[offset]["date"],
-                             "current": live_trips, "candidate": new_trips})
+                             "current": live_trips, "candidate": new_trips,
+                             "routes": shared[:10]})
         gate = {"kind": "operator_inflation", "operator": operator,
                 "metric": "trips", "days": len(days),
                 "ratio_limit": policy.inflation_ratio, "examples": days[:5],
+                "comparison": "routes both timetables run that day",
                 "passed": len(days) < policy.inflation_days}
         inflation.append(gate)
         if not gate["passed"] and len(failures) < MAX_RECORDED_FAILURES:
