@@ -10,6 +10,15 @@ This module preserves every edition, but gives replacement-like editions
 non-overlapping effective windows.  Small or differently scheduled cohorts
 are retained in parallel because they may be genuine school, event, or
 day-specific additions.
+
+First publishes its timetables as a series of editions, each in force until
+the next one starts (for example a Christmas-week edition from 20 Dec 2026
+with no Friday service, then a new regular edition from 27 Dec). The BODS
+GTFS gives such short editions end dates months away, and their days of the
+week can differ from the editions around them. For a route whose operator's
+own TransXChange shows a new edition starting on the same day as a later GTFS
+edition, that later edition replaces the earlier one from its start, whatever
+its day pattern (``successor_starts``).
 """
 from __future__ import annotations
 
@@ -108,7 +117,18 @@ def _replacement_like(older: Edition, newer: Edition) -> bool:
     return MIN_REPLACEMENT_RATIO <= ratio <= MAX_REPLACEMENT_RATIO
 
 
-def _resolve(editions: list[Edition]) -> None:
+def _source_successor(older: Edition, newer: Edition,
+                      successor_starts: dict[str, set[str]]) -> bool:
+    """The operator's own edition series says ``newer`` replaces ``older``."""
+    return (newer.start in successor_starts.get(older.route_id, ())
+            and older.route_id == newer.route_id
+            and newer.start > older.start
+            and older.source_end >= newer.start)
+
+
+def _resolve(editions: list[Edition],
+             successor_starts: dict[str, set[str]] | None = None) -> None:
+    successor_starts = successor_starts or {}
     by_route: dict[str, list[Edition]] = {}
     for edition in editions:
         by_route.setdefault(edition.route_id, []).append(edition)
@@ -116,7 +136,8 @@ def _resolve(editions: list[Edition]) -> None:
         for index, older in enumerate(route_editions[:-1]):
             replacement = next(
                 (newer for newer in route_editions[index + 1:]
-                 if _replacement_like(older, newer)),
+                 if _replacement_like(older, newer)
+                 or _source_successor(older, newer, successor_starts)),
                 None,
             )
             if replacement is None:
@@ -185,8 +206,13 @@ def _apply_cutoff(connection: sqlite3.Connection, edition: Edition) -> int:
     return changed
 
 
-def normalize_database(path: Path) -> dict[str, int]:
-    """Apply route-edition windows transactionally to a disposable database."""
+def normalize_database(path: Path,
+                       successor_starts: dict[str, set[str]] | None = None) -> dict[str, int]:
+    """Apply route-edition windows transactionally to a disposable database.
+
+    ``successor_starts`` maps a GTFS route_id to the YYYYMMDD dates on which
+    the operator's own TransXChange starts a new edition of that line.
+    """
     connection = sqlite3.connect(path)
     try:
         if TABLE in _tables(connection):
@@ -196,7 +222,7 @@ def normalize_database(path: Path) -> dict[str, int]:
         editions = _editions(connection)
         if not editions:
             raise RuntimeError("timetable contains no calendar-backed route editions")
-        _resolve(editions)
+        _resolve(editions, successor_starts)
         connection.execute("BEGIN IMMEDIATE")
         _create_table(connection)
         trips_rewindowed = sum(
