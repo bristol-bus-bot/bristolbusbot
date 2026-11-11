@@ -110,7 +110,7 @@ def configure_shadow_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(
         builder, "TIMETABLE_DB", tmp_path / "output" / "timetable.db")
     monkeypatch.setattr(builder, "BUSBOT_DB", tmp_path / "missing-fallback.db")
-    monkeypatch.setattr(builder, "normalize_route_editions", lambda _path: {
+    monkeypatch.setattr(builder, "normalize_route_editions", lambda _path, successor_starts=None: {
         "route_editions": 1,
         "superseded_route_editions": 0,
         "trips_rewindowed": 0,
