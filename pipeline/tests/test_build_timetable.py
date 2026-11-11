@@ -103,6 +103,8 @@ def configure_shadow_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(builder, "TMP", scratch)
     monkeypatch.setattr(builder, "GTFS_DIR", gtfs)
     monkeypatch.setattr(builder, "WECA_DB", scratch / "weca.db")
+    # The fixture database is a placeholder; the corrections step has its own tests.
+    monkeypatch.setattr(builder, "load_source_corrections", lambda _today: [])
     monkeypatch.setattr(
         builder, "SOURCE_STATUS", scratch / "source-status.json")
     monkeypatch.setattr(

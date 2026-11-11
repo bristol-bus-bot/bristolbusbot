@@ -26,6 +26,16 @@ From the repository root:
 python -m pytest pipeline\tests -q
 ```
 
+**Known BODS faults** are corrected only through `pipeline/source_corrections.json`:
+one reviewed entry per service date, with the reason, an external reference, who
+approved it and an `expires` date. For that date only, a "not running" exception
+is removed from a calendar that runs normally on the same weekday a week before
+and a week after (the pattern of a wrongly added bank holiday). Each removal is
+recorded in the candidate's `source_date_corrections` table. Every safety check
+still runs. After `expires` the build refuses to start until the entry is
+deleted, so a correction cannot outlive its fault. The first entry is 1 December
+2026 (BODS BSD-1342, planning #128).
+
 Normal production refreshes use the fixed `timetable-build` workflow and the
 Pi's daily shadow-delivery timer. A successful candidate is independently
 revalidated, copied to fixed staging, atomically promoted, and checked by the
