@@ -149,3 +149,58 @@ def test_validator_rejects_tampered_edition_record(tmp_path):
     with pytest.raises(RuntimeError, match="differs from timetable"):
         validate_database(check, require_table=True)
     check.close()
+
+
+def _christmas_series(path):
+    """Route A1's editions in the 11 Nov 2026 build (planning ticket 126)."""
+    connection = database(path)
+    calendar(connection, "NOV", "20261111", "20270811")
+    calendar(connection, "XMAS", "20261220", "20270920", days=(1, 1, 1, 1, 0, 1, 1))  # no Friday: Christmas Day
+    calendar(connection, "NEW", "20261227", "20270927")
+    for index in range(9):
+        trip(connection, f"NOV_{index}", "R1", "NOV")
+        trip(connection, f"XMAS_{index}", "R1", "XMAS")
+        trip(connection, f"NEW_{index}", "R1", "NEW")
+    connection.commit()
+    connection.close()
+
+
+def _active(path, day, weekday):
+    check = sqlite3.connect(path)
+    rows = check.execute(f"""
+        SELECT DISTINCT substr(t.trip_id, 1, instr(t.trip_id, '_') - 1)
+          FROM trips t JOIN calendar c USING(service_id)
+         WHERE c.{weekday}=1 AND ? BETWEEN c.start_date AND c.end_date""", (day,)).fetchall()
+    check.close()
+    return sorted(row[0] for row in rows)
+
+
+def test_without_source_editions_a_differently_scheduled_edition_runs_in_parallel(tmp_path):
+    """The old behaviour that doubled First's service on 21-22 Dec 2026."""
+    path = tmp_path / "timetable.db"
+    _christmas_series(path)
+    normalize_database(path)
+    assert _active(path, "20261221", "monday") == ["NOV", "XMAS"]
+
+
+def test_first_edition_series_replaces_editions_whatever_their_days(tmp_path):
+    path = tmp_path / "timetable.db"
+    _christmas_series(path)
+    result = normalize_database(path, successor_starts={"R1": {"20261220", "20261227"}})
+    assert result["superseded_route_editions"] == 2
+    assert _active(path, "20261214", "monday") == ["NOV"]
+    assert _active(path, "20261221", "monday") == ["XMAS"]      # Christmas week only
+    assert _active(path, "20261225", "friday") == []            # Christmas Day
+    assert _active(path, "20261228", "monday") == ["NEW"]       # not doubled into 2027
+    check = sqlite3.connect(path)
+    assert validate_database(check, require_table=True)["superseded_route_editions"] == 2
+    check.close()
+
+
+def test_a_source_edition_date_with_no_gtfs_edition_cuts_nothing(tmp_path):
+    """Never end an edition where the GTFS has nothing to replace it."""
+    path = tmp_path / "timetable.db"
+    _christmas_series(path)
+    result = normalize_database(path, successor_starts={"R1": {"20261122"}})
+    assert result["superseded_route_editions"] == 1             # only the same-days rule (NOV -> NEW)
+    assert _active(path, "20261123", "monday") == ["NOV"]

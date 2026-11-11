@@ -161,6 +161,28 @@ def diagnose_missing(gtfs_dir, missing):
         logger.info(f"    {m}: {', '.join(ops) if ops else 'NOT PRESENT under any operator'}")
 
 
+def first_edition_starts(database: Path, source_index) -> dict[str, set[str]]:
+    """First GTFS route_id -> dates on which First's TransXChange starts an edition.
+
+    Matched by line name. An edition date only counts where the GTFS also has
+    an edition of that route starting that day (checked by the resolver), so
+    an older edition is never cut where there is nothing to replace it.
+    """
+    if source_index is None or not getattr(source_index, "editions", None):
+        return {}
+    starts_by_line: dict[str, set[str]] = {}
+    for (_service_code, line_name), starts in source_index.editions.items():
+        starts_by_line.setdefault(str(line_name), set()).update(
+            start.strftime("%Y%m%d") for start in starts)
+    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as connection:
+        routes = connection.execute("""
+            SELECT r.route_id, r.route_short_name
+              FROM routes r JOIN agency a USING(agency_id)
+             WHERE a.agency_noc = 'FBRI'""").fetchall()
+    return {str(route_id): starts_by_line[str(line)]
+            for route_id, line in routes if str(line) in starts_by_line}
+
+
 def main():
     args = sys.argv[1:]
     no_download = "--no-download" in args
@@ -289,7 +311,8 @@ def main():
     # make replacement-like editions effective one at a time.
     logger.info("Resolving overlapping timetable editions...")
     try:
-        edition_result = normalize_route_editions(WECA_DB)
+        edition_result = normalize_route_editions(
+            WECA_DB, successor_starts=first_edition_starts(WECA_DB, source_index))
     except (OSError, sqlite3.Error, RuntimeError) as exc:
         logger.error(
             "Route-edition normalization failed - refusing the candidate: %s",
