@@ -1323,3 +1323,32 @@ def test_writer_check_alerts_only_on_a_run_of_writer_fallbacks(tmp_path, monkeyp
     report.unlink()
     assert aggregate_health.writer_check() == (
         {"status": "unavailable", "error": "FileNotFoundError"}, [])
+
+
+def test_an_expired_source_correction_raises_a_needs_you_alert(tmp_path):
+    """The 1 Dec 2026 correction (#128) blocks every build after it expires."""
+    import json as _json
+    from datetime import date as _date
+    path = tmp_path / "source_corrections.json"
+    path.write_text(_json.dumps([{
+        "date": "2026-12-01", "reference": "BODS BSD-1342; planning #128",
+        "expires": "2026-12-02"}]), encoding="utf-8")
+
+    assert aggregate_health.expired_source_corrections(_date(2026, 12, 2), path) == []
+    expired = aggregate_health.expired_source_corrections(_date(2026, 12, 3), path)
+    assert [entry["date"] for entry in expired] == ["2026-12-01"]
+
+    message = aggregate_health.source_correction_expired_message(expired)
+    assert "pipeline/source_corrections.json" in message
+    assert "2026-12-01" in message and "BSD-1342" in message and "expired 2026-12-02" in message
+    assert aggregate_health.needs_tom(message)          # buzzes the phone
+    assert aggregate_health.plain_issue_area("timetable:source-correction-expired") \
+        .startswith("an expired timetable correction")
+
+
+def test_a_missing_or_unreadable_corrections_file_raises_nothing(tmp_path):
+    from datetime import date as _date
+    assert aggregate_health.expired_source_corrections(_date(2027, 1, 1), tmp_path / "absent.json") == []
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert aggregate_health.expired_source_corrections(_date(2027, 1, 1), bad) == []

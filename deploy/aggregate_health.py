@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -59,6 +59,9 @@ WEBHOOK = REMOTE_HOME / ".config/busbot-alerts/webhook"
 # Anyone who knows a topic can read it, so the phone only ever gets the state
 # ("needs your attention"); the details stay in Slack.
 PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
+# Reviewed, dated corrections for known BODS faults, as shipped in the current
+# pipeline release (pipeline/source_corrections.json in the repository).
+SOURCE_CORRECTIONS = REMOTE_HOME / "bristolbusbot/current/pipeline/source_corrections.json"
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1634,6 +1637,7 @@ def plain_issue_area(issue: str) -> str:
         "timetable:operator-missing": "an operator missing from the live timetable",
         "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
         "credential:timetable-token-expiry": "the GitHub timetable token (expiring within a week, or missing)",
+        "timetable:source-correction-expired": "an expired timetable correction (it blocks every build)",
     }
     if issue in exact:
         return exact[issue]
@@ -1657,6 +1661,39 @@ def health_status(issues: list[str]) -> str:
     if any(issue not in WARNING_ISSUES for issue in issues):
         return "error"
     return "warning" if issues else "ok"
+
+
+def expired_source_corrections(today: date | None = None,
+                               path: Path | None = None) -> list[dict]:
+    """Entries past their expiry date. The timetable build refuses to start
+    while any remain, so no new timetable can arrive until they are deleted."""
+    today = today or datetime.now(BRISTOL_TZ).date()
+    try:
+        entries = json.loads((path or SOURCE_CORRECTIONS).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    expired = []
+    for entry in entries if isinstance(entries, list) else []:
+        try:
+            if today > date.fromisoformat(str(entry.get("expires"))):
+                expired.append(entry)
+        except (AttributeError, ValueError):
+            continue
+    return expired
+
+
+def source_correction_expired_message(entries: list[dict]) -> str:
+    names = "; ".join(
+        f"{entry.get('date', '?')} ({entry.get('reference', 'no reference')}, "
+        f"expired {entry.get('expires', '?')})" for entry in entries)
+    return "\n".join((
+        ":rotating_light: *A timetable correction has expired*",
+        f"What happened: pipeline/source_corrections.json still holds the entry for "
+        f"{names}. Timetable builds refuse to start until it is deleted, so no new "
+        "timetable can arrive. The current timetable stays live.",
+        "*You need to do:* Delete that entry from pipeline/source_corrections.json "
+        "(or ask Claude to), merge it, then deploy the pipeline component.",
+    ))
 
 
 def general_incident_message(issues: list[str]) -> str:
@@ -1699,6 +1736,9 @@ def main() -> int:
     issues.extend(found)
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
+    expired_corrections = expired_source_corrections()
+    if expired_corrections:
+        issues.append("timetable:source-correction-expired")
     social_deliveries, found = social_curation_check()
     issues.extend(found)
     data_health, found = data_health_check()
@@ -1916,6 +1956,9 @@ def main() -> int:
     if "job:fleet-automation" in remaining_opened:
         notify(fleet_failure_message(fleet_automation))
         remaining_opened.remove("job:fleet-automation")
+    if "timetable:source-correction-expired" in remaining_opened:
+        notify(source_correction_expired_message(expired_corrections))
+        remaining_opened.remove("timetable:source-correction-expired")
     if remaining_opened:
         notify(general_incident_message(remaining_opened))
 
