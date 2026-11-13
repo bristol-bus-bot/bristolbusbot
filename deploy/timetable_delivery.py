@@ -58,8 +58,8 @@ ALLOWED_FILES = {
 }
 SHADOW_ROOT = Path("/var/lib/bristolbusbot/timetable-shadow")
 LIVE_DATABASE = Path("/var/lib/bristolbusbot/pipeline/timetable.db")
-MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
-MAX_DATABASE_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 192 * 1024 * 1024
+MAX_DATABASE_BYTES = 768 * 1024 * 1024  # 546-550 MB by 13 Nov 2026: see planning ticket on timetable growth
 MAX_TOTAL_BYTES = MAX_DATABASE_BYTES + MAX_SERVICE_SUMMARY_BYTES + 2 * 1024 * 1024
 # The live timetable's summary, kept beside the promotion state so both the
 # overnight check and the swap can read and write it.
