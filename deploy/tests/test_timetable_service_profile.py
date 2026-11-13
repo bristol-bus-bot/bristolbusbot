@@ -418,7 +418,7 @@ def test_oversized_and_locked_database_fail_with_named_context(
         compare_databases(database, database, start_date=START)
     assert oversized.value.code == "database_too_large"
 
-    monkeypatch.setattr(service_profile, "MAX_DATABASE_BYTES", 512 * 1024 * 1024)
+    monkeypatch.setattr(service_profile, "MAX_DATABASE_BYTES", 768 * 1024 * 1024)
 
     def locked(*_args, **_kwargs):
         raise sqlite3.OperationalError("database is locked")

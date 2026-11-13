@@ -29,7 +29,7 @@ WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday",
     "friday", "saturday", "sunday",
 )
-MAX_DATABASE_BYTES = 512 * 1024 * 1024
+MAX_DATABASE_BYTES = 768 * 1024 * 1024  # matches timetable_delivery
 SQLITE_CACHE_KIB = 8 * 1024
 DEFAULT_DEADLINE_SECONDS = 8 * 60
 MAX_RECORDED_FAILURES = 100
