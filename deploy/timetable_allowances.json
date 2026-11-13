@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "forward_coverage",
+    "from_date": "2026-12-27",
+    "reason": "BODS GTFS gives First's 27 Dec 2026 edition a Tue-Thu main weekday calendar, so January Mondays and Fridays look short",
+    "reference": "planning #126 (January Monday/Friday fault ticket)",
+    "approved_by": "Tom, 13 Nov 2026",
+    "expires": "2026-12-13"
+  }
+]

@@ -919,7 +919,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "install_unified_deploy.sh", "deploy_control.sh", "backup.py",
         "timetable_control.py",
         "timetable_delivery.py", "timetable_promote.py",
-        "timetable_service_profile.py",
+        "timetable_service_profile.py", "timetable_allowances.json",
         "validate_production_config.py", "verify_release.py",
         "verify_collector_state.py", "run_audit_rollup.sh", "publish_to_github.sh",
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",

@@ -387,6 +387,8 @@ install -o root -g root -m 0755 -d /usr/local/libexec/bristolbusbot-timetable
 install -o root -g root -m 0755 "$stage/timetable_delivery.py" /usr/local/libexec/bristolbusbot-timetable/timetable_delivery.py
 install -o root -g root -m 0755 "$stage/timetable_promote.py" /usr/local/libexec/bristolbusbot-timetable/timetable_promote.py
 install -o root -g root -m 0644 "$stage/timetable_service_profile.py" /usr/local/libexec/bristolbusbot-timetable/timetable_service_profile.py
+install -o root -g root -m 0644 "$stage/timetable_allowances.json" /usr/local/libexec/bristolbusbot-timetable/timetable_allowances.json
+/usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$stage/timetable_allowances.json"
 install -o root -g root -m 0644 "$stage/timetable_manifest.py" /usr/local/libexec/bristolbusbot-timetable/timetable_manifest.py
 install -o root -g root -m 0644 "$stage/timetable_editions.py" /usr/local/libexec/bristolbusbot-timetable/timetable_editions.py
 install -o root -g root -m 0644 "$stage/timetable_control.py" /usr/local/libexec/bristolbusbot-timetable/timetable_control.py
