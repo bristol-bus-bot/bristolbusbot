@@ -1352,3 +1352,16 @@ def test_a_missing_or_unreadable_corrections_file_raises_nothing(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     assert aggregate_health.expired_source_corrections(_date(2027, 1, 1), bad) == []
+
+
+def test_an_expired_coverage_allowance_raises_a_needs_you_alert(tmp_path):
+    import json as _json
+    from datetime import date as _date
+    path = tmp_path / "timetable_allowances.json"
+    path.write_text(_json.dumps([{"kind": "forward_coverage", "from_date": "2026-12-27",
+                                  "reference": "planning #129", "expires": "2026-12-13"}]), encoding="utf-8")
+    assert aggregate_health.expired_coverage_allowances(_date(2026, 12, 13), path) == []
+    expired = aggregate_health.expired_coverage_allowances(_date(2026, 12, 14), path)
+    message = aggregate_health.coverage_allowance_expired_message(expired)
+    assert "deploy/timetable_allowances.json" in message and "2026-12-27" in message
+    assert aggregate_health.needs_tom(message)

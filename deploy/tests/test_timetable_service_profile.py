@@ -631,3 +631,50 @@ def test_a_doubled_route_on_a_day_with_a_new_route_still_fails(tmp_path):
     with pytest.raises(ServiceProfileError) as error:
         compare(tmp_path, live, candidate)
     assert error.value.code == "candidate_service_inflation"
+
+
+def _allowance(**overrides):
+    entry = {"kind": "forward_coverage", "from_date": "2026-12-27", "reason": "BODS fault",
+             "reference": "test", "approved_by": "Tom", "expires": "2026-12-13"}
+    entry.update(overrides)
+    return entry
+
+
+def test_forward_coverage_allowance_covers_only_dates_from_its_start(tmp_path):
+    from datetime import timedelta
+    live = [{"operator": "FBRI", "route": "1", "trips": 20}]
+    cliff_day = START + timedelta(days=60)
+    candidate = [{"operator": "FBRI", "route": "1", "trips": 20,
+                  "end": _yyyymmdd(cliff_day - timedelta(days=1))}]
+    active = [_allowance(from_date=cliff_day.isoformat(), expires="2099-01-01")]
+    for item in active:
+        item["from_date"] = date.fromisoformat(item["from_date"])
+    # A failure on the allowed date onwards passes, recorded as a warning.
+    make_service_database(tmp_path / "c.db", live)
+    make_service_database(tmp_path / "n.db", candidate)
+    cur = service_profile.build_service_profile(tmp_path / "c.db", start_date=START)
+    new = service_profile.build_service_profile(tmp_path / "n.db", start_date=START)
+    result = service_profile.compare_service_profiles(cur, new, allowances=active)
+    assert result["status"] == "pass"
+    assert any(w.get("code") == "forward_coverage_allowed" for w in result["warnings"])
+    # The same failure starting one day before the allowance still fails.
+    early = [dict(active[0], from_date=cliff_day + timedelta(days=1))]
+    with pytest.raises(ServiceProfileError) as error:
+        service_profile.compare_service_profiles(cur, new, allowances=early)
+    assert error.value.code == "candidate_future_coverage_cliff"
+
+
+def test_allowance_file_entries_expire(tmp_path):
+    import json as _json
+    path = tmp_path / "a.json"
+    path.write_text(_json.dumps([_allowance()]), encoding="utf-8")
+    assert len(service_profile.forward_coverage_allowances(date(2026, 12, 13), path)) == 1
+    assert service_profile.forward_coverage_allowances(date(2026, 12, 14), path) == []
+    path.write_text(_json.dumps([_allowance(approved_by="")]), encoding="utf-8")
+    assert service_profile.forward_coverage_allowances(date(2026, 12, 1), path) == []
+
+
+def test_committed_allowance_is_the_approved_27_december_one():
+    entries = service_profile.forward_coverage_allowances(date(2026, 11, 13))
+    assert [(e["from_date"].isoformat(), e["expires"], e["approved_by"]) for e in entries] == [
+        ("2026-12-27", "2026-12-13", "Tom, 13 Nov 2026")]

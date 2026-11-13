@@ -62,6 +62,7 @@ PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
 # Reviewed, dated corrections for known BODS faults, as shipped in the current
 # pipeline release (pipeline/source_corrections.json in the repository).
 SOURCE_CORRECTIONS = REMOTE_HOME / "bristolbusbot/current/pipeline/source_corrections.json"
+TIMETABLE_ALLOWANCES = Path("/usr/local/libexec/bristolbusbot-timetable/timetable_allowances.json")
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1638,6 +1639,7 @@ def plain_issue_area(issue: str) -> str:
         "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
         "credential:timetable-token-expiry": "the GitHub timetable token (expiring within a week, or missing)",
         "timetable:source-correction-expired": "an expired timetable correction (it blocks every build)",
+        "timetable:coverage-allowance-expired": "an expired timetable allowance",
     }
     if issue in exact:
         return exact[issue]
@@ -1696,6 +1698,28 @@ def source_correction_expired_message(entries: list[dict]) -> str:
     ))
 
 
+def expired_coverage_allowances(today: date | None = None,
+                                path: Path | None = None) -> list[dict]:
+    """Forward-coverage allowances past their expiry. They stop applying, so
+    the Pi's check rejects again whatever they covered."""
+    return expired_source_corrections(today, path or TIMETABLE_ALLOWANCES)
+
+
+def coverage_allowance_expired_message(entries: list[dict]) -> str:
+    names = "; ".join(
+        f"dates from {entry.get('from_date', '?')} ({entry.get('reference', 'no reference')}, "
+        f"expired {entry.get('expires', '?')})" for entry in entries)
+    return "\n".join((
+        ":rotating_light: *A timetable allowance has expired*",
+        f"What happened: deploy/timetable_allowances.json still holds the allowance for "
+        f"{names}. It no longer applies, so the Pi will reject new timetables again "
+        "if the fault it covered is still in the data. The current timetable stays live.",
+        "*You need to do:* Check whether the source fault is fixed, then delete the entry "
+        "from deploy/timetable_allowances.json or renew it (or ask Claude to), merge it and "
+        "run the layout install.",
+    ))
+
+
 def general_incident_message(issues: list[str]) -> str:
     areas = sorted({plain_issue_area(issue) for issue in issues})
     return "\n".join((
@@ -1739,6 +1763,9 @@ def main() -> int:
     expired_corrections = expired_source_corrections()
     if expired_corrections:
         issues.append("timetable:source-correction-expired")
+    expired_allowances = expired_coverage_allowances()
+    if expired_allowances:
+        issues.append("timetable:coverage-allowance-expired")
     social_deliveries, found = social_curation_check()
     issues.extend(found)
     data_health, found = data_health_check()
@@ -1959,6 +1986,9 @@ def main() -> int:
     if "timetable:source-correction-expired" in remaining_opened:
         notify(source_correction_expired_message(expired_corrections))
         remaining_opened.remove("timetable:source-correction-expired")
+    if "timetable:coverage-allowance-expired" in remaining_opened:
+        notify(coverage_allowance_expired_message(expired_allowances))
+        remaining_opened.remove("timetable:coverage-allowance-expired")
     if remaining_opened:
         notify(general_incident_message(remaining_opened))
 

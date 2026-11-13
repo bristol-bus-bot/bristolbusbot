@@ -713,9 +713,39 @@ def _compatible_transfers(current: ServiceProfile, candidate: ServiceProfile,
     return transferred, warnings
 
 
+ALLOWANCES_FILE = Path(__file__).resolve().with_name("timetable_allowances.json")
+
+
+def forward_coverage_allowances(today: date | None = None,
+                                path: Path | None = None) -> list[dict]:
+    """Reviewed, dated allowances for forward-coverage failures (unexpired only).
+
+    Each entry names a known source fault, who approved it and an expiry.
+    It only ever applies to forward-coverage dates on or after its
+    ``from_date``; near-term checks and earlier dates are never relaxed.
+    An expired entry stops applying (aggregate health then alerts)."""
+    today = today or bristol_today()
+    try:
+        entries = json.loads((path or ALLOWANCES_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    active = []
+    for entry in entries if isinstance(entries, list) else []:
+        try:
+            if (entry.get("kind") == "forward_coverage"
+                    and all(entry.get(key) for key in ("reason", "reference", "approved_by"))
+                    and today <= date.fromisoformat(entry["expires"])):
+                active.append(dict(entry, from_date=date.fromisoformat(entry["from_date"])))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    return active
+
+
 def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
                              *, policy: AcceptancePolicy = DEFAULT_POLICY,
-                             provisional_requirements: Iterable[dict] = ()) -> dict[str, object]:
+                             provisional_requirements: Iterable[dict] = (),
+                             allowances: Iterable[dict] | None = None) -> dict[str, object]:
+    allowances = list(forward_coverage_allowances() if allowances is None else allowances)
     if current.start_date != candidate.start_date:
         raise ServiceProfileError(
             "profile_identity_mismatch", "service profiles use different start dates")
@@ -907,6 +937,8 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
         if gate['passed']:
             return
         day = date.fromisoformat(str(gate['date']))
+        allowed = next((entry for entry in allowances
+                        if gate.get('kind') == 'forward_coverage' and day >= entry['from_date']), None)
         if ((day - candidate.start_date).days > policy.provisional_holiday_lead_days
                 and special_service_date(day)):
             warning = dict(gate, code='provisional_holiday_coverage',
@@ -914,6 +946,11 @@ def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
             key = (gate['date'], gate['metric'])
             if int(warning['minimum']) >= int(provisional.get(key, {}).get('minimum', 0)):
                 provisional[key] = warning
+        elif allowed is not None:
+            # A reviewed, dated allowance (timetable_allowances.json); only
+            # dates on or after its from_date, and only until it expires.
+            warnings.append(dict(gate, code='forward_coverage_allowed',
+                                 reference=allowed['reference'], expires=allowed['expires']))
         elif len(failures) < MAX_RECORDED_FAILURES:
             failures.append(gate)
     forward_days = min(len(current.daily), len(candidate.daily))
