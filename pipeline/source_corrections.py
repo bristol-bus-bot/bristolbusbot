@@ -11,9 +11,10 @@ exclusions (school days, works) keep their exception because they are not
 this pattern, or because the calendar does not run on the neighbouring weeks.
 
 Every safety check downstream is unchanged. Each removed exception is
-recorded in ``source_date_corrections``. An entry stops being valid after its
-``expires`` date, and the build then refuses to start until it is deleted, so
-a correction can never quietly outlive the fault.
+recorded in ``source_date_corrections``. After its ``expires`` date an entry is
+skipped and listed in the build log; it never stops the build (planning #138:
+time-limited fixes lapse by themselves). It can do no harm after its date
+anyway, since it only restores calendars that run normally a week either side.
 """
 from __future__ import annotations
 
@@ -32,12 +33,15 @@ class CorrectionError(RuntimeError):
     pass
 
 
-def load_corrections(today: date, path: Path = CORRECTIONS_FILE) -> list[dict]:
+def load_corrections(today: date, path: Path = CORRECTIONS_FILE,
+                     skipped: list[dict] | None = None) -> list[dict]:
+    """Valid, unexpired entries. Expired ones are appended to ``skipped``."""
     if not path.exists():
         return []
     entries = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(entries, list):
         raise CorrectionError(f"{path.name} must be a list of corrections")
+    active = []
     for entry in entries:
         missing = [key for key in REQUIRED if not entry.get(key)]
         if missing:
@@ -47,10 +51,11 @@ def load_corrections(today: date, path: Path = CORRECTIONS_FILE) -> list[dict]:
         if expires < day:
             raise CorrectionError(f"correction for {day} expires before it applies")
         if today > expires:
-            raise CorrectionError(
-                f"correction for {day} ({entry['reference']}) expired on {expires}; "
-                f"delete it from {path.name}")
-    return entries
+            if skipped is not None:
+                skipped.append(entry)
+            continue
+        active.append(entry)
+    return active
 
 
 def apply_corrections(connection: sqlite3.Connection, entries: list[dict]) -> dict[str, int]:

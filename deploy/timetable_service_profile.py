@@ -17,7 +17,7 @@ import math
 import sqlite3
 import time
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
@@ -172,6 +172,8 @@ class ServiceProfile:
     duplicate_trips_removed: int = 0
     journey_identity: str = "database_rows"
     cross_calendar_duplicates: int = 0
+    # Operator -> latest calendar start date used by its trips (an edition).
+    latest_edition_starts: dict[str, date] = field(default_factory=dict)
 
     def summary(self) -> dict[str, object]:
         last_service = next((
@@ -531,6 +533,11 @@ def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
         latest_date = max(
             latest_date,
             end)
+    latest_edition_starts: dict[str, date] = {}
+    for service_id, start, _end, _days in calendars:
+        for volume in volumes.get(service_id, ()):
+            if start > latest_edition_starts.get(volume.operator, date.min):
+                latest_edition_starts[volume.operator] = start
     for row in exception_rows:
         service_day = _parse_service_date(row["date"], "calendar exception")
         service_id = str(row["service_id"] or "")
@@ -631,6 +638,7 @@ def profile_from_tables(tables: Mapping[str, object], *, start_date: date,
         cross_calendar_duplicates=sum(
             sum(day["duplicates"].values())
             for day in daily[:policy.near_term_days]),
+        latest_edition_starts=latest_edition_starts,
     )
 
 
@@ -718,12 +726,14 @@ ALLOWANCES_FILE = Path(__file__).resolve().with_name("timetable_allowances.json"
 
 def forward_coverage_allowances(today: date | None = None,
                                 path: Path | None = None) -> list[dict]:
-    """Reviewed, dated allowances for forward-coverage failures (unexpired only).
+    """Reviewed allowances for forward-coverage failures that are still in force.
 
-    Each entry names a known source fault, who approved it and an expiry.
-    It only ever applies to forward-coverage dates on or after its
-    ``from_date``; near-term checks and earlier dates are never relaxed.
-    An expired entry stops applying (aggregate health then alerts)."""
+    Each entry names a known source fault and who approved it. It only ever
+    applies to forward-coverage dates on or after its ``from_date``; near-term
+    checks and earlier dates are never relaxed. It lapses by itself (#138): at
+    its hard ``expires`` date, and, when it names ``lapses_when_edition_after``
+    for an ``operator``, as soon as the candidate has an edition of that
+    operator starting after that date (checked in compare_service_profiles)."""
     today = today or bristol_today()
     try:
         entries = json.loads((path or ALLOWANCES_FILE).read_text(encoding="utf-8"))
@@ -741,11 +751,23 @@ def forward_coverage_allowances(today: date | None = None,
     return active
 
 
+def allowance_lapsed_by_edition(entry: Mapping, candidate: "ServiceProfile") -> bool:
+    """The fault an allowance covers is gone: the operator has a later edition."""
+    after = entry.get("lapses_when_edition_after")
+    operator = entry.get("operator")
+    if not after or not operator:
+        return False
+    latest = candidate.latest_edition_starts.get(str(operator))
+    return latest is not None and latest > date.fromisoformat(str(after))
+
+
 def compare_service_profiles(current: ServiceProfile, candidate: ServiceProfile,
                              *, policy: AcceptancePolicy = DEFAULT_POLICY,
                              provisional_requirements: Iterable[dict] = (),
                              allowances: Iterable[dict] | None = None) -> dict[str, object]:
-    allowances = list(forward_coverage_allowances() if allowances is None else allowances)
+    allowances = [entry for entry in
+                  (forward_coverage_allowances() if allowances is None else allowances)
+                  if not allowance_lapsed_by_edition(entry, candidate)]
     if current.start_date != candidate.start_date:
         raise ServiceProfileError(
             "profile_identity_mismatch", "service profiles use different start dates")

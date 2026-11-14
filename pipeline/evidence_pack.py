@@ -653,6 +653,11 @@ def build_report(
         connection, scope, route_names, end, months, frequency_context)
     target = target_metadata(compact(end))
     start_target = target_metadata(compact(start))
+    if target["current_target_pct"] is None or start_target["current_target_pct"] is None:
+        raise PackUnavailable(
+            f"WECA has not published a punctuality target for "
+            f"{target['current_target_financial_year']} yet; add it to "
+            "pipeline/audit_targets.py before making an evidence pack for this period")
     target["period_target_consistent"] = (
         start_target["current_target_financial_year"]
         == target["current_target_financial_year"])

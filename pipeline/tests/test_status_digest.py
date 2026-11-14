@@ -446,3 +446,12 @@ def test_monday_update_lists_descriptions_published_that_week(tmp_path):
     assert "- FBRI:303 (in service): Known Model. Doing another shift." in lines
     assert not any("Old line" in line for line in lines)
     assert status_digest.published_description_lines(date(2026, 11, 3), history) == []
+
+
+def test_health_notes_appear_in_today_without_asking_for_action():
+    note = ("The timetable correction for 2026-12-01 (planning #128) lapsed on "
+            "2026-12-02 and is no longer used. It can go in a later tidy-up; "
+            "nothing needs doing.")
+    lines = status_digest.today_lines({"notes": [note]}, date(2026, 12, 3))
+    assert lines[-1] == note
+    assert status_digest.today_lines({"notes": "not a list"})[-1].startswith("The overnight")

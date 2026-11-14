@@ -36,6 +36,14 @@ change you're committing. `.scratch/` is ignored by Git.
 - Never delete databases, backups or `.env` files without checking with Tom
   first, here or on the Pi.
 
+## No dated jobs for Tom
+
+A fix must not leave a date on which Tom has to do something by hand or the
+system stops. Anything time-limited (a dated correction, an allowance, a
+yearly figure) must lapse by itself: it stops applying, is noted in the daily
+summary, and alerts only if a real fault is still there when it matters.
+Planning #138 has the background.
+
 ## Folders that are meant to be here
 
 | Folder | What it is |

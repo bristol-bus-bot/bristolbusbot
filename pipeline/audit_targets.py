@@ -59,13 +59,17 @@ def target_for_service_date(service_date: date | str) -> PunctualityTarget:
     )
 
 
+def _financial_year(day: date) -> str:
+    start = day.year if day.month >= 4 else day.year - 1
+    return f"{start}-{(start + 1) % 100:02d}"
+
+
 def target_metadata(service_date: date | str) -> dict:
-    target = target_for_service_date(service_date)
-    return {
-        "current_target_pct": target.target_pct,
-        "current_target_financial_year": target.financial_year,
-        "current_target_starts_on": target.starts_on,
-        "current_target_ends_on": target.ends_on,
+    """Target fields for the export. After the published schedule ends the
+    figures still publish: no target is shown as current, and the last
+    published one is named for reference only (planning #138)."""
+    day = _date(service_date)
+    common = {
         "current_target_source": EP_TARGET_SOURCE,
         "current_target_source_short": EP_TARGET_SOURCE_SHORT,
         "current_target_source_url": EP_TARGET_SOURCE_URL,
@@ -73,3 +77,28 @@ def target_metadata(service_date: date | str) -> dict:
             asdict(item) for item in PUNCTUALITY_TARGETS
         ],
     }
+    last = PUNCTUALITY_TARGETS[-1]
+    if day > date.fromisoformat(last.ends_on):
+        return {
+            "current_target_status": "not_yet_published",
+            "current_target_pct": None,
+            "current_target_financial_year": _financial_year(day),
+            "current_target_starts_on": None,
+            "current_target_ends_on": None,
+            "last_published_target_pct": last.target_pct,
+            "last_published_target_financial_year": last.financial_year,
+            **common,
+        }
+    target = target_for_service_date(day)
+    return {
+        "current_target_status": "published",
+        "current_target_pct": target.target_pct,
+        "current_target_financial_year": target.financial_year,
+        "current_target_starts_on": target.starts_on,
+        "current_target_ends_on": target.ends_on,
+        **common,
+    }
+
+
+def target_not_yet_published(service_date: date | str) -> bool:
+    return _date(service_date) > date.fromisoformat(PUNCTUALITY_TARGETS[-1].ends_on)

@@ -1325,8 +1325,8 @@ def test_writer_check_alerts_only_on_a_run_of_writer_fallbacks(tmp_path, monkeyp
         {"status": "unavailable", "error": "FileNotFoundError"}, [])
 
 
-def test_an_expired_source_correction_raises_a_needs_you_alert(tmp_path):
-    """The 1 Dec 2026 correction (#128) blocks every build after it expires."""
+def test_a_lapsed_source_correction_is_a_note_not_an_alert(tmp_path):
+    """The 1 Dec 2026 correction (#128) lapses by itself; #138 says no task for Tom."""
     import json as _json
     from datetime import date as _date
     path = tmp_path / "source_corrections.json"
@@ -1338,12 +1338,10 @@ def test_an_expired_source_correction_raises_a_needs_you_alert(tmp_path):
     expired = aggregate_health.expired_source_corrections(_date(2026, 12, 3), path)
     assert [entry["date"] for entry in expired] == ["2026-12-01"]
 
-    message = aggregate_health.source_correction_expired_message(expired)
-    assert "pipeline/source_corrections.json" in message
-    assert "2026-12-01" in message and "BSD-1342" in message and "expired 2026-12-02" in message
-    assert aggregate_health.needs_tom(message)          # buzzes the phone
-    assert aggregate_health.plain_issue_area("timetable:source-correction-expired") \
-        .startswith("an expired timetable correction")
+    [note] = aggregate_health.timetable_notes(expired, [])
+    assert "2026-12-01" in note and "BSD-1342" in note and "lapsed on 2026-12-02" in note
+    assert "nothing needs doing" in note
+    assert not aggregate_health.needs_tom(note)
 
 
 def test_a_missing_or_unreadable_corrections_file_raises_nothing(tmp_path):
@@ -1354,14 +1352,100 @@ def test_a_missing_or_unreadable_corrections_file_raises_nothing(tmp_path):
     assert aggregate_health.expired_source_corrections(_date(2027, 1, 1), bad) == []
 
 
-def test_an_expired_coverage_allowance_raises_a_needs_you_alert(tmp_path):
+def test_an_ended_coverage_allowance_is_a_note_not_an_alert(tmp_path):
     import json as _json
     from datetime import date as _date
     path = tmp_path / "timetable_allowances.json"
     path.write_text(_json.dumps([{"kind": "forward_coverage", "from_date": "2026-12-27",
-                                  "reference": "planning #129", "expires": "2026-12-13"}]), encoding="utf-8")
-    assert aggregate_health.expired_coverage_allowances(_date(2026, 12, 13), path) == []
-    expired = aggregate_health.expired_coverage_allowances(_date(2026, 12, 14), path)
-    message = aggregate_health.coverage_allowance_expired_message(expired)
-    assert "deploy/timetable_allowances.json" in message and "2026-12-27" in message
+                                  "operator": "FBRI", "reference": "planning #129",
+                                  "expires": "2027-01-10"}]), encoding="utf-8")
+    assert aggregate_health.expired_coverage_allowances(_date(2027, 1, 10), path) == []
+    expired = aggregate_health.expired_coverage_allowances(_date(2027, 1, 11), path)
+    [note] = aggregate_health.timetable_notes([], expired)
+    assert "FBRI" in note and "2026-12-27" in note and "ended on 2027-01-10" in note
+    assert not aggregate_health.needs_tom(note)
+
+
+def _write_live_summary(path, calendar_starts):
+    import gzip as _gzip
+    import json as _json
+    calendars = [[f"s{index}", 1, 1, 1, 1, 1, 0, 0, start, "20270331"]
+                 for index, (_operator, start) in enumerate(calendar_starts)]
+    volumes = [[f"s{index}", operator, "1", 0, 10, 100, 0, None]
+               for index, (operator, _start) in enumerate(calendar_starts)]
+    with _gzip.open(path, "wb") as output:
+        output.write(_json.dumps({"calendars": calendars, "volumes": volumes}).encode("utf-8"))
+
+
+def test_the_still_needed_alert_fires_only_while_first_has_no_later_edition(tmp_path):
+    """One phone alert from 18 Dec if First still hasn't published past 27 Dec."""
+    import json as _json
+    from datetime import date as _date
+    allowances = tmp_path / "timetable_allowances.json"
+    allowances.write_text(_json.dumps([{
+        "kind": "forward_coverage", "from_date": "2026-12-27", "operator": "FBRI",
+        "lapses_when_edition_after": "2026-12-27", "alert_if_still_needed_on": "2026-12-18",
+        "reference": "planning #129", "expires": "2027-01-10"}]), encoding="utf-8")
+    summary = tmp_path / "live-timetable-summary.json.gz"
+    _write_live_summary(summary, [("FBRI", "20261220"), ("FBRI", "20261227"),
+                                  ("ABUS", "20270104")])
+    latest = aggregate_health.live_latest_edition_starts(summary)
+    assert latest == {"FBRI": _date(2026, 12, 27), "ABUS": _date(2027, 1, 4)}
+
+    def due(today, starts=latest):
+        return aggregate_health.allowances_still_needed(today, allowances, starts)
+
+    assert due(_date(2026, 12, 17)) == []                     # not yet
+    [entry] = due(_date(2026, 12, 18))                         # still needed
+    assert due(_date(2027, 1, 10)) == [entry]
+    assert due(_date(2027, 1, 11)) == []                      # ended: the check takes over
+    assert due(_date(2026, 12, 20), {**latest, "FBRI": _date(2027, 1, 3)}) == []
+
+    message = aggregate_health.allowance_still_needed_message([entry])
+    assert "FBRI" in message and "planning #129" in message and "2027-01-10" in message
     assert aggregate_health.needs_tom(message)
+    assert "timetable:allowance-still-needed" in aggregate_health.WARNING_ISSUES
+    assert aggregate_health.plain_issue_area("timetable:allowance-still-needed") \
+        .startswith("a temporary timetable allowance")
+
+
+def test_the_still_needed_alert_stays_quiet_when_the_live_summary_is_unreadable(tmp_path, monkeypatch):
+    import json as _json
+    from datetime import date as _date
+    allowances = tmp_path / "timetable_allowances.json"
+    allowances.write_text(_json.dumps([{
+        "kind": "forward_coverage", "from_date": "2026-12-27", "operator": "FBRI",
+        "lapses_when_edition_after": "2026-12-27", "alert_if_still_needed_on": "2026-12-18",
+        "expires": "2027-01-10"}]), encoding="utf-8")
+    monkeypatch.setattr(aggregate_health, "STATE", tmp_path)
+    assert aggregate_health.live_latest_edition_starts() is None
+    assert aggregate_health.allowances_still_needed(_date(2026, 12, 20), allowances) == []
+
+
+def test_the_committed_allowance_has_a_still_needed_date_before_it_ends():
+    import json as _json
+    from datetime import date as _date
+    from pathlib import Path as _Path
+    entries = _json.loads((_Path(__file__).resolve().parents[1]
+                           / "timetable_allowances.json").read_text(encoding="utf-8"))
+    for entry in entries:
+        assert _date.fromisoformat(entry["alert_if_still_needed_on"]) \
+            < _date.fromisoformat(entry["expires"])
+
+
+def test_a_missing_punctuality_target_is_a_weekly_note(tmp_path):
+    import json as _json
+    from datetime import date as _date
+    published = tmp_path / "audit_data.json"
+    published.write_text(_json.dumps({
+        "current_target_status": "not_yet_published", "current_target_pct": None,
+        "current_target_financial_year": "2027-28", "last_published_target_pct": 87,
+        "last_published_target_financial_year": "2026-27"}), encoding="utf-8")
+    [note] = aggregate_health.unpublished_target_note(_date(2027, 4, 5), published)  # Monday
+    assert "2027-28" in note and "87%" in note and "2026-27" in note
+    assert not aggregate_health.needs_tom(note)
+    assert aggregate_health.unpublished_target_note(_date(2027, 4, 6), published) == []
+    published.write_text(_json.dumps({"current_target_status": "published",
+                                      "current_target_pct": 87}), encoding="utf-8")
+    assert aggregate_health.unpublished_target_note(_date(2027, 4, 5), published) == []
+    assert aggregate_health.unpublished_target_note(_date(2027, 4, 5), tmp_path / "absent") == []

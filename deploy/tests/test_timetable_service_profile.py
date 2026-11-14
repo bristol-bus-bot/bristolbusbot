@@ -676,5 +676,35 @@ def test_allowance_file_entries_expire(tmp_path):
 
 def test_committed_allowance_is_the_approved_27_december_one():
     entries = service_profile.forward_coverage_allowances(date(2026, 11, 13))
-    assert [(e["from_date"].isoformat(), e["expires"], e["approved_by"]) for e in entries] == [
-        ("2026-12-27", "2026-12-13", "Tom, 13 Nov 2026")]
+    assert [(e["from_date"].isoformat(), e["expires"], e["approved_by"], e["operator"],
+             e["lapses_when_edition_after"]) for e in entries] == [
+        ("2026-12-27", "2027-01-10", "Tom, 13 Nov 2026", "FBRI", "2026-12-27")]
+    # Lapses by itself on its hard end date (#138): no manual removal needed.
+    assert service_profile.forward_coverage_allowances(date(2027, 1, 11)) == []
+
+
+def test_allowance_lapses_once_the_operator_publishes_a_later_edition(tmp_path):
+    from datetime import timedelta
+    live = [{"operator": "FBRI", "route": "1", "trips": 20}]
+    cliff = START + timedelta(days=60)
+    short = {"operator": "FBRI", "route": "1", "trips": 20,
+             "end": _yyyymmdd(cliff - timedelta(days=1))}
+    entry = dict(_allowance(from_date=cliff.isoformat(), expires="2099-01-01",
+                            operator="FBRI",
+                            lapses_when_edition_after=(cliff - timedelta(days=5)).isoformat()))
+    entry["from_date"] = date.fromisoformat(entry["from_date"])
+    make_service_database(tmp_path / "c.db", live)
+    make_service_database(tmp_path / "n.db", [short])
+    cur = service_profile.build_service_profile(tmp_path / "c.db", start_date=START)
+    new = service_profile.build_service_profile(tmp_path / "n.db", start_date=START)
+    assert service_profile.compare_service_profiles(cur, new, allowances=[entry])["status"] == "pass"
+    # A later First edition appears (starting after the named date): the
+    # allowance no longer applies and the shortfall is judged normally.
+    later = dict(short, service_id="NEXT", start=_yyyymmdd(cliff - timedelta(days=2)),
+                 end=_yyyymmdd(cliff - timedelta(days=1)), trips=1)
+    make_service_database(tmp_path / "n2.db", [short, later])
+    new2 = service_profile.build_service_profile(tmp_path / "n2.db", start_date=START)
+    assert service_profile.allowance_lapsed_by_edition(entry, new2)
+    with pytest.raises(ServiceProfileError) as error:
+        service_profile.compare_service_profiles(cur, new2, allowances=[entry])
+    assert error.value.code == "candidate_future_coverage_cliff"

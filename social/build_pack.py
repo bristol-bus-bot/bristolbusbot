@@ -198,6 +198,11 @@ def build_week(audit: dict, operator: str | None = None) -> dict:
     sample = weekly_qualification(overall)
     if sample['status'] == 'unavailable':
         raise ValueError('Bus Week sample is unavailable: ' + ', '.join(sample['reasons']))
+    if audit.get("current_target_pct") is None:
+        raise ValueError(
+            "WECA has not published a punctuality target for "
+            f"{audit.get('current_target_financial_year', 'this year')} yet; add it to "
+            "pipeline/audit_targets.py before building a Bus Week pack")
     target_pct = float(audit["current_target_pct"])
     target_financial_year = str(audit["current_target_financial_year"])
     target_source = str(audit["current_target_source"])
