@@ -555,6 +555,8 @@ function renderHeadline(opData) {
   $("h-lead").textContent = hasReadings(overall)
     ? `${day.period ? "Over" : "On"} ${when}, ${finiteNumber(pct).toFixed(1)}% of ${state.operator === "ALL" ? "" : operatorName(state.operator) + " "}readings at timing points were on time. ${targetPending() ? `No target for ${targetYearLabel()} has been published yet; the last, for ${lastTargetYearLabel()}, was ${finiteNumber(state.target)}%.` : `The target for ${targetYearLabel()} is ${finiteNumber(state.target)}%${shortBy > 0 ? `, so buses are ${shortBy.toFixed(1)} points short` : ", and buses met it"}.`}`
     : "No readings for this operator in this period.";
+  // How the rest missed, for the network or operator (planning #123).
+  $("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
   $("h-tgt").style.left = state.target + "%";

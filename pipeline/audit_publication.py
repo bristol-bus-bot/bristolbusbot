@@ -30,6 +30,25 @@ ADDITIVE_OVERALL_FIELDS = (
 )
 
 
+def very_late_readings(connection: sqlite3.Connection, service_dates,
+                       operator: str) -> int | None:
+    """Readings 20+ minutes late for an operator's (or the network's) overall
+    row, from the delay histogram the rollup keeps (route NULL). None when
+    the histogram is missing, so the page falls back to three bands."""
+    dates = list(service_dates)
+    if not dates:
+        return None
+    try:
+        row = connection.execute(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN bucket = 'late_20plus' THEN n END), 0) "
+            "FROM daily_delay_histogram WHERE operator = ? AND route IS NULL "
+            f"AND service_date IN ({','.join('?' * len(dates))})",
+            (operator, *dates)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return int(row[1] or 0) if row[0] else None
+
+
 def day_consistency_reasons(
     connection: sqlite3.Connection,
     service_date: str,
