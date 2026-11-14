@@ -20,6 +20,7 @@ from timetable_duplicate_evidence import reconcile_database as reconcile_duplica
 from timetable_journey_dedupe import collapse_same_day_copies
 from timetable_evidence_storage import compact_evidence
 from timetable_source_index import build_source_index
+import ticket_machine_codes
 from timetable_quality_gates import check_candidate_quality
 
 HERE = Path(__file__).parent
@@ -334,6 +335,14 @@ def main():
         logger.exception('Duplicate source verification failed - refusing the candidate')
         return 2
     logger.info('Exact source-backed duplicate corrections: %s', duplicate_result)
+
+    # Ticket machine journey codes for the offline matching check (#132).
+    # Informational only: a failure here never refuses the candidate.
+    try:
+        logger.info("Ticket machine journey codes: %s",
+                    ticket_machine_codes.attach(WECA_DB, source_index))
+    except Exception:  # noqa: BLE001 - reported, not fatal
+        logger.exception("Ticket machine journey codes could not be attached")
 
     # The steps above need First's own source files. Every other operator only
     # reaches us through BODS GTFS, where one journey can arrive under several
