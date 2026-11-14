@@ -557,6 +557,7 @@ function renderHeadline(opData) {
     : "No readings for this operator in this period.";
   // How the rest missed, for the network or operator (planning #123).
   $("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";
+  renderSixBands();
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
   $("h-tgt").style.left = state.target + "%";
@@ -723,6 +724,39 @@ function arrivalSplitHTML(row) {
     parts.map(([key, label, , n]) => `<i class="${key}" style="width:${pct(n)}%" title="${escapeHTML(label)}: ${Math.round(pct(n))}%"></i>`).join("")}</div>
     <ul class="split-legend">${parts.map(([key, label, what, n]) =>
       `<li><i class="${key}"></i><strong>${Math.round(pct(n))}%</strong> ${escapeHTML(label.toLowerCase())} <span class="faint">(${escapeHTML(what)})</span></li>`).join("")}</ul>`;
+}
+
+// All six bands (planning #124): the same colours, lighter and darker.
+const SIX_BANDS = [
+  ["early5", "5+ min early", "more than 5 minutes ahead of the timetable"],
+  ["early1", "1 to 5 min early", "1 to 5 minutes ahead"],
+  ["ontime", "On time", "up to a minute early or under 6 minutes late"],
+  ["late6", "6 to 10 min late", "6 to 10 minutes late"],
+  ["late10", "10 to 20 min late", "10 to 20 minutes late"],
+  ["late20", "20+ min late", "20 minutes or more late"],
+];
+
+function sixBandHTML(counts) {
+  if (!Array.isArray(counts) || counts.length !== SIX_BANDS.length) return "";
+  const values = counts.map((n) => finiteNumber(n));
+  const total = values.reduce((sum, n) => sum + n, 0);
+  if (!total) return "";
+  const pct = (n) => (100 * n) / total;
+  return `<div class="split six" role="img" aria-label="${escapeHTML(SIX_BANDS.map(([, label], i) => `${label} ${Math.round(pct(values[i]))}%`).join(", "))}">${
+    SIX_BANDS.map(([key, label], i) => `<i class="${key}" style="width:${pct(values[i])}%" title="${escapeHTML(label)}: ${Math.round(pct(values[i]))}%"></i>`).join("")}</div>
+    <ul class="split-legend">${SIX_BANDS.map(([key, label, what], i) =>
+      `<li><i class="${key}"></i><strong>${Math.round(pct(values[i]))}%</strong> ${escapeHTML(label.toLowerCase())} <span class="faint">(${escapeHTML(what)})</span></li>`).join("")}</ul>`;
+}
+
+async function renderSixBands() {
+  const panel = $("h-bands");
+  if (!panel || !panel.open) return;
+  const body = panel.querySelector(".bands-body");
+  const operator = state.operator;
+  const bands = (await loadHourly(operator))?.bands;
+  if (operator !== state.operator) return;
+  const counts = state.day?.period ? bands?.window : bands?.days?.[state.day?.service_date];
+  body.innerHTML = sixBandHTML(counts) || '<p class="small faint">The six bands are not available for this view.</p>';
 }
 
 // --- Network sections -----------------------------------------------------------------
@@ -1159,6 +1193,7 @@ function wireControls() {
       renderMap(currentOpData());
     });
   });
+  $("h-bands").addEventListener("toggle", renderSixBands);
   $("fleet-more").addEventListener("click", () => {
     state.fleetAll = !state.fleetAll;
     renderFleet(currentOpData());

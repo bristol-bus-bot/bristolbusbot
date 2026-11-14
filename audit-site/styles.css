@@ -226,6 +226,13 @@ details p, details ul { margin: 10px 0 0; color: var(--fg-2); }
 .split .ontime, .split-legend .ontime { background: var(--good); }
 .split .late, .split-legend .late { background: var(--warn); }
 .split .verylate, .split-legend .verylate { background: var(--bad); }
+/* Six bands (#124): the four colours, lighter and darker. */
+.split .early5, .split-legend .early5 { background: var(--link); }
+.split .early1, .split-legend .early1 { background: var(--link); opacity: 0.55; }
+.split .late6, .split-legend .late6 { background: var(--warn); opacity: 0.6; }
+.split .late10, .split-legend .late10 { background: var(--warn); }
+.split .late20, .split-legend .late20 { background: var(--bad); }
+.bands summary { cursor: pointer; font-size: 0.88rem; color: var(--link); margin-bottom: 6px; }
 .split-legend { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: 0.88rem; }
 .split-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 /* Minutes lost or spare, leading each stretch */

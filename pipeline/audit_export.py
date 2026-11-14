@@ -360,6 +360,41 @@ def write_segments(conn, dates, operators):
     return {"files": files} if files else None
 
 
+DELAY_BANDS = ("early_5plus", "early_1_5", "on_time",
+               "late_6_10", "late_10_20", "late_20plus")
+
+
+def build_bands(cur, dates, operator):
+    """All six delay bands the rollup keeps (planning #124): pooled over the
+    window for the operator and each route, and per day for the operator.
+    Counts follow DELAY_BANDS order."""
+    window = dates[-HOURLY_WINDOW_DAYS:]
+    placeholders = ",".join("?" for _ in window)
+    try:
+        rows = cur.execute(
+            f"""SELECT service_date, route, bucket, n FROM daily_delay_histogram
+                 WHERE operator = ? AND service_date IN ({placeholders})""",
+            (operator, *window)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    if not rows:
+        return None
+    index = {band: i for i, band in enumerate(DELAY_BANDS)}
+    window_total = [0] * len(DELAY_BANDS)
+    routes, days = {}, {}
+    for service_date, route, bucket, n in rows:
+        position = index.get(bucket)
+        if position is None:
+            continue
+        if route is None:
+            window_total[position] += int(n or 0)
+            days.setdefault(service_date, [0] * len(DELAY_BANDS))[position] += int(n or 0)
+        else:
+            routes.setdefault(route, [0] * len(DELAY_BANDS))[position] += int(n or 0)
+    return {"order": list(DELAY_BANDS), "window": window_total,
+            "routes": routes, "days": days}
+
+
 def write_hourly(cur, dates, operators):
     """Write hourly/<operator>.json; return the index for audit_data.json."""
     os.makedirs(os.path.join(OUT_DIR, HOURLY_DIR), exist_ok=True)
@@ -371,6 +406,9 @@ def write_hourly(cur, dates, operators):
         journeys = build_journeys(cur, dates[-HOURLY_WINDOW_DAYS:], operator)
         if journeys:
             payload["journeys"] = journeys
+        bands = build_bands(cur, dates, operator)
+        if bands:
+            payload["bands"] = bands
         name = f"{HOURLY_DIR}/{operator}.json"
         with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as out:
             json.dump(payload, out, separators=(",", ":"))

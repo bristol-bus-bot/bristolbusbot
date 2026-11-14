@@ -49,6 +49,31 @@ def very_late_readings(connection: sqlite3.Connection, service_dates,
     return int(row[1] or 0) if row[0] else None
 
 
+def band_sum_reasons(connection, service_date, by_operator, columns) -> list[str]:
+    """The six delay bands must add up to the readings, and their on-time band
+    to the on-time count, for every operator's overall row (planning #124).
+    Days with no stored bands (older rollups) are not judged."""
+    try:
+        bands = connection.execute(
+            "SELECT operator, SUM(n), SUM(CASE WHEN bucket = 'on_time' THEN n ELSE 0 END) "
+            "FROM daily_delay_histogram WHERE service_date = ? AND route IS NULL "
+            "GROUP BY operator", (service_date,)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    reasons = []
+    readings_at = columns.index("readings_in_gate")
+    on_time_at = columns.index("on_time")
+    for operator, total, on_time in bands:
+        row = by_operator.get(str(operator))
+        if row is None:
+            continue
+        if int(total or 0) != int(row[readings_at] or 0):
+            reasons.append("delay_bands_do_not_add_up_to_readings")
+        if int(on_time or 0) != int(row[on_time_at] or 0):
+            reasons.append("on_time_band_does_not_equal_on_time")
+    return sorted(set(reasons))
+
+
 def day_consistency_reasons(
     connection: sqlite3.Connection,
     service_date: str,
@@ -73,7 +98,7 @@ def day_consistency_reasons(
     if network is None:
         return ["pooled_summary_missing"]
 
-    reasons = []
+    reasons = band_sum_reasons(connection, service_date, by_operator, columns)
     concrete = [
         by_operator[operator]
         for operator in operator_list
