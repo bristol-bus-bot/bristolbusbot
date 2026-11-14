@@ -41,15 +41,21 @@ def operating_day(raw: bytes, day: date) -> bool | None:
             date(day.year, 12, 26), date(day.year, 12, 31)}
         bank = root.find('BankHolidayOperation')
         if bank is not None:
-            if len(bank) != 1 or bank[0].tag != 'DaysOfNonOperation':
+            # Holidays listed as operating (First lists Boxing Day) only add
+            # service on those holidays, which stay unknown via ``blocked``;
+            # they say nothing about ordinary days (planning #133).
+            parts = [e.tag for e in bank]
+            if not parts or len(parts) != len(set(parts)) or any(
+                    tag not in {'DaysOfOperation', 'DaysOfNonOperation'} for tag in parts):
                 return None
-            for e in bank[0]:
-                if e.tag == 'OtherPublicHoliday':
-                    if any(x.tag not in {'Description', 'Date'} for x in e) or len(e.findall('Date')) != 1:
+            for part in bank:
+                for e in part:
+                    if e.tag == 'OtherPublicHoliday':
+                        if any(x.tag not in {'Description', 'Date'} for x in e) or len(e.findall('Date')) != 1:
+                            return None
+                        blocked.add(date.fromisoformat(e.findtext('Date', '')))
+                    elif e.tag not in HOLIDAYS or len(e):
                         return None
-                    blocked.add(date.fromisoformat(e.findtext('Date', '')))
-                elif e.tag not in HOLIDAYS or len(e):
-                    return None
         if day in blocked:
             return None
         organisations = {}
