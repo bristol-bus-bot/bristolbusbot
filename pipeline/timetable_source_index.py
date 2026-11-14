@@ -43,6 +43,8 @@ class SourceJourney:
     code: str
     calls: tuple
     evidence: Evidence
+    # TicketMachine/JourneyCode: what the live feed's journey ref carries (#132).
+    ticket_machine_code: str | None = None
 
     @property
     def start(self) -> date:
@@ -151,7 +153,8 @@ def build_source_index(directory: Path, lines: set[str] | None = None) -> Source
                                 journey.code, calls,
                                 Evidence(scope, period.start, period.end,
                                          profile.hash if profile else b'',
-                                         archive_sha, file_sha, info.filename)))
+                                         archive_sha, file_sha, info.filename),
+                                journey.ticket_machine_journey_code or None))
     return index
 
 
