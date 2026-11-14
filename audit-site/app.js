@@ -553,7 +553,7 @@ function renderHeadline(opData) {
   $("h-pct").textContent = hasReadings(overall) ? `on time (${finiteNumber(pct).toFixed(1)}%)` : "no readings";
   const shortBy = state.target - finiteNumber(pct);
   $("h-lead").textContent = hasReadings(overall)
-    ? `${day.period ? "Over" : "On"} ${when}, ${finiteNumber(pct).toFixed(1)}% of ${state.operator === "ALL" ? "" : operatorName(state.operator) + " "}bus arrivals at timing points were on time. ${targetPending() ? `No target for ${targetYearLabel()} has been published yet; the last, for ${lastTargetYearLabel()}, was ${finiteNumber(state.target)}%.` : `The target for ${targetYearLabel()} is ${finiteNumber(state.target)}%${shortBy > 0 ? `, so buses are ${shortBy.toFixed(1)} points short` : ", and buses met it"}.`}`
+    ? `${day.period ? "Over" : "On"} ${when}, ${finiteNumber(pct).toFixed(1)}% of ${state.operator === "ALL" ? "" : operatorName(state.operator) + " "}readings at timing points were on time. ${targetPending() ? `No target for ${targetYearLabel()} has been published yet; the last, for ${lastTargetYearLabel()}, was ${finiteNumber(state.target)}%.` : `The target for ${targetYearLabel()} is ${finiteNumber(state.target)}%${shortBy > 0 ? `, so buses are ${shortBy.toFixed(1)} points short` : ", and buses met it"}.`}`
     : "No readings for this operator in this period.";
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
@@ -711,7 +711,7 @@ function arrivalSplitHTML(row) {
   if (!readings) return "";
   const veryLate = row.very_late == null ? null : Math.min(finiteNumber(row.very_late), finiteNumber(row.late));
   const parts = [
-    ["early", "Early", "left more than a minute before the timetable", finiteNumber(row.early)],
+    ["early", "Early", "more than a minute ahead of the timetable (the bus may have arrived early and waited)", finiteNumber(row.early)],
     ["ontime", "On time", "up to a minute early or under 6 minutes late", finiteNumber(row.on_time)],
     ["late", "Late", veryLate == null ? "6 minutes or more" : "6 to 20 minutes", finiteNumber(row.late) - (veryLate || 0)],
     ...(veryLate == null ? [] : [["verylate", "Very late", "20 minutes or more", veryLate]]),

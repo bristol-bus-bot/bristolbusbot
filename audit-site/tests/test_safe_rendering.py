@@ -184,3 +184,19 @@ def test_a_target_not_yet_published_is_never_shown_as_current():
     assert "the last published target" in source
     assert "Last target ${finiteNumber(state.target)}%" in source
     assert "has been published yet; the last, for" in source
+
+
+def test_wording_claims_no_more_than_is_measured():
+    """#122: a reading is neither an arrival nor a departure."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    method = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
+    route = (ROOT.parent / "site" / "templates" / "route.html").read_text(encoding="utf-8")
+    assert "arrivals at timing points" not in source
+    assert "left more than a minute" not in source
+    assert "readings at timing points were on time" in source
+    assert "may have arrived early and waited" in source
+    assert "A departure counts" not in method and "A reading counts as on time" in method
+    assert "within a few seconds of the truth" not in method
+    assert "A reading is neither an arrival nor a departure." in method
+    assert "more than 15 minutes early or more than 90 minutes late" in method
+    assert "arrived early and waited can count as early" in route

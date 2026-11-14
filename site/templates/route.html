@@ -46,7 +46,7 @@
                 {% if route.typical %}<div><strong>{{ route.typical }}</strong><span>typical lateness</span></div>{% endif %}
                 {% if route.journeys %}<div><strong>{{ route.journeys[0] }} of {{ route.journeys[1] }}</strong><span>timetabled journeys seen running</span></div>{% endif %}
             </div>
-            <p class="profile-note">On time means between 1 minute early and 5 min 59 s late at a timing point, measured within 150 m of it.</p>
+            <p class="profile-note">On time means between 1 minute early and 5 min 59 s late at a timing point, measured within 150 m of it. Each reading is the bus's closest recorded position to the timing point, so a bus that arrived early and waited can count as early.</p>
         </section>
 
         {% if route.hours %}
