@@ -100,6 +100,16 @@ def test_settled_reading_marks_first_schedule_row_as_origin():
     assert r is not None and r.is_origin
 
 
+def test_settled_reading_marks_last_schedule_row_as_final():
+    """#131: the trip's last stop is flagged; origin and middle stops are not."""
+    end = settled_reading(51.4500, -2.5890, utc(10, 22), SCHEDULE, SM)
+    assert end is not None and end.is_final and not end.is_origin
+    assert end.observed_delay_s == -180          # raw delay and band unchanged
+    assert not end.on_time
+    origin = settled_reading(51.4600, -2.5890, utc(10, 15), SCHEDULE, SM)
+    assert origin is not None and not origin.is_final
+
+
 def test_settled_reading_dft_band_edges():
     # 5 min 59 s late = on time; 6 min 00 s = not
     r_359 = settled_reading(51.4500, -2.5890, utc(10, 30, 59), SCHEDULE, SM)

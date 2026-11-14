@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS timepoint_observations (
     vehicle_ref      TEXT,
     is_origin        INTEGER NOT NULL DEFAULT 0,
     match_tier       TEXT,
+    is_final         INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (service_date, trip_id, stop_sequence)
 );
 CREATE INDEX IF NOT EXISTS idx_obs_date_route
@@ -142,6 +143,8 @@ def connect(path: str = ":memory:") -> sqlite3.Connection:
     _ensure_column(conn, "timepoint_observations", "is_origin",
                    "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "timepoint_observations", "match_tier", "TEXT")
+    _ensure_column(conn, "timepoint_observations", "is_final",
+                   "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "poll_log", "stale",
                    "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "poll_log", "evidence_written",
@@ -215,14 +218,19 @@ def apply_clock_reading(cur, service_date: str, trip_id: str,
 
 
 def upsert_observation(cur, obs: tuple) -> None:
-    """Keep the closest observation for each trip and timing point."""
+    """Keep the closest observation for each trip and timing point.
+
+    ``obs`` ends with is_final; older 15-field tuples mean not final.
+    """
+    if len(obs) == 15:
+        obs = (*obs, 0)
     cur.execute(
         """INSERT INTO timepoint_observations
                (service_date, operator, route, trip_id, siri_journey_ref,
                 stop_sequence, stop_code, scheduled_local, observed_delay_s,
                 on_time, gps_distance_m, recorded_at, vehicle_ref, is_origin,
-                match_tier)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                match_tier, is_final)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(service_date, trip_id, stop_sequence) DO UPDATE SET
                observed_delay_s = excluded.observed_delay_s,
                on_time          = excluded.on_time,
@@ -234,7 +242,8 @@ def upsert_observation(cur, obs: tuple) -> None:
                siri_journey_ref = excluded.siri_journey_ref,
                scheduled_local  = excluded.scheduled_local,
                is_origin        = excluded.is_origin,
-               match_tier       = excluded.match_tier
+               match_tier       = excluded.match_tier,
+               is_final         = excluded.is_final
            WHERE excluded.gps_distance_m < timepoint_observations.gps_distance_m""",
         obs)
 

@@ -16,7 +16,7 @@ import statistics
 from collections import defaultdict
 
 from audit_operators import NETWORK_LABEL, SHOW_OPERATORS, public_route
-from audit_publication import very_late_readings
+from audit_publication import final_stop_early_on_time, very_late_readings
 from audit_scope import frequency_adherence, operator_composition
 import route_split
 from sample_quality import qualify_row
@@ -100,6 +100,7 @@ def _overall(cur, window, operator, valid, medians):
         "observed_trips": total["observed_trips"] if covered else None,
         "coverage_pct": _pct(total["observed_trips"], total["expected_trips"]) if covered else None,
         "very_late": very_late_readings(cur.connection, window, operator),
+        "final_stop_early_on_time": final_stop_early_on_time(cur.connection, window, operator),
     }
 
 

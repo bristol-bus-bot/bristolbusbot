@@ -10,6 +10,7 @@ from audit_fleet import fleet_for
 
 from sample_rules import qualification
 import route_split
+from on_time_rule import is_on_time
 
 
 def init_schema(c):
@@ -28,8 +29,9 @@ def write_day(c,day,geo_index,fleet_index=None):
         init_schema(c)
         c.execute('DELETE FROM daily_sample_support WHERE service_date=?',(day,))
         return 0
-    rows=c.execute('''SELECT operator,route,trip_id,vehicle_ref,siri_journey_ref,
-        stop_sequence,recorded_at,observed_delay_s,stop_code
+    final=route_split.column_or_null(c,'timepoint_observations','is_final')
+    rows=c.execute(f'''SELECT operator,route,trip_id,vehicle_ref,siri_journey_ref,
+        stop_sequence,recorded_at,observed_delay_s,stop_code,{final}
         FROM timepoint_observations WHERE service_date=? AND COALESCE(is_origin,0)=0
         AND gps_distance_m BETWEEN 0 AND 150 AND observed_delay_s IS NOT NULL
         ORDER BY operator,trip_id,vehicle_ref,siri_journey_ref,stop_sequence''',(day,)).fetchall()
@@ -56,7 +58,7 @@ def write_day(c,day,geo_index,fleet_index=None):
         if any(b<a for a,b in zip(times,times[1:])):bad.add(identity)
         if len({x[1] for x in items})>1:bad.add(identity)
         for row in items:
-            op,route,_,_,_,_,_,delay,stop=row
+            op,route,_,_,_,_,_,delay,stop,is_final=row
             route=split.route(op,route,identity[1],stop)
             scopes=[('overall',''),('route',route or '')]
             fleet = fleet_for(fleet_index, op, identity[2]) if fleet_index else None
@@ -71,16 +73,16 @@ def write_day(c,day,geo_index,fleet_index=None):
                 for scope,key in scopes:
                     # The pooled rollup tags other operators' route numbers.
                     if scope=='route':key=public_route(op,route,label==NETWORK_LABEL) or ''
-                    cells[(label,scope,key)][identity].append(delay)
+                    cells[(label,scope,key)][identity].append((delay,is_final))
     init_schema(c)
     c.execute('DELETE FROM daily_sample_support WHERE service_date=?',(day,))
     for (op,scope,key),groups in cells.items():
         support=dict(readings=sum(len(v) for v in groups.values()),
-                     on_time=sum(sum(-60<=v<=359 for v in values) for values in groups.values()),
+                     on_time=sum(sum(is_on_time(*v) for v in values) for values in groups.values()),
                      journeys=len(groups),squared_weights=sum(len(v)**2 for v in groups.values()),
                      inconsistent_journeys=len(set(groups)&bad),missing_identity=len(set(groups)&missing),
                      ambiguous_readings=sum(len(values) for identity,values in groups.items() if identity in bad),
-                     ambiguous_on_time=sum(sum(-60<=v<=359 for v in values) for identity,values in groups.items() if identity in bad),
+                     ambiguous_on_time=sum(sum(is_on_time(*v) for v in values) for identity,values in groups.items() if identity in bad),
                      service_days=1)
         c.execute('INSERT INTO daily_sample_support VALUES (?,?,?,?,?)',
                   (day,op,scope,key,json.dumps(support,sort_keys=True)))

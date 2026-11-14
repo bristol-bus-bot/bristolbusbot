@@ -71,9 +71,10 @@ def test_vm_cycle_end_to_end():
     obs = audit_conn.execute("SELECT * FROM timepoint_observations").fetchall()
     assert len(obs) == 1
     (sdate, op, route, trip, ref, seq, stop, sched, delay, on_time, dist,
-     rec, veh, is_origin, match_tier) = obs[0]
+     rec, veh, is_origin, match_tier, is_final) = obs[0]
     assert (op, route, trip, stop, delay, on_time) == ("FBRI", "75", "T_OUT", "0100C", 120, 1)
     assert is_origin == 0
+    assert is_final == 1          # 0100C ends the trip
     assert match_tier == "fuzzy"
     # vehicle row in live.db with the live estimate
     v = live_conn.execute("SELECT * FROM vehicles").fetchone()

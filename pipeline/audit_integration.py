@@ -22,11 +22,10 @@ from pathlib import Path
 from audit_operators import NETWORK_LABEL, OPERATOR_NAMES, SHOW_OPERATORS
 import route_split
 from audit_publication import publication_exclusions
+from on_time_rule import ON_TIME_HIGH_S, ON_TIME_LOW_S, early_sql, on_time_sql
 
 
 DISTANCE_GATE_M = 150
-ON_TIME_LOW_S = -60
-ON_TIME_HIGH_S = 359
 INITIAL_START = "20260714"
 PROFILE_DAYS = 56
 PROFILE_MIN_DAYS = 2
@@ -54,6 +53,11 @@ DEFAULT_OUTPUT = Path(os.getenv(
     "BBB_AUDIT_INTEGRATION_PENDING",
     "/var/lib/bristolbusbot/collector/audit_integration.pending.json",
 ))
+
+
+def _final_column(cur: sqlite3.Cursor) -> str:
+    return route_split.column_or_null(
+        cur.connection, "timepoint_observations", "is_final")
 
 
 def _placeholders(values) -> str:
@@ -98,11 +102,11 @@ def _headline(cur: sqlite3.Cursor, start_date: str,
     excluded = publication_exclusions(cur.connection, days)
     days=[day for day in days if day not in excluded]
     dates_sql = _placeholders(days) or 'NULL'
+    final = _final_column(cur)
     row = cur.execute(
         f"""SELECT COUNT(*) AS readings,
-                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
-                            THEN 1 ELSE 0 END) AS on_time,
-                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
+                   SUM(CASE WHEN {on_time_sql(final=final)} THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN {early_sql(final=final)} THEN 1 ELSE 0 END) AS early,
                    SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late
             FROM timepoint_observations
             WHERE service_date BETWEEN ? AND ?
@@ -111,7 +115,7 @@ def _headline(cur: sqlite3.Cursor, start_date: str,
               AND COALESCE(is_origin, 0) = 0
               AND observed_delay_s IS NOT NULL
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
-        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
+        (ON_TIME_HIGH_S,
          start_date, through_date, *days, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchone()
     readings = int(row["readings"] or 0)
@@ -245,13 +249,13 @@ def _fair_comparison(cur: sqlite3.Cursor, dates: list[str]) -> tuple[dict, dict,
     """
     date_ph = _placeholders(dates)
     op_ph = _placeholders(SHOW_OPERATORS)
+    final = _final_column(cur)
     rows = cur.execute(
         f"""SELECT operator, vehicle_ref, route, service_date,
                    CAST(substr(scheduled_local, 12, 2) AS INTEGER) AS hour,
                    COUNT(*) AS readings,
-                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
-                            THEN 1 ELSE 0 END) AS on_time,
-                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early
+                   SUM(CASE WHEN {on_time_sql(final=final)} THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN {early_sql(final=final)} THEN 1 ELSE 0 END) AS early
             FROM timepoint_observations
             WHERE service_date IN ({date_ph})
               AND operator IN ({op_ph})
@@ -262,8 +266,7 @@ def _fair_comparison(cur: sqlite3.Cursor, dates: list[str]) -> tuple[dict, dict,
               AND observed_delay_s IS NOT NULL
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
             GROUP BY operator, vehicle_ref, route, service_date, hour""",
-        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S,
-         *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
+        (*dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchall()
     cells: dict[tuple, list[int]] = {}
     for row in rows:
@@ -311,13 +314,13 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
     date_ph = _placeholders(dates)
     op_ph = _placeholders(SHOW_OPERATORS)
     histogram_sql = _histogram_select_sql()
+    final = _final_column(cur)
     day_rows = cur.execute(
         f"""SELECT operator, vehicle_ref, route, service_date,
                    MIN(trip_id) AS trip_id, MIN(stop_code) AS stop_code,
                    COUNT(*) AS readings,
-                   SUM(CASE WHEN observed_delay_s BETWEEN ? AND ?
-                            THEN 1 ELSE 0 END) AS on_time,
-                   SUM(CASE WHEN observed_delay_s < ? THEN 1 ELSE 0 END) AS early,
+                   SUM(CASE WHEN {on_time_sql(final=final)} THEN 1 ELSE 0 END) AS on_time,
+                   SUM(CASE WHEN {early_sql(final=final)} THEN 1 ELSE 0 END) AS early,
                    SUM(CASE WHEN observed_delay_s > ? THEN 1 ELSE 0 END) AS late,
                    {histogram_sql}
             FROM timepoint_observations
@@ -330,7 +333,7 @@ def _profiles(cur: sqlite3.Cursor, completed_dates: list[str],
               AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?
             GROUP BY operator, vehicle_ref, route, service_date
             ORDER BY operator, vehicle_ref, route, service_date DESC""",
-        (ON_TIME_LOW_S, ON_TIME_HIGH_S, ON_TIME_LOW_S, ON_TIME_HIGH_S,
+        (ON_TIME_HIGH_S,
          *dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
     ).fetchall()
 
@@ -679,11 +682,13 @@ def build_payload(conn: sqlite3.Connection, through_date: str,
         "audit_url": "https://bristol-bus-bot.github.io/weca-bus-audit/",
         "live_url": "https://bristolbuses.live/",
         "on_time_definition": {"minimum_delay_s": ON_TIME_LOW_S,
-                               "maximum_delay_s": ON_TIME_HIGH_S},
+                               "maximum_delay_s": ON_TIME_HIGH_S,
+                               "early_at_final_stop": "on_time"},
         "distance_gate_m": DISTANCE_GATE_M,
         "measurement_method": {
             "version": 2,
             "origin_timing_points": "excluded_until_departure_can_be_detected",
+            "final_timing_points": "early_arrival_counts_as_on_time",
         },
         "headline": _headline(conn.cursor(), _month_start(actual_through),
                               actual_through),

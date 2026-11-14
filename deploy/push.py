@@ -925,7 +925,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "data_health.py", "collector_anomaly_report.py", "evidence_pack.py",
         "collector_research_export.py",
-        "audit_origin_backfill.py",
+        "audit_origin_backfill.py", "audit_final_backfill.py",
         "configure_timetable_delivery.py", "configure_social_curation.py",
         "configure_blurb_generation.py", "blurb_automation.py",
         "blurb_review.sh",

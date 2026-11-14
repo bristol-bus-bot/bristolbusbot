@@ -407,7 +407,8 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                         reading.scheduled_local.isoformat(),
                         reading.observed_delay_s, int(reading.on_time),
                         reading.gps_distance_m, snap.recorded_utc.isoformat(),
-                        snap.vehicle_ref, int(reading.is_origin), match.tier)))
+                        snap.vehicle_ref, int(reading.is_origin), match.tier,
+                        int(reading.is_final))))
                     counters["obs_written"] += 1
 
         decision = live_db.upsert_vehicle(live_conn, snap, est, match,

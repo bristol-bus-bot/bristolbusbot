@@ -18,7 +18,8 @@ import sqlite3
 from datetime import datetime, timezone
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, operator_name, public_route
-from audit_publication import publication_exclusions, very_late_readings
+from audit_publication import (final_stop_early_on_time, publication_exclusions,
+                               very_late_readings)
 from snapshot_quality import denominator_reasons, withheld_routes
 from sample_quality import qualify_row
 from audit_scope import operator_composition, frequency_adherence
@@ -96,6 +97,8 @@ def build_operator(cur, service_date, operator, *, coverage_valid=True):
     row = cur.fetchone()
     overall = {col: row[col] for col in OVERALL_COLS}
     overall["very_late"] = very_late_readings(cur.connection, [service_date], operator)
+    overall["final_stop_early_on_time"] = final_stop_early_on_time(
+        cur.connection, [service_date], operator)
     cur.execute(
         """SELECT * FROM daily_route_summary
            WHERE service_date = ? AND operator = ? AND route IS NOT NULL
