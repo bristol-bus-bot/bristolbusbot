@@ -200,3 +200,11 @@ def test_wording_claims_no_more_than_is_measured():
     assert "A reading is neither an arrival nor a departure." in method
     assert "more than 15 minutes early or more than 90 minutes late" in method
     assert "arrived early and waited can count as early" in route
+
+
+def test_headline_shows_how_the_rest_missed():
+    """#123: the four-way split sits under the network or operator headline."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'id="h-split"' in html
+    assert '$("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";' in source

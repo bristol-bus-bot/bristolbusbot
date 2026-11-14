@@ -177,3 +177,27 @@ def test_network_ward_routes_use_the_network_route_labels():
             (DAYS[0], "ALL", source, "ward", "Central", "13", 20, 10, 0, 0, None, None, None))
     routes = audit_period._geography(conn.cursor(), DAYS[:1], "ALL")["ward"][0]["routes"]
     assert {r["route"] for r in routes} == {"13", audit_period.public_route("SSWL", "13", True)}
+
+
+def test_headline_reports_very_late_for_the_operator_in_both_views():
+    """#123: the overall row carries very_late from the route-NULL histogram."""
+    conn, _period = build()
+    for day in DAYS:
+        conn.execute("INSERT INTO daily_delay_histogram VALUES (?,?,NULL,?,?)",
+                     (day, "FBRI", "late_20plus", 2))
+        conn.execute("INSERT INTO daily_delay_histogram VALUES (?,?,NULL,?,?)",
+                     (day, "FBRI", "on_time", 9))
+    period = audit_period.build_period(conn.cursor(), DAYS, lambda cur, day: True)
+    overall = period["by_operator"]["FBRI"]["overall"]
+    assert overall["very_late"] == 2 * len(DAYS)
+    assert overall["very_late"] <= overall["late"]
+    assert overall["early"] + overall["on_time"] + overall["late"] == overall["readings_in_gate"]
+    day = audit_export.build_operator(conn.cursor(), DAYS[0], "FBRI")
+    assert day["overall"]["very_late"] == 2
+
+
+def test_very_late_is_none_without_a_histogram():
+    from audit_publication import very_late_readings
+    conn = database()
+    assert very_late_readings(conn, DAYS, "FBRI") is None
+    assert very_late_readings(conn, [], "FBRI") is None
