@@ -2,6 +2,7 @@
 """Write the internal estate snapshot and notify only on incident transitions."""
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import re
@@ -63,6 +64,7 @@ PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
 # pipeline release (pipeline/source_corrections.json in the repository).
 SOURCE_CORRECTIONS = REMOTE_HOME / "bristolbusbot/current/pipeline/source_corrections.json"
 TIMETABLE_ALLOWANCES = Path("/usr/local/libexec/bristolbusbot-timetable/timetable_allowances.json")
+LIVE_TIMETABLE_SUMMARY = "live-timetable-summary.json.gz"
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -95,6 +97,7 @@ WARNING_ISSUES = frozenset({
     "credential:timetable-token-renewal-due",
     "timetable:provisional-holiday-due",
     "timetable:operator-missing",
+    "timetable:allowance-still-needed",
 })
 BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
@@ -1638,8 +1641,7 @@ def plain_issue_area(issue: str) -> str:
         "timetable:operator-missing": "an operator missing from the live timetable",
         "credential:timetable-token-renewal-due": "the GitHub timetable token (renew within 30 days)",
         "credential:timetable-token-expiry": "the GitHub timetable token (expiring within a week, or missing)",
-        "timetable:source-correction-expired": "an expired timetable correction (it blocks every build)",
-        "timetable:coverage-allowance-expired": "an expired timetable allowance",
+        "timetable:allowance-still-needed": "a temporary timetable allowance that is still needed",
     }
     if issue in exact:
         return exact[issue]
@@ -1665,59 +1667,145 @@ def health_status(issues: list[str]) -> str:
     return "warning" if issues else "ok"
 
 
-def expired_source_corrections(today: date | None = None,
-                               path: Path | None = None) -> list[dict]:
-    """Entries past their expiry date. The timetable build refuses to start
-    while any remain, so no new timetable can arrive until they are deleted."""
-    today = today or datetime.now(BRISTOL_TZ).date()
+def _dated_entries(path: Path) -> list[dict]:
     try:
-        entries = json.loads((path or SOURCE_CORRECTIONS).read_text(encoding="utf-8"))
+        entries = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
+    return [entry for entry in entries if isinstance(entry, dict)] \
+        if isinstance(entries, list) else []
+
+
+def _entry_date(entry: dict, field: str) -> date | None:
+    try:
+        return date.fromisoformat(str(entry.get(field)))
+    except ValueError:
+        return None
+
+
+def expired_source_corrections(today: date | None = None,
+                               path: Path | None = None) -> list[dict]:
+    """Entries past their expiry date. The build skips them by itself, so
+    these are tidy-up notes for the daily summary, never alerts."""
+    today = today or datetime.now(BRISTOL_TZ).date()
     expired = []
-    for entry in entries if isinstance(entries, list) else []:
-        try:
-            if today > date.fromisoformat(str(entry.get("expires"))):
-                expired.append(entry)
-        except (AttributeError, ValueError):
-            continue
+    for entry in _dated_entries(path or SOURCE_CORRECTIONS):
+        expires = _entry_date(entry, "expires")
+        if expires is not None and today > expires:
+            expired.append(entry)
     return expired
-
-
-def source_correction_expired_message(entries: list[dict]) -> str:
-    names = "; ".join(
-        f"{entry.get('date', '?')} ({entry.get('reference', 'no reference')}, "
-        f"expired {entry.get('expires', '?')})" for entry in entries)
-    return "\n".join((
-        ":rotating_light: *A timetable correction has expired*",
-        f"What happened: pipeline/source_corrections.json still holds the entry for "
-        f"{names}. Timetable builds refuse to start until it is deleted, so no new "
-        "timetable can arrive. The current timetable stays live.",
-        "*You need to do:* Delete that entry from pipeline/source_corrections.json "
-        "(or ask Claude to), merge it, then deploy the pipeline component.",
-    ))
 
 
 def expired_coverage_allowances(today: date | None = None,
                                 path: Path | None = None) -> list[dict]:
-    """Forward-coverage allowances past their expiry. They stop applying, so
-    the Pi's check rejects again whatever they covered."""
+    """Forward-coverage allowances past their hard end. They stop applying by
+    themselves; if the fault is still there the Pi's check rejects the next
+    timetable and that failure alerts in the usual way."""
     return expired_source_corrections(today, path or TIMETABLE_ALLOWANCES)
 
 
-def coverage_allowance_expired_message(entries: list[dict]) -> str:
-    names = "; ".join(
-        f"dates from {entry.get('from_date', '?')} ({entry.get('reference', 'no reference')}, "
-        f"expired {entry.get('expires', '?')})" for entry in entries)
+def live_latest_edition_starts(path: Path | None = None) -> dict[str, date] | None:
+    """Latest calendar start per operator in the live timetable's summary.
+    None when the summary can't be read."""
+    path = path or STATE / LIVE_TIMETABLE_SUMMARY
+    try:
+        with gzip.open(path, "rb") as source:
+            tables = json.loads(source.read(256 * 1024 * 1024).decode("utf-8"))
+        starts_by_service: dict[str, date] = {}
+        for row in tables["calendars"]:
+            starts_by_service[str(row[0])] = datetime.strptime(str(row[8]), "%Y%m%d").date()
+        latest: dict[str, date] = {}
+        for row in tables["volumes"]:
+            start = starts_by_service.get(str(row[0]))
+            operator = str(row[1])
+            if start is not None and start > latest.get(operator, date.min):
+                latest[operator] = start
+        return latest
+    except (OSError, EOFError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+def allowances_still_needed(today: date | None = None, path: Path | None = None,
+                            latest_starts: dict[str, date] | None = None) -> list[dict]:
+    """Allowances past their ``alert_if_still_needed_on`` date, before their
+    hard end, whose operator still hasn't published the later edition that
+    would end them. Each is worth one alert: left alone it lapses and the
+    next timetable is rejected."""
+    today = today or datetime.now(BRISTOL_TZ).date()
+    due = []
+    for entry in _dated_entries(path or TIMETABLE_ALLOWANCES):
+        alert_on = _entry_date(entry, "alert_if_still_needed_on")
+        expires = _entry_date(entry, "expires")
+        after = _entry_date(entry, "lapses_when_edition_after")
+        if alert_on is None or expires is None or not alert_on <= today <= expires:
+            continue
+        if after is not None and entry.get("operator"):
+            if latest_starts is None:
+                latest_starts = live_latest_edition_starts()
+            if latest_starts is None:
+                continue  # can't tell; say nothing rather than guess
+            latest = latest_starts.get(str(entry["operator"]))
+            if latest is not None and latest > after:
+                continue
+        due.append(entry)
+    return due
+
+
+def allowance_still_needed_message(entries: list[dict]) -> str:
+    details = "; ".join(
+        f"{entry.get('operator', '?')} from {entry.get('from_date', '?')} "
+        f"({entry.get('reference', 'no reference')}), ends {entry.get('expires', '?')}"
+        for entry in entries)
     return "\n".join((
-        ":rotating_light: *A timetable allowance has expired*",
-        f"What happened: deploy/timetable_allowances.json still holds the allowance for "
-        f"{names}. It no longer applies, so the Pi will reject new timetables again "
-        "if the fault it covered is still in the data. The current timetable stays live.",
-        "*You need to do:* Check whether the source fault is fixed, then delete the entry "
-        "from deploy/timetable_allowances.json or renew it (or ask Claude to), merge it and "
-        "run the layout install.",
+        ":rotating_light: *A temporary timetable allowance is still needed*",
+        f"What happened: the allowance for {details} was expected to be unnecessary "
+        "by now, but the operator has not published the later edition that ends it. "
+        "When it ends, the Pi will reject new timetables if the fault is still "
+        "in the data. The current timetable stays live.",
+        "*You need to do:* Chase the fault with BODS or the operator, or tell Claude "
+        "whether to extend the allowance.",
     ))
+
+
+def unpublished_target_note(today: date | None = None,
+                            path: Path | None = None) -> list[str]:
+    """Once a week, while the public report has no current WECA target
+    because the next year's hasn't been published (planning #138)."""
+    today = today or datetime.now(BRISTOL_TZ).date()
+    if today.weekday() != 0:
+        return []
+    try:
+        data = json.loads((path or PUBLISHED).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(data, dict)             or data.get("current_target_status") != "not_yet_published":
+        return []
+    return [
+        f"The public report shows no punctuality target for "
+        f"{data.get('current_target_financial_year', 'this year')}: WECA hasn't "
+        f"published it yet (the last was {data.get('last_published_target_pct', '?')}% "
+        f"for {data.get('last_published_target_financial_year', '?')}). "
+        "When it is published, add it to pipeline/audit_targets.py."
+    ]
+
+
+def timetable_notes(expired_corrections: list[dict],
+                    expired_allowances: list[dict]) -> list[str]:
+    """Daily-summary lines for entries that have lapsed by themselves."""
+    notes = [
+        f"The timetable correction for {entry.get('date', '?')} "
+        f"({entry.get('reference', 'no reference')}) lapsed on {entry.get('expires', '?')} "
+        "and is no longer used. It can go in a later tidy-up; nothing needs doing."
+        for entry in expired_corrections
+    ]
+    notes.extend(
+        f"The timetable allowance for {entry.get('operator', 'an operator')} from "
+        f"{entry.get('from_date', '?')} ({entry.get('reference', 'no reference')}) "
+        f"ended on {entry.get('expires', '?')} and is no longer used. It can go in a "
+        "later tidy-up; nothing needs doing."
+        for entry in expired_allowances
+    )
+    return notes
 
 
 def general_incident_message(issues: list[str]) -> str:
@@ -1760,12 +1848,12 @@ def main() -> int:
     issues.extend(found)
     editorial_refresh, found = editorial_refresh_check()
     issues.extend(found)
-    expired_corrections = expired_source_corrections()
-    if expired_corrections:
-        issues.append("timetable:source-correction-expired")
-    expired_allowances = expired_coverage_allowances()
-    if expired_allowances:
-        issues.append("timetable:coverage-allowance-expired")
+    notes = timetable_notes(expired_source_corrections(),
+                            expired_coverage_allowances())
+    notes.extend(unpublished_target_note())
+    still_needed = allowances_still_needed()
+    if still_needed:
+        issues.append("timetable:allowance-still-needed")
     social_deliveries, found = social_curation_check()
     issues.extend(found)
     data_health, found = data_health_check()
@@ -1856,6 +1944,7 @@ def main() -> int:
         "writer": writer,
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
+        "notes": notes,
     }
     atomic_json(STATE / "health.json", snapshot)
 
@@ -1983,12 +2072,9 @@ def main() -> int:
     if "job:fleet-automation" in remaining_opened:
         notify(fleet_failure_message(fleet_automation))
         remaining_opened.remove("job:fleet-automation")
-    if "timetable:source-correction-expired" in remaining_opened:
-        notify(source_correction_expired_message(expired_corrections))
-        remaining_opened.remove("timetable:source-correction-expired")
-    if "timetable:coverage-allowance-expired" in remaining_opened:
-        notify(coverage_allowance_expired_message(expired_allowances))
-        remaining_opened.remove("timetable:coverage-allowance-expired")
+    if "timetable:allowance-still-needed" in remaining_opened:
+        notify(allowance_still_needed_message(still_needed))
+        remaining_opened.remove("timetable:allowance-still-needed")
     if remaining_opened:
         notify(general_incident_message(remaining_opened))
 

@@ -49,12 +49,14 @@ def test_only_the_bank_holiday_style_exclusion_is_removed(tmp_path):
         == [("BUGGED", "20261201", "BSD-1342")]
 
 
-def test_an_expired_correction_refuses_the_build(tmp_path):
+def test_an_expired_correction_is_skipped_and_never_stops_the_build(tmp_path):
+    """#138: time-limited fixes lapse by themselves."""
     path = tmp_path / "c.json"
     path.write_text(json.dumps([ENTRY]), encoding="utf-8")
     assert sc.load_corrections(date(2026, 12, 2), path) == [ENTRY]
-    with pytest.raises(sc.CorrectionError, match="expired on 2026-12-02; delete it"):
-        sc.load_corrections(date(2026, 12, 3), path)
+    skipped = []
+    assert sc.load_corrections(date(2026, 12, 3), path, skipped=skipped) == []
+    assert skipped == [ENTRY]
 
 
 def test_an_entry_must_be_reviewed_and_dated(tmp_path):

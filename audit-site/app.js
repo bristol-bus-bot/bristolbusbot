@@ -81,12 +81,25 @@ function targetYearLabel() {
     : "current year";
 }
 
+// After WECA's published schedule ends, no target is current: the last one
+// is named for reference and still sets the colours (planning #138).
+function targetPending() {
+  return state.targetStatus === "not_yet_published";
+}
+
+function lastTargetYearLabel() {
+  return (state.lastTargetFinancialYear || "the previous year").replace("-", "–");
+}
+
 function targetReferenceHTML() {
   const source = escapeHTML(state.targetSource || "published WECA target schedule");
   const url = safeHTTPURL(state.targetSourceUrl);
   const sourceHTML = url
     ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${source}</a>`
     : source;
+  if (targetPending()) {
+    return `area-wide targets: none has been published for <strong>${escapeHTML(targetYearLabel())}</strong> yet, so the last one, <strong>${finiteNumber(state.target)}%</strong> for ${escapeHTML(lastTargetYearLabel())}, is shown for reference (${sourceHTML})`;
+  }
   return `<strong>${finiteNumber(state.target)}%</strong> area-wide target for <strong>${escapeHTML(targetYearLabel())}</strong> (${sourceHTML})`;
 }
 
@@ -96,7 +109,9 @@ function renderTargetContext() {
   const note = `Compared with WECA's ${reference}. The separate long-term goal is ${escapeHTML(longTerm)}.`;
   $("headline-target-note").innerHTML = note;
   // The sections only need the colour key; the full reference is up top.
-  const key = `Green means at or above the ${finiteNumber(state.target)}% target for ${escapeHTML(targetYearLabel())}.`;
+  const key = targetPending()
+    ? `Green means at or above ${finiteNumber(state.target)}%, the last published target (${escapeHTML(lastTargetYearLabel())}).`
+    : `Green means at or above the ${finiteNumber(state.target)}% target for ${escapeHTML(targetYearLabel())}.`;
   ["geo-target-note", "route-target-note"].forEach((id) => {
     const element = $(id);
     if (element) element.innerHTML = key;
@@ -538,12 +553,14 @@ function renderHeadline(opData) {
   $("h-pct").textContent = hasReadings(overall) ? `on time (${finiteNumber(pct).toFixed(1)}%)` : "no readings";
   const shortBy = state.target - finiteNumber(pct);
   $("h-lead").textContent = hasReadings(overall)
-    ? `${day.period ? "Over" : "On"} ${when}, ${finiteNumber(pct).toFixed(1)}% of ${state.operator === "ALL" ? "" : operatorName(state.operator) + " "}bus arrivals at timing points were on time. The target for ${targetYearLabel()} is ${finiteNumber(state.target)}%${shortBy > 0 ? `, so buses are ${shortBy.toFixed(1)} points short` : ", and buses met it"}.`
+    ? `${day.period ? "Over" : "On"} ${when}, ${finiteNumber(pct).toFixed(1)}% of ${state.operator === "ALL" ? "" : operatorName(state.operator) + " "}bus arrivals at timing points were on time. ${targetPending() ? `No target for ${targetYearLabel()} has been published yet; the last, for ${lastTargetYearLabel()}, was ${finiteNumber(state.target)}%.` : `The target for ${targetYearLabel()} is ${finiteNumber(state.target)}%${shortBy > 0 ? `, so buses are ${shortBy.toFixed(1)} points short` : ", and buses met it"}.`}`
     : "No readings for this operator in this period.";
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
   $("h-tgt").style.left = state.target + "%";
-  $("h-tgt-label").textContent = `Target ${finiteNumber(state.target)}%`;
+  $("h-tgt-label").textContent = targetPending()
+    ? `Last target ${finiteNumber(state.target)}%`
+    : `Target ${finiteNumber(state.target)}%`;
   $("s-median").textContent = format.delaySeconds(overall.median_delay_s);
   $("s-seen").textContent = overall.coverage_pct != null ? `${Math.round(overall.coverage_pct)} in 100` : "–";
   $("s-routes").textContent = (opData.routes || []).filter(hasReadings).length.toLocaleString();
@@ -1072,8 +1089,10 @@ async function load() {
 
   state.data = data;
   state.target = Math.min(100, Math.max(0,
-    finiteNumber(data.current_target_pct,
+    finiteNumber(data.current_target_pct ?? data.last_published_target_pct,
       finiteNumber(data.target_pct, DEFAULT_TARGET_PCT))));
+  state.targetStatus = String(data.current_target_status || "published");
+  state.lastTargetFinancialYear = String(data.last_published_target_financial_year || "");
   state.targetFinancialYear = String(data.current_target_financial_year || "");
   state.targetSource = String(data.current_target_source || "");
   state.targetSourceUrl = String(data.current_target_source_url || "");

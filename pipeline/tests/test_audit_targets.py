@@ -8,7 +8,8 @@ import pytest
 PIPELINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PIPELINE))
 
-from audit_targets import target_for_service_date, target_metadata  # noqa: E402
+from audit_targets import (  # noqa: E402
+    target_for_service_date, target_metadata, target_not_yet_published)
 
 
 @pytest.mark.parametrize(
@@ -48,3 +49,22 @@ def test_export_metadata_names_the_year_source_and_full_schedule():
     assert metadata["current_target_source_url"].startswith("https://")
     assert [row["target_pct"] for row in
             metadata["punctuality_target_schedule"]] == [81, 82, 83, 85, 87]
+
+
+def test_export_for_a_year_with_no_published_target_shows_none_as_current():
+    """#138: 1 April 2027 publishes, but 87% is never shown as current."""
+    metadata = target_metadata("20270401")
+
+    assert metadata["current_target_status"] == "not_yet_published"
+    assert metadata["current_target_pct"] is None
+    assert metadata["current_target_financial_year"] == "2027-28"
+    assert metadata["last_published_target_pct"] == 87
+    assert metadata["last_published_target_financial_year"] == "2026-27"
+    assert target_metadata("20260822")["current_target_status"] == "published"
+    assert target_not_yet_published("20270401")
+    assert not target_not_yet_published("20270331")
+
+
+def test_dates_before_the_schedule_still_fail():
+    with pytest.raises(ValueError, match="No published WECA punctuality target"):
+        target_metadata("20220331")

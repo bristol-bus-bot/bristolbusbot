@@ -281,9 +281,11 @@ def main():
         return 2
 
     # Reviewed, dated corrections for known BODS GTFS faults (source_corrections.json).
-    # An expired entry refuses the build so it cannot outlive the fault.
+    # Expired entries are skipped and listed; they never stop the build (#138).
     try:
-        corrections = load_source_corrections(datetime.now(timezone.utc).date())
+        expired_corrections: list[dict] = []
+        corrections = load_source_corrections(
+            datetime.now(timezone.utc).date(), skipped=expired_corrections)
         correction_result = {}
         if corrections:
             connection = sqlite3.connect(WECA_DB)
@@ -297,6 +299,9 @@ def main():
         return 2
     if corrections:
         logger.info("Source date corrections (calendars restored per date): %s", correction_result)
+    for entry in expired_corrections:
+        logger.info("Source date correction for %s (%s) expired on %s; skipped",
+                    entry["date"], entry["reference"], entry["expires"])
 
     logger.info("Checking removal exceptions against exact First source journeys...")
     try:

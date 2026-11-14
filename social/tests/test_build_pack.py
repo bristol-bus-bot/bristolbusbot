@@ -334,3 +334,12 @@ def test_weekly_existing_floor_still_applies_to_independent_journeys():
                                        squared_weights=140,service_days=1))
     with pytest.raises(ValueError,match="1,000 timing-point"):
         build_pack.build_week(payload)
+
+
+def test_week_explains_a_target_not_yet_published():
+    audit = audit_payload()
+    audit.update(current_target_status="not_yet_published", current_target_pct=None,
+                 current_target_financial_year="2027-28")
+
+    with pytest.raises(ValueError, match="not published a punctuality target for 2027-28"):
+        build_pack.build_week(audit)

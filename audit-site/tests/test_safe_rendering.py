@@ -171,3 +171,16 @@ def test_route_descriptions_are_escaped():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     assert '<p class="route-desc">${escapeHTML(row.description)}</p>' in source
     assert 'title="${escapeHTML(row.description)}"' in source
+
+
+def test_a_target_not_yet_published_is_never_shown_as_current():
+    """#138: after WECA's schedule ends the last target is named for reference only."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    # A null current target must not read as 0%.
+    assert "finiteNumber(data.current_target_pct ?? data.last_published_target_pct" in source
+    assert 'state.targetStatus === "not_yet_published"' in source
+    assert "data.last_published_target_financial_year" in source
+    assert "none has been published for" in source
+    assert "the last published target" in source
+    assert "Last target ${finiteNumber(state.target)}%" in source
+    assert "has been published yet; the last, for" in source

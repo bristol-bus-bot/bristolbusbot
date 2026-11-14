@@ -551,6 +551,8 @@ def today_lines(snapshot: dict, today: date | None = None) -> list[str]:
         )
     else:
         lines.append("The overnight odd-reading check found nothing urgent.")
+    notes = snapshot.get("notes")
+    lines.extend(str(note) for note in (notes if isinstance(notes, list) else []))
     return lines
 
 
