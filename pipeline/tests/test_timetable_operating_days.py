@@ -93,3 +93,29 @@ def test_school_collision_keeps_working_trip_and_records_holiday_exclusion(tmp_p
     assert c.execute('SELECT count(*) FROM calendar').fetchone()[0] == 0
     assert duplicate.reconcile_database(p,tmp_path) == {'trips_corrected':0,'dates_excluded':0}
     c.close()
+
+
+def test_an_extra_operating_holiday_does_not_hide_ordinary_days():
+    """#133: First lists Boxing Day as operating alongside the usual
+    non-operating holidays. Ordinary days resolve; the holidays stay unknown."""
+    bank = (b'<BankHolidayOperation><DaysOfOperation><BoxingDayHoliday/></DaysOfOperation>'
+            b'<DaysOfNonOperation><ChristmasDayHoliday/><NewYearsDayHoliday/></DaysOfNonOperation>'
+            b'</BankHolidayOperation>')
+    raw = REGULAR.replace(b'{}', bank)
+    assert operating_day(raw, date(2027, 1, 4)) is True        # ordinary Monday
+    assert operating_day(raw, date(2027, 1, 3)) is False       # Sunday: not in the days of week
+    assert operating_day(raw, date(2026, 12, 28)) is None      # Boxing Day substitute: unknown
+    assert operating_day(raw, date(2026, 12, 25)) is None
+    term = REGULAR.replace(b'{}', bank + b'<ServicedOrganisationDayType><DaysOfOperation><WorkingDays>'
+                           b'<ServicedOrganisationRef>UOB</ServicedOrganisationRef></WorkingDays>'
+                           b'</DaysOfOperation></ServicedOrganisationDayType>') + ORG
+    assert operating_day(term, date(2026, 11, 16)) is True     # term-time journey in term
+    assert operating_day(term, date(2027, 1, 4)) is None       # past the published term dates
+
+
+def test_unknown_bank_holiday_parts_are_still_declined():
+    raw = REGULAR.replace(b'{}', b'<BankHolidayOperation><Other/></BankHolidayOperation>')
+    assert operating_day(raw, date(2027, 1, 4)) is None
+    twice = REGULAR.replace(b'{}', b'<BankHolidayOperation><DaysOfOperation/><DaysOfOperation/>'
+                            b'</BankHolidayOperation>')
+    assert operating_day(twice, date(2027, 1, 4)) is None
