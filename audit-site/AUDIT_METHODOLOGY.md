@@ -87,7 +87,7 @@ reading would incorrectly describe the layover as an early departure.
 
 ## On-time definition
 
-A departure counts as on time if it is between 1 minute early and 5 minutes 59
+A reading counts as on time if it is between 1 minute early and 5 minutes 59
 seconds late (delay between -60 and +359 seconds). This is the DfT statistical
 "on time" band, chosen because it matches the convention behind the official
 published figures. WECA's latest published Enhanced Partnership Scheme sets an
@@ -342,8 +342,22 @@ page names the routes withheld each day.
 ## Honest limitations
 
 - A bus missing from the feed is not the same as a bus that did not run.
-- Positions are sampled roughly every 30 seconds, so the closest-approach reading
-  is within a few seconds of the truth, not exact.
+- Positions are sampled roughly every 30 seconds, so each reading can be out
+  by up to about half a minute.
+- **A reading is neither an arrival nor a departure.** We keep the single
+  position where the bus was closest to the timing point and compare it with
+  the timetable's departure time. If a bus waits at the stop, that position
+  can come from any moment of the wait, so a bus that arrived early and
+  waited can count as early. The official standard, and the Department for
+  Transport's ABODS tool, judge departure times; this audit does not yet
+  detect the moment a bus leaves.
+- Readings more than 15 minutes early or more than 90 minutes late are
+  dropped as implausible. Over 22 August to 12 November 2026 this made no
+  practical difference: 517 readings sat in the last minute before the early
+  cut-off and 10 before the late one.
+- The 150-metre zone around each timing point does not change the result: a
+  70, 100, 250 or 1,000-metre zone gives the same network figure to within
+  0.1 points.
 - The match is fuzzy, so some trips are unmatched and excluded.
 - We measure at timing points only, which is the official basis, not at every stop.
 - Operators differ in data quality: First's real-time feed is rich, while some
