@@ -201,3 +201,38 @@ def test_very_late_is_none_without_a_histogram():
     conn = database()
     assert very_late_readings(conn, DAYS, "FBRI") is None
     assert very_late_readings(conn, [], "FBRI") is None
+
+
+def test_six_bands_are_exported_per_route_operator_and_day():
+    """#124: all six bands, in the lazily loaded per-operator file."""
+    conn, _period = build()
+    for day in DAYS:
+        for route, bucket, n in ((None, "early_5plus", 1), (None, "on_time", 8),
+                                 (None, "late_10_20", 2), ("1", "late_20plus", 3)):
+            conn.execute("INSERT INTO daily_delay_histogram VALUES (?,?,?,?,?)",
+                         (day, "FBRI", route, bucket, n))
+    bands = audit_export.build_bands(conn.cursor(), DAYS, "FBRI")
+    assert bands["order"] == list(audit_export.DELAY_BANDS)
+    assert bands["window"] == [7, 0, 56, 0, 14, 0]
+    assert bands["days"][DAYS[0]] == [1, 0, 8, 0, 2, 0]
+    assert bands["routes"]["1"] == [0, 0, 0, 0, 0, 21]
+    assert audit_export.build_bands(database().cursor(), DAYS, "FBRI") is None
+
+
+def test_a_day_whose_bands_do_not_add_up_is_not_published():
+    from audit_publication import day_consistency_reasons
+    conn, _period = build()
+    day = DAYS[0]
+    readings, on_time = conn.execute(
+        "SELECT readings_in_gate, on_time FROM daily_overall_summary WHERE service_date = ?",
+        (day,)).fetchone()
+    conn.execute("INSERT INTO daily_overall_summary (service_date, operator, readings_in_gate, "
+                 "on_time) VALUES (?, 'ALL', ?, ?)", (day, readings, on_time))
+    conn.execute("INSERT INTO daily_delay_histogram VALUES (?, 'FBRI', NULL, 'on_time', ?)",
+                 (day, on_time))
+    conn.execute("INSERT INTO daily_delay_histogram VALUES (?, 'FBRI', NULL, 'late_6_10', ?)",
+                 (day, readings - on_time))
+    band_reasons = {"delay_bands_do_not_add_up_to_readings", "on_time_band_does_not_equal_on_time"}
+    assert band_reasons.isdisjoint(day_consistency_reasons(conn, day, ["FBRI"]))
+    conn.execute("UPDATE daily_delay_histogram SET n = n + 1 WHERE bucket = 'late_6_10'")
+    assert "delay_bands_do_not_add_up_to_readings" in day_consistency_reasons(conn, day, ["FBRI"])

@@ -208,3 +208,14 @@ def test_headline_shows_how_the_rest_missed():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     assert 'id="h-split"' in html
     assert '$("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";' in source
+
+
+def test_six_bands_open_on_tap_from_the_lazy_file():
+    """#124: six bands under the headline, loaded with the hourly file."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    method = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
+    assert 'id="h-bands"' in html and "Show all six bands" in html
+    assert '$("h-bands").addEventListener("toggle", renderSixBands);' in source
+    assert "(await loadHourly(operator))?.bands" in source
+    assert "### The six delay bands" in method and "+601 to +1200" in method

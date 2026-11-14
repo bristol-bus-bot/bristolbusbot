@@ -114,6 +114,26 @@ clearly for a later service date until a newly published target is deliberately
 added. It does not silently carry 87% into a financial year for which the
 scheme provides no target.
 
+### The six delay bands
+
+Every reading also falls into one of six bands, published for each route,
+each operator and the network ("Show all six bands" under the headline).
+Delay is the reading's time minus the timetable's, in seconds:
+
+| Band | Delay |
+|---|---|
+| More than 5 minutes early | below -300 |
+| 1 to 5 minutes early | -300 to -61 |
+| On time | -60 to +359 |
+| 6 to 10 minutes late | +360 to +600 |
+| 10 to 20 minutes late | +601 to +1200 |
+| More than 20 minutes late | above +1200 |
+
+A bus a minute or two ahead has probably arrived and is waiting; one more
+than five minutes ahead is either a real early run or a bad match. The six
+bands always add up to the readings counted, and the on-time band to the
+on-time figure; a day where they don't is not published.
+
 ## Last 28 days (the default view)
 
 The audit opens on the last 28 published service days pooled together, not a
