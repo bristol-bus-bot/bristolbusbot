@@ -72,6 +72,22 @@ def band_sum_reasons(connection, service_date, by_operator, columns) -> list[str
         if int(on_time or 0) != int(row[on_time_at] or 0):
             reasons.append("on_time_band_does_not_equal_on_time")
     return sorted(set(reasons))
+def final_stop_early_on_time(connection: sqlite3.Connection, service_dates,
+                             operator: str) -> int:
+    """Readings counted on time only because early arrival at a trip's last
+    timing point is not a failure (planning #131). Zero for days before the
+    rule, or databases without the table."""
+    dates = list(service_dates)
+    if not dates:
+        return 0
+    try:
+        row = connection.execute(
+            "SELECT COALESCE(SUM(final_early_on_time), 0) FROM daily_final_stop_summary "
+            f"WHERE operator = ? AND route IS NULL AND service_date IN ({','.join('?' * len(dates))})",
+            (operator, *dates)).fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    return int(row[0] or 0)
 
 
 def day_consistency_reasons(

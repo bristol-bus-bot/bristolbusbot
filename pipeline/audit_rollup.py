@@ -32,6 +32,9 @@ from dateutil import tz
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, public_route
 import route_split
 from audit_publication import day_consistency_reasons
+from on_time_rule import (ON_TIME_HIGH_S, ON_TIME_LOW_S,  # noqa: F401 - re-exported
+                          FINAL_STOP_RULE_FROM, delay_band, delay_bucket,
+                          final_early, is_on_time)
 from audit_geo import load_geo_index, geo_for
 from audit_fleet import load_fleet_index, fleet_for, fleet_number
 
@@ -42,8 +45,6 @@ SQLITE_BUSY_TIMEOUT_MS = 60_000
 TARGET_TZ = tz.gettz("Europe/London") or tz.tzlocal()
 
 DISTANCE_GATE_M = 150
-ON_TIME_LOW_S = -60
-ON_TIME_HIGH_S = 359
 RAW_RETENTION_DAYS = 95
 MIN_GEO_MATCH_PCT = 90.0
 MAX_UNATTENDED_RESTATEMENT_LOSS_PCT = 25.0
@@ -192,6 +193,22 @@ def init_summary_tables(conn):
     )
     cur.execute(
         "CREATE INDEX IF NOT EXISTS ix_hist_date ON daily_delay_histogram(service_date, operator)"
+    )
+    # Readings at the last timing point of a trip, and how many of them count
+    # as on time only because early arrival there is not a failure. The page
+    # uses these for the stricter figure beside the headline.
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_final_stop_summary (
+               service_date        TEXT NOT NULL,
+               operator            TEXT NOT NULL,
+               route               TEXT,
+               final_readings      INTEGER NOT NULL,
+               final_early_on_time INTEGER NOT NULL
+           )"""
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS ix_final_stop_date "
+        "ON daily_final_stop_summary(service_date, operator)"
     )
     cur.execute(
         """CREATE TABLE IF NOT EXISTS daily_peak_summary (
@@ -417,28 +434,6 @@ def init_summary_tables(conn):
     conn.commit()
 
 
-def delay_band(delay_s):
-    if delay_s < ON_TIME_LOW_S:
-        return "early"
-    if delay_s > ON_TIME_HIGH_S:
-        return "late"
-    return "on_time"
-
-
-def delay_bucket(delay_s):
-    if delay_s < -300:
-        return "early_5plus"
-    if delay_s < ON_TIME_LOW_S:
-        return "early_1_5"
-    if delay_s <= ON_TIME_HIGH_S:
-        return "on_time"
-    if delay_s <= 600:
-        return "late_6_10"
-    if delay_s <= 1200:
-        return "late_10_20"
-    return "late_20plus"
-
-
 def peak_band_for(scheduled_local):
     try:
         hour = int(scheduled_local[11:13])
@@ -474,10 +469,11 @@ def rollup_hours(conn, date_str, operators, label, *, commit=True):
     counts = {}
     split = route_split.for_connection(conn)
     stop_sql = route_split.column_or_null(conn, "timepoint_observations", "stop_code")
+    final_sql = route_split.column_or_null(conn, "timepoint_observations", "is_final")
     for (operator, route, delay_s, dist_m, scheduled_local,
-         trip_id, stop_code) in conn.execute(
+         trip_id, stop_code, is_final) in conn.execute(
             f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local,
-                      trip_id, {stop_sql}
+                      trip_id, {stop_sql}, {final_sql}
                FROM timepoint_observations
                WHERE service_date = ? AND operator IN ({op_ph})
                  AND COALESCE(is_origin, 0) = 0""",
@@ -487,7 +483,7 @@ def rollup_hours(conn, date_str, operators, label, *, commit=True):
         hour = local_hour(scheduled_local)
         if hour is None:
             continue
-        band = delay_band(delay_s)
+        band = delay_band(delay_s, is_final)
         label_route = public_route(
             operator, split.route(operator, route, trip_id, stop_code), pooled)
         # Readings without a route count towards the network row only.
@@ -556,6 +552,8 @@ def new_accumulator():
         "late": 0,
         "readings_total": 0,
         "excluded_distance": 0,
+        "final_readings": 0,
+        "final_early": 0,
         "hist": {bucket: 0 for bucket in DELAY_BUCKETS},
         "peak": {
             band: {"delays": [], "on_time": 0, "early": 0, "late": 0}
@@ -572,6 +570,8 @@ def fold_into(target, source):
     target["late"] += source["late"]
     target["readings_total"] += source["readings_total"]
     target["excluded_distance"] += source["excluded_distance"]
+    target["final_readings"] += source["final_readings"]
+    target["final_early"] += source["final_early"]
     for bucket in DELAY_BUCKETS:
         target["hist"][bucket] += source["hist"][bucket]
     for band in PEAK_BANDS:
@@ -1347,9 +1347,10 @@ def rollup(
 
     pooled = len(operators) > 1
     stop_sql = route_split.column_or_null(conn, "timepoint_observations", "stop_code")
+    final_sql = route_split.column_or_null(conn, "timepoint_observations", "is_final")
     cur.execute(
         f"""SELECT operator, route, observed_delay_s, gps_distance_m, scheduled_local,
-                  trip_id, {stop_sql}
+                  trip_id, {stop_sql}, {final_sql}
            FROM timepoint_observations
            WHERE service_date = ? AND operator IN ({op_ph})
              AND COALESCE(is_origin, 0) = 0""",
@@ -1387,7 +1388,7 @@ def rollup(
 
     per_route = {}
     for (operator, route, delay_s, dist_m, scheduled_local,
-         trip_id, stop_code) in observations:
+         trip_id, stop_code, is_final) in observations:
         stats = per_route.setdefault(
             public_route(operator, split.route(operator, route, trip_id, stop_code), pooled),
             new_accumulator())
@@ -1397,9 +1398,12 @@ def rollup(
             continue
         stats["delays"].append(delay_s)
         stats["gate_dists"].append(dist_m)
-        band = delay_band(delay_s)
+        band = delay_band(delay_s, is_final)
         stats[band] += 1
-        stats["hist"][delay_bucket(delay_s)] += 1
+        stats["hist"][delay_bucket(delay_s, is_final)] += 1
+        if is_final:
+            stats["final_readings"] += 1
+            stats["final_early"] += final_early(delay_s, is_final)
         band_stats = stats["peak"][peak_band_for(scheduled_local)]
         band_stats["delays"].append(delay_s)
         band_stats[band] += 1
@@ -1422,6 +1426,18 @@ def rollup(
         "DELETE FROM daily_peak_summary WHERE service_date = ? AND operator = ?",
         (date_str, label),
     )
+    cur.execute(
+        "DELETE FROM daily_final_stop_summary WHERE service_date = ? AND operator = ?",
+        (date_str, label),
+    )
+
+    def write_final_stop(route, accumulator):
+        if accumulator["final_readings"]:
+            cur.execute(
+                "INSERT INTO daily_final_stop_summary VALUES (?,?,?,?,?)",
+                (date_str, label, route, accumulator["final_readings"],
+                 accumulator["final_early"]),
+            )
 
     def write_histogram(route, accumulator):
         for bucket in DELAY_BUCKETS:
@@ -1466,6 +1482,7 @@ def rollup(
         )
         write_histogram(route, stats)
         write_peak(route, stats)
+        write_final_stop(route, stats)
         fold_into(network_totals, stats)
 
     overall = punctuality_stats(network_totals)
@@ -1489,6 +1506,7 @@ def rollup(
     )
     write_histogram(None, network_totals)
     write_peak(None, network_totals)
+    write_final_stop(None, network_totals)
     if commit:
         conn.commit()
 
@@ -1504,6 +1522,8 @@ def rollup(
         "coverage_pct": coverage_total,
         "coverage_valid": coverage_valid,
         "hist": network_totals["hist"],
+        "final_readings": network_totals["final_readings"],
+        "final_early_on_time": network_totals["final_early"],
         "peak": {band: len(network_totals["peak"][band]["delays"]) for band in PEAK_BANDS},
     }
 
@@ -1579,7 +1599,8 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
     cur = conn.cursor()
     op_ph = ",".join("?" for _ in operators)
     cur.execute(
-        f"""SELECT operator, stop_code, route, observed_delay_s, trip_id
+        f"""SELECT operator, stop_code, route, observed_delay_s, trip_id,
+                   {route_split.column_or_null(conn, "timepoint_observations", "is_final")}
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
               AND COALESCE(is_origin, 0) = 0
@@ -1589,7 +1610,7 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
     geography = {}
     routes = {}
     split = route_split.for_connection(conn, geo_index)
-    for source_operator, stop_code, route, delay_s, trip_id in cur.fetchall():
+    for source_operator, stop_code, route, delay_s, trip_id, is_final in cur.fetchall():
         route = split.route(source_operator, route, trip_id, stop_code)
         place = geo_for(geo_index, stop_code)
         if not place:
@@ -1599,7 +1620,7 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
             acc = geography.setdefault(
                 (geo_type, geo_key), {"delays": [], "on_time": 0})
             acc["delays"].append(delay_s)
-            if ON_TIME_LOW_S <= delay_s <= ON_TIME_HIGH_S:
+            if is_on_time(delay_s, is_final):
                 acc["on_time"] += 1
             if route:
                 route_acc = routes.setdefault(
@@ -1607,7 +1628,7 @@ def _geo_route_buckets(conn, date_str, operators, geo_index):
                     {"delays": [], "on_time": 0, "early": 0, "late": 0},
                 )
                 route_acc["delays"].append(delay_s)
-                band = delay_band(delay_s)
+                band = delay_band(delay_s, is_final)
                 route_acc[band] += 1
     return geography, routes
 
@@ -1700,7 +1721,8 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
     cur.execute(
         f"""SELECT operator, route, vehicle_ref, observed_delay_s,
                    {route_split.column_or_null(conn, "timepoint_observations", "trip_id")},
-                   {route_split.column_or_null(conn, "timepoint_observations", "stop_code")}
+                   {route_split.column_or_null(conn, "timepoint_observations", "stop_code")},
+                   {route_split.column_or_null(conn, "timepoint_observations", "is_final")}
             FROM timepoint_observations
             WHERE service_date = ? AND operator IN ({op_ph})
               AND COALESCE(is_origin, 0) = 0
@@ -1709,7 +1731,7 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
     )
     models = {}
     split = route_split.for_connection(conn)
-    for op, route, vehicle_ref, delay_s, trip_id, stop_code in cur.fetchall():
+    for op, route, vehicle_ref, delay_s, trip_id, stop_code, is_final in cur.fetchall():
         route = split.route(op, route, trip_id, stop_code)
         f = fleet_for(fleet_index, op, vehicle_ref)
         if not f:
@@ -1719,7 +1741,7 @@ def rollup_fleet(conn, date_str, operators, label, fleet_index, *, commit=True):
             "delays": [], "on_time": 0, "vehicles": set(), "routes": {},
         })
         m["delays"].append(delay_s)
-        if ON_TIME_LOW_S <= delay_s <= ON_TIME_HIGH_S:
+        if is_on_time(delay_s, is_final):
             m["on_time"] += 1
         fn = fleet_number(vehicle_ref)
         if fn:
@@ -1888,6 +1910,47 @@ def rollup_public_day(
     }
 
 
+def final_stop_restatement_dates(conn, since=FINAL_STOP_RULE_FROM):
+    """Published days from ``since`` that still have retained raw readings."""
+    return [row[0] for row in conn.execute(
+        """SELECT s.service_date FROM daily_overall_summary s
+            WHERE s.operator = ? AND s.service_date >= ?
+              AND EXISTS (SELECT 1 FROM timepoint_observations o
+                           WHERE o.service_date = s.service_date)
+            ORDER BY s.service_date""", (NETWORK_LABEL, since))]
+
+
+def restate_final_stop(conn, dates, geo_index, fleet_index, report=print):
+    """Re-run the public products for retained days under the final-stop rule
+    (planning #131). Coverage validity is kept from the day's existing row, so
+    only the punctuality classification changes. Returns before/after counts."""
+    results = []
+    for date_str in dates:
+        before = conn.execute(
+            """SELECT readings_in_gate, on_time, expected_trips
+                 FROM daily_overall_summary WHERE service_date = ? AND operator = ?""",
+            (date_str, NETWORK_LABEL)).fetchone()
+        coverage_valid = before is not None and before[2] is not None
+        rollup_public_day(conn, date_str, coverage_valid, geo_index, fleet_index)
+        after = conn.execute(
+            """SELECT o.readings_in_gate, o.on_time, COALESCE(f.final_early_on_time, 0)
+                 FROM daily_overall_summary o
+                 LEFT JOIN daily_final_stop_summary f
+                   ON f.service_date = o.service_date AND f.operator = o.operator
+                  AND f.route IS NULL
+                WHERE o.service_date = ? AND o.operator = ?""",
+            (date_str, NETWORK_LABEL)).fetchone()
+        row = {"service_date": date_str,
+               "readings_before": before[0] if before else None,
+               "on_time_before": before[1] if before else None,
+               "readings_after": after[0], "on_time_after": after[1],
+               "final_early_on_time": after[2]}
+        results.append(row)
+        report(f"[{date_str}] on time {row['on_time_before']} -> {row['on_time_after']} "
+               f"of {row['readings_after']} (+{row['final_early_on_time']} early at the last stop)")
+    return results
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"ERROR: audit.db not found at {AUDIT_DB} (run the collector first).")
@@ -1900,12 +1963,13 @@ def main():
     backfill_geo_routes = "--backfill-geo-routes" in raw_args
     backfill_hours = "--backfill-hours" in raw_args
     backfill_segments = "--backfill-segments" in raw_args
+    restate_final = "--restate-final-stop" in raw_args
     allow_large_restatement = "--allow-large-restatement" in raw_args
     positional = [arg for arg in raw_args if not arg.startswith("--")]
 
     backfill_modes = sum((
         backfill_trip_coverage, backfill_duty_gaps, backfill_geo_routes,
-        backfill_hours, backfill_segments))
+        backfill_hours, backfill_segments, restate_final))
     if backfill_modes > 1:
         print("ERROR: choose one backfill mode at a time.")
         return 2
@@ -1970,6 +2034,20 @@ def main():
                 conn, date_str, SHOW_OPERATORS, NETWORK_LABEL, commit=False)
             conn.commit()
             print(f"[{date_str}] {cells} route/hour cells")
+        conn.close()
+        return 0
+
+    if restate_final:
+        dates = final_stop_restatement_dates(conn)
+        print(f"Restating {len(dates)} retained days under the final-stop rule...")
+        results = restate_final_stop(
+            conn, dates, load_geo_index(), load_fleet_index())
+        before = sum(r["on_time_before"] or 0 for r in results)
+        after = sum(r["on_time_after"] for r in results)
+        readings = sum(r["readings_after"] for r in results)
+        if readings:
+            print(f"All restated days: {100.0 * before / readings:.1f}% -> "
+                  f"{100.0 * after / readings:.1f}% on time over {readings} readings.")
         conn.close()
         return 0
 

@@ -219,3 +219,12 @@ def test_six_bands_open_on_tap_from_the_lazy_file():
     assert '$("h-bands").addEventListener("toggle", renderSixBands);' in source
     assert "(await loadHourly(operator))?.bands" in source
     assert "### The six delay bands" in method and "+601 to +1200" in method
+def test_stricter_figure_sits_beside_the_headline():
+    """#131: early at the last stop counts as on time; the strict figure is shown too."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'id="h-strict" hidden' in html
+    assert "overall.final_stop_early_on_time" in source
+    assert "renderStrictFigure(overall);" in source
+    # Plain text only, never HTML.
+    assert 'element.textContent = `A bus that reaches the end of its journey early' in source

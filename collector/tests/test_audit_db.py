@@ -320,3 +320,15 @@ def test_default_limits_survive_sustained_noise_across_a_whole_day():
     assert connection.execute(
         "SELECT MAX(n) FROM (SELECT COUNT(*) n FROM matching_evidence "
         "GROUP BY sampling_band,sampling_reason,operator)").fetchone()[0] <= 4
+
+
+def test_observation_keeps_the_final_stop_flag():
+    from collector import audit_db
+    connection = audit_db.connect()
+    row = ("20261114", "FBRI", "75", "T1", "J1", 9, "S9", "2026-11-14T10:00:00+00:00",
+           -200, 0, 20, "2026-11-14T09:56:40+00:00", "V1", 0, "exact")
+    audit_db.upsert_observation(connection.cursor(), (*row[:2], "75", "T2", *row[4:], 1))
+    audit_db.upsert_observation(connection.cursor(), row)   # older 15-field form
+    flags = dict(connection.execute(
+        "SELECT trip_id, is_final FROM timepoint_observations").fetchall())
+    assert flags == {"T1": 0, "T2": 1}

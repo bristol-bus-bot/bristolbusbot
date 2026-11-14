@@ -514,6 +514,7 @@ def test_layout_installs_shadow_validator_but_requires_credential_for_timer(tmp_
     assert (extract / "evidence_pack.py").is_file()
     assert (extract / "collector_research_export.py").is_file()
     assert (extract / "audit_origin_backfill.py").is_file()
+    assert (extract / "audit_final_backfill.py").is_file()
     assert (extract / "systemd/bbb-collector-anomaly.service").is_file()
     assert (extract / "systemd/bbb-collector-anomaly.timer").is_file()
     assert "enable --now bbb-collector-anomaly.timer" in installer

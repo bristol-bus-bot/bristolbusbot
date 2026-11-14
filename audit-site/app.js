@@ -538,6 +538,28 @@ function routeSummary(row, hourly) {
 }
 
 // --- Headline --------------------------------------------------------------------------
+// Early arrival at a trip's last timing point counts as on time, as the
+// official standard allows (planning #131). The stricter figure, counting it
+// as early, sits beside the headline.
+function strictFigure(overall) {
+  const finalEarly = finiteNumber(overall.final_stop_early_on_time);
+  const readings = finiteNumber(overall.readings_in_gate);
+  if (!hasReadings(overall) || finalEarly <= 0 || readings <= 0) return null;
+  return {
+    pct: (100 * (finiteNumber(overall.on_time) - finalEarly)) / readings,
+    finalEarly,
+  };
+}
+
+function renderStrictFigure(overall) {
+  const element = $("h-strict");
+  if (!element) return;
+  const strict = strictFigure(overall);
+  element.hidden = !strict;
+  if (!strict) return;
+  element.textContent = `A bus that reaches the end of its journey early counts as on time, as the official standard allows. Counting those ${Math.round(strict.finalEarly).toLocaleString("en-GB")} readings as early instead, ${strict.pct.toFixed(1)}% were on time.`;
+}
+
 function renderHeadline(opData) {
   const data = state.data;
   const day = state.day;
@@ -558,6 +580,7 @@ function renderHeadline(opData) {
   // How the rest missed, for the network or operator (planning #123).
   $("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";
   renderSixBands();
+  renderStrictFigure(overall);
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
   $("h-tgt").style.left = state.target + "%";

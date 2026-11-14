@@ -57,6 +57,9 @@ class SettledReading:
     gps_distance_m: int
     is_origin: bool
     clock_offset_s: int = 0  # clock reading minus standard; see clock_change
+    # The trip's last timing point: early arrival there is not a failure
+    # (Statutory Document No. 14). The rollup applies that rule.
+    is_final: bool = False
 
 
 ON_TIME_LOW_S = -60
@@ -234,6 +237,7 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
         gps_distance_m=int(cs.distance_m),
         is_origin=cs.index == 0,
         clock_offset_s=offset_s,
+        is_final=cs.index == len(schedule_rows) - 1 and cs.index != 0,
     ), None
 
 
