@@ -689,6 +689,9 @@ def test_disk_priorities_take_effect_and_manual_work_has_a_wrapper():
     assert "/etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules" in installer
     assert 'echo bfq > "$scheduler"' in installer
     assert "/usr/local/bin/bbb-heavy" in installer
+    # A shell script, so never in the installer's Python compile list.
+    compiled = installer.split("-m py_compile", 1)[1].split("\n/", 1)[0]
+    assert "bbb_heavy.sh" not in compiled
     wrapper = (deploy / "bbb_heavy.sh").read_text(encoding="utf-8")
     assert "LOCK=/run/lock/bristolbusbot/heavy-io.lock" in wrapper
     assert "/usr/bin/ionice -c 3 /usr/bin/nice -n 19" in wrapper

@@ -90,7 +90,7 @@ done
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" "$stage/collector_anomaly_report.py" \
     "$stage/evidence_pack.py" "$stage/collector_research_export.py" \
-    "$stage/audit_origin_backfill.py" "$stage/audit_final_backfill.py" "$stage/bbb_heavy.sh" \
+    "$stage/audit_origin_backfill.py" "$stage/audit_final_backfill.py" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
     "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
