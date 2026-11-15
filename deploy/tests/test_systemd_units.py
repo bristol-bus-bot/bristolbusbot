@@ -654,3 +654,42 @@ def test_editorial_fetch_and_promotion_are_split_and_sandboxed():
         "d /var/lib/bristolbusbot-editorial/incoming "
         "0750 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -"
     ) in tmpfiles
+
+
+HEAVY_JOBS = ("audit-rollup", "audit-snapshot", "audit-publish", "timetable-promote@",
+              "timetable-shadow@", "timetable-shadow-auto", "data-health", "backup",
+              "backup-check", "collector-anomaly", "fleet-refresh", "fleet-shadow",
+              "locality-refresh", "locality-shadow", "blurb-generate")
+
+
+def _settings(name):
+    lines = (SYSTEMD / f"bbb-{name}.service").read_text(encoding="utf-8").splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line and not line.startswith("#"))
+
+
+def test_the_collector_has_first_call_on_cpu_and_disk():
+    """#139: the collector must never be starved by other work."""
+    collector = _settings("collector")
+    assert int(collector["CPUWeight"]) == 1000 and int(collector["IOWeight"]) == 1000
+    for name in HEAVY_JOBS:
+        job = _settings(name)
+        assert int(job["Nice"]) >= 10, name
+        assert job["IOSchedulingClass"] in {"best-effort", "idle"}, name
+        assert int(job.get("IOSchedulingPriority", 7)) == 7, name
+        assert int(job["IOWeight"]) <= 10, name
+        assert int(job["CPUWeight"]) <= 50, name
+
+
+def test_disk_priorities_take_effect_and_manual_work_has_a_wrapper():
+    """#139: BFQ honours the weights; bbb-heavy queues manual work on the lock."""
+    deploy = SYSTEMD.parent
+    rule = (deploy / "udev" / "60-bristolbusbot-io-scheduler.rules").read_text(encoding="utf-8")
+    assert 'ATTR{queue/scheduler}="bfq"' in rule
+    installer = (deploy / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    assert "/etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules" in installer
+    assert 'echo bfq > "$scheduler"' in installer
+    assert "/usr/local/bin/bbb-heavy" in installer
+    wrapper = (deploy / "bbb_heavy.sh").read_text(encoding="utf-8")
+    assert "LOCK=/run/lock/bristolbusbot/heavy-io.lock" in wrapper
+    assert "/usr/bin/ionice -c 3 /usr/bin/nice -n 19" in wrapper
+    assert '/usr/bin/flock -w "$WAIT" -E 75 "$LOCK"' in wrapper

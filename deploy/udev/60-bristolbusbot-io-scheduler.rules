@@ -1,0 +1,4 @@
+# Planning #139: BFQ is the only Linux disk scheduler that honours cgroup
+# IO weights and idle IO priority. With mq-deadline (the Pi's default), the
+# collector's IOWeight and every job's low IO priority did nothing.
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/scheduler}="bfq"

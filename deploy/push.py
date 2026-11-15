@@ -925,7 +925,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
         "run_recorded_job.py", "aggregate_health.py", "sample_resources.py",
         "data_health.py", "collector_anomaly_report.py", "evidence_pack.py",
         "collector_research_export.py",
-        "audit_origin_backfill.py", "audit_final_backfill.py",
+        "audit_origin_backfill.py", "audit_final_backfill.py", "bbb_heavy.sh",
         "configure_timetable_delivery.py", "configure_social_curation.py",
         "configure_blurb_generation.py", "blurb_automation.py",
         "blurb_review.sh",
@@ -946,6 +946,7 @@ def install_payload(workspace: Path, settings: DeploySettings) -> Path:
     copy_tree(DEPLOY / "systemd", root / "systemd")
     copy_tree(DEPLOY / "sudoers", root / "sudoers")
     copy_tree(DEPLOY / "tmpfiles", root / "tmpfiles")
+    copy_tree(DEPLOY / "udev", root / "udev")
     for path in root.rglob("*"):
         if path.is_file():
             render_template(path, path, settings)
