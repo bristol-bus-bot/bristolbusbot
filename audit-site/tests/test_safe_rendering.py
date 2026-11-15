@@ -50,21 +50,20 @@ def test_current_target_year_and_source_drive_every_comparison():
     assert "safeHTTPURL(state.targetSourceUrl)" in source
     assert "escapeHTML(state.targetSource" in source
     for marker in (
-            'id="headline-target-note"',
+            'id="h-tgt-label"',
             'id="geo-target-note"',
             'id="route-target-note"',
-            'id="historical-data-note"',
-            'id="point-callout"',
-            'id="footer-intro"'):
+            'id="h-bar"'):
         assert marker in html
 
 
 def test_historical_restatement_and_excluded_day_are_disclosed():
-    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     methodology = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
 
-    assert "contradictory evidence and are excluded" in html
-    assert "Method and timetable changes" in html
+    assert "contradictory evidence and are excluded" in readme
+    assert "Method and timetable changes" in readme
+    assert "AUDIT_METHODOLOGY.md#changes-to-the-measurement" in readme
     assert "That service day is excluded from all public results" in methodology
     assert "not a verified deployment" in methodology
 
@@ -180,10 +179,9 @@ def test_a_target_not_yet_published_is_never_shown_as_current():
     assert "finiteNumber(data.current_target_pct ?? data.last_published_target_pct" in source
     assert 'state.targetStatus === "not_yet_published"' in source
     assert "data.last_published_target_financial_year" in source
-    assert "none has been published for" in source
-    assert "the last published target" in source
-    assert "Last target ${finiteNumber(state.target)}%" in source
-    assert "has been published yet; the last, for" in source
+    assert '${escapeHTML(lastTargetYearLabel())}, last published)' in source
+    assert "no target published for ${targetYearLabel()}" in source
+    assert '$("h-tgt-label").innerHTML = targetReferenceHTML()' in source
 
 
 def test_wording_claims_no_more_than_is_measured():
@@ -215,7 +213,7 @@ def test_six_bands_open_on_tap_from_the_lazy_file():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     method = (ROOT / "AUDIT_METHODOLOGY.md").read_text(encoding="utf-8")
-    assert 'id="h-bands"' in html and "Show all six bands" in html
+    assert 'id="h-bands"' in html and "Six bands" in html
     assert '$("h-bands").addEventListener("toggle", renderSixBands);' in source
     assert "(await loadHourly(operator))?.bands" in source
     assert "### The six delay bands" in method and "+601 to +1200" in method
@@ -226,5 +224,7 @@ def test_stricter_figure_sits_beside_the_headline():
     assert 'id="h-strict" hidden' in html
     assert "overall.final_stop_early_on_time" in source
     assert "renderStrictFigure(overall);" in source
-    # Plain text only, never HTML.
-    assert 'element.textContent = `A bus that reaches the end of its journey early' in source
+    # The visible marker uses textContent; its position is a bounded number.
+    assert '$("h-strict-label").textContent = `${strict.pct.toFixed(1)}% strict`' in source
+    assert 'Math.max(0, Math.min(100, strict.pct))' in source
+    assert 'strictReadings.finalEarly' in source

@@ -36,6 +36,14 @@ change you're committing. `.scratch/` is ignored by Git.
 - Never delete databases, backups or `.env` files without checking with Tom
   first, here or on the Pi.
 
+## Audit page wording
+
+The audit page shows figures and charts. Put explanations in
+`audit-site/README.md` or the methodology. A new figure must arrive as a
+visual, not a sentence: if a chart needs a sentence beside it to be
+understood, change the chart. Keep definitions in accessible labels and
+hover text. Keep the static word-budget test passing.
+
 ## No dated jobs for Tom
 
 A fix must not leave a date on which Tom has to do something by hand or the
