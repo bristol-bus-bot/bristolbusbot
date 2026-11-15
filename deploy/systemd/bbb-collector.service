@@ -28,7 +28,11 @@ UMask=0077
 CPUAccounting=yes
 MemoryAccounting=yes
 TasksAccounting=yes
-CPUWeight=100
+# The collector must never be starved (planning #139): ten times the
+# default share of CPU and disk. Disk weights need the BFQ scheduler,
+# which the layout installs.
+CPUWeight=1000
+IOWeight=1000
 
 NoNewPrivileges=yes
 PrivateDevices=yes

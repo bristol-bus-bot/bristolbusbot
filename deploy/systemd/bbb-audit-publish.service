@@ -12,6 +12,10 @@ Environment=BBB_PIPELINE_DIR=@BBB_DEPLOY_BASE@/current/pipeline
 Environment=BBB_REMOTE_HOME=@BBB_REMOTE_HOME@
 Environment=BBB_AUDIT_SITE_DIR=/var/lib/bristolbusbot/pipeline/audit_site
 ExecStart=/usr/local/libexec/bbb-run-recorded-job --name audit-publish -- /usr/bin/flock -w 900 /run/lock/bristolbusbot/audit.lock @BBB_DEPLOY_BASE@/current/pipeline/publish_to_github.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+IOWeight=10
 TimeoutStartSec=30min
 UMask=0077
 CPUWeight=50

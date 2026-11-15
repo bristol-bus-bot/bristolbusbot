@@ -90,7 +90,7 @@ done
     "$stage/run_recorded_job.py" "$stage/aggregate_health.py" "$stage/sample_resources.py" \
     "$stage/data_health.py" "$stage/collector_anomaly_report.py" \
     "$stage/evidence_pack.py" "$stage/collector_research_export.py" \
-    "$stage/audit_origin_backfill.py" "$stage/audit_final_backfill.py" \
+    "$stage/audit_origin_backfill.py" "$stage/audit_final_backfill.py" "$stage/bbb_heavy.sh" \
     "$stage/configure_timetable_delivery.py" "$stage/configure_social_curation.py" \
     "$stage/configure_blurb_generation.py" "$stage/blurb_automation.py" \
     "$stage/enrichment_layout.py" "$stage/data_promotion.py" \
@@ -137,6 +137,8 @@ for destination in \
     /usr/local/bin/bbb-evidence-pack \
     /usr/local/bin/bbb-collector-research-export \
     /usr/local/libexec/bbb-audit-origin-backfill \
+    /usr/local/bin/bbb-heavy \
+    /etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/bin/bbb-blurb-review \
     /usr/local/sbin/bbb-configure-blurb-generation \
@@ -407,6 +409,16 @@ for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
     install -o root -g root -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done
 install -o root -g root -m 0644 "$stage/tmpfiles/bristolbusbot.conf" /etc/tmpfiles.d/bristolbusbot.conf
+install -o root -g root -m 0755 "$stage/bbb_heavy.sh" /usr/local/bin/bbb-heavy
+# Planning #139: BFQ so the collector's disk weight and idle IO priority
+# take effect. Applied now and on every boot or new disk.
+install -o root -g root -m 0644 "$stage/udev/60-bristolbusbot-io-scheduler.rules" /etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules
+/usr/bin/udevadm control --reload
+for scheduler in /sys/block/sd*/queue/scheduler; do
+    if [ -w "$scheduler" ] && grep -qw bfq "$scheduler"; then
+        echo bfq > "$scheduler"
+    fi
+done
 for shared_lock in \
     /run/lock/bristolbusbot/heavy-io.lock \
     /run/lock/bristolbusbot/editorial.lock

@@ -44,6 +44,27 @@ yearly figure) must lapse by itself: it stops applying, is noted in the daily
 summary, and alerts only if a real fault is still there when it matters.
 Planning #138 has the background.
 
+## Heavy work on the Pi
+
+The collector is the one process on the Pi that must never be starved: every
+poll it misses is a permanent hole in the live map and the audit. It has ten
+times the normal share of CPU and disk, and the disks use the BFQ scheduler so
+that share is honoured (planning #139). Work done by hand has to cooperate:
+
+- **One heavy job at a time, always through `bbb-heavy`**:
+  `bbb-heavy -- <command>`. It waits for the shared heavy-I/O lock (so it
+  queues behind the backup, rollup and timetable jobs) and runs at idle disk
+  and lowest CPU priority. If you aren't sure whether something is heavy
+  (a copy, export, backup, rebuild or large query), treat it as heavy.
+- **No copies off the Pi while a backfill, rebuild, backup or rollup runs.**
+  Prefer files already on Tom's PC in `C:\dev\bbb-research` (the live
+  timetable, the research export, an audit copy). If a copy is unavoidable,
+  rate-limit it and run it through the wrapper:
+  `rsync --bwlimit=10000 --rsync-path="bbb-heavy -- rsync" <pi>:<file> .`
+- **After any heavy job, check the collector's last ten polls** (`poll_log`
+  in audit.db, or `journalctl -u bbb-collector`). If any were missed, stop
+  and tell Tom before doing anything else.
+
 ## Folders that are meant to be here
 
 | Folder | What it is |
