@@ -30,7 +30,6 @@ from timetable_delivery import (
 from timetable_manifest import verify_service_summary
 from timetable_service_profile import (
     SERVICE_SUMMARY_FILENAME,
-    ServiceProfileError,
     load_service_summary,
     pending_holiday_coverage,
 )

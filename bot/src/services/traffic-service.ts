@@ -93,6 +93,7 @@ export class TrafficService {
                 const cacheAge = Number(response.headers.get('age') || 0);
                 if (!Number.isFinite(date) || now - date > 120_000 || date - now > 30_000
                     || !Number.isFinite(cacheAge) || cacheAge < 0 || cacheAge > 120) return null;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 const data = (await response.json() as any)?.flowSegmentData;
                 if (!data || !Number.isFinite(data.confidence) || data.confidence < 0.8 || data.confidence > 1
                     || data.roadClosure !== false

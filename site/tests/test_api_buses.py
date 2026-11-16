@@ -129,7 +129,7 @@ def test_stale_recorded_position_is_hidden(app, client):
     even though the collector's upserts keep updated_at fresh (the
     frozen-city-centre ghost bug)."""
     from datetime import timedelta
-    from conftest import NOW, _vehicle
+    from conftest import _vehicle
     import sqlite3
     conn = sqlite3.connect(app.config["BBB"].live_db)
     from datetime import datetime as _dt, timezone as _tz

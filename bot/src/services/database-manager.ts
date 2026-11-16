@@ -4,21 +4,15 @@
 import type { AppConfig } from '../types/bus-types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
-import * as path from 'path';
 import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
-import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
+import { logger, PerformanceTimer, TARGET_TIMEZONE } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
 import { buildFleetIdentityIndex, emptyFleetIdentityIndex } from './vehicle-identity.js';
 import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import { DatabaseError } from '../types/bus-types.js';
 import { matchedJourneyContext, type JourneyStop } from './journey-context.js';
 import type { 
-    DatabaseStop, 
-    DatabaseRoute, 
-    DatabaseJourney, 
-    DatabaseStopTime,
-    BusVehicleDetails,
     BusEvent
 } from '../types/bus-types.js';
 
@@ -134,6 +128,7 @@ export class DatabaseManager {
                 appDataConnected: !!this.appDataDb
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Failed to initialize databases', { error: error.message });
@@ -150,6 +145,7 @@ export class DatabaseManager {
                 { readonly: true, fileMustExist: true });
             logger.info('Successfully connected to the timetable database (READ-ONLY).');
             return Promise.resolve();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (err: any) {
             logger.error(`FATAL: Could not connect to timetable database: ${err.message}`, {
                 err, path: this.databaseConfig.timetablePath });
@@ -167,6 +163,7 @@ export class DatabaseManager {
             this.appDataDb.pragma(`busy_timeout = ${APP_DATA_BUSY_TIMEOUT_MS}`);
             logger.info('Successfully connected to the app data database (READ-WRITE).');
             return Promise.resolve();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (err: any) {
             logger.error(`FATAL: Could not connect to app data database: ${err.message}`, {
                 err, path: this.databaseConfig.appDataPath });
@@ -199,6 +196,7 @@ export class DatabaseManager {
             this.migrateEngagementAnalytics();
             logger.info("App data database tables and indexes are ready.");
             return Promise.resolve();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (err: any) {
             logger.error("Error initializing app data database tables and indexes.", { err });
             return Promise.reject(err);
@@ -286,6 +284,7 @@ export class DatabaseManager {
                 vehiclesLoaded: this.appState.busDetailsLookup.results.length
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error(`Could not load or parse 'fbribuses.json'`, { err: error });
@@ -330,6 +329,7 @@ export class DatabaseManager {
                 routesLoaded: routeCount
             });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error(`Could not load or parse 'route_details.json'`, { err: error });
@@ -376,6 +376,7 @@ export class DatabaseManager {
                 terminusStopsLoaded: this.appState.terminusStopNames.size
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) { 
             timer.fail(error);
             logger.error(`Error loading terminus stops`, { err: error }); 
@@ -400,6 +401,7 @@ export class DatabaseManager {
                 for (const row of rows) if (!names.has(row.stop_code)) names.set(row.stop_code, row.stop_name);
             }
             logger.info(`Loaded ${names.size} stop names from the timetable.`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Error loading stop names', { err: error });
         }
@@ -447,6 +449,7 @@ export class DatabaseManager {
                  event?.lastStopName || null,
                  event?.source || null, event?.corroboration ?? null,
                  event ? (event.lowConfidence ? 1 : 0) : null]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Failed to store engagement record', { error: error.message });
         }
@@ -490,6 +493,7 @@ export class DatabaseManager {
                 significance: r.significance_score,
                 timestamp: r.timestamp
             }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Error getting recent posts', { error: error.message });
             return [];
@@ -519,6 +523,7 @@ export class DatabaseManager {
                     const changes = this.appDataDb.prepare(sql).run(thirtyDaysAgo).changes;
                     if (changes > 0) logger.info(`Cleaned up ${changes} old records from ${table}.`);
                     totalCleaned += changes;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 } catch (err: any) {
                     logger.error(`Failed to clean up old data from ${table}`, { err });
                 }
@@ -529,6 +534,7 @@ export class DatabaseManager {
                 tablesProcessed: tables.length
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error during data cleanup', { error: error.message });
@@ -562,6 +568,7 @@ export class DatabaseManager {
                 reloadSuccessful: true
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) { 
             timer.fail(error);
             logger.error('A critical error occurred during timetable reload.', { err: error }); 
@@ -621,6 +628,7 @@ export class DatabaseManager {
                 connectionsClosed: closed
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error closing database connections', { error: error.message });

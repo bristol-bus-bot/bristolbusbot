@@ -43,12 +43,14 @@ export function bandFor(iso: string): { band: string; dayType: 'weekday' | 'week
 }
 
 export class TimetableFit {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private cache = new Map<string, { mtimeMs: number; data: any }>();
 
     constructor(private readonly directory = process.env.AUDIT_SEGMENTS_DIR
         || '/var/lib/bristolbusbot/pipeline/audit_site/segments',
         private readonly enabled = (process.env.BBB_TIMETABLE_FIT_POSTS || '').toLowerCase() === 'true') {}
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private load(operator: string): any | null {
         if (!/^[A-Z0-9]{2,8}$/.test(operator)) return null;
         const file = join(this.directory, `${operator}.json`);
@@ -74,6 +76,7 @@ export class TimetableFit {
         // A number reused in another town is filed as "4 Bath" / "4 Bristol";
         // the stop the bus just passed picks the right one.
         const routes = data?.routes && typeof data.routes === 'object' ? data.routes : {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         const items: any[] = Object.keys(routes)
             .filter(key => key === event.line || key.startsWith(`${event.line} `))
             .flatMap(key => (Array.isArray(routes[key]) ? routes[key] : []));

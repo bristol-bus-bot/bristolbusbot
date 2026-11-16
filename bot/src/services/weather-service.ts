@@ -175,6 +175,7 @@ export class WeatherService {
             logger.info(`Fetched and cached weather: ${formattedWeather}`);
             return formattedWeather;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Failed to fetch weather data', {
                 errorType: error instanceof Error ? error.name : 'unknown'
@@ -245,6 +246,7 @@ export class WeatherService {
             this.lastAirQualityFetch = now;
             return null;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Failed to fetch air quality data', {
                 errorType: error instanceof Error ? error.name : 'unknown'

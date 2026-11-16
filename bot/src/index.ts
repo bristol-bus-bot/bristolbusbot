@@ -47,6 +47,7 @@ class BristolBusBot {
     private apiRoutes!: APIRoutes;
     private systemdWatchdog: SystemdWatchdog;
     private expressApp: express.Application;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private server: any;
     
     constructor() {
@@ -171,6 +172,7 @@ class BristolBusBot {
             // Log startup success
             this.logStartupSuccess();
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Failed to start Bristol Bus Bot', {
                 error: error.message,
@@ -199,6 +201,7 @@ class BristolBusBot {
                 terminusStopsLoaded: this.appState.terminusStopNames.size
             });
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Error loading initial data', { error: error.message });
             throw error;
@@ -220,6 +223,7 @@ class BristolBusBot {
                     resolve();
                 });
                 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 this.server.on('error', (error: any) => {
                     logger.error('Express server error', { error: error.message });
                     reject(error);
@@ -275,6 +279,7 @@ class BristolBusBot {
         setInterval(async () => {
             try {
                 await this.databaseManager.cleanupOldData();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             } catch (error: any) {
                 logger.error('Error during daily cleanup', { error: error.message });
             }
@@ -395,6 +400,7 @@ class BristolBusBot {
             
             logger.info('✅ Bristol Bus Bot shutdown complete');
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Error during shutdown', { error: error.message });
         }
@@ -437,6 +443,7 @@ async function main() {
         app = new BristolBusBot();
         await app.start();
         
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     } catch (error: any) {
         logger.error('Failed to start application', { 
             error: error.message,

@@ -18,7 +18,6 @@ Usage:
   python build_timetable_weca.py --gtfs /path/to/itm_south_west_gtfs --boundary /path/to/weca_boundary_dissolved.geojson
 """
 
-import os
 import sys
 import csv
 import json
@@ -49,7 +48,7 @@ GTFS_URL = "https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/south_
 
 def download_and_extract_gtfs(gtfs_path: Path) -> bool:
     """Download fresh GTFS data from BODS and extract to gtfs_path."""
-    logger.info(f"Downloading fresh GTFS data from BODS...")
+    logger.info("Downloading fresh GTFS data from BODS...")
     logger.info(f"  URL: {GTFS_URL}")
     logger.info(f"  Target: {gtfs_path}")
 
@@ -122,7 +121,7 @@ def load_boundary_polygon(boundary_path: Path):
         sys.exit(1)
     
     try:
-        from shapely.geometry import shape, MultiPolygon
+        from shapely.geometry import shape, MultiPolygon  # noqa: F401 - preserve the existing Shapely fallback if either symbol is unavailable
         from shapely.ops import unary_union
         from shapely.prepared import prep
         
@@ -156,7 +155,7 @@ def find_stops_in_area(stops_file: Path, boundary_prepared, bounds) -> set:
     
     min_lon, min_lat, max_lon, max_lat = bounds
     
-    logger.info(f"Scanning stops for those within WECA boundary...")
+    logger.info("Scanning stops for those within WECA boundary...")
     
     total_stops = 0
     in_bbox = 0
@@ -212,7 +211,7 @@ def find_routes_serving_area(stop_times_file: Path, trips_file: Path,
     """
     
     # Step 1: Find trips that visit WECA-area stops
-    logger.info(f"Scanning stop_times.txt for trips visiting WECA-area stops...")
+    logger.info("Scanning stop_times.txt for trips visiting WECA-area stops...")
     trip_stop_counts = {}  # trip_id -> count of stops in WECA area
     
     total_stop_times = 0
@@ -239,7 +238,7 @@ def find_routes_serving_area(stop_times_file: Path, trips_file: Path,
     logger.info(f"  Trips with ≥{MIN_STOPS_IN_AREA} WECA stops: {len(qualifying_trip_ids):,}")
     
     # Step 2: Find route_ids for qualifying trips
-    logger.info(f"Scanning trips.txt to find route_ids...")
+    logger.info("Scanning trips.txt to find route_ids...")
     route_ids = set()
     
     with open(trips_file, 'r', encoding='utf-8') as f:
@@ -744,10 +743,10 @@ def main():
     logger.info(f"\n✓ Build complete in {duration}")
     logger.info(f"  Output: {output_path}")
     logger.info(f"  Size: {output_path.stat().st_size / (1024*1024):.1f} MB")
-    logger.info(f"\nNext steps:")
+    logger.info("\nNext steps:")
     logger.info(f"  1. Finalize and validate {output_path} before promotion")
-    logger.info(f"  2. Update app.py to remove FBRI-only operator filtering")
-    logger.info(f"  3. Update app.py BOUNDING_BOX to match the WECA boundary")
+    logger.info("  2. Update app.py to remove FBRI-only operator filtering")
+    logger.info("  3. Update app.py BOUNDING_BOX to match the WECA boundary")
 
 
 if __name__ == "__main__":

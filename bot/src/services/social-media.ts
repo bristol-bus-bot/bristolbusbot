@@ -163,6 +163,7 @@ export class SocialMediaManager {
             if (this.socialConfig.handle && this.socialConfig.appPassword) {
                 const MAX_RETRIES = 3;
                 const RETRY_DELAYS = [5000, 10000, 20000]; // 5s, 10s, 20s
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 let lastError: any = null;
                 const firstAttemptAt = new Date();
 
@@ -202,6 +203,7 @@ export class SocialMediaManager {
                         blueskySuccess = true;
                         try {
                             this.aiCommentary?.recordPublished(finalPostText, postUri || undefined, this.currentFallbackReason);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                         } catch (error: any) {
                             // A ledger failure must not resubmit an already published post.
                             logger.error('Published post could not update editorial memory', { error: error.message });
@@ -224,6 +226,7 @@ export class SocialMediaManager {
 
                         break; // Success, exit retry loop
 
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                     } catch (error: any) {
                         lastError = error;
 
@@ -284,6 +287,7 @@ export class SocialMediaManager {
 
             return { bluesky: blueskySuccess };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error("--- Error posting to Bluesky: ---", { err: error });
@@ -335,6 +339,7 @@ export class SocialMediaManager {
 
             return posted;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error posting network summary', { error: error.message });
@@ -362,6 +367,7 @@ export class SocialMediaManager {
     /**
      * Get posting statistics for the day
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getDailyStats(): any {
         if (!this.appState) {
             return {
@@ -387,6 +393,7 @@ export class SocialMediaManager {
     /**
      * Create social media post record for tracking
      */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing post-record method signature.
     private createPostRecord(text: string, event: BusEvent, posted: boolean): SocialMediaPost {
         return {
             id: `${Date.now()}_${event.line}_${event.eventType}`,
@@ -473,6 +480,7 @@ export class SocialMediaManager {
                         return true;
                     }
                     
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 } catch (error: any) {
                     lastError = error;
                     logger.warn(`Post attempt ${attempt} failed`, {
@@ -499,6 +507,7 @@ export class SocialMediaManager {
             
             return false;
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error in validated posting', { error: error.message });
@@ -509,6 +518,7 @@ export class SocialMediaManager {
     /**
      * Get service status
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getStatus(): any {
         return {
             name: 'Social Media Manager',
@@ -601,6 +611,7 @@ public async processEventCollector(): Promise<void> {
         const collected = this.appState.getAndClearBusEvents();
         let snapshots: BusEvent[] = [];
         try { snapshots = this.storyProvider?.() || []; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         catch (error: any) { logger.warn('Current story lookup failed', { error: error.message }); }
         const candidates = latestStoryEvents([...collected, ...snapshots])
             .filter(event => !this.observationValidator || this.observationValidator(event));
@@ -609,12 +620,14 @@ public async processEventCollector(): Promise<void> {
         if (event) {
             logAlways('info', `[STORY_SELECTION] ${event.eventType} route ${event.line}; pool ${candidates.filter(item => item.eventType === 'punctual').length} on-time, ${candidates.filter(item => item.eventType !== 'punctual').length} late/early`);
             try { event = await this.databaseManager?.enrichStoryJourney(event) || event; }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             catch (error: any) { logger.warn('Journey context unavailable', { error: error.message }); }
         }
         let text: string | null = null;
         let fallbackReason = event ? 'writer_unavailable' : 'no_eligible_observation';
         if (event && this.aiCommentary) {
             try { text = await this.aiCommentary.generatePost(event); }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             catch (error: any) { logger.warn('Writer failed; using factual fallback', { error: error.message }); }
             fallbackReason = 'writer_rejected_or_failed';
         }
@@ -658,11 +671,13 @@ public async processEventCollector(): Promise<void> {
         }
         if (result.bluesky && event) this.recentStories = [...this.recentStories, event].slice(-6);
         if (!result.bluesky) logger.error('[POSTING] Scheduled post could not be delivered');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     } catch (error: any) {
         logger.error('Posting cycle failed', { error: error.message });
         if (!publishing) {
             this.currentFallbackReason = 'posting_cycle_failed';
             try { await this.postUpdate(this.reserveText(), null); }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             catch (fallbackError: any) { logger.error('Reserve post failed', { error: fallbackError.message }); }
         }
     } finally {
@@ -725,6 +740,7 @@ public async processEventCollector(): Promise<void> {
                 throw new Error('Failed to fetch profile data');
             }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logDetailed('warn', `[FOLLOWER_UPDATE] Error: ${error.message}`);
@@ -744,6 +760,7 @@ public async processEventCollector(): Promise<void> {
                 intervalsCleared: true
             });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('Error during social media service shutdown', {
                 error: error.message
@@ -783,6 +800,7 @@ public async processEventCollector(): Promise<void> {
             if (feed.success && feed.data.feed) {
                 // Extract post text from feed
                 const posts = feed.data.feed
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                     .map((item: any) => item.post?.record?.text)
                     .filter((text: string) => text && text.length > 0)
                     .slice(0, limit);
@@ -791,6 +809,7 @@ public async processEventCollector(): Promise<void> {
             }
 
             return [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('[BLUESKY] Failed to fetch recent posts', { error: error.message });
             return [];
@@ -800,6 +819,7 @@ public async processEventCollector(): Promise<void> {
     /**
      * Get recent posts for debugging
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getRecentPostsDebugInfo(): any {
         return {
             postsToday: this.appState.postsTodayCount,

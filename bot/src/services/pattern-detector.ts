@@ -151,6 +151,7 @@ export class PatternDetector {
             
             return patterns;
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error detecting delay patterns', {
@@ -257,6 +258,7 @@ export class PatternDetector {
                         summary = `Network-wide disruption: ${totalRoutesAffected} routes delayed by ${averageDelay.toFixed(1)} minutes on average`;
                         break;
                     case 'area':
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                         summary = `Area disruption around ${(pattern as any).affectedArea}: ${pattern.routes.length} routes affected`;
                         break;
                     case 'single':
@@ -311,6 +313,7 @@ export class PatternDetector {
             
             return result;
             
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error analyzing pattern significance', {
@@ -340,6 +343,7 @@ export class PatternDetector {
      * Get current network pattern status
      * Provides overview of all active patterns
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getNetworkPatternStatus(): any {
         const recentDelays = this.appState.getRecentDelayEvents(30); // Last 30 minutes
         const patterns = this.detectDelayPatterns(recentDelays);
@@ -389,6 +393,7 @@ export class PatternDetector {
     /**
      * Get service status
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getStatus(): any {
         const recentDelays = this.appState.getRecentDelayEvents(30);
         const currentPatterns = this.detectDelayPatterns(recentDelays);

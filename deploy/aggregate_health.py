@@ -1365,8 +1365,8 @@ def timetable_success_message(attempt: dict[str, object]) -> str:
         f"{count('superseded_route_editions')} overlapping route editions "
         "given separate effective windows",
         f"Sources: {source}",
-        f"Safety: stop search, collector, site, bot and public health passed; "
-        f"previous timetable retained for rollback",
+        "Safety: stop search, collector, site, bot and public health passed; "
+        "previous timetable retained for rollback",
         f"Database: {digest} · promotion {duration_text}",
         _run_line(attempt.get("run_id")),
     ))

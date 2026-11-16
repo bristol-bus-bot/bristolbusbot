@@ -124,6 +124,7 @@ const POWER_LABELS: Record<string, string> = {
 
 /** One subject per bus aspect that has real material; each carries only its own facts. */
 export function vehicleSubjects(event: BusEvent): SubjectChoice[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     const bus: any = event.busDetails;
     if (!bus) return [];
     const choices: SubjectChoice[] = [];
@@ -244,6 +245,7 @@ export function chooseSubject(event: BusEvent, weather: string | null | undefine
         history.at(-1)?.kind !== choice.kind
         && !history.slice(-6).some(item => item.key === choice.key)
         && !(choice.kind === 'livery' && recent.includes(String(choice.context.livery).toLowerCase()))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         && !(choice.kind === 'model' && recent.includes(String((choice.context.busModel as any)?.name).toLowerCase()))
         && !(choice.kind === 'depot' && recent.includes(event.busDetails?.garage?.name?.toLowerCase() || '\u0000'))
     ));

@@ -36,6 +36,12 @@ change you're committing. `.scratch/` is ignored by Git.
 - Never delete databases, backups or `.env` files without checking with Tom
   first, here or on the Pi.
 
+## Lint checks before a pull request
+
+Run `ruff check` from the repository root and `npm run lint` from `bot/`.
+CI runs these in its own lint job. The existing custom checks still run
+as part of the test and security jobs.
+
 ## Audit page wording
 
 The audit page shows figures and charts. One line of at most 20 words

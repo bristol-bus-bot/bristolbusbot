@@ -60,10 +60,12 @@ const limiter = new RequestLimiter(HTTP_MAX_CONCURRENT);
 // Exponential backoff with jitter
 async function withBackoff<T>(fn: () => Promise<T>, retries = HTTP_RETRIES): Promise<T> {
   let attempt = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   let lastError: any = null;
   while (attempt <= retries) {
     try {
       return await fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     } catch (err: any) {
       lastError = err;
       attempt++;
@@ -87,9 +89,11 @@ export async function httpFetch(url: string, options: RequestInit & { timeoutMs?
       try {
         // A fresh timeout per attempt.
         return await fetch(url, { ...init, dispatcher, signal: AbortSignal.timeout(timeoutMs) });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
       } catch (err: any) {
         if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
           const e = new Error(`HTTP request timed out after ${timeoutMs}ms`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
           (e as any).code = 'ETIMEDOUT';
           throw e;
         }

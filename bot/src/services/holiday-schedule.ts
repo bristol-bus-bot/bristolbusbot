@@ -66,6 +66,7 @@ export class HolidaySchedule {
             } else {
                 logger.warn(`${day} post not sent; will try again`);
             }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error(`Failed to post ${day} message`, { error: error.message });
         } finally {
@@ -96,6 +97,7 @@ export class HolidaySchedule {
             const temporary = `${this.statePath}.new-${process.pid}`;
             writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
             renameSync(temporary, this.statePath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('Could not record the holiday post', { error: error.message });
         }

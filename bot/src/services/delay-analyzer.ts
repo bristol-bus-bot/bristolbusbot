@@ -3,7 +3,7 @@
 
 import type { AppConfig } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
-import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
+import { logger, TARGET_TIMEZONE, logDetailed } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
 import { resolveFleetVehicle } from './vehicle-identity.js';
 import type { DatabaseManager } from './database-manager.js';
@@ -49,6 +49,7 @@ export class DelayAnalyzer {
   }
 
   // Ignore extreme readings, which are more likely to be feed or match errors.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   calculateEventSignificance(delayMinutes: number, time: DateTime, counters?: any): { type: 'delay' | 'early' | 'punctual' | 'ignore', score: number } {
     if (delayMinutes > 30) {
       if (counters) counters.extremeFiltered++;
@@ -139,6 +140,7 @@ export class DelayAnalyzer {
     return history;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   shouldReportDelay(delayRecord: BusEvent, history: DelayHistory, counters?: any): boolean {
     const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
     const timeSinceLastReport = currentTime.diff(history.lastReportTime, 'minutes').minutes;
@@ -206,6 +208,7 @@ export class DelayAnalyzer {
     ) as BusVehicleDetails | null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   getStatus(): any {
     return {
       name: 'Delay Analyzer',

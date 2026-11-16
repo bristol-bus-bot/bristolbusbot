@@ -71,6 +71,7 @@ export class RareWorkingShadowReader {
         try {
             snapshot = JSON.parse(
                 fs.readFileSync(this.snapshotPath, 'utf8')) as IntegrationSnapshot;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             if (error?.code !== 'ENOENT') {
                 logAlways('error', '[RARE_SHADOW] snapshot read failed', {

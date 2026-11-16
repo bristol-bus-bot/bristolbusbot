@@ -304,12 +304,12 @@ def main():
     cursor.execute("SELECT COUNT(*) FROM route_shapes WHERE variant > 0")
     variant_count = cursor.fetchone()[0]
 
-    print(f"\nDone!")
+    print("\nDone!")
     print(f"  Temporary shape points processed: {inserted}")
     print(f"  Route shapes: {total_route_shapes} polylines across {total_operators} operators ({total_json_bytes / 1024:.0f} KB total JSON)")
     if variant_count:
         print(f"  Geographic variants: {variant_count} extra polylines from split routes")
-    print(f"  Biggest polylines:")
+    print("  Biggest polylines:")
     for name, op, dir_id, var, size in biggest:
         print(f"    Route {name} ({op}, dir {dir_id}, var {var}): {size / 1024:.1f} KB")
 

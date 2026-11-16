@@ -93,6 +93,7 @@ export class EventReader {
                 FROM vehicles v WHERE v.recorded_at >= ? AND v.delay_seconds IS NOT NULL
                 AND v.event_type IN ('delayed', 'early', 'punctual')
                 ORDER BY v.recorded_at DESC LIMIT 1000`)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 .all(new Date(now - 90_000).toISOString()) as any[];
             return rows.filter(row => this.operators.has(row.operator_ref)).map(row => {
                 const name = names.get(row.stop_code);
@@ -102,6 +103,7 @@ export class EventReader {
                 event.significance = Math.max(1, event.significance);
                 return event;
             }).filter(event => !observationIssue(event, now) && this.isObservationCurrent(event, now));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('Could not read current stories', { error: error.message });
             return [];
@@ -121,6 +123,7 @@ export class EventReader {
     private validateObservation(event: BusEvent, now: number, exactPosition: boolean): boolean {
         try {
             const row = this.db.prepare('SELECT * FROM vehicles WHERE vehicle_ref = ?')
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 .get(event.vehicleRef) as any;
             if (!row || row.low_confidence || row.at_depot || row.delay_seconds == null) return false;
             const age = now - Date.parse(row.recorded_at);
@@ -135,6 +138,7 @@ export class EventReader {
                     && (event.collectorStopSequence === undefined || row.stop_sequence === event.collectorStopSequence)
                     && this.mapEventType(row.event_type) === event.eventType
                     && Math.round(row.delay_seconds / 60) === event.delayMinutes));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('Could not confirm current story observation', { error: error.message });
             return false;
@@ -262,6 +266,7 @@ export class EventReader {
                 logSummary('info', `📋 COLLECTED (events): ${reportable.length} of ${rows.length} rows → collector total ${this.appState.busEventCollector.length}`);
             }
             completed = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (err: any) {
             logAlways('error', 'EventReader cycle failed', { error: err.message });
         } finally {

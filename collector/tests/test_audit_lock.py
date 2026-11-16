@@ -8,9 +8,9 @@ import time
 
 import pytest
 
-from collector import audit_db, live_db
+from collector import audit_db
 from collector.run import AuditBacklog, _write_audit, vm_cycle
-from test_run import LDN, NOW, VM_FEED, BristolBoxBoundary, setup
+from test_run import LDN, NOW, VM_FEED, setup
 
 SHORT_WAIT_S = 0.3
 
