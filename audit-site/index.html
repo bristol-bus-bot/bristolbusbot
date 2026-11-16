@@ -44,21 +44,26 @@
   <div class="hero">
     <div class="card">
       <div class="big"><strong id="h-inten">–</strong><span id="h-pct"></span></div>
-      <p class="lead" id="h-lead"></p>
-      <p class="small" id="h-strict" hidden></p>
-      <div class="bar" aria-hidden="true"><i id="h-fill"></i><b id="h-tgt"></b></div>
-      <div class="bar-labels"><span>0%</span><span id="h-tgt-label"></span><span>100%</span></div>
+      <p class="small on-time-definition">Up to 1 minute early, under 6 minutes late.</p>
+      <div class="headline-chart">
+        <div class="bar" role="img" id="h-bar">
+          <i id="h-fill"></i>
+          <b id="h-tgt"><span id="h-tgt-label"></span></b>
+          <b id="h-strict" hidden></b>
+        </div>
+        <div class="bar-labels" aria-hidden="true"><span>0%</span><span>100%</span></div>
+        <div id="h-strict-label" class="small" hidden></div>
+      </div>
       <div class="headline-split" id="h-split"></div>
-      <details class="bands" id="h-bands"><summary>Show all six bands</summary><div class="bands-body"></div></details>
-      <p class="small faint" id="headline-target-note"></p>
+      <details class="bands" id="h-bands"><summary>Six bands</summary><div class="bands-body"></div></details>
       <details class="evidence" id="evidence">
-        <summary>How sure are we?</summary>
+        <summary>Confidence</summary>
         <p id="evidence-text"></p>
       </details>
     </div>
     <div class="card stats">
       <div class="stat"><span class="k">Typical lateness</span><span class="v" id="s-median">–</span></div>
-      <div class="stat"><span class="k">Journeys we saw run</span><span class="v" id="s-seen">–</span></div>
+      <div class="stat"><span class="k">Journeys seen</span><span class="v" id="s-seen">–</span></div>
       <div class="stat"><span class="k">Routes measured</span><span class="v" id="s-routes">–</span></div>
       <div class="stat"><span class="k">Timing-point readings</span><span class="v" id="s-readings">–</span></div>
     </div>
@@ -70,16 +75,15 @@
     <label class="sr-only" for="operator">Bus operator</label>
     <select id="operator" class="op-select"></select>
     <div class="jump-links">
-      <a href="#routes">Your route</a><a href="#time">Time of day</a><a href="#timetable">Timetable problems</a>
-      <a href="#places">Places</a><a href="#vehicles">Vehicles</a><a href="#about">How it works</a>
+      <a href="#routes">Your route</a><a href="#time">Time of day</a><a href="#timetable">Timetable shortfalls</a>
+      <a href="#places">Places</a><a href="#vehicles">Vehicles</a>
     </div>
   </div>
 </nav>
 
 <main id="main-content" class="wrap">
   <section id="routes">
-    <h2>How is your route doing?</h2>
-    <p class="intro">Search for a route, or pick one from the list. Faded routes have too few readings to be sure.</p>
+    <h2>Your route</h2>
     <p class="small faint" id="route-target-note"></p>
     <div class="routes">
       <div>
@@ -100,21 +104,21 @@
   </section>
 
   <section id="time">
-    <h2>When are buses on time?</h2>
+    <h2>Time of day</h2>
     <div class="card" id="net-hours">
       <p class="faint">Loading…</p>
     </div>
   </section>
 
   <section id="timetable">
-    <h2>Where the timetable doesn't allow enough time</h2>
-    <p class="intro">Stretches where buses take longer than the timetable gives them, almost every day. That's a planning problem: drivers can only catch up by driving faster or pulling away before people sit down.</p>
+    <h2>Timetable shortfalls</h2>
+    <p class="intro">These stretches take longer than the timetable allows. That’s a planning problem, not the drivers’ fault.</p>
     <ol class="fit" id="worst"></ol>
   </section>
 
   <section id="places">
     <h2>Places</h2>
-    <p class="intro">How punctual buses are where they run. A ward can look bad because one busy route through it struggles.</p>
+    <p class="intro">A ward can look bad because one busy route through it struggles.</p>
     <p class="small faint" id="geo-target-note"></p>
     <div class="two">
       <div class="card">
@@ -123,7 +127,7 @@
           <button type="button" data-m="ward" aria-pressed="false">Wards</button>
         </div>
         <svg id="map" class="map" role="img" aria-label="Map of on-time share by place"></svg>
-        <p class="strip-detail" id="map-d" aria-live="polite">Tap a place for its figures.</p>
+        <p class="strip-detail" id="map-d" aria-live="polite">Select a place</p>
         <div class="legend" id="map-legend"></div>
         <p class="small faint" id="unknown-note"></p>
       </div>
@@ -137,7 +141,7 @@
 
   <section id="vehicles">
     <h2>Vehicles</h2>
-    <p class="intro">Buses are given routes by the operator, so on-time figures here say more about routes than about the vehicles. Model names link to Wikipedia.</p>
+    <p class="intro">Figures here say more about routes than about the vehicles.</p>
     <div class="card glance-card">
       <div class="glance"><strong id="e-share"></strong><span id="e-text"></span></div>
       <div class="fleetbar" id="fleetbar" role="img"></div>
@@ -152,44 +156,9 @@
     </div>
   </section>
 
-  <section id="about">
-    <h2>How it works</h2>
-    <div class="callout" id="point-callout">
-      <strong>The point.</strong> This site compares independent measurements with WECA's dated annual target and longer-term goal.
-    </div>
-    <details>
-      <summary>What "on time" means</summary>
-      <p>Between 1 minute early and 5 minutes 59 seconds late at a timing point, the Department for Transport's statistical definition. A reading is a bus recorded within 150 m of a timing point. We measure every bus we can see, every day, against the published timetable.</p>
-    </details>
-    <details>
-      <summary>"Likely reasons" are suggestions, not facts</summary>
-      <p>They come from patterns in the data: a stretch where buses lose time on most days, time that the timetable puts before a stop when it's needed after it, a timetable that expects faster journeys after 10am when buses don't get faster, trips that start later and later as the day goes on, a time of day that is much worse than the rest, journeys that go missing, or buses that wait at a stop. Each one shows its evidence. When there is no clear pattern, we don't suggest a reason.</p>
-    </details>
-    <details>
-      <summary>This is about the timetable and the service, not drivers</summary>
-      <p>Figures measure buses against their timetable. They are not a measure of individual drivers.</p>
-    </details>
-    <details>
-      <summary>What we do <em>not</em> claim</summary>
-      <ul>
-        <li>We do <strong>not</strong> claim any operator is breaking the law or withholding required data. Operators are legally required to publish timetables, vehicle locations and fares, and they do. Performance figures are <em>not</em> a statutory publication requirement.</li>
-        <li>We do <strong>not</strong> claim these are the official figures. They are an independent estimate and will differ from any internal operator or regulator measurement.</li>
-        <li>Low-sample routes, smaller operators with patchier real-time data, and partial collection days are <strong>not</strong> reliable on their own, and are flagged as such.</li>
-      </ul>
-    </details>
-    <details id="historical-data-note">
-      <summary>Historical data note</summary>
-      <p>Some days have incomplete or contradictory evidence and are excluded. Method and timetable changes also limit comparisons across periods. <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md#changes-to-the-measurement">See the dated change record.</a></p>
-    </details>
-    <details>
-      <summary>Full methodology and data</summary>
-      <p>The method, data sources (including routes drawn from TNDS that operators do not publish to BODS), the geography, fleet and frequent-service definitions, and every limitation are in <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">AUDIT_METHODOLOGY.md</a>. Day-by-day history is in <a href="audit_data.json">audit_data.json</a>.</p>
-    </details>
-  </section>
 
   <footer class="audit-footer">
-    <p id="footer-intro">An independent, non-commercial measurement of West of England bus punctuality, compared with WECA's published targets. Full method, sources and limitations are in the <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">methodology</a>, and all the code and data are on <a href="https://github.com/bristol-bus-bot/weca-bus-audit">GitHub</a>.</p>
-    <p class="small faint">Contains public sector information licensed under the Open Government Licence v3.0 (DfT Bus Open Data Service). Generated <span id="genat">–</span> · <span id="genday">–</span>.</p>
+    <p>Independent · <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/README.md">How this works</a> · <a href="https://github.com/bristol-bus-bot/weca-bus-audit/blob/main/AUDIT_METHODOLOGY.md">Methodology</a> · Generated <span id="genat">–</span> · <span id="genday">–</span> · Contains public sector information licensed under the Open Government Licence v3.0 (DfT Bus Open Data Service).</p>
   </footer>
 </main>
 

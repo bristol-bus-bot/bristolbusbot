@@ -36,6 +36,14 @@ change you're committing. `.scratch/` is ignored by Git.
 - Never delete databases, backups or `.env` files without checking with Tom
   first, here or on the Pi.
 
+## Audit page wording
+
+The audit page shows figures and charts. One line of at most 20 words
+per section is allowed. Anything a reader needs must be visible or one
+tap away on a phone, never hover only. Put longer background in
+`audit-site/README.md` or the methodology. Keep the static word-budget
+test passing.
+
 ## No dated jobs for Tom
 
 A fix must not leave a date on which Tom has to do something by hand or the
