@@ -29,6 +29,7 @@
       <div>
         <span class="pill">Independent · non-commercial · open data</span>
         <h1>West of England bus punctuality</h1>
+        <p>An independent check on whether buses run on time, from the operators' own live data.</p>
       </div>
       <a class="live-link" href="https://bristolbuses.live/">Track buses live ↗</a>
     </div>
@@ -43,13 +44,15 @@
   <div class="hero">
     <div class="card">
       <div class="big"><strong id="h-inten">–</strong><span id="h-pct"></span></div>
+      <p class="small on-time-definition">Up to 1 minute early, under 6 minutes late.</p>
       <div class="headline-chart">
         <div class="bar" role="img" id="h-bar">
           <i id="h-fill"></i>
           <b id="h-tgt"><span id="h-tgt-label"></span></b>
-          <b id="h-strict" hidden><span id="h-strict-label"></span></b>
+          <b id="h-strict" hidden></b>
         </div>
         <div class="bar-labels" aria-hidden="true"><span>0%</span><span>100%</span></div>
+        <div id="h-strict-label" class="small" hidden></div>
       </div>
       <div class="headline-split" id="h-split"></div>
       <details class="bands" id="h-bands"><summary>Six bands</summary><div class="bands-body"></div></details>
@@ -109,11 +112,13 @@
 
   <section id="timetable">
     <h2>Timetable shortfalls</h2>
+    <p class="intro">Stretches where the timetable gives buses too little time; a planning problem, not a driver one.</p>
     <ol class="fit" id="worst"></ol>
   </section>
 
   <section id="places">
     <h2>Places</h2>
+    <p class="intro">A ward can look bad because one busy route through it struggles.</p>
     <p class="small faint" id="geo-target-note"></p>
     <div class="two">
       <div class="card">
@@ -136,6 +141,7 @@
 
   <section id="vehicles">
     <h2>Vehicles</h2>
+    <p class="intro">Figures here say more about routes than about the vehicles.</p>
     <div class="card glance-card">
       <div class="glance"><strong id="e-share"></strong><span id="e-text"></span></div>
       <div class="fleetbar" id="fleetbar" role="img"></div>

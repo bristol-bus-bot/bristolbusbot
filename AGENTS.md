@@ -38,11 +38,11 @@ change you're committing. `.scratch/` is ignored by Git.
 
 ## Audit page wording
 
-The audit page shows figures and charts. Put explanations in
-`audit-site/README.md` or the methodology. A new figure must arrive as a
-visual, not a sentence: if a chart needs a sentence beside it to be
-understood, change the chart. Keep definitions in accessible labels and
-hover text. Keep the static word-budget test passing.
+The audit page shows figures and charts. One line of at most 20 words
+per section is allowed. Anything a reader needs must be visible or one
+tap away on a phone, never hover only. Put longer background in
+`audit-site/README.md` or the methodology. Keep the static word-budget
+test passing.
 
 ## No dated jobs for Tom
 

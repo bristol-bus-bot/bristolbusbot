@@ -536,13 +536,21 @@ function strictFigure(overall) {
 
 function renderStrictFigure(overall) {
   const element = $("h-strict");
+  const label = $("h-strict-label");
   const strict = strictFigure(overall);
-  element.hidden = !strict;
+  element.hidden = label.hidden = !strict;
   if (!strict) return;
   element.style.left = Math.max(0, Math.min(100, strict.pct)) + "%";
-  element.classList.toggle("near-start", strict.pct < 35);
-  $("h-strict-label").textContent = `${strict.pct.toFixed(1)}% strict`;
+  label.textContent = `${strict.pct.toFixed(1)}% if early arrivals at the last stop count as early`;
   element.title = `Counting ${Math.round(strict.finalEarly).toLocaleString("en-GB")} early last-stop readings as early instead of on time`;
+}
+
+function positionTargetLabel() {
+  const width = $("h-bar").clientWidth;
+  const label = $("h-tgt-label");
+  const marker = width * state.target / 100;
+  const left = Math.max(0, Math.min(marker - label.offsetWidth / 2, width - label.offsetWidth));
+  label.style.left = `${left - marker}px`;
 }
 
 function renderHeadline(opData) {
@@ -556,13 +564,13 @@ function renderHeadline(opData) {
   $("h-inten").textContent = hasReadings(overall) ? inTen(pct) : "–";
   $("h-pct").textContent = hasReadings(overall) ? `on time (${finiteNumber(pct).toFixed(1)}%)` : "no readings";
   // How the rest missed, for the network or operator (planning #123).
-  $("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";
+  $("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall, true) : "";
   renderSixBands();
   renderStrictFigure(overall);
   $("h-fill").style.width = Math.min(100, finiteNumber(pct)) + "%";
   $("h-fill").style.background = colour;
   $("h-tgt").style.left = state.target + "%";
-  $("h-tgt").classList.toggle("near-start", state.target < 80);
+  positionTargetLabel();
   const strict = strictFigure(overall);
   $("h-bar").setAttribute("aria-label", hasReadings(overall)
     ? `${finiteNumber(pct).toFixed(1)}% of readings at timing points were on time; ${finiteNumber(state.target)}% ${targetPending() ? `last published target (${lastTargetYearLabel()}); no target published for ${targetYearLabel()}` : `target for ${targetYearLabel()}`}${strict ? `; ${strict.pct.toFixed(1)}% strict, counting ${Math.round(strict.finalEarly)} early last-stop readings as early` : ""}`
@@ -716,7 +724,7 @@ async function renderRouteDetail() {
 }
 
 /** Early, on time, late and very late as one bar, so "6 in 10 on time" says how the rest missed. */
-function arrivalSplitHTML(row) {
+function arrivalSplitHTML(row, showDefinitions = false) {
   const readings = finiteNumber(row.readings_in_gate);
   if (!readings) return "";
   const veryLate = row.very_late == null ? null : Math.min(finiteNumber(row.very_late), finiteNumber(row.late));
@@ -730,17 +738,20 @@ function arrivalSplitHTML(row) {
   return `<div class="split" role="img" aria-label="${escapeHTML(parts.map(([, label, what, n]) => `${label} ${Math.round(pct(n))}%: ${what}`).join(", "))}">${
     parts.map(([key, label, what, n]) => `<i class="${key}" style="width:${pct(n)}%" title="${escapeHTML(label)}: ${Math.round(pct(n))}% · ${escapeHTML(what)}"><span aria-hidden="true">${pct(n) >= 12 ? Math.round(pct(n)) + "%" : ""}</span></i>`).join("")}</div>
     <ul class="split-legend">${parts.map(([key, label, what, n]) =>
-      `<li><i class="${key}"></i><strong>${Math.round(pct(n))}%</strong> ${escapeHTML(label.toLowerCase())}</li>`).join("")}</ul>`;
+      `<li><i class="${key}"></i><strong>${Math.round(pct(n))}%</strong> ${escapeHTML(label.toLowerCase())}</li>`).join("")}</ul>
+    ${showDefinitions ? `<details class="bands"><summary>What do these mean?</summary>
+      <ul>${parts.map(([, label, what]) => `<li><strong>${escapeHTML(label)}:</strong> ${escapeHTML(what)}.</li>`).join("")}</ul>
+    </details>` : ""}`;
 }
 
 // All six bands (planning #124): the same colours, lighter and darker.
 const SIX_BANDS = [
-  ["early5", "5+ min early", "more than 5 minutes ahead of the timetable"],
-  ["early1", "1 to 5 min early", "1 to 5 minutes ahead"],
-  ["ontime", "On time", "up to a minute early or under 6 minutes late"],
-  ["late6", "6 to 10 min late", "6 to 10 minutes late"],
-  ["late10", "10 to 20 min late", "10 to 20 minutes late"],
-  ["late20", "20+ min late", "20 minutes or more late"],
+  ["early5", "5+ min early", "more than 5 minutes ahead of the timetable", "5m+ early"],
+  ["early1", "1 to 5 min early", "1 to 5 minutes ahead", "1–5m early"],
+  ["ontime", "On time", "up to a minute early or under 6 minutes late", "on time"],
+  ["late6", "6 to 10 min late", "6 to 10 minutes late", "6–10m late"],
+  ["late10", "10 to 20 min late", "10 to 20 minutes late", "10–20m late"],
+  ["late20", "20+ min late", "20 minutes or more late", "20m+ late"],
 ];
 
 function sixBandHTML(counts) {
@@ -751,8 +762,8 @@ function sixBandHTML(counts) {
   const pct = (n) => (100 * n) / total;
   return `<div class="split six" role="img" aria-label="${escapeHTML(SIX_BANDS.map(([, label, what], i) => `${label} ${Math.round(pct(values[i]))}%: ${what}`).join(", "))}">${
     SIX_BANDS.map(([key, label, what], i) => `<i class="${key}" style="width:${pct(values[i])}%" title="${escapeHTML(label)}: ${Math.round(pct(values[i]))}% · ${escapeHTML(what)}"><span aria-hidden="true">${pct(values[i]) >= 12 ? Math.round(pct(values[i])) + "%" : ""}</span></i>`).join("")}</div>
-    <ul class="split-legend">${SIX_BANDS.map(([key, label, what], i) =>
-      `<li><i class="${key}"></i><strong>${Math.round(pct(values[i]))}%</strong> ${escapeHTML(label.toLowerCase())}</li>`).join("")}</ul>`;
+    <ul class="split-legend">${SIX_BANDS.map(([key, , , shortLabel], i) =>
+      `<li><i class="${key}"></i><strong>${Math.round(pct(values[i]))}%</strong> ${escapeHTML(shortLabel)}</li>`).join("")}</ul>`;
 }
 
 async function renderSixBands() {
@@ -1167,6 +1178,9 @@ async function load() {
 }
 
 function wireControls() {
+  const targetPosition = new ResizeObserver(positionTargetLabel);
+  targetPosition.observe($("h-bar"));
+  targetPosition.observe($("h-tgt-label"));
   $("operator").addEventListener("change", (event) => selectOperator(event.target.value));
   $("q").addEventListener("input", () => {
     state.routesShown = ROUTES_SHOWN;

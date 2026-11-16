@@ -205,7 +205,7 @@ def test_headline_shows_how_the_rest_missed():
     source = (ROOT / "app.js").read_text(encoding="utf-8")
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     assert 'id="h-split"' in html
-    assert '$("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall) : "";' in source
+    assert '$("h-split").innerHTML = hasReadings(overall) ? arrivalSplitHTML(overall, true) : "";' in source
 
 
 def test_six_bands_open_on_tap_from_the_lazy_file():
@@ -225,6 +225,6 @@ def test_stricter_figure_sits_beside_the_headline():
     assert "overall.final_stop_early_on_time" in source
     assert "renderStrictFigure(overall);" in source
     # The visible marker uses textContent; its position is a bounded number.
-    assert '$("h-strict-label").textContent = `${strict.pct.toFixed(1)}% strict`' in source
+    assert 'label.textContent = `${strict.pct.toFixed(1)}% if early arrivals at the last stop count as early`' in source
     assert 'Math.max(0, Math.min(100, strict.pct))' in source
     assert 'strictReadings.finalEarly' in source
