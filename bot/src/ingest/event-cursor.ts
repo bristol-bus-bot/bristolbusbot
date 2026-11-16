@@ -42,7 +42,6 @@ export class EventCursor {
             const temporary = `${this.path}.new`;
             writeFileSync(temporary, JSON.stringify({ version: 1, ...state }), { mode: 0o600 });
             renameSync(temporary, this.path);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('[EVENT_CURSOR] Could not save the event position; kept in memory only',
                 { error: error?.message });

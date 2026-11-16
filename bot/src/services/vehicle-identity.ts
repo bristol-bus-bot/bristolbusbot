@@ -6,15 +6,10 @@
  */
 
 export interface FleetIdentityIndex {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     results: any[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     scoped: Map<string, any[]>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     registrationsScoped: Map<string, any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     byRegistration: Map<string, any[]>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     byCode: Map<string, any[]>;
     codeOwners: Map<string, Set<string>>;
 }
@@ -23,13 +18,11 @@ function text(value: unknown): string {
     return String(value ?? '').trim();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 function operator(record: any): string {
     const value = record?.operator;
     return text(typeof value === 'object' ? value?.id : value).toUpperCase();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 function code(record: any): string {
     return text(record?.fleet_code ?? record?.fleet_number);
 }
@@ -38,7 +31,6 @@ function registration(value: unknown): string {
     return text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 function registrationFor(record: any): string {
     return registration(record?.reg ?? record?.registration);
 }
@@ -47,7 +39,6 @@ function key(...parts: string[]): string {
     return parts.join('\0');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 function preferred(records: any[]): any | null {
     const active = records.filter(record => !record?.withdrawn);
     const candidates = active.length ? active : records;
@@ -60,7 +51,6 @@ function preferred(records: any[]): any | null {
 }
 
 /** A registration with no operator must name one operator's one fleet number. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 function preferredRegistration(records: any[]): any | null {
     const active = records.filter(record => !record?.withdrawn);
     const candidates = active.length ? active : records;
@@ -87,7 +77,6 @@ export function emptyFleetIdentityIndex(): FleetIdentityIndex {
     };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function buildFleetIdentityIndex(records: any[]): FleetIdentityIndex {
     const index = emptyFleetIdentityIndex();
     index.results = Array.isArray(records) ? records.filter(
@@ -123,7 +112,6 @@ export function resolveFleetVehicle(
     index: FleetIdentityIndex | null | undefined,
     vehicleRef: string,
     operatorRef = '',
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 ): any | null {
     if (!index || !vehicleRef) return null;
     const noc = text(operatorRef).toUpperCase();

@@ -197,7 +197,6 @@ export class AICommentary {
     private aiConfig: AppConfig['ai'];
     private appState: ApplicationState;
     private weatherService: WeatherService;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private socialMediaManager: any | null = null;    private pendingPublications = new Map<string, { hook: EditorialSelection | null; used: boolean; subject?: SubjectChoice }>();
     private subjectHistory?: SubjectHistory;
     private publicationLedger?: PublicationLedger;
@@ -266,7 +265,6 @@ export class AICommentary {
     /**
      * Inject social media manager (called after construction to avoid circular dependency)
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     setSocialMediaManager(socialMediaManager: any): void {
         this.socialMediaManager = socialMediaManager;
     }
@@ -503,7 +501,6 @@ export class AICommentary {
                 }
             }
             return null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             // At most two drafts, two checks and one transient retry. Never publish
             // a rejected draft or let repair create another repair loop.
@@ -520,7 +517,6 @@ export class AICommentary {
                 if (Array.isArray(posts) && posts.length > 0) {
                     return posts.slice(0, 20);
                 }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             } catch (error: any) {
                 logDetailed(
                     'warn',
@@ -606,15 +602,12 @@ export class AICommentary {
                 /quota/i.test(body),
             );
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         const payload = await response.json() as any;
         logger.info('[AI_USAGE]', { model, usage: payload.usageMetadata || null });
         const parts = payload.candidates?.[0]?.content?.parts;
         const text = Array.isArray(parts)
             ? parts
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 .filter((part: any) => typeof part?.text === 'string' && !part.thought)
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 .map((part: any) => part.text)
                 .join('\n')
                 .trim()
@@ -808,13 +801,12 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
         return s.slice(0, limit).replace(/\s+\S*$/, '').trim();
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- Keep the existing public method signature and type.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing public method signature and type.
     async generateNetworkSummary(_networkStatus: any): Promise<string | null> {
         // The interface permits summaries even when this provider has none.
         return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getStatus(): any {
         return {
             name: 'AI Commentary',
@@ -840,7 +832,6 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
     /**
      * Get AI configuration (for dashboard/API access)
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getConfig(): any {
         return {
             dailyLimit: this.aiConfig.dailyLimit,

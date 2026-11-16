@@ -35,7 +35,6 @@ interface PerformanceMetrics {
   duration?: number;
   success: boolean;
   error?: Error;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   metadata?: Record<string, any>;
 }
 
@@ -70,7 +69,6 @@ const jsonFormat = winston.format.combine(
   winston.format.errors({ stack: true }),
   winston.format.json(),
   winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     const logObject: Record<string, any> = { timestamp, level, message, ...meta };
     if (stack) logObject.stack = stack;
     return JSON.stringify(logObject);
@@ -166,23 +164,17 @@ export function setSummaryMode(enabled: boolean): void {
 }
 
 // Only logs when SUMMARY mode is ON
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function logSummary(level: 'info'|'warn'|'error', message: string, meta?: any): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   if (summaryModeEnabled) (logger as any)[level](message, meta);
 }
 
 // Only logs when SUMMARY mode is OFF
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function logDetailed(level: 'info'|'warn'|'error', message: string, meta?: any): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   if (!summaryModeEnabled) (logger as any)[level](message, meta);
 }
 
 // Always logs regardless of summary mode (errors, critical events)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function logAlways(level: 'info'|'warn'|'error', message: string, meta?: any): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   (logger as any)[level](message, meta);
 }
 
@@ -191,10 +183,8 @@ export class PerformanceTimer {
   private startTime: number;
   private operation: string;
   private logger: winston.Logger;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   private metadata: Record<string, any>;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   constructor(operation: string, loggerInstance: winston.Logger, metadata: Record<string, any> = {}) {
     this.operation = operation;
     this.logger = loggerInstance;
@@ -208,7 +198,6 @@ export class PerformanceTimer {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   complete(additionalMetadata: Record<string, any> = {}): void {
     const endTime = Date.now();
     const duration = endTime - this.startTime;
@@ -232,7 +221,6 @@ export class PerformanceTimer {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   fail(error: Error, additionalMetadata: Record<string, any> = {}): void {
     const endTime = Date.now();
     const duration = endTime - this.startTime;
@@ -274,12 +262,10 @@ export class PerformanceTimer {
 
 // -------- Utility helpers ----------------------------------------------------
 export class LoggingUtils {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static createOperationLogger(operation: string, metadata: Record<string, any> = {}): winston.Logger {
     return logger.child({ operation, ...metadata });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static logHttpRequest(req: any, res: any, duration: number): void {
     logger.info('HTTP request', {
       method: req.method,
@@ -314,7 +300,6 @@ export class LoggingUtils {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static logSystemMetrics(metrics: Record<string, any>): void {
     logger.info('System metrics', {
       type: 'system_metrics',
@@ -323,7 +308,6 @@ export class LoggingUtils {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static logBusinessEvent(event: string, data: Record<string, any>): void {
     logger.info('Business event', {
       type: 'business_event',
@@ -333,7 +317,6 @@ export class LoggingUtils {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static logSecurityEvent(event: string, data: Record<string, any>): void {
     logger.warn('Security event', {
       type: 'security_event',
@@ -343,10 +326,8 @@ export class LoggingUtils {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   static safelog(obj: any, sensitiveKeys: string[] = ['password', 'apiKey', 'token', 'secret']): any {
     if (typeof obj !== 'object' || obj === null) return obj;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     const cleaned: Record<string, any> = { ...obj };
     for (const key of sensitiveKeys) if (key in cleaned) cleaned[key] = '[REDACTED]';
     return cleaned;
@@ -354,7 +335,6 @@ export class LoggingUtils {
 }
 
 // -------- Express middlewares ------------------------------------------------
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function requestLoggingMiddleware(req: any, res: any, next: any): void {
   const startTime = Date.now();
   logger.debug('HTTP request started', {
@@ -364,7 +344,6 @@ export function requestLoggingMiddleware(req: any, res: any, next: any): void {
     ip: req.ip
   });
   const originalSend = res.send;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   res.send = function (body: any) {
     const duration = Date.now() - startTime;
     LoggingUtils.logHttpRequest(req, res, duration);
@@ -373,7 +352,6 @@ export function requestLoggingMiddleware(req: any, res: any, next: any): void {
   next();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function errorLoggingMiddleware(error: Error, req: any, res: any, next: any): void {
   logger.error('Express error', {
     error: error.message,
@@ -393,7 +371,6 @@ export function setupGracefulShutdown(): void {
     logger.on('finish', () => { process.exit(0); });
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Keep the existing TypeScript suppression for the Winston stream.
     // @ts-ignore end() is on NodeJS.WritableStream types used by winston
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     (logger as any).end?.();
   };
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

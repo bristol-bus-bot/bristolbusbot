@@ -26,7 +26,6 @@ export interface BlueskyClientOptions {
 
 const NETWORK_ERROR = /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|timed? ?out/i;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export function isNetworkError(error: any): boolean {
     return NETWORK_ERROR.test(String(error?.message ?? ''))
         || ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(error?.code)
@@ -68,7 +67,6 @@ export class BlueskyClient {
                 await this.agent.resumeSession(saved);
                 logger.info('[BLUESKY_SESSION] Resumed the saved session');
                 return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             } catch (error: any) {
                 // A network failure says nothing about the saved session. Keep
                 // it and let the caller retry rather than spend a login.
@@ -92,7 +90,6 @@ export class BlueskyClient {
         const actor = this.agent.session?.did || this.options.handle;
         const feed = await this.agent.getAuthorFeed({ actor, limit: 5 });
         for (const item of feed.data.feed || []) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             const record: any = item.post?.record;
             if (!record || item.post.author?.did !== this.agent.session?.did) continue;
             const created = Date.parse(record.createdAt || '');
@@ -135,7 +132,6 @@ export class BlueskyClient {
             const temporary = `${file}.new`;
             writeFileSync(temporary, JSON.stringify(session), { mode: 0o600 });
             renameSync(temporary, file);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('[BLUESKY_SESSION] Could not save the session; it is kept in memory only', { error: error?.message });
         }

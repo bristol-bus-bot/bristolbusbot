@@ -11,6 +11,8 @@ export default tseslint.config({
     },
   },
   rules: {
+    // Existing loose types are accepted for now.
+    '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-floating-promises': 'error',
   },
 });

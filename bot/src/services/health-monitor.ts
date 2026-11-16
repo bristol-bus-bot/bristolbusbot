@@ -62,7 +62,6 @@ export class HealthMonitor {
                 delegatedToAppState: true
             });
             
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error checking daily counter reset', {
@@ -74,7 +73,6 @@ export class HealthMonitor {
     /**
      * Return health data for the API endpoint.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getHealthStatus(): any {
         const timer = new PerformanceTimer('health_status_check', logger);
         
@@ -139,7 +137,6 @@ export class HealthMonitor {
             
             return healthData;
             
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error getting health status', {
@@ -218,7 +215,6 @@ export class HealthMonitor {
                 dailyPosts: this.appState.postsTodayCount
             });
             
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error in periodic health check', {
@@ -250,7 +246,6 @@ export class HealthMonitor {
     /**
      * Get memory usage analysis
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getMemoryAnalysis(): any {
         const memUsage = process.memoryUsage();
         const systemMem = {
@@ -304,7 +299,6 @@ export class HealthMonitor {
     /**
      * Get application performance metrics
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getPerformanceMetrics(): any {
         const cpuUsage = process.cpuUsage();
         const loadAvg = os.loadavg();
@@ -326,9 +320,7 @@ export class HealthMonitor {
             application: {
                 uptime: Math.floor(process.uptime()),
                 eventLoopDelay: 0, // Could be enhanced with async_hooks
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 activeHandles: (process as any)._getActiveHandles?.()?.length || 0,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                 activeRequests: (process as any)._getActiveRequests?.()?.length || 0
             }
         };
@@ -337,7 +329,6 @@ export class HealthMonitor {
     /**
      * Get service status
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getStatus(): any {
         const health = this.getHealthStatus();
         

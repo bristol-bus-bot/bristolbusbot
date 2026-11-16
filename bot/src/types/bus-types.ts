@@ -308,7 +308,6 @@ export interface AppConfig {
 }
 
 // Event handler types
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
 export type EventHandler<T = any> = (event: T) => void | Promise<void>;
 
 // Service interface
@@ -325,7 +324,6 @@ export interface ServiceStatus {
     status: 'starting' | 'running' | 'stopped' | 'error';
     uptime: number;
     lastError?: Error;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     metrics: Record<string, any>;
 }
 
@@ -334,7 +332,6 @@ export class BusMonitoringError extends Error {
     constructor(
         message: string,
         public readonly code: string,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         public readonly context?: any
     ) {
         super(message);
@@ -343,7 +340,6 @@ export class BusMonitoringError extends Error {
 }
 
 export class DatabaseError extends BusMonitoringError {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     constructor(message: string, context?: any) {
         super(message, 'DATABASE_ERROR', context);
         this.name = 'DatabaseError';
@@ -351,7 +347,6 @@ export class DatabaseError extends BusMonitoringError {
 }
 
 export class AIError extends BusMonitoringError {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     constructor(message: string, context?: any) {
         super(message, 'AI_ERROR', context);
         this.name = 'AIError';
@@ -359,7 +354,6 @@ export class AIError extends BusMonitoringError {
 }
 
 export class SocialMediaError extends BusMonitoringError {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     constructor(message: string, context?: any) {
         super(message, 'SOCIAL_MEDIA_ERROR', context);
         this.name = 'SocialMediaError';

@@ -49,7 +49,6 @@ export class DelayAnalyzer {
   }
 
   // Ignore extreme readings, which are more likely to be feed or match errors.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   calculateEventSignificance(delayMinutes: number, time: DateTime, counters?: any): { type: 'delay' | 'early' | 'punctual' | 'ignore', score: number } {
     if (delayMinutes > 30) {
       if (counters) counters.extremeFiltered++;
@@ -140,7 +139,6 @@ export class DelayAnalyzer {
     return history;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   shouldReportDelay(delayRecord: BusEvent, history: DelayHistory, counters?: any): boolean {
     const currentTime = DateTime.now().setZone(TARGET_TIMEZONE);
     const timeSinceLastReport = currentTime.diff(history.lastReportTime, 'minutes').minutes;
@@ -208,7 +206,6 @@ export class DelayAnalyzer {
     ) as BusVehicleDetails | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
   getStatus(): any {
     return {
       name: 'Delay Analyzer',

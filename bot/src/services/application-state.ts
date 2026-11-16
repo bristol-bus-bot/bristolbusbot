@@ -48,12 +48,10 @@ export class ApplicationState {
         fleet: { loaded: false, path: '', sha256: null, records: 0 },
         localities: { loaded: false, path: '', sha256: null, records: 0 },
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     public routeDetails: { [routeNumber: string]: any } = {};  // Route/stop details for AI context
     public terminusStopNames: Set<string> = new Set();
     // Stop code -> the timetable's (already corrected) stop name, loaded once.
     public stopNamesByCode: Map<string, string> = new Map();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     public zenComments: any = {};
     public wittyCommentData: { [key: string]: string[] } = { on_time: ["running normally."] };
     
@@ -68,7 +66,6 @@ export class ApplicationState {
     public lastAICriticPrompt: string | null = null;  // Critic agent prompt
     public lastAICriticOutput: string | null = null;  // Critic agent output (final selection)
     public lastWeatherContext: string | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     public recentRouteSummary: any[] = [];
 
     // Social media stats
@@ -311,7 +308,6 @@ export class ApplicationState {
      * Update filter statistics and activity log after SIRI cycle
      * For dashboard real-time monitoring
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     public updateActivityLog(activitiesProcessed: number, eventsCollected: number, filterStats: any): void {
         // Update current filter stats
         this.filterStats = {
@@ -575,7 +571,6 @@ export class ApplicationState {
     /**
      * Get current state summary for logging
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     public getStateSummary(): any {
         return {
             eventCollectorSize: this.busEventCollector.length,

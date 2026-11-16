@@ -45,9 +45,7 @@ export class APIRoutes {
     private appState: ApplicationState;
     private healthMonitor: HealthMonitor;
     private databaseManager: DatabaseManager | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private socialMediaManager: any = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private aiCommentary: any = null;
     private readonly systemdUnit = 'bbb-bot.service';
     private authToken: string | null;
@@ -156,7 +154,6 @@ export class APIRoutes {
     /**
      * Set social media manager reference (for test endpoint)
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     setSocialMediaManager(socialMediaManager: any): void {
         this.socialMediaManager = socialMediaManager;
     }
@@ -164,7 +161,6 @@ export class APIRoutes {
     /**
      * Set AI commentary reference (for dashboard config access)
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     setAICommentary(aiCommentary: any): void {
         this.aiCommentary = aiCommentary;
     }
@@ -205,7 +201,6 @@ export class APIRoutes {
                 aiCallsToday: this.appState.aiCallsToday
             });
             res.status(success ? 200 : 503).json(payload);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error in health check endpoint', { error: error.message });
@@ -275,7 +270,6 @@ export class APIRoutes {
                         
                         res.json(filteredLogs);
                         
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
                     } catch (e: any) { 
                         timer.fail(e);
                         res.status(500).json({ 
@@ -286,7 +280,6 @@ export class APIRoutes {
                 }
             );
             
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             timer.fail(error);
             logger.error('Error in logs endpoint', { error: error.message });
@@ -339,7 +332,6 @@ export class APIRoutes {
                 message: 'Database and dependent data reloaded successfully.' 
             });
             
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) { 
             timer.fail(error);
             res.status(500).json({ 
@@ -381,7 +373,6 @@ export class APIRoutes {
                 }
             };
             res.json(status);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -408,7 +399,6 @@ export class APIRoutes {
                 },
                 weatherContext: this.appState.lastWeatherContext || 'No weather data'
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -423,7 +413,6 @@ export class APIRoutes {
             const allEvents = this.appState.busEventCollector || [];
 
             // Map to route summaries
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             const routes = allEvents.map((event: any) => ({
                 line: event.line,
                 direction: event.direction,
@@ -438,7 +427,6 @@ export class APIRoutes {
                 routes: routes,
                 count: routes.length
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -454,7 +442,6 @@ export class APIRoutes {
                 activityLog: this.appState.activityLog,
                 currentFilterStats: this.appState.filterStats
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -468,7 +455,6 @@ export class APIRoutes {
             const events = this.appState.busEventCollector || [];
 
             // Group events by vehicleRef for journey tracking
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             const journeyMap = new Map<string, any[]>();
 
             events.forEach(event => {
@@ -521,7 +507,6 @@ export class APIRoutes {
                 totalJourneys: journeys.length,
                 journeys: journeys
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -531,7 +516,6 @@ export class APIRoutes {
      * Extract bus details from vehicle reference
      * Looks up fleet number in busDetailsLookup to get livery and other bus info
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     private extractBusDetails(vehicleRef: string, operatorRef = ''): any | null {
         return resolveFleetVehicle(
             this.appState.busDetailsLookup, vehicleRef, operatorRef);
@@ -546,7 +530,6 @@ export class APIRoutes {
             const events = this.appState.busEventCollector || [];
 
             // Create a map of latest location for each vehicle
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             const vehicleLocationMap = new Map<string, any>();
 
             events.forEach(event => {
@@ -586,7 +569,6 @@ export class APIRoutes {
                 totalBuses: locations.length,
                 locations: locations
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -630,7 +612,6 @@ export class APIRoutes {
                     summariesPosted: systemMetrics.summariesPosted
                 }
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -675,7 +656,6 @@ export class APIRoutes {
                     throttled: cpuTemp && cpuTemp > 80 // Pi throttles at 80°C
                 });
             });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
@@ -723,7 +703,6 @@ export class APIRoutes {
             });
 
             res.json({ posts: enriched });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('Error handling recent-posts request', { error: error.message });
             res.status(500).json({ error: 'Internal error' });
@@ -746,7 +725,6 @@ export class APIRoutes {
             }
 
             // Trigger posting immediately (don't await to respond quickly)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             this.socialMediaManager.processEventCollector().catch((error: any) => {
                 logger.error('[TEST] Error in manual post trigger', { error: error.message });
             });
@@ -757,7 +735,6 @@ export class APIRoutes {
                 eventsInCollector: this.appState.busEventCollector.length
             });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.error('[TEST] Error handling post-now request', { error: error.message });
             res.status(500).json({
@@ -778,7 +755,6 @@ export class APIRoutes {
     /**
      * Get API endpoints summary
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getEndpointsSummary(): any {
         return {
             endpoints: [
@@ -794,13 +770,11 @@ export class APIRoutes {
     /**
      * Get service status
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     getStatus(): any {
         return {
             name: 'API Routes',
             status: 'running',
             config: { endpointsRegistered: this.getRouteCount() },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
             endpoints: this.getEndpointsSummary().endpoints.map((ep: any) => `${ep.method} ${ep.path}`)
         };
     }

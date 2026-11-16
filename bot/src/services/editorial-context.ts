@@ -464,7 +464,6 @@ function loadUsage(path: string): UsageState {
             last_post_was_special: value.last_post_was_special,
             items: value.items as Record<string, UsageRecord>,
         };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
     } catch (error: any) {
         if (existsSync(path)) logger.warn('Editorial usage state was ignored', { error: error.message });
         return emptyUsage();
@@ -546,7 +545,6 @@ export class EditorialContextStore {
                 },
             };
             logger.info('Loaded approved editorial context', this.status);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             this.document = {
                 schema_version: 1,
@@ -693,7 +691,6 @@ export class EditorialContextStore {
     private persistUsage(): void {
         try {
             atomicWrite(this.usagePath, this.usage);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Keep the existing type for this lint rollout.
         } catch (error: any) {
             logger.warn('Could not persist editorial usage state', { error: error.message });
         }
