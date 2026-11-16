@@ -1,4 +1,5 @@
-# Version update PRs are optional. Merging one takes effect on the Pi only
+# Version updates run on the 1st of each month. Update PRs are optional.
+# Merging one takes effect on the Pi only
 # after the next deployment of that component. Security updates are separate.
 version: 2
 updates:
@@ -6,8 +7,8 @@ updates:
     directory: /
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       actions:
@@ -17,8 +18,8 @@ updates:
     directory: /bot
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       minor-and-patch:
@@ -29,8 +30,8 @@ updates:
     directory: /social
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       sharp:
@@ -45,8 +46,8 @@ updates:
     directory: /collector
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       minor-and-patch:
@@ -57,8 +58,8 @@ updates:
     directory: /site
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       minor-and-patch:
@@ -69,8 +70,8 @@ updates:
     directory: /pipeline
     open-pull-requests-limit: 3
     schedule:
-      interval: cron
-      cronjob: "0 6 * * mon#1" # First Monday of each month
+      interval: monthly
+      time: "06:00"
       timezone: Europe/London
     groups:
       minor-and-patch:
