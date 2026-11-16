@@ -581,7 +581,7 @@ function renderHeadline(opData) {
   $("s-readings").textContent = finiteNumber(overall.readings_in_gate).toLocaleString();
 
   const status = overall.qualification?.status || "historical";
-  $("evidence").querySelector("summary").textContent = `Evidence · ${status}`;
+  $("evidence").querySelector("summary").textContent = `Confidence · ${status}`;
   let text = evidenceText(overall, day.operator_composition, state.operator, Boolean(day.period));
   const strictReadings = strictFigure(overall);
   if (strictReadings) text += ` Early last-stop readings: ${Math.round(strictReadings.finalEarly).toLocaleString("en-GB")}.`;
