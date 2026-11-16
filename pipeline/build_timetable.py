@@ -40,14 +40,6 @@ BUSBOT_DB = Path(os.getenv("BUSBOT_FALLBACK_DB",
 # Required First routes used to reject incomplete source exports.
 EXPECTED_FBRI = ["1", "2", "42", "43", "44", "45", "75", "76", "X1", "m1"]
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("build_timetable.log", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
 logger = logging.getLogger(__name__)
 
 
@@ -468,4 +460,9 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
     sys.exit(main())
