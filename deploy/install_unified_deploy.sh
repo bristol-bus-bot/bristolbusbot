@@ -404,11 +404,12 @@ install -o root -g root -m 0440 "$stage/sudoers/bristolbusbot-deploy" /etc/sudoe
 mv -f /etc/sudoers.d/bristolbusbot-deploy.new /etc/sudoers.d/bristolbusbot-deploy
 
 install -o "$deploy_user" -g "$deploy_user" -m 0755 "$stage/publish_to_github.sh" "$remote_home/bus-audit/publish_to_github.sh"
-# Keep the published-audit repository packed as daily publishes add files, so
-# the nightly backup bundles it quickly. Each publish commit runs git gc --auto.
+# Never let git pack the published-audit repository by itself on the Pi. An
+# unbounded repack of it ran the Pi out of memory on 17 Nov 2026 and the Pi
+# restarted. git's default (gc.auto 6700) would eventually trigger the same
+# thing from a publish commit, so automatic gc is switched off explicitly.
 if [ -d "$remote_home/bus-audit-repo/.git" ]; then
-    /usr/sbin/runuser -u "$deploy_user" -- git -C "$remote_home/bus-audit-repo" config gc.auto 200
-    /usr/sbin/runuser -u "$deploy_user" -- git -C "$remote_home/bus-audit-repo" config gc.autoDetach false
+    /usr/sbin/runuser -u "$deploy_user" -- git -C "$remote_home/bus-audit-repo" config gc.auto 0
 fi
 for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
     install -o root -g root -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"

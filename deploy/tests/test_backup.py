@@ -571,7 +571,10 @@ def test_sqlite_snapshot_copies_in_one_step_so_writers_cannot_restart_it(tmp_pat
         assert restored.execute("SELECT COUNT(*) FROM big").fetchone()[0] >= 3000
 
 
-def test_layout_keeps_the_published_audit_repository_packed():
+def test_layout_never_lets_git_pack_the_audit_repository_by_itself():
+    """17 Nov 2026: an unbounded git gc ran the Pi out of memory."""
     installer = (Path(__file__).resolve().parents[1] / "install_unified_deploy.sh").read_text(encoding="utf-8")
-    assert 'git -C "$remote_home/bus-audit-repo" config gc.auto 200' in installer
-    assert 'git -C "$remote_home/bus-audit-repo" config gc.autoDetach false' in installer
+    assert 'git -C "$remote_home/bus-audit-repo" config gc.auto 0' in installer
+    assert "gc.auto 200" not in installer
+    for path in (Path(__file__).resolve().parents[1]).glob("*.sh"):
+        assert "git gc" not in path.read_text(encoding="utf-8"), path.name
