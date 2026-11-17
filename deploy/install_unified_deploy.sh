@@ -1,6 +1,20 @@
 #!/bin/sh
 # One-time, idempotent bootstrap for the release/symlink deployment layout.
 set -eu
+# Planning #143: the install is heavy work. Run it under the shared heavy-I/O
+# lock, at idle disk and lowest CPU priority, so it never starves the
+# collector and never overlaps the backup, rollup or timetable jobs. (The
+# lock's directory exists on any Pi this layout has been installed on; a
+# first install runs at low priority without it.)
+if [ -z "${BBB_INSTALL_LOW_PRIORITY:-}" ]; then
+    BBB_INSTALL_LOW_PRIORITY=1
+    export BBB_INSTALL_LOW_PRIORITY
+    if [ -d /run/lock/bristolbusbot ]; then
+        exec /usr/bin/flock -w 1800 -E 75 /run/lock/bristolbusbot/heavy-io.lock \
+            /usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh "$0" "$@"
+    fi
+    exec /usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh "$0" "$@"
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "run this installer through sudo" >&2
@@ -404,6 +418,20 @@ install -o root -g root -m 0440 "$stage/sudoers/bristolbusbot-deploy" /etc/sudoe
 mv -f /etc/sudoers.d/bristolbusbot-deploy.new /etc/sudoers.d/bristolbusbot-deploy
 
 install -o "$deploy_user" -g "$deploy_user" -m 0755 "$stage/publish_to_github.sh" "$remote_home/bus-audit/publish_to_github.sh"
+# The collector reads its unit file, its drop-ins and its environment file at
+# start; nothing else in this layout. Restart it only if one of those changed
+# (planning #143). The fingerprint is a hash; the files are never printed.
+collector_fingerprint() {
+    for file in /etc/systemd/system/bbb-collector.service \
+                /etc/systemd/system/bbb-collector.service.d/* \
+                /etc/bristolbusbot/collector.env; do
+        if [ -f "$file" ]; then
+            printf '%s\n' "$file"
+            /usr/bin/sha256sum < "$file"
+        fi
+    done | /usr/bin/sha256sum
+}
+collector_unit_before=$(collector_fingerprint)
 # Never let git pack the published-audit repository by itself on the Pi. An
 # unbounded repack of it ran the Pi out of memory on 17 Nov 2026 and the Pi
 # restarted. git's default (gc.auto 6700) would eventually trigger the same
@@ -460,7 +488,13 @@ fi
     --file /var/lib/bristolbusbot-editorial/editorial-context.json >/dev/null
 
 /usr/bin/systemctl daemon-reload
-/usr/bin/systemctl restart bbb-collector.service
+collector_unit_after=$(collector_fingerprint)
+if [ "$collector_unit_before" != "$collector_unit_after" ] || \
+   ! /usr/bin/systemctl is-active --quiet bbb-collector.service; then
+    /usr/bin/systemctl restart bbb-collector.service
+else
+    echo "Collector settings unchanged; the collector was left running."
+fi
 if ! wait_collector; then echo "collector health wait exhausted" >&2; exit 1; fi
 /usr/bin/systemctl restart bbb-site.service
 if ! wait_site; then echo "site health wait exhausted" >&2; exit 1; fi

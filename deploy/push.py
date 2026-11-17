@@ -57,6 +57,14 @@ SSH_CONNECT_TIMEOUT_SECONDS = 15
 SSH_PREFLIGHT_TIMEOUT_SECONDS = 20
 SSH_PREFLIGHT_ATTEMPTS = 2
 REMOTE_COMMAND_TIMEOUT_SECONDS = 15 * 60
+# Planning #143: heavy remote steps wait for the shared heavy-I/O lock (up to
+# 30 minutes, behind a backup or rollup) and then run at idle priority, so they
+# get the lock wait plus twice the 15 minutes a full-speed step was allowed.
+HEAVY_LOCK = "/run/lock/bristolbusbot/heavy-io.lock"
+HEAVY_LOCK_WAIT_SECONDS = 30 * 60
+HEAVY_COMMAND_TIMEOUT_SECONDS = HEAVY_LOCK_WAIT_SECONDS + 30 * 60
+# A gap longer than this between two collector polls means a poll was missed.
+MISSED_POLL_GAP_SECONDS = 45
 UPLOAD_TIMEOUT_SECONDS = 30 * 60
 PROCESS_STOP_TIMEOUT_SECONDS = 5
 SSH_ANCHOR_READY = "bbb-deploy-anchor-ready"
@@ -578,17 +586,19 @@ class Remote:
                 raise
             log.exception("could not close the private SSH session cleanly")
 
-    def run(self, command: str, *, check: bool = True) -> str:
+    def run(self, command: str, *, check: bool = True,
+            timeout: float | None = None) -> str:
+        limit = self.command_timeout if timeout is None else timeout
         try:
             result = run_bounded_process(
                 ["ssh", *self._client_options, self.target, command],
-                timeout=self.command_timeout,
+                timeout=limit,
             )
         except BoundedProcessTimeout as exc:
             output = exc.stdout + exc.stderr
             raise RuntimeError(
                 f"remote command timed out after "
-                f"{self.command_timeout:g} seconds; its private SSH process "
+                f"{limit:g} seconds; its private SSH process "
                 f"tree was stopped and the deployment will not continue: "
                 f"{command}\n{output}"
             ) from exc
@@ -680,6 +690,112 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
             "chmod 0755 publish_to_github.sh"
         )
     raise RuntimeError(f"no setup command for {component}")
+
+
+def low_priority(command: str) -> str:
+    """Run a heavy deploy step under the shared heavy-I/O lock,
+    at idle disk and lowest CPU priority (planning #143)."""
+    return (f"/usr/bin/flock -w {HEAVY_LOCK_WAIT_SECONDS} -E 75 {HEAVY_LOCK} "
+            f"/usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh -c {q(command)}")
+
+
+def lock_taking_units() -> set[str]:
+    """Scheduled units that take the heavy-I/O lock, from this repository."""
+    return {path.name for path in (DEPLOY / "systemd").glob("*.service")
+            if HEAVY_LOCK in path.read_text(encoding="utf-8")}
+
+
+SCHEDULE_QUERY = (
+    "systemctl list-timers --all --output=json --no-pager 'bbb-*' && echo ---- && "
+    "systemctl list-units --state=active,activating --no-legend --plain 'bbb-*.service'"
+)
+
+
+def jobs_in_the_way(output: str, now_usec: int, units: set[str]) -> list[str]:
+    """Lock-taking jobs running now, or due before a deploy could finish."""
+    timers_text, _, active_text = output.partition("----")
+    try:
+        timers = json.loads(timers_text or "[]")
+    except ValueError as exc:
+        raise RuntimeError("could not read the Pi's job schedule; deploy not started") from exc
+    template = {unit.split("@", 1)[0] + "@" for unit in units if "@" in unit}
+
+    def takes_lock(name: str) -> bool:
+        return name in units or any(name.startswith(prefix) for prefix in template)
+
+    blocking = []
+    for line in active_text.splitlines():
+        name = line.split()[0] if line.split() else ""
+        if takes_lock(name):
+            blocking.append(f"{name} is running now")
+    horizon = now_usec + HEAVY_COMMAND_TIMEOUT_SECONDS * 1_000_000
+    for timer in timers:
+        unit, due = str(timer.get("activates") or ""), timer.get("next")
+        if takes_lock(unit) and isinstance(due, int) and 0 < due <= horizon:
+            minutes = max(0, round((due - now_usec) / 60_000_000))
+            blocking.append(f"{unit} is due in {minutes} minutes")
+    return blocking
+
+
+def ensure_no_scheduled_heavy_job(remote: Remote) -> None:
+    """Refuse to start a deploy that could make a scheduled job fail (#143).
+
+    Deploy steps hold the heavy-I/O lock for up to an hour. The backup gives up
+    at once if the lock is held, and the other jobs after 15 minutes, so a
+    deploy only starts when none of them is running or due within that hour."""
+    output = remote.run(f"date +%s%6N && echo ---- && {SCHEDULE_QUERY}")
+    now_text, _, rest = output.partition("----")
+    blocking = jobs_in_the_way(rest.lstrip("\n"), int(now_text.strip()), lock_taking_units())
+    if blocking:
+        raise RuntimeError(
+            "deploy not started, so no scheduled job can fail because of it: "
+            + "; ".join(blocking) + ". Try again after it has run.")
+
+
+def remote_now(remote: Remote) -> str:
+    return remote.run("date -u +%Y-%m-%dT%H:%M:%S+00:00").strip()
+
+
+POLL_GAP_QUERY = (
+    "import sqlite3, sys\n"
+    "from datetime import datetime\n"
+    "c = sqlite3.connect('file:/var/lib/bristolbusbot/collector/audit.db?mode=ro', uri=True)\n"
+    "rows = [r[0] for r in c.execute("
+    "'SELECT poll_at FROM poll_log WHERE poll_at >= ? ORDER BY poll_at', (sys.argv[1],))]\n"
+    "print(len(rows))\n"
+    "times = [datetime.fromisoformat(r.replace('Z', '+00:00')) for r in rows]\n"
+    "for a, b, at in zip(times, times[1:], rows):\n"
+    "    print(at, round((b - a).total_seconds()))\n"
+)
+
+
+def poll_gaps(output: str) -> tuple[int, list[tuple[str, int]]]:
+    lines = [line.split() for line in output.strip().splitlines() if line.strip()]
+    if not lines:
+        return 0, []
+    count = int(lines[0][0])
+    gaps = [(at, int(seconds)) for at, seconds in lines[1:]
+            if int(seconds) > MISSED_POLL_GAP_SECONDS]
+    return count, gaps
+
+
+def report_collector_polls(remote: Remote, since: str) -> bool:
+    """Say plainly whether the collector missed a poll since ``since``."""
+    output = remote.run(
+        f"/usr/bin/python3 -c {q(POLL_GAP_QUERY)} {q(since)}", check=False)
+    try:
+        count, gaps = poll_gaps(output)
+    except (ValueError, IndexError):
+        log.warning("could not read the collector's polls after this deploy: %s",
+                    output.strip()[:300])
+        return False
+    if gaps:
+        log.warning(
+            "THE COLLECTOR MISSED POLLS during this deploy: %s",
+            ", ".join(f"{seconds}s gap after {at}" for at, seconds in gaps))
+        return False
+    log.info("collector: %d polls since %s, none missed", count, since)
+    return True
 
 
 def atomic_switch(remote: Remote, component: str, target: str) -> None:
@@ -781,6 +897,8 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
         check=False,
     ).strip()
     switched = False
+    ensure_no_scheduled_heavy_job(remote)
+    started = remote_now(remote)
     try:
         remote.run(f"test -f {MARKER}")
         if component != "social":
@@ -790,17 +908,18 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
             f"test ! -e {q(release_dir)} && mkdir {q(release_dir)}"
         )
         remote.upload(built.archive, PurePosixPath(f"{incoming}.part"))
-        remote.run(
+        remote.run(low_priority(
             f"test \"$(sha256sum {q(str(incoming) + '.part')} | cut -d' ' -f1)\" = "
             f"{q(built.sha256)} && mv -f {q(str(incoming) + '.part')} {q(incoming)} && "
             f"tar --no-same-owner --no-same-permissions -xzf {q(incoming)} -C {q(release_dir)} && "
             f"rm -f {q(incoming)}"
-        )
-        remote.run(
+        ), timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
+        remote.run(low_priority(
             f"/usr/local/libexec/bbb-verify-release {q(release_dir)} "
             f"{q(component)} {q(built.release)}"
-        )
-        remote.run(setup_command(component, release_dir))
+        ), timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
+        remote.run(low_priority(setup_command(component, release_dir)),
+                   timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
         atomic_switch(remote, component, str(release_dir))
         switched = True
         restart(remote, component)
@@ -828,6 +947,7 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
     if notify_success:
         notify(remote, f":white_check_mark: BristolBusBot {component} deployed {built.release}")
     log.info("%s deployed and healthy (%s)", component, built.release)
+    report_collector_polls(remote, started)
 
 
 def render_template(source: Path, destination: Path,
@@ -962,16 +1082,21 @@ def install_layout(remote: Remote, workspace: Path) -> None:
     release = release_id()
     remote_dir = PurePosixPath(f"/tmp/bbb-unified-layout-{release}")
     remote_archive = PurePosixPath(f"{remote_dir}.tar.gz")
+    ensure_no_scheduled_heavy_job(remote)
+    started = remote_now(remote)
     remote.upload(archive, PurePosixPath(f"{remote_archive}.part"))
     remote.run(
         f"mv -f {q(str(remote_archive) + '.part')} {q(remote_archive)} && "
         f"mkdir {q(remote_dir)} && tar -xzf {q(remote_archive)} -C {q(remote_dir)}"
     )
+    # The installer takes the heavy-I/O lock and lowers its own priority.
     remote.run(
-        f"sudo -n /bin/sh {q(remote_dir / 'install_unified_deploy.sh')} {q(remote_dir)}"
+        f"sudo -n /bin/sh {q(remote_dir / 'install_unified_deploy.sh')} {q(remote_dir)}",
+        timeout=HEAVY_COMMAND_TIMEOUT_SECONDS,
     )
     remote.run(f"test -f {MARKER}")
     log.info("unified deployment layout installed and live health checks passed")
+    report_collector_polls(remote, started)
 
 
 LAYOUT_INSTALL_LINE = re.compile(
