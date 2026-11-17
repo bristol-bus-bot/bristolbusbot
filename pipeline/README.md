@@ -82,15 +82,15 @@ less than 95% complete. These are **candidate duty gaps, not cancellations**.
 None of these tables is read by `audit_export.py`, the audit website or the
 test summary generator.
 
-Attended restatements and `--backfill-*` runs take `audit.db`'s write lock once
-per day they rewrite. The collector holds its readings in memory while the lock
-is held and writes them afterwards, but a long attended run still delays the
-audit's raw data, so avoid running one across the 07:00 rollup or the 02:15
-backup. Every job that writes `audit.db` opens it through `audit_writer.py`.
+Restatements and backfills are never run by hand on the live `audit.db`
+(see the golden rule in `AGENTS.md`). Any backfill is built into the scheduled
+rollup in small, bounded pieces, tested on the PC and deployed; the
+`--backfill-*` flags remain for that code and for tests. Every job that writes
+`audit.db` opens it through `audit_writer.py`.
 
-Use `audit_rollup.py --backfill-duty-gaps` only after snapshots genuinely carry
-the block and end-time fields. It selects only complete retained dates with raw
-observations and never reconstructs older duties from a newer timetable.
+The duty-gap backfill selects only complete retained dates with raw
+observations and never reconstructs older duties from a newer timetable, so it
+is only useful once snapshots carry the block and end-time fields.
 
 `frequency_changes.py` is the separate read-only timetable-change report. By default it compares four complete
 weeks with the equivalent block 1, 3, 6 and 12 months earlier:
@@ -151,9 +151,8 @@ first or last evidence falls more than 14 days inside the selected period; use
 a shorter complete window instead of presenting partial history under a longer
 date label. Route figures need 200 readings to be
 treated as more than indicative. Area/ward route evidence is stored daily in
-`daily_geo_route_summary`; after first deployment, run
-`audit_rollup.py --backfill-geo-routes` once under the normal audit lock to
-materialise as much of the retained 95-day raw history as remains. The pack
+`daily_geo_route_summary`; older days are filled only by the scheduled rollup's
+bounded backfill, never by hand. The pack
 labels a partially backfilled route table instead of implying it covers the
 whole headline period. It also keeps operator identity beside each route number
 and labels a route as partial when its evidence starts or ends more than 14 days
@@ -175,8 +174,9 @@ end of the scheduled window is missing by more than five minutes, an internal
 successful-poll gap exceeds 15 minutes, or the feed-wide match rate falls below
 80%. Invalid rows remain private evidence with explicit reasons; their coverage
 is withheld from the public route summary and must never be called a
-cancellation. `--backfill-trip-coverage` safely materialises the retained raw
-history without rewriting published punctuality summaries.
+cancellation. Retained raw history is filled into this table only by the
+scheduled rollup's bounded backfill, never by hand, and that never rewrites
+published punctuality summaries.
 
 `fbribuses.json` is a generated runtime cache and is intentionally not stored
 in Git. Run `python pipeline/update_fleet_data.py`, or
