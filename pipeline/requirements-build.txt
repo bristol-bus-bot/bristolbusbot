@@ -1,2 +1,2 @@
 -r requirements-runtime.txt
-shapely==2.1.2
+shapely==2.2.0
