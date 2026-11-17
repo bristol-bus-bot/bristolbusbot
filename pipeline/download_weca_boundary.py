@@ -29,7 +29,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-from urllib.parse import quote
 
 try:
     import requests
@@ -199,7 +198,7 @@ def main():
     logger.info(f"  Size: {size_kb:.1f} KB")
     
     # Dissolve into a single polygon for server-side filtering
-    logger.info(f"\nDissolving boundaries...")
+    logger.info("\nDissolving boundaries...")
     dissolved = dissolve_boundaries(geojson_data)
     
     logger.info(f"Saving dissolved boundary to: {OUTPUT_DISSOLVED}")
@@ -212,7 +211,6 @@ def main():
     all_coords = []
     for feature in geojson_data.get("features", []):
         geom = feature.get("geometry", {})
-        geom_type = geom.get("type", "")
         coords = geom.get("coordinates", [])
         
         def extract_coords(c):
@@ -233,14 +231,14 @@ def main():
         min_lat, max_lat = min(lats), max(lats)
         bbox_str = f"{min_lon},{min_lat},{max_lon},{max_lat}"
         
-        logger.info(f"\n--- BOUNDING BOX for SIRI API ---")
+        logger.info("\n--- BOUNDING BOX for SIRI API ---")
         logger.info(f"BOUNDING_BOX = '{bbox_str}'")
         logger.info(f"  Min Lon: {min_lon:.6f}  Max Lon: {max_lon:.6f}")
         logger.info(f"  Min Lat: {min_lat:.6f}  Max Lat: {max_lat:.6f}")
-        logger.info(f"---------------------------------")
-        logger.info(f"Update this in app.py to replace the current BOUNDING_BOX value")
+        logger.info("---------------------------------")
+        logger.info("Update this in app.py to replace the current BOUNDING_BOX value")
     
-    logger.info(f"\n✓ Done!")
+    logger.info("\n✓ Done!")
     logger.info(f"  {OUTPUT_COMBINED.name}  → load in Leaflet for map display")
     logger.info(f"  {OUTPUT_DISSOLVED.name}  → use server-side for point-in-polygon filtering")
 

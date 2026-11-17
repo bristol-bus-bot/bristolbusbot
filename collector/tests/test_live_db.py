@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
 
 from collector.delay import LiveEstimate
-from collector.live_db import (CORROBORATION_EXTREME, connect, decide_event,
-                               prune_consumed_events, prune_old_events,
+from collector.live_db import (CORROBORATION_EXTREME, connect, prune_consumed_events, prune_old_events,
                                record_poll,
                                upsert_vehicle)
 from collector.matching import Match
@@ -65,7 +64,7 @@ def test_worsening_reemits():
     upsert_vehicle(conn, snap(), est(420, "delayed"), MATCH)      # emit @ ~420
     upsert_vehicle(conn, snap(), est(500, "delayed"), MATCH)      # not enough worse
     upsert_vehicle(conn, snap(), est(560, "delayed"), MATCH)
-    d = upsert_vehicle(conn, snap(), est(640, "delayed"), MATCH)  # small climbs...
+    upsert_vehicle(conn, snap(), est(640, "delayed"), MATCH)  # small climbs...
     upsert_vehicle(conn, snap(), est(730, "delayed"), MATCH)      # >= 420+300 -> re-emit
     evs = events(conn)
     assert len(evs) == 2 and evs[1]["delay_seconds"] == 730

@@ -436,12 +436,12 @@ def route_summaries(
         })
         route_days = []
         for day in connection.execute(
-            (f"""SELECT DISTINCT service_date FROM daily_geo_route_summary
+            ("""SELECT DISTINCT service_date FROM daily_geo_route_summary
                   WHERE operator=? AND geo_type=? AND geo_key=?
                     AND source_operator=? AND route=?
                     AND service_date BETWEEN ? AND ?"""
              if scope.kind in ("area", "ward") else
-             f"""SELECT DISTINCT service_date FROM daily_route_summary
+             """SELECT DISTINCT service_date FROM daily_route_summary
                   WHERE operator=? AND route=?
                     AND service_date BETWEEN ? AND ?""") + clause,
             ((operator, scope.kind, scope.values[0], row["source_operator"],
@@ -928,7 +928,7 @@ def _pdf_safe(value: object) -> str:
 
 def render_pdf(report: dict, output: Path) -> None:
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.enums import TA_LEFT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm

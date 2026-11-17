@@ -1,6 +1,5 @@
 """Every audit.db writer uses WAL with synchronous=NORMAL and a busy wait (#96)."""
 import re
-import sqlite3
 from pathlib import Path
 
 import audit_rollup

@@ -333,7 +333,7 @@ def test_twin_declared_only_in_a_future_edition_is_not_proof(tmp_path):
 
 def test_two_journeys_in_the_edition_in_force_are_both_kept(tmp_path):
     index = index_of(journey('VJ390', SEP27), journey('VJ391', SEP27))
-    result_db = duplicate_db(tmp_path / 'd.db', [('a', 'x', 'VJ390', CALLS),
+    result_db = duplicate_db(tmp_path / 'd.db', [('a', 'x', 'VJ390', CALLS),  # noqa: F841 - keep the fixture connection alive through reconciliation
                                                  ('b', 'y', 'VJ391', CALLS)])
     result = duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)
     assert result == {'trips_corrected': 0, 'dates_excluded': 0}

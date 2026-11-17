@@ -255,6 +255,7 @@ export class APIRoutes {
                             if (!line.trim()) return null;
                             try { 
                                 return JSON.parse(line); 
+                            // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing handler signature or catch binding.
                             } catch (e) { 
                                 return { level: 30, time: Date.now(), msg: line, type: 'raw' }; 
                             }
@@ -301,6 +302,7 @@ export class APIRoutes {
     /**
      * Reload the timetable database and dependent caches.
      */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing handler signature or catch binding.
     private async handleReloadDatabase(req: Request, res: Response, next: NextFunction): Promise<void> {
         const timer = new PerformanceTimer('api_reload_database', logger);
         

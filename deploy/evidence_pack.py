@@ -17,7 +17,6 @@ from collections import Counter
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 
 DEFAULT_AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")

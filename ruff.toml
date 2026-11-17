@@ -1,0 +1,5 @@
+target-version = "py313"
+extend-exclude = [".venv", ".scratch", ".claude", "node_modules", "dist", "docs", "social"]
+
+[lint]
+select = ["F", "E9"]

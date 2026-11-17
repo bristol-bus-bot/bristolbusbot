@@ -111,7 +111,6 @@ def main():
     calendar_ids = {}
     routes_added = set()
     n_trips = n_st = n_stops_added = 0
-    seq_counter = 0
     errors = []
 
     def ensure_stop(atco):

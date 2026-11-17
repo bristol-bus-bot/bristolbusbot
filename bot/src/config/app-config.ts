@@ -22,7 +22,6 @@ function intSetting(name: string, fallback: number, min = 0): number {
 
 export function loadConfig(): AppConfig {
     const isTestMode = process.env.TEST_MODE?.toLowerCase() === 'true';
-    const TARGET_TIMEZONE = 'Europe/London';
 
     // API credentials come from the environment only; there are no defaults.
     const bskyHandle = process.env.BSKY_HANDLE;
@@ -33,6 +32,7 @@ export function loadConfig(): AppConfig {
     // Timing constants with environment overrides. Timeouts are generous
     // because the Pi's network path to BODS can be slow.
     const SUMMARY_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the configuration lookup and its validation.
     const DAILY_CLEANUP_INTERVAL_MS = intSetting('CLEANUP_INTERVAL', 86400000);
     
     // File paths; environment overrides, working-directory defaults.
@@ -44,13 +44,9 @@ export function loadConfig(): AppConfig {
         || path.join(process.cwd(), 'editorial-context.json');
     const EDITORIAL_USAGE_FILE = process.env.EDITORIAL_USAGE_PATH
         || path.join(path.dirname(APP_DATA_DB_FILE), 'editorial-usage.json');
-    const WITTY_COMMENTS_FILE = 'witty_comments.json';
-    const FBRI_BUSES_FILE = 'fbribuses.json';
-    const ZEN_COMMENTS_FILE = 'zen_comments.json';
     
     // Event-processing thresholds.
     const LATE_THRESHOLD_MINUTES = 4;
-    const SIGNIFICANT_DELAY_THRESHOLD = 10;
     const TIME_WINDOW_MINUTES = 2;
     const MAX_DISTANCE_KM_SANITY_CHECK = 1.0;
     const MAX_JOURNEY_AGE_HOURS = 2;

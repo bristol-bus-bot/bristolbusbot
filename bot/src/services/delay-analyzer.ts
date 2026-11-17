@@ -3,7 +3,7 @@
 
 import type { AppConfig } from '../types/bus-types.js';
 import { DateTime } from 'luxon';
-import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
+import { logger, TARGET_TIMEZONE, logDetailed } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
 import { resolveFleetVehicle } from './vehicle-identity.js';
 import type { DatabaseManager } from './database-manager.js';

@@ -25,7 +25,6 @@ import socket
 import sqlite3
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 import urllib.error
@@ -36,7 +35,7 @@ from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 
 LOG = logging.getLogger("bbb-backup")

@@ -32,6 +32,7 @@ import {
     VERIFIER_RESPONSE_SCHEMA,
     cleanEditorialPost,
     jargonIssues,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing import or public method signature.
     containsWebLink,
     parseEditorialVerifierOutput,
     parseEditorialWriterOutput,
@@ -404,6 +405,7 @@ export class AICommentary {
      */
     private async callSingleWriterGemini(
         context: AICommentaryContext,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing import or public method signature.
         retryCount: number = 0,
         selectedHook?: EditorialSelection | null,
     ): Promise<AICommentaryResult | null> {
@@ -799,6 +801,7 @@ private buildVehicleOneLiner(context: AICommentaryContext): string | null {
         return s.slice(0, limit).replace(/\s+\S*$/, '').trim();
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing public method signature and type.
     async generateNetworkSummary(_networkStatus: any): Promise<string | null> {
         // The interface permits summaries even when this provider has none.
         return null;

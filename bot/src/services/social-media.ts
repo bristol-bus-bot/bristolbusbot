@@ -387,6 +387,7 @@ export class SocialMediaManager {
     /**
      * Create social media post record for tracking
      */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing post-record method signature.
     private createPostRecord(text: string, event: BusEvent, posted: boolean): SocialMediaPost {
         return {
             id: `${Date.now()}_${event.line}_${event.eventType}`,

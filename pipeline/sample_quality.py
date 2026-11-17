@@ -1,8 +1,6 @@
 """Shared evidence support for descriptive punctuality, never cancellations."""
 from collections import defaultdict
 import json
-import math
-import sqlite3
 
 from audit_operators import SHOW_OPERATORS, NETWORK_LABEL, public_route
 from audit_geo import geo_for

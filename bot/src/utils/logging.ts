@@ -369,6 +369,7 @@ export function setupGracefulShutdown(): void {
   const gracefulShutdown = (signal: string) => {
     logger.info('Received shutdown signal', { signal });
     logger.on('finish', () => { process.exit(0); });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Keep the existing TypeScript suppression for the Winston stream.
     // @ts-ignore end() is on NodeJS.WritableStream types used by winston
     (logger as any).end?.();
   };

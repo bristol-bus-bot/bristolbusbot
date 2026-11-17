@@ -4,21 +4,15 @@
 import type { AppConfig } from '../types/bus-types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
-import * as path from 'path';
 import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
-import { logger, PerformanceTimer, TARGET_TIMEZONE, logSummary, logDetailed, logAlways } from '../utils/logging.js';
+import { logger, PerformanceTimer, TARGET_TIMEZONE } from '../utils/logging.js';
 import { ApplicationState } from './application-state.js';
 import { buildFleetIdentityIndex, emptyFleetIdentityIndex } from './vehicle-identity.js';
 import { BOT_DATA_PATHS } from '../config/data-paths.js';
 import { DatabaseError } from '../types/bus-types.js';
 import { matchedJourneyContext, type JourneyStop } from './journey-context.js';
 import type { 
-    DatabaseStop, 
-    DatabaseRoute, 
-    DatabaseJourney, 
-    DatabaseStopTime,
-    BusVehicleDetails,
     BusEvent
 } from '../types/bus-types.js';
 

@@ -21,7 +21,7 @@ import time
 import zipfile
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo

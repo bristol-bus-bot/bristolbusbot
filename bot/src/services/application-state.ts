@@ -288,6 +288,7 @@ export class ApplicationState {
      * Increment the daily AI call counter (quota tracking).
      */
     public incrementAICallCount(): void {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the existing state read.
         const previousCount = this.aiCallsToday;
         this.aiCallsToday++;
         this.saveCounters();
