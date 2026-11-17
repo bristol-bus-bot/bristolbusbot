@@ -693,7 +693,7 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
 
 
 def low_priority(command: str) -> str:
-    """Run a heavy remote step like bbb-heavy: under the shared heavy-I/O lock,
+    """Run a heavy deploy step under the shared heavy-I/O lock,
     at idle disk and lowest CPU priority (planning #143)."""
     return (f"/usr/bin/flock -w {HEAVY_LOCK_WAIT_SECONDS} -E 75 {HEAVY_LOCK} "
             f"/usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh -c {q(command)}")
