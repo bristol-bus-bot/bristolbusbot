@@ -43,3 +43,36 @@ def test_application_skip_remains_benign_and_clears_old_failure(
     assert state["last_result"] == "skipped"
     assert state["exit_code"] == 75
     assert "failure_code" not in state
+
+
+def test_a_job_can_name_its_failure_and_failures_are_counted(tmp_path, monkeypatch):
+    """#141: the daily message needs the reason and how many runs in a row."""
+    import os
+
+    def failing(*_args, **_kwargs):
+        Path(os.environ["BBB_JOB_REASON_FILE"]).write_text("git_bundle_timed_out\n", encoding="utf-8")
+        return subprocess.CompletedProcess([], 1)
+
+    monkeypatch.setattr(subprocess, "run", failing)
+    monkeypatch.setattr(sys, "argv", ["bbb-run-recorded-job", "--name", "backup",
+                                      "--state-dir", str(tmp_path), "--", "x"])
+    run_recorded_job.main()
+    run_recorded_job.main()
+    state = json.loads((tmp_path / "backup.json").read_text(encoding="utf-8"))
+    assert state["failure_reason"] == "git_bundle_timed_out"
+    assert state["consecutive_failures"] == 2
+    assert not (tmp_path / "backup.reason").exists()
+
+    monkeypatch.setattr(subprocess, "run",
+                        lambda *_a, **_k: subprocess.CompletedProcess([], 0))
+    run_recorded_job.main()
+    state = json.loads((tmp_path / "backup.json").read_text(encoding="utf-8"))
+    assert state["consecutive_failures"] == 0 and "failure_reason" not in state
+
+
+def test_free_text_never_becomes_a_reason(tmp_path):
+    path = tmp_path / "x.reason"
+    path.write_text("Traceback (most recent call last): /home/x", encoding="utf-8")
+    assert run_recorded_job.read_reason(path) is None
+    path.write_text("disk_full\n", encoding="utf-8")
+    assert run_recorded_job.read_reason(path) == "disk_full"

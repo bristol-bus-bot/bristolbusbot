@@ -578,3 +578,25 @@ def test_layout_never_lets_git_pack_the_audit_repository_by_itself():
     assert "gc.auto 200" not in installer
     for path in (Path(__file__).resolve().parents[1]).glob("*.sh"):
         assert "git gc" not in path.read_text(encoding="utf-8"), path.name
+    assert 'git -C "$remote_home/bus-audit-repo" config gc.auto 200' in installer
+    assert 'git -C "$remote_home/bus-audit-repo" config gc.autoDetach false' in installer
+
+
+def test_backup_failures_carry_a_reason_code_for_the_daily_message(tmp_path: Path, monkeypatch):
+    """#141: a bundle that runs out of time says so, in a code, not a path."""
+    def slow(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+
+    monkeypatch.setattr(backup.subprocess, "run", slow)
+    repository = tmp_path / "published"
+    repository.mkdir()
+    with pytest.raises(backup.BackupError) as raised:
+        backup._git_bundle(backup.Source(name="published", path=repository),
+                           tmp_path / "published.bundle")
+    assert raised.value.reason == "git_bundle_timed_out"
+
+    reason_file = tmp_path / "backup.reason"
+    monkeypatch.setenv("BBB_JOB_REASON_FILE", str(reason_file))
+    backup.record_failure_reason(raised.value.reason)
+    assert reason_file.read_text(encoding="utf-8") == "git_bundle_timed_out\n"
+    assert backup.BackupError("anything").reason == "unknown"

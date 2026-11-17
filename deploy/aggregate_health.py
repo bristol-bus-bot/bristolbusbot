@@ -232,6 +232,11 @@ def job_checks() -> tuple[dict, list[str]]:
                 "last_success_at": success,
                 "age_hours": round(age_h, 2) if age_h is not None else None,
             }
+            if result == "failure":
+                checks[name].update({
+                    key: payload[key] for key in (
+                        "failure_code", "failure_reason", "last_failure_at",
+                        "consecutive_failures") if payload.get(key) is not None})
             if interrupted:
                 checks[name].update(
                     failure_code='interrupted_by_restart',
@@ -1808,13 +1813,107 @@ def timetable_notes(expired_corrections: list[dict],
     return notes
 
 
-def general_incident_message(issues: list[str]) -> str:
+# One plain sentence per known failure kind (#141). Codes come from
+# bbb-run-recorded-job (lock_timeout, command_failed), from a job's own
+# reason file (for example the backup's), or from this check (interrupted).
+FAILURE_REASONS = {
+    "lock_timeout": "It could not start because another heavy job held the disk lock.",
+    "git_bundle_timed_out": "It ran out of time bundling the published audit site's history.",
+    "git_bundle_failed": "It could not bundle the published audit site's history.",
+    "database_copy_timed_out": "It ran out of time copying the databases.",
+    "database_copy_failed": "It could not copy one of the databases.",
+    "storage_timed_out": "It ran out of time saving to the backup store.",
+    "storage_failed": "It could not save to the backup store (the backup disk or the online copy).",
+    "backup_disk_missing": "The backup disk was not mounted.",
+    "disk_full": "The disk is full.",
+    "interrupted_by_restart": "It was interrupted by a Pi restart.",
+    "interrupted_without_result": "It stopped without recording a result.",
+}
+STILL_SAFE = {
+    "backup": "The last good backup is from {date}.",
+}
+
+
+def _day(value: object) -> str | None:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return f"{moment.day} {moment.strftime('%b')}"
+
+
+def job_failure_sentence(name: str, check: dict) -> str | None:
+    """'The backup has failed 2 times in a row, most recently on 17 Nov. It ran
+    out of time ... The last good backup is from 15 Nov.' None if not failing."""
+    result = check.get("result")
+    if result not in {"failure", "interrupted", "missing"}:
+        return None
+    area = plain_issue_area(f"job:{name}")
+    subject = area[:1].upper() + area[1:]
+    if result == "missing":
+        return f"{subject} has no record of ever running."
+    times = int(check.get("consecutive_failures") or 1)
+    when = _day(check.get("last_failure_at") or check.get("interrupted_at"))
+    opening = (f"{subject} has failed {times} times in a row" if times > 1
+               else f"{subject} failed")
+    opening += f", most recently on {when}." if when and times > 1 else (
+        f" on {when}." if when else ".")
+    code = check.get("failure_reason") or check.get("failure_code")
+    reason = FAILURE_REASONS.get(str(code)) or (
+        f"It failed for a reason not seen before; the details are in the {name} job's log.")
+    last_good = _day(check.get("last_success_at"))
+    safe = (STILL_SAFE.get(name, "It last worked on {date}.").format(date=last_good)
+            if last_good else "It has no recorded success yet.")
+    return " ".join((opening, reason, safe))
+
+
+# Delivery failures that happen before any service check (#141).
+TIMETABLE_DELIVERY_REASONS = {
+    "artifact_too_large": "The new timetable file was larger than the Pi accepts, "
+                          "so it was not downloaded.",
+    "download_timeout": "Downloading the new timetable took too long.",
+    "expired_token": "The GitHub key the Pi uses to fetch timetables has expired.",
+    "missing_token": "The Pi has no GitHub key to fetch timetables with.",
+}
+
+
+def timetable_problem_sentence(automation: dict) -> str | None:
+    """What happened to a rejected timetable, in the alert's own words."""
+    if automation.get("status") != "failed":
+        return None
+    attempt = automation.get("last_attempt")
+    attempt = attempt if isinstance(attempt, dict) else {}
+    plain = TIMETABLE_DELIVERY_REASONS.get(str(attempt.get("failure_code")))
+    if plain:
+        return plain
+    message = _timetable_failure_message(
+        str(automation.get("phase") or "shadow"), attempt)
+    for line in message.split("\n"):
+        if line.startswith("What happened: "):
+            return line.removeprefix("What happened: ")
+    return "It failed a safety check that has no plain description yet."
+
+
+def job_failure_sentences(jobs: dict) -> list[str]:
+    sentences = []
+    for name in sorted(jobs):
+        check = jobs[name] if isinstance(jobs[name], dict) else {}
+        sentence = job_failure_sentence(name, check)
+        if sentence:
+            sentences.append(sentence)
+    return sentences
+
+
+def general_incident_message(issues: list[str], jobs: dict | None = None) -> str:
     areas = sorted({plain_issue_area(issue) for issue in issues})
+    failing = {issue.removeprefix("job:") for issue in issues if issue.startswith("job:")}
+    reasons = job_failure_sentences(
+        {name: check for name, check in (jobs or {}).items() if name in failing})
     return "\n".join((
         ":rotating_light: *Bristol Bus Bot needs attention*",
         "Problem area: " + ", ".join(areas) + ".",
-        "The previous safe data is kept wherever possible. Technical details "
-        "are recorded on the Pi for diagnosis.",
+        *reasons,
+        "The previous safe data is kept wherever possible.",
     ))
 
 
@@ -1945,6 +2044,12 @@ def main() -> int:
         "resource_samples_age_minutes": round(resource_age, 1)
         if resource_age is not None else None,
         "notes": notes,
+        # Plain words for the daily message, so it never prints job names or
+        # codes, and says the same thing as the immediate alert (#141).
+        "failures": job_failure_sentences(
+            {name: check for name, check in jobs.items() if name != "timetable-automation"}),
+        "timetable_problem": timetable_problem_sentence(timetable_automation),
+        "issue_areas": {issue: plain_issue_area(issue) for issue in unique_issues},
     }
     atomic_json(STATE / "health.json", snapshot)
 
@@ -2076,7 +2181,7 @@ def main() -> int:
         notify(allowance_still_needed_message(still_needed))
         remaining_opened.remove("timetable:allowance-still-needed")
     if remaining_opened:
-        notify(general_incident_message(remaining_opened))
+        notify(general_incident_message(remaining_opened, jobs))
 
     timetable_resolved = "job:timetable-automation" in resolved
     recovery_pending = bool(
