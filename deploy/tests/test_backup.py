@@ -166,6 +166,8 @@ def test_git_bundle_creation_and_verification_use_repository_context(
         "bundle", "verify",
         str(destination),
     ]
+    # 45 minutes for each step: the low-priority backup needs more than 10.
+    assert [kwargs["timeout"] for _command, kwargs in calls] == [2700, 2700]
 
 
 def test_restored_bundle_verification_uses_temporary_bare_repository(
@@ -567,3 +569,9 @@ def test_sqlite_snapshot_copies_in_one_step_so_writers_cannot_restart_it(tmp_pat
     assert len(calls) == 2
     with closing(sqlite3.connect(staged)) as restored:
         assert restored.execute("SELECT COUNT(*) FROM big").fetchone()[0] >= 3000
+
+
+def test_layout_keeps_the_published_audit_repository_packed():
+    installer = (Path(__file__).resolve().parents[1] / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    assert 'git -C "$remote_home/bus-audit-repo" config gc.auto 200' in installer
+    assert 'git -C "$remote_home/bus-audit-repo" config gc.autoDetach false' in installer
