@@ -578,8 +578,6 @@ def test_layout_never_lets_git_pack_the_audit_repository_by_itself():
     assert "gc.auto 200" not in installer
     for path in (Path(__file__).resolve().parents[1]).glob("*.sh"):
         assert "git gc" not in path.read_text(encoding="utf-8"), path.name
-    assert 'git -C "$remote_home/bus-audit-repo" config gc.auto 200' in installer
-    assert 'git -C "$remote_home/bus-audit-repo" config gc.autoDetach false' in installer
 
 
 def test_backup_failures_carry_a_reason_code_for_the_daily_message(tmp_path: Path, monkeypatch):
