@@ -1,0 +1,79 @@
+# Version updates run on the 1st of each month. Update PRs are optional.
+# Merging one takes effect on the Pi only
+# after the next deployment of that component. Security updates are separate.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /bot
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /social
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      sharp:
+        patterns: ['sharp']
+        update-types: [minor, patch]
+      minor-and-patch:
+        patterns: ['*']
+        exclude-patterns: ['sharp']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /collector
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /site
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /pipeline
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
