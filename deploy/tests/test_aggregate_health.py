@@ -1449,3 +1449,41 @@ def test_a_missing_punctuality_target_is_a_weekly_note(tmp_path):
                                       "current_target_pct": 87}), encoding="utf-8")
     assert aggregate_health.unpublished_target_note(_date(2027, 4, 5), published) == []
     assert aggregate_health.unpublished_target_note(_date(2027, 4, 5), tmp_path / "absent") == []
+
+
+def test_failed_jobs_get_one_plain_sentence_with_reason_and_last_good_run():
+    """#141: name the job, the reason and what is still safe; no codes or paths."""
+    backup = {"result": "failure", "failure_code": "command_failed",
+              "failure_reason": "git_bundle_timed_out", "consecutive_failures": 2,
+              "last_failure_at": "2026-11-17T02:29:36+00:00",
+              "last_success_at": "2026-11-15T02:36:59+00:00"}
+    assert aggregate_health.job_failure_sentence("backup", backup) == (
+        "The backup has failed 2 times in a row, most recently on 17 Nov. It ran out "
+        "of time bundling the published audit site's history. The last good backup "
+        "is from 15 Nov.")
+    unknown = {"result": "failure", "failure_code": "command_failed",
+               "last_failure_at": "2026-11-17T07:10:00+00:00",
+               "last_success_at": "2026-11-16T07:09:00+00:00"}
+    sentence = aggregate_health.job_failure_sentence("audit-rollup", unknown)
+    assert sentence.startswith("The nightly performance totals failed on 17 Nov.")
+    assert "a reason not seen before" in sentence and "It last worked on 16 Nov." in sentence
+    assert aggregate_health.job_failure_sentence("backup", {"result": "success"}) is None
+
+
+def test_the_immediate_alert_gives_the_reason_not_a_pointer_to_the_pi():
+    message = aggregate_health.general_incident_message(["job:backup"], {"backup": {
+        "result": "failure", "failure_code": "lock_timeout",
+        "last_failure_at": "2026-11-17T02:29:36+00:00",
+        "last_success_at": "2026-11-15T02:36:59+00:00"}})
+    assert "Technical details are recorded on the Pi" not in message
+    assert "It could not start because another heavy job held the disk lock." in message
+    assert "The last good backup is from 15 Nov." in message
+    assert "timetable" not in message.lower()
+
+
+def test_a_refused_timetable_download_is_named_plainly():
+    sentence = aggregate_health.timetable_problem_sentence(
+        {"status": "failed", "last_attempt": {"failure_code": "artifact_too_large"}})
+    assert sentence == ("The new timetable file was larger than the Pi accepts, "
+                        "so it was not downloaded.")
+    assert aggregate_health.timetable_problem_sentence({"status": "healthy"}) is None

@@ -227,36 +227,8 @@ def plain_daily_snapshot():
     }
 
 
-def test_daily_message_explains_recent_work_and_plan_in_plain_english(monkeypatch):
-    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
-
-    message = status_digest.daily_message(
-        plain_daily_snapshot(), today=date(2026, 8, 13))
-
-    assert "Everything important is working" in message
-    assert "core move away from the Windows PC is complete" in message
-    assert "next real job is to save better evidence" in message
-    assert "Nothing today" in message
-    assert "clues, not confirmed faults" in message
-    for jargon in (
-            "healthz", "matched-but-ungated", "mismatch canary", "report-only",
-            "run_id", "token", "GB free", "aggregate"):
-        assert jargon not in message
 
 
-def test_stale_backup_and_timetable_are_prominent_and_need_action(monkeypatch):
-    monkeypatch.setattr(status_digest, '_current_release_fingerprints', lambda: {})
-    snapshot = plain_daily_snapshot()
-    snapshot['jobs']['backup'] = {'last_success_at': '2026-09-04T01:20:33Z',
-                                  'result': 'interrupted'}
-    snapshot['timetable_automation']['last_accepted'] = {'accepted_at': '2026-09-09T12:00:00Z'}
-    message = status_digest.daily_message(snapshot, today=date(2026, 9, 27))
-    assert message.index('Needs attention') < message.index('Where the plan stands')
-    assert 'Backup: last success 23 days ago' in message
-    assert 'Timetable update: last success 18 days ago' in message
-    assert 'interrupted by a Pi restart' in message
-    assert 'Ask Claude to investigate the backup or timetable problem' in message
-    assert 'Nothing today' not in message
 
 
 def test_daily_message_reports_only_changes_since_previous_summary(monkeypatch):
@@ -293,78 +265,12 @@ def test_daily_message_makes_pending_description_review_the_only_action(
     assert "Nothing will publish by itself" in message
 
 
-def test_daily_message_says_safe_timetable_rejection_did_not_break_live_bot(
-        monkeypatch):
-    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
-    snapshot = plain_daily_snapshot()
-    snapshot.update({
-        "status": "error",
-        "issues": ["job:timetable-automation"],
-        "timetable_automation": {
-            "status": "failed",
-            "last_accepted": {"run_id": "31070121269",
-                              "accepted_at": "2026-08-10T04:20:00Z"},
-            "delivery": {"job": {"last_ok_at": "2026-08-13T04:20:00Z"}},
-            "last_attempt": {
-                "outcome": "failure",
-                "failure_code": "candidate_operator_collapse",
-            },
-        },
-    })
-
-    message = status_digest.daily_message(
-        snapshot, today=date(2026, 8, 14))
-
-    assert "live bot and website are working" in message
-    assert "proposed timetable update was rejected" in message
-    assert "current working timetable stayed live" in message
-    assert "Pi will retry at the next check" in message
-    assert "needs attention" not in message
 
 
-def test_timetable_stuck_for_days_needs_attention_not_reassurance(monkeypatch):
-    """October 2026: 19 days of "Nothing today. The Pi will retry" while every
-    retry failed the same way. Two failed days must become an action."""
-    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
-    snapshot = plain_daily_snapshot()
-    snapshot.update({
-        "status": "error",
-        "issues": ["job:timetable-automation"],
-        "timetable_automation": {
-            "status": "failed",
-            "last_accepted": {"accepted_at": "2026-10-03T00:12:44Z"},
-            "delivery": {"job": {"last_ok_at": "2026-10-03T00:12:44Z"}},
-            "last_attempt": {"outcome": "failure",
-                             "failure_code": "candidate_service_inflation"},
-        },
-    })
-
-    message = status_digest.daily_message(snapshot, today=date(2026, 10, 22))
-
-    assert message.index("Needs attention") < message.index("Where the plan stands")
-    assert "Timetable updates have failed every check for 19 days" in message
-    assert "Ask Claude to investigate" in message
-    assert "Nothing today" not in message
-    assert "will retry automatically" not in message
 
 
-def test_unknown_timetable_success_is_a_warning(monkeypatch):
-    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
-    snapshot = plain_daily_snapshot()
-    snapshot["timetable_automation"]["last_accepted"] = {}
-    message = status_digest.daily_message(snapshot, today=date(2026, 8, 13))
-    assert "*Needs attention*\n- Timetable update: last success unknown." in message
 
 
-def test_overall_line_calls_reminders_warnings_not_problems():
-    line = status_digest.overall_line({
-        "status": "warning",
-        "issues": ["credential:timetable-token-renewal-due"],
-    })
-    assert line.startswith(":large_yellow_circle:")
-    assert "Nothing is broken" in line
-    assert status_digest.overall_line({"status": "ok", "issues": []}).startswith(
-        ":white_check_mark:")
 
 
 def test_routine_skip_resets_the_stuck_count():
@@ -431,27 +337,142 @@ def test_daily_phone_summary_only_goes_to_an_ntfy_topic(tmp_path, monkeypatch):
                      "message": "m", "priority": 2, "tags": ["bus"]}]
 
 
-def test_monday_update_lists_descriptions_published_that_week(tmp_path):
-    history = tmp_path / "history"
-    history.mkdir()
-    (history / "20261101T021500Z-aaaaaaaa.approved.json").write_text(json.dumps({
-        "created_at": "2026-11-01T02:15:00+00:00",
-        "additions": {"in_service": {"FBRI:303": "Known Model. Doing another shift."},
-                      "waiting": {}, "depot": {}}}))
-    (history / "20261001T021500Z-bbbbbbbb.approved.json").write_text(json.dumps({
-        "created_at": "2026-10-01T02:15:00+00:00",
-        "additions": {"in_service": {"FBRI:1": "Old line."}}}))
-    lines = status_digest.published_description_lines(date(2026, 11, 2), history)
-    assert lines[0] == "*Bus descriptions published this week (1)*"
-    assert "- FBRI:303 (in service): Known Model. Doing another shift." in lines
-    assert not any("Old line" in line for line in lines)
-    assert status_digest.published_description_lines(date(2026, 11, 3), history) == []
+# --- #141: say what is happening now in plain words -------------------------
+
+BACKUP_FAILURE = ("The backup has failed 2 times in a row, most recently on 17 Nov. "
+                  "It ran out of time bundling the published audit site's history. "
+                  "The last good backup is from 15 Nov.")
 
 
-def test_health_notes_appear_in_today_without_asking_for_action():
+def quiet_snapshot():
+    snapshot = plain_daily_snapshot()
+    snapshot["timetable_automation"]["last_accepted"]["accepted_at"] = "2026-11-13T21:53:00Z"
+    snapshot["collector_anomaly"] = {"status": "ok", "detectors": {"extreme_delays": {"count": 9}}}
+    snapshot["failures"] = []
+    return snapshot
+
+
+def quiet_state(snapshot):
+    return {"fingerprints": status_digest._progress_fingerprints(snapshot),
+            "counts": status_digest.standing_counts(snapshot),
+            "sent_at": "2026-11-14T08:00:00+00:00"}
+
+
+def test_a_quiet_day_is_short_and_has_no_fixed_text(monkeypatch, tmp_path):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = quiet_snapshot()
+    message = status_digest.daily_message(snapshot, quiet_state(snapshot),
+                                          date(2026, 11, 15), tmp_path)
+    assert "Where the plan stands" not in message
+    assert "Everything is working." in message
+    assert "*You need to do:* nothing." in message
+    assert "Timetable: current, last updated 13 Nov." in message
+    # Unchanged standing notes are left out.
+    assert "missing source details" not in message
+    assert "Odd readings" not in message
+    assert "clues, not confirmed faults" not in message
+    assert "Live bus information and the public website are current" not in message
+    assert len(message.splitlines()) <= 12
+
+
+def test_a_backup_failure_is_named_with_its_reason_and_never_blames_the_timetable(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = quiet_snapshot()
+    snapshot.update(status="error", issues=["job:backup"], failures=[BACKUP_FAILURE],
+                    issue_areas={"job:backup": "the backup"})
+    message = status_digest.daily_message(snapshot, quiet_state(snapshot),
+                                          date(2026, 11, 17), tmp_path)
+    assert BACKUP_FAILURE in message
+    assert "Something needs looking at" in message
+    assert "Ask Claude to look at the problem above" in message
+    problem = message.split("*Since yesterday*")[0]
+    assert "timetable" not in problem.lower()
+    assert "Backup or timetable" not in message
+    assert "nothing." not in message
+
+
+def test_a_rejected_timetable_says_what_happened_and_that_the_old_one_stays(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = quiet_snapshot()
+    snapshot.update(
+        status="error", issues=["job:timetable-automation"],
+        timetable_problem="The proposed timetable runs out of usable future service too soon.")
+    snapshot["timetable_automation"].update(
+        status="failed", delivery={"job": {"last_ok_at": "2026-11-13T05:01:00Z"}})
+    message = status_digest.daily_message(snapshot, quiet_state(snapshot),
+                                          date(2026, 11, 13), tmp_path)
+    assert "A proposed timetable update was rejected." in message
+    assert "runs out of usable future service too soon" in message
+    assert "current timetable stays live" in message
+    assert "*You need to do:* nothing." in message
+
+
+def test_a_timetable_stuck_for_days_becomes_an_action(monkeypatch, tmp_path):
+    """October 2026: 19 days of 'the Pi will retry' while every retry failed."""
+    monkeypatch.setattr(status_digest, "_current_release_fingerprints", lambda: {})
+    snapshot = quiet_snapshot()
+    snapshot.update(status="error", issues=["job:timetable-automation"],
+                    timetable_problem="Saturday has too little service.")
+    snapshot["timetable_automation"].update(
+        status="failed", last_accepted={"accepted_at": "2026-10-03T00:12:44Z"},
+        delivery={"job": {"last_ok_at": "2026-10-03T00:12:44Z"}})
+    message = status_digest.daily_message(snapshot, {}, date(2026, 10, 22), tmp_path)
+    assert "Timetable updates have been rejected for 19 days running." in message
+    assert message.count("Saturday has too little service.") == 1     # said once
+    assert "Ask Claude to look at the problem above" in message
+
+
+def test_an_old_or_unknown_timetable_is_a_problem():
+    snapshot = quiet_snapshot()
+    snapshot["timetable_automation"]["last_accepted"] = {"accepted_at": "2026-11-01T00:00:00Z"}
+    assert any("last updated 16 days ago (1 Nov)" in line
+               for line in status_digest.problems(snapshot, date(2026, 11, 17)))
+    snapshot["timetable_automation"]["last_accepted"] = {}
+    assert "The timetable's last update date is unknown." in status_digest.problems(
+        snapshot, date(2026, 11, 17))
+
+
+def test_standing_notes_appear_only_when_their_count_changes():
+    snapshot = quiet_snapshot()
+    state = quiet_state(snapshot)
+    assert status_digest.change_lines(snapshot, state) == []
+    snapshot["collector_anomaly"]["detectors"]["extreme_delays"]["count"] = 14
+    assert status_digest.change_lines(snapshot, state) == [
+        "Odd readings for Claude to look at (clues, not faults): 14, up from 9."]
+
+
+def test_warnings_name_what_is_coming_up():
+    line = status_digest.overall_line({
+        "status": "warning",
+        "issues": ["credential:timetable-token-renewal-due"],
+        "issue_areas": {"credential:timetable-token-renewal-due":
+                        "the GitHub timetable token (renew within 30 days)"},
+    })
+    assert line.startswith(":large_yellow_circle: *Everything is working.* Coming up soon:")
+    assert "GitHub timetable token" in line
+
+
+def test_health_notes_appear_under_today():
     note = ("The timetable correction for 2026-12-01 (planning #128) lapsed on "
             "2026-12-02 and is no longer used. It can go in a later tidy-up; "
             "nothing needs doing.")
-    lines = status_digest.today_lines({"notes": [note]}, date(2026, 12, 3))
-    assert lines[-1] == note
-    assert status_digest.today_lines({"notes": "not a list"})[-1].startswith("The overnight")
+    snapshot = quiet_snapshot()
+    snapshot["notes"] = [note]
+    message = status_digest.daily_message(snapshot, quiet_state(snapshot), date(2026, 12, 3),
+                                          Path("does-not-exist"))
+    assert f"- {note}" in message
+
+
+def test_published_descriptions_are_one_line_and_only_when_new(tmp_path):
+    (tmp_path / "a.approved.json").write_text(json.dumps({
+        "created_at": "2026-11-16T22:30:00+00:00",
+        "additions": {"in_service": {"FBRI-1": "x", "FBRI-2": "y"}, "waiting": {"FBRI-3": "z"}},
+    }), encoding="utf-8")
+    since = datetime.fromisoformat("2026-11-16T08:00:00+00:00")
+    lines = status_digest.published_description_lines(date(2026, 11, 17), tmp_path, since)
+    assert lines == ["3 new bus descriptions went live (3 this week). They show on each "
+                     "bus's page on bristolbuses.live; ask Claude to pull any you don't like."]
+    later = datetime.fromisoformat("2026-11-17T08:00:00+00:00")
+    assert status_digest.published_description_lines(date(2026, 11, 18), tmp_path, later) == []
