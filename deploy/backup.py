@@ -681,6 +681,11 @@ def _require_or_skip(source: Source, missing: list[dict[str, str]]) -> bool:
     return False
 
 
+# Bundling the published-audit repository at the backup's low disk priority
+# took more than 10 minutes once #139 made that priority real (16-17 Nov).
+GIT_BUNDLE_TIMEOUT_SECONDS = 45 * 60
+
+
 def _git_bundle(source: Source, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     trusted_repository = f"safe.directory={source.path}"
@@ -698,7 +703,7 @@ def _git_bundle(source: Source, destination: Path) -> None:
     )
     for command in commands:
         try:
-            subprocess.run(command, check=True, timeout=600)
+            subprocess.run(command, check=True, timeout=GIT_BUNDLE_TIMEOUT_SECONDS)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise BackupError(f"cannot create/verify git bundle for {source.path}") from exc
 
