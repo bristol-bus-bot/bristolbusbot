@@ -306,8 +306,10 @@ class FakeRemote:
         self.commands = []
         self.settings = TEST_SETTINGS
 
-    def run(self, command, check=True):
+    def run(self, command, check=True, timeout=None):
         self.commands.append(command)
+        self.timeouts = getattr(self, "timeouts", {})
+        self.timeouts[command] = timeout
         if command.startswith("test -L"):
             return "/srv/darkplace/bbb-site\n"
         return ""
@@ -647,3 +649,80 @@ def test_layout_check_maps_verbatim_helpers_and_reports_drift(tmp_path):
 def test_check_layout_is_read_only_and_needs_no_clean_tree():
     plan = push.command_plan(push.parser().parse_args(["--check-layout"]))
     assert any("changes nothing" in line for line in plan)
+
+
+
+def test_heavy_deploy_steps_take_the_lock_at_low_priority_with_room_to_finish(monkeypatch, tmp_path):
+    """#143: unpack, verify and package installs never starve the collector."""
+    archive = tmp_path / "site.tar.gz"
+    archive.write_bytes(b"archive")
+    built = push.BuiltRelease("site", "release-1", archive, push.sha256_file(archive))
+    remote = FakeRemote()
+    monkeypatch.setattr(push, "wait_healthy", lambda *_: True)
+    monkeypatch.setattr(push, "notify", lambda *_: None)
+    reports = []
+    monkeypatch.setattr(push, "report_collector_polls", lambda _remote, since: reports.append(since))
+
+    push.deploy_release(remote, built)
+
+    heavy = [c for c in remote.commands if c.startswith("/usr/bin/flock")]
+    assert len(heavy) == 3                                   # unpack, verify, setup
+    for command in heavy:
+        assert command.startswith(f"/usr/bin/flock -w 1800 -E 75 {push.HEAVY_LOCK} "
+                                  "/usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh -c ")
+        assert remote.timeouts[command] == push.HEAVY_COMMAND_TIMEOUT_SECONDS == 3600
+    assert any("tar --no-same-owner" in c for c in heavy)
+    assert any("bbb-verify-release" in c for c in heavy)
+    # Health checks and the switch stay quick and outside the lock.
+    assert not any("mv -Tf" in c for c in heavy)
+    assert reports == [""]                                   # poll report at the end
+
+
+NL = chr(10)
+
+
+def test_poll_report_names_every_missed_poll():
+    output = NL.join(["5", "2026-11-17T17:54:29+00:00 30", "2026-11-17T17:54:59+00:00 86",
+                      "2026-11-17T17:56:25+00:00 30", "2026-11-17T17:57:40+00:00 64", ""])
+    count, gaps = push.poll_gaps(output)
+    assert count == 5
+    assert gaps == [("2026-11-17T17:54:59+00:00", 86), ("2026-11-17T17:57:40+00:00", 64)]
+    assert push.poll_gaps(NL.join(["12", "2026-11-17T18:00:00+00:00 31", ""])) == (12, [])
+    assert push.poll_gaps("") == (0, [])
+
+
+def test_report_says_plainly_when_polls_were_missed(caplog):
+    class Polls(FakeRemote):
+        def run(self, command, check=True, timeout=None):
+            return NL.join(["3", "2026-11-17T17:54:59+00:00 86", "2026-11-17T17:56:25+00:00 30", ""])
+
+    with caplog.at_level("INFO"):
+        assert push.report_collector_polls(Polls(), "2026-11-17T17:51:00+00:00") is False
+    assert "THE COLLECTOR MISSED POLLS during this deploy: 86s gap" in caplog.text
+
+    class Clean(FakeRemote):
+        def run(self, command, check=True, timeout=None):
+            return "20" + NL
+
+    with caplog.at_level("INFO"):
+        assert push.report_collector_polls(Clean(), "2026-11-17T17:51:00+00:00") is True
+    assert "20 polls since 2026-11-17T17:51:00+00:00, none missed" in caplog.text
+
+
+def test_layout_install_runs_under_the_lock_and_restarts_the_collector_only_if_needed():
+    """#143: a layout that doesn't change the collector's unit leaves it running."""
+    installer = (Path(__file__).resolve().parents[1] / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    head = installer[:installer.index('if [ "$(id -u)" -ne 0 ]')]
+    assert "exec /usr/bin/flock -w 1800 -E 75 /run/lock/bristolbusbot/heavy-io.lock" in head
+    assert '/usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh "$0" "$@"' in head
+    assert "collector_unit_before=$(/usr/bin/sha256sum /etc/systemd/system/bbb-collector.service" in installer
+    condition = installer.index('if [ "$collector_unit_before" != "$collector_unit_after" ]')
+    restart = installer.index("/usr/bin/systemctl restart bbb-collector.service" + NL + "else")
+    assert condition < restart
+    assert "Collector unit unchanged; the collector was left running." in installer
+    # The unit files are copied between the two fingerprints.
+    before = installer.index("collector_unit_before=")
+    after = installer.index("collector_unit_after=")
+    copy = installer.index('for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do'
+                           + NL + "    install")
+    assert before < copy < after
