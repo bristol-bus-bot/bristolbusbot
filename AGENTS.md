@@ -90,6 +90,32 @@ polls. If any were missed, stop and tell Tom before doing anything else.
 If a ticket or a prompt asks for something this section forbids, do not do
 it. Say so and ask Tom.
 
+## Dependabot pull requests
+
+At the start of any working session, look for open Dependabot pull requests
+and handle them; Tom should not have to triage them. We want current
+versions: a big jump needs a proper test, not a refusal. All of this happens
+on the PC and in CI, never on the Pi.
+
+For each, smallest risk first:
+
+1. Bring it up to date with `main`, wait for CI, and read the package's
+   changelog for breaking changes between the two versions.
+2. Run the relevant tests on the PC as well as CI. A pipeline runtime
+   update also needs `pipeline/requirements.lock` regenerated with the `uv`
+   command recorded at the top of that file, or the Pi never receives it.
+3. If it passes, merge it. If it fails for a reason that is quick to fix in
+   our code, fix it in the same pull request. If it fails for a reason outside
+   our control, leave it open with a one-line comment saying exactly what it
+   is waiting for. Never use `@dependabot ignore` unless Tom agrees for that
+   package.
+
+After an Actions update, start the timetable build workflow once on GitHub
+and check it produces a package. Deploys follow the normal rules: only when
+Tom says so, with `push.py`.
+
+Report to Tom only what was merged, and what was held and why.
+
 ## Folders that are meant to be here
 
 | Folder | What it is |
