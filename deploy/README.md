@@ -153,8 +153,12 @@ proceed when it is missing.
 
 ### Private collector research dataset
 
-Run this from the repository root when an expert needs a broad, machine-readable
-copy of the collector history:
+**An assistant must not run this export.** It builds a large copy on the Pi
+and copies it off, which the golden rule in `AGENTS.md` forbids ("The Pi is
+production. Nothing else."). It needs Tom's explicit instruction each time.
+Use the copies already in `C:\dev\bbb-research` instead.
+
+When Tom asks for it, it is run from the repository root:
 
 ```powershell
 python deploy/get_collector_research_export.py
@@ -208,7 +212,9 @@ and appear in the twice-daily digest. A failed or stale job is an operational
 health problem, but a completeness warning cannot edit or promote any data.
 
 It also installs `bbb-evidence-pack`, an attended private diagnostic for an odd
-reading. Select a service date, exact bus reference, timetable/SIRI trip
+reading. **An assistant must not run it**: it reads the production databases on
+the Pi, which needs Tom's explicit instruction each time (see the golden rule in
+`AGENTS.md`). Select a service date, exact bus reference, timetable/SIRI trip
 reference or saved evidence ID; selectors can be combined to narrow the result:
 
 ```sh

@@ -15,6 +15,7 @@ or written to the manifest.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import logging
@@ -46,7 +47,25 @@ MIN_RESTIC_VERSION = (0, 18, 0)
 
 
 class BackupError(RuntimeError):
-    """A backup safety gate or operation failed."""
+    """A backup safety gate or operation failed.
+
+    ``reason`` is a short code the daily message turns into a plain sentence
+    (#141); it never carries paths or other detail."""
+
+    def __init__(self, message: str, *, reason: str = "unknown") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def record_failure_reason(reason: str) -> None:
+    """Hand the reason code to bbb-run-recorded-job, if it asked for one."""
+    target = os.environ.get("BBB_JOB_REASON_FILE")
+    if not target:
+        return
+    try:
+        Path(target).write_text(reason + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 class AlreadyRunning(BackupError):
@@ -309,7 +328,8 @@ def validate_local_mount(config: Config) -> None:
     actual = mounted_source(config.local_mountpoint)
     if actual is None:
         raise BackupError(
-            f"local backup mount is absent: {config.local_mountpoint}; refusing to use root disk")
+            f"local backup mount is absent: {config.local_mountpoint}; refusing to use root disk",
+            reason="backup_disk_missing")
     expected_path = Path(config.expected_mount_source)
     actual_path = Path(actual)
     try:
@@ -319,7 +339,8 @@ def validate_local_mount(config: Config) -> None:
         raise BackupError(f"cannot resolve backup mount device: {exc}") from exc
     if observed != expected:
         raise BackupError(
-            f"wrong backup mount source: expected {expected}, observed {observed}")
+            f"wrong backup mount source: expected {expected}, observed {observed}",
+            reason="backup_disk_missing")
 
 
 def validate_private_file(path: Path, label: str, *, require_root_owner: bool) -> None:
@@ -454,8 +475,10 @@ class Restic:
             self.runner(
                 command, check=True, env=os.environ.copy(),
                 timeout=self.config.restic_timeout_seconds)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            raise BackupError("restic command failed") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise BackupError("restic command failed", reason="storage_timed_out") from exc
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise BackupError("restic command failed", reason="storage_failed") from exc
 
     def init_local(self) -> None:
         self._run([
@@ -603,7 +626,8 @@ def backup_sqlite(
     def progress(_status: int, _remaining: int, _total: int) -> None:
         if time.monotonic() > deadline:
             raise BackupError(
-                f"SQLite snapshot exceeded {timeout_seconds}s: {source}")
+                f"SQLite snapshot exceeded {timeout_seconds}s: {source}",
+                reason="database_copy_timed_out")
 
     try:
         with closing(sqlite3.connect(uri, uri=True, timeout=30)) as live:
@@ -619,7 +643,10 @@ def backup_sqlite(
             raise BackupError(
                 f"SQLite {pragma} failed for {source}: {'; '.join(results[:5])}")
     except (OSError, sqlite3.Error) as exc:
-        raise BackupError(f"cannot snapshot SQLite database {source}: {exc}") from exc
+        reason = ("disk_full" if getattr(exc, "errno", None) == errno.ENOSPC
+                  else "database_copy_failed")
+        raise BackupError(f"cannot snapshot SQLite database {source}: {exc}",
+                          reason=reason) from exc
     shutil.copystat(source, destination)
     _chown_like(source, destination)
     return pragma
@@ -681,6 +708,11 @@ def _require_or_skip(source: Source, missing: list[dict[str, str]]) -> bool:
     return False
 
 
+# Bundling the published-audit repository at the backup's low disk priority
+# took more than 10 minutes once #139 made that priority real (16-17 Nov).
+GIT_BUNDLE_TIMEOUT_SECONDS = 45 * 60
+
+
 def _git_bundle(source: Source, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     trusted_repository = f"safe.directory={source.path}"
@@ -698,9 +730,13 @@ def _git_bundle(source: Source, destination: Path) -> None:
     )
     for command in commands:
         try:
-            subprocess.run(command, check=True, timeout=600)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            raise BackupError(f"cannot create/verify git bundle for {source.path}") from exc
+            subprocess.run(command, check=True, timeout=GIT_BUNDLE_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as exc:
+            raise BackupError(f"cannot create/verify git bundle for {source.path}",
+                              reason="git_bundle_timed_out") from exc
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise BackupError(f"cannot create/verify git bundle for {source.path}",
+                              reason="git_bundle_failed") from exc
 
 
 def _verify_restored_git_bundle(bundle: Path, scratch_parent: Path) -> None:
@@ -1041,6 +1077,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except BackupError as exc:
         LOG.error("backup failed: %s", exc)
+        record_failure_reason(exc.reason)
         return 1
 
 

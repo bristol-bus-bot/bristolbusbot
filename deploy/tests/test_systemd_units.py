@@ -680,19 +680,17 @@ def test_the_collector_has_first_call_on_cpu_and_disk():
         assert int(job["CPUWeight"]) <= 50, name
 
 
-def test_disk_priorities_take_effect_and_manual_work_has_a_wrapper():
-    """#139: BFQ honours the weights; bbb-heavy queues manual work on the lock."""
+def test_disk_priorities_take_effect_and_there_is_no_manual_heavy_wrapper():
+    """#139: BFQ honours the weights. bbb-heavy is gone: the Pi is production."""
     deploy = SYSTEMD.parent
     rule = (deploy / "udev" / "60-bristolbusbot-io-scheduler.rules").read_text(encoding="utf-8")
     assert 'ATTR{queue/scheduler}="bfq"' in rule
     installer = (deploy / "install_unified_deploy.sh").read_text(encoding="utf-8")
     assert "/etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules" in installer
     assert 'echo bfq > "$scheduler"' in installer
-    assert "/usr/local/bin/bbb-heavy" in installer
-    # A shell script, so never in the installer's Python compile list.
-    compiled = installer.split("-m py_compile", 1)[1].split("\n/", 1)[0]
-    assert "bbb_heavy.sh" not in compiled
-    wrapper = (deploy / "bbb_heavy.sh").read_text(encoding="utf-8")
-    assert "LOCK=/run/lock/bristolbusbot/heavy-io.lock" in wrapper
-    assert "/usr/bin/ionice -c 3 /usr/bin/nice -n 19" in wrapper
-    assert '/usr/bin/flock -w "$WAIT" -E 75 "$LOCK"' in wrapper
+    assert not (deploy / "bbb_heavy.sh").exists()
+    assert "rm -f /usr/local/bin/bbb-heavy" in installer
+    # Nor can a failed install restore it: it is not in the rollback list.
+    assert installer.count("/usr/local/bin/bbb-heavy") == 1
+    assert '"$stage/bbb_heavy.sh"' not in installer
+    assert "bbb_heavy" not in (deploy / "push.py").read_text(encoding="utf-8")
