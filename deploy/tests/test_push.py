@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -345,6 +346,7 @@ def test_failed_health_switches_back_to_previous_release(monkeypatch, tmp_path):
     remote = FakeRemote()
     health = iter((False, True))
     monkeypatch.setattr(push, "wait_healthy", lambda *_: next(health))
+    monkeypatch.setattr(push, "ensure_no_scheduled_heavy_job", lambda _remote: None)
     monkeypatch.setattr(push, "notify", lambda *_: None)
 
     with pytest.raises(RuntimeError, match="health gate"):
@@ -659,6 +661,7 @@ def test_heavy_deploy_steps_take_the_lock_at_low_priority_with_room_to_finish(mo
     built = push.BuiltRelease("site", "release-1", archive, push.sha256_file(archive))
     remote = FakeRemote()
     monkeypatch.setattr(push, "wait_healthy", lambda *_: True)
+    monkeypatch.setattr(push, "ensure_no_scheduled_heavy_job", lambda _remote: None)
     monkeypatch.setattr(push, "notify", lambda *_: None)
     reports = []
     monkeypatch.setattr(push, "report_collector_polls", lambda _remote, since: reports.append(since))
@@ -715,14 +718,76 @@ def test_layout_install_runs_under_the_lock_and_restarts_the_collector_only_if_n
     head = installer[:installer.index('if [ "$(id -u)" -ne 0 ]')]
     assert "exec /usr/bin/flock -w 1800 -E 75 /run/lock/bristolbusbot/heavy-io.lock" in head
     assert '/usr/bin/ionice -c 3 /usr/bin/nice -n 19 /bin/sh "$0" "$@"' in head
-    assert "collector_unit_before=$(/usr/bin/sha256sum /etc/systemd/system/bbb-collector.service" in installer
+    assert "collector_unit_before=$(collector_fingerprint)" in installer
     condition = installer.index('if [ "$collector_unit_before" != "$collector_unit_after" ]')
     restart = installer.index("/usr/bin/systemctl restart bbb-collector.service" + NL + "else")
     assert condition < restart
-    assert "Collector unit unchanged; the collector was left running." in installer
+    assert "Collector settings unchanged; the collector was left running." in installer
     # The unit files are copied between the two fingerprints.
     before = installer.index("collector_unit_before=")
     after = installer.index("collector_unit_after=")
     copy = installer.index('for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do'
                            + NL + "    install")
     assert before < copy < after
+
+
+def test_every_job_that_takes_the_heavy_lock_is_known_to_the_deploy():
+    units = push.lock_taking_units()
+    for name in ("bbb-backup.service", "bbb-backup-check.service", "bbb-audit-rollup.service",
+                 "bbb-timetable-shadow-auto.service", "bbb-timetable-promote@.service",
+                 "bbb-blurb-promote.service", "bbb-fleet-refresh.service"):
+        assert name in units
+    assert "bbb-collector.service" not in units
+
+
+def test_a_deploy_does_not_start_when_a_lock_taking_job_is_running_or_due():
+    """#143: the backup gives up at once if a deploy holds the lock."""
+    now = 1_795_000_000_000_000
+    minute = 60_000_000
+    timers = [
+        {"unit": "bbb-backup.timer", "activates": "bbb-backup.service", "next": now + 20 * minute},
+        {"unit": "bbb-digest.timer", "activates": "bbb-digest.service", "next": now + 5 * minute},
+        {"unit": "bbb-audit-rollup.timer", "activates": "bbb-audit-rollup.service",
+         "next": now + 300 * minute},
+    ]
+    units = push.lock_taking_units()
+    output = json.dumps(timers) + NL + "----" + NL + \
+        "bbb-timetable-promote@auto.service loaded active running x" + NL
+    assert push.jobs_in_the_way(output, now, units) == [
+        "bbb-timetable-promote@auto.service is running now",
+        "bbb-backup.service is due in 20 minutes",
+    ]
+    quiet = json.dumps(timers[1:]) + NL + "----" + NL
+    assert push.jobs_in_the_way(quiet, now, units) == []    # digest takes no lock
+
+
+def test_the_deploy_refuses_before_uploading_anything(monkeypatch, tmp_path):
+    archive = tmp_path / "site.tar.gz"
+    archive.write_bytes(b"archive")
+    built = push.BuiltRelease("site", "release-1", archive, push.sha256_file(archive))
+
+    class Busy(FakeRemote):
+        def run(self, command, check=True, timeout=None):
+            self.commands.append(command)
+            if command.startswith("date +%s%6N"):
+                due = 1_795_000_000_000_000 + 10 * 60_000_000
+                return ("1795000000000000" + NL + "----" + NL + json.dumps(
+                    [{"activates": "bbb-backup.service", "next": due}]) + NL + "----" + NL)
+            return ""
+
+    remote = Busy()
+    with pytest.raises(RuntimeError, match="deploy not started.*bbb-backup.service is due in 10 minutes"):
+        push.deploy_release(remote, built)
+    assert not any(command.startswith("UPLOAD") for command in remote.commands)
+
+
+def test_the_collector_restarts_if_its_drop_ins_or_environment_changed():
+    installer = (Path(__file__).resolve().parents[1] / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    body = installer[installer.index("collector_fingerprint() {"):installer.index("collector_unit_before=")]
+    for path in ("/etc/systemd/system/bbb-collector.service",
+                 "/etc/systemd/system/bbb-collector.service.d/*",
+                 "/etc/bristolbusbot/collector.env"):
+        assert path in body
+    assert "cat " not in body          # hashed, never printed
+    assert "collector_unit_before=$(collector_fingerprint)" in installer
+    assert "collector_unit_after=$(collector_fingerprint)" in installer

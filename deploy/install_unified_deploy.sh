@@ -418,9 +418,20 @@ install -o root -g root -m 0440 "$stage/sudoers/bristolbusbot-deploy" /etc/sudoe
 mv -f /etc/sudoers.d/bristolbusbot-deploy.new /etc/sudoers.d/bristolbusbot-deploy
 
 install -o "$deploy_user" -g "$deploy_user" -m 0755 "$stage/publish_to_github.sh" "$remote_home/bus-audit/publish_to_github.sh"
-# The collector loads nothing else from this layout, so only a change to its
-# unit file needs a collector restart (planning #143).
-collector_unit_before=$(/usr/bin/sha256sum /etc/systemd/system/bbb-collector.service 2>/dev/null || true)
+# The collector reads its unit file, its drop-ins and its environment file at
+# start; nothing else in this layout. Restart it only if one of those changed
+# (planning #143). The fingerprint is a hash; the files are never printed.
+collector_fingerprint() {
+    for file in /etc/systemd/system/bbb-collector.service \
+                /etc/systemd/system/bbb-collector.service.d/* \
+                /etc/bristolbusbot/collector.env; do
+        if [ -f "$file" ]; then
+            printf '%s\n' "$file"
+            /usr/bin/sha256sum < "$file"
+        fi
+    done | /usr/bin/sha256sum
+}
+collector_unit_before=$(collector_fingerprint)
 # Never let git pack the published-audit repository by itself on the Pi. An
 # unbounded repack of it ran the Pi out of memory on 17 Nov 2026 and the Pi
 # restarted. git's default (gc.auto 6700) would eventually trigger the same
@@ -477,12 +488,12 @@ fi
     --file /var/lib/bristolbusbot-editorial/editorial-context.json >/dev/null
 
 /usr/bin/systemctl daemon-reload
-collector_unit_after=$(/usr/bin/sha256sum /etc/systemd/system/bbb-collector.service 2>/dev/null || true)
+collector_unit_after=$(collector_fingerprint)
 if [ "$collector_unit_before" != "$collector_unit_after" ] || \
    ! /usr/bin/systemctl is-active --quiet bbb-collector.service; then
     /usr/bin/systemctl restart bbb-collector.service
 else
-    echo "Collector unit unchanged; the collector was left running."
+    echo "Collector settings unchanged; the collector was left running."
 fi
 if ! wait_collector; then echo "collector health wait exhausted" >&2; exit 1; fi
 /usr/bin/systemctl restart bbb-site.service
