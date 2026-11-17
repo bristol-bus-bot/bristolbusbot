@@ -40,6 +40,18 @@ def write_state(path: Path, payload: dict) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
+REASON_PATTERN = re.compile(r"^[a-z][a-z_]{0,39}$")
+
+
+def read_reason(path: Path) -> str | None:
+    """The job's reason code, if it wrote a well-formed one."""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text if REASON_PATTERN.fullmatch(text) else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True)
@@ -58,6 +70,11 @@ def main() -> int:
     except (OSError, json.JSONDecodeError):
         payload = {"name": args.name}
     started = time.monotonic()
+    # A job may write one short reason code here when it fails (#141), for
+    # example "git_bundle_timed_out". Never free text: it reaches Slack.
+    reason_file = args.state_dir / f"{args.name}.reason"
+    reason_file.unlink(missing_ok=True)
+    os.environ["BBB_JOB_REASON_FILE"] = str(reason_file)
     payload.update({"name": args.name, "last_started_at": now(),
                     "last_result": "running", "command": command[0]})
     write_state(path, payload)
@@ -74,6 +91,8 @@ def main() -> int:
         payload["last_result"] = "success"
         payload["last_success_at"] = payload["last_finished_at"]
         payload.pop("failure_code", None)
+        payload.pop("failure_reason", None)
+        payload["consecutive_failures"] = 0
     elif code in args.skip_exit_code:
         payload["last_result"] = "skipped"
         payload["last_skipped_at"] = payload["last_finished_at"]
@@ -85,6 +104,13 @@ def main() -> int:
         payload["failure_code"] = (
             "lock_timeout" if code == LOCK_TIMEOUT_EXIT_CODE
             else "command_failed")
+        payload["consecutive_failures"] = int(payload.get("consecutive_failures") or 0) + 1
+        reason = read_reason(reason_file)
+        if reason:
+            payload["failure_reason"] = reason
+        else:
+            payload.pop("failure_reason", None)
+    reason_file.unlink(missing_ok=True)
     write_state(path, payload)
     return code
 

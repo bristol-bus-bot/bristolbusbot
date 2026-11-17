@@ -479,80 +479,132 @@ def progress_lines(snapshot: dict, previous_state: dict,
     return "Since yesterday", lines
 
 
-def overall_line(snapshot: dict) -> str:
-    issues = snapshot.get("issues")
-    issues = issues if isinstance(issues, list) else []
-    if snapshot.get("status") == "ok" and not issues:
-        return (
-            ":white_check_mark: *Overall:* Everything important is working. "
-            "Live buses, the website, the Bluesky bot and automatic updates "
-            "are healthy."
-        )
-    if snapshot.get("status") == "warning":
-        return (
-            ":large_yellow_circle: *Overall:* Everything important is working. "
-            "A reminder needs attention soon, such as renewing a token or "
-            "reviewing holiday timetables. Nothing is broken."
-        )
-    safe_update_issues = {
-        "job:timetable-automation", "job:fleet-automation",
-        "job:locality-automation", "job:blurb-generation",
-        "job:editorial-refresh", "job:editorial-fetch",
-        "job:editorial-promote",
-    }
-    if issues and set(map(str, issues)).issubset(safe_update_issues):
-        return (
-            ":white_check_mark: *Overall:* The live bot and website are working. "
-            "A proposed automatic data update was rejected safely, so the "
-            "current good version remains in use."
-        )
-    return (
-        ":warning: *Overall:* An automatic check needs attention. Existing "
-        "safe data stays in place where possible, and urgent failures are sent "
-        "as a separate plain-English alert."
-    )
+def _count(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
-def today_lines(snapshot: dict, today: date | None = None) -> list[str]:
-    lines = ["Live bus information and the public website are current."]
+def _day(value: object) -> str | None:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return f"{moment.day} {moment.strftime('%b')}"
+
+
+def _days_since(value: object, today: date) -> int | None:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+    except (TypeError, ValueError):
+        return None
+    return max(0, (today - moment).days)
+
+
+def standing_counts(snapshot: dict) -> dict[str, int | None]:
+    """The counts behind the two standing notes, for day-to-day comparison."""
+    summary = _dict(_dict(snapshot.get("data_health")).get("summary"))
+    missing = (_count(summary.get("missing_fleet")) + _count(summary.get("missing_livery"))
+               + sum(_count(value) for value in _dict(summary.get("missing_blurbs")).values()))
+    anomalies = _dict(snapshot.get("collector_anomaly"))
+    odd = None
+    if str(anomalies.get("status") or "unavailable") not in {"unavailable", "stale"}:
+        odd = sum(_count(_dict(item).get("count"))
+                  for item in _dict(anomalies.get("detectors")).values())
+    return {"missing_details": missing if summary else None, "odd_readings": odd}
+
+
+def timetable_days_failing(snapshot: dict, today: date) -> int | None:
+    return timetable_failing_days(snapshot, today)
+
+
+TIMETABLE_MAX_AGE_DAYS = 7
+
+
+def problems(snapshot: dict, today: date | None = None) -> list[str]:
+    """Sentences for what is wrong today, each naming the thing and why."""
+    today = today or datetime.now(timezone.utc).date()
+    found: list[str] = [str(item) for item in snapshot.get("failures") or []
+                        if isinstance(snapshot.get("failures"), list)]
     timetable = _dict(snapshot.get("timetable_automation"))
+    accepted = _dict(timetable.get("last_accepted"))
     if timetable.get("status") == "failed":
         stuck = timetable_failing_days(snapshot, today) or 0
-        lines.append(
-            "A proposed timetable update was rejected. The current working "
-            "timetable stayed live"
-            + (f", but updates have now failed for {stuck} days."
-               if stuck >= TIMETABLE_STUCK_DAYS
-               else " and the Pi will retry at the next check.")
-        )
-    data = _dict(snapshot.get("data_health"))
-    summary = _dict(data.get("summary"))
-    gaps = any(int(summary.get(key, 0) or 0) for key in (
-        "missing_fleet", "missing_livery"))
-    blurbs = _dict(summary.get("missing_blurbs"))
-    gaps = gaps or any(int(value or 0) for value in blurbs.values())
-    if gaps:
-        lines.append(
-            "Some buses still lack trustworthy source details or optional "
-            "descriptions. Safe fallbacks are being used and the weekly Pi "
-            "checks will keep looking for improvements."
-        )
+        what = str(snapshot.get("timetable_problem") or
+                   "It failed a safety check that has no plain description yet.")
+        if stuck >= TIMETABLE_STUCK_DAYS:
+            found.append(f"Timetable updates have been rejected for {stuck} days running. "
+                         f"{what} The current timetable stays live, but retries are not fixing it.")
+    age = _days_since(accepted.get("accepted_at"), today)
+    if age is None:
+        found.append("The timetable's last update date is unknown.")
+    elif age > TIMETABLE_MAX_AGE_DAYS:
+        found.append(f"The timetable was last updated {age} days ago "
+                     f"({_day(accepted.get('accepted_at'))}), longer than the usual week.")
     anomalies = _dict(snapshot.get("collector_anomaly"))
-    anomaly_status = str(anomalies.get("status") or "unavailable")
-    if anomaly_status == "attention":
-        lines.append(
-            "The overnight checker found possible odd delay or matching "
-            "readings to investigate. These are clues, not confirmed faults, "
-            "and no public figures were changed."
-        )
-    elif anomaly_status in {"unavailable", "stale"}:
-        lines.append(
-            "The overnight odd-reading check is not current and needs attention."
-        )
-    else:
-        lines.append("The overnight odd-reading check found nothing urgent.")
-    notes = snapshot.get("notes")
-    lines.extend(str(note) for note in (notes if isinstance(notes, list) else []))
+    if str(anomalies.get("status") or "unavailable") in {"unavailable", "stale"}:
+        found.append("The overnight odd-reading check did not produce a current report.")
+    return found
+
+
+def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str], list[str]]:
+    """Kept for the phone note: (problems, nothing)."""
+    return problems(snapshot, today), []
+
+
+def overall_line(snapshot: dict, found: list[str] | None = None) -> str:
+    issues = snapshot.get("issues")
+    issues = issues if isinstance(issues, list) else []
+    if found:
+        return ":warning: *Something needs looking at.*"
+    timetable = _dict(snapshot.get("timetable_automation"))
+    if timetable.get("status") == "failed":
+        return (":white_check_mark: *Everything is working.* A proposed timetable "
+                "update was rejected safely; the current one stays live.")
+    if snapshot.get("status") == "ok" and not issues:
+        return ":white_check_mark: *Everything is working.*"
+    areas = _dict(snapshot.get("issue_areas"))
+    named = sorted({str(areas.get(issue) or "an automatic check") for issue in issues})
+    if snapshot.get("status") == "warning":
+        return (":large_yellow_circle: *Everything is working.* Coming up soon: "
+                + ", ".join(named) + ".")
+    return ":warning: *Something needs looking at:* " + ", ".join(named) + "."
+
+
+def timetable_today_line(snapshot: dict, today: date) -> str | None:
+    """Only on a day the timetable is not otherwise mentioned."""
+    timetable = _dict(snapshot.get("timetable_automation"))
+    accepted = _dict(timetable.get("last_accepted"))
+    if timetable.get("status") == "failed":
+        what = str(snapshot.get("timetable_problem") or "")
+        return ("A proposed timetable update was rejected. " + (what + " " if what else "")
+                + "The current timetable stays live and the Pi will retry at the next check.")
+    when = _day(accepted.get("accepted_at"))
+    age = _days_since(accepted.get("accepted_at"), today)
+    if when is None or age is None or age > TIMETABLE_MAX_AGE_DAYS:
+        return None    # reported as a problem instead
+    return f"Timetable: current, last updated {when}."
+
+
+def change_lines(snapshot: dict, previous_state: dict) -> list[str]:
+    """Standing notes only when their count changed since yesterday."""
+    before = _dict(previous_state.get("counts"))
+    now = standing_counts(snapshot)
+    lines = []
+    labels = {
+        "missing_details": "Buses still missing source details or descriptions",
+        "odd_readings": "Odd readings for Claude to look at (clues, not faults)",
+    }
+    for key, label in labels.items():
+        current, earlier = now.get(key), before.get(key)
+        if current is None or current == earlier:
+            continue
+        if earlier is None:
+            lines.append(f"{label}: {current}.")
+        else:
+            direction = "up" if current > earlier else "down"
+            lines.append(f"{label}: {current}, {direction} from {earlier}.")
     return lines
 
 
@@ -575,42 +627,6 @@ def timetable_failing_days(snapshot: dict, today: date | None = None) -> int | N
 
 
 TIMETABLE_STUCK_DAYS = 2
-
-
-def recovery_status(snapshot: dict, today: date | None = None) -> tuple[list[str], list[str]]:
-    today = today or datetime.now(timezone.utc).date()
-    backup = _dict(_dict(snapshot.get('jobs')).get('backup'))
-    accepted = _dict(_dict(snapshot.get('timetable_automation')).get('last_accepted'))
-    warnings, freshness = [], []
-    stuck = timetable_failing_days(snapshot, today)
-    if stuck is not None and stuck >= TIMETABLE_STUCK_DAYS:
-        warnings.append(
-            f'Timetable updates have failed every check for {stuck} days. '
-            'Automatic retries are not fixing it.')
-    for label, timestamp, maximum_days in (
-        ('Backup', backup.get('last_success_at'), 2),
-        ('Timetable update', accepted.get('accepted_at'), 7),
-    ):
-        try:
-            days = max(0, (today - datetime.fromisoformat(
-                str(timestamp).replace('Z', '+00:00')).date()).days)
-        except (ValueError, TypeError):
-            text = f'{label}: last success unknown.'
-            freshness.append(text)
-            # Not knowing when the timetable last updated is itself a problem.
-            warnings.append(text)
-            continue
-        text = f'{label}: last success {days} days ago ({str(timestamp)[:10]}).'
-        freshness.append(text)
-        if days > maximum_days:
-            warnings.append(text)
-    if backup.get('result') == 'interrupted':
-        warnings.append('Backup was interrupted by a Pi restart.'
-                        if backup.get('failure_code') != 'interrupted_without_result'
-                        else 'Backup stopped without recording a result.')
-    elif backup.get('result') == 'failure':
-        warnings.append('The latest backup failed.')
-    return warnings, freshness
 
 
 def moving_occasion_lines(today: date | None = None,
@@ -642,101 +658,84 @@ def moving_occasion_lines(today: date | None = None,
 
 
 def published_description_lines(today: date | None = None,
-                                history: Path | None = None) -> list[str]:
-    """Mondays: the bus descriptions that went live in the last week, so Tom
-    can spot any to pull. They publish automatically after their checks."""
+                                history: Path | None = None,
+                                since: datetime | None = None) -> list[str]:
+    """One line: descriptions published in the last week. The 'pull any you
+    don't like' prompt only when some are new since the previous message."""
     today = today or datetime.now(timezone.utc).date()
-    if today.weekday() != 0:
-        return []
-    lines = []
+    count, new = 0, 0
     for path in sorted((history or DESCRIPTION_HISTORY).glob("*.approved.json")):
         try:
             batch = json.loads(path.read_text(encoding="utf-8"))
-            published = date.fromisoformat(str(batch.get("created_at", ""))[:10])
+            created = datetime.fromisoformat(
+                str(batch.get("created_at", "")).replace("Z", "+00:00"))
         except (OSError, ValueError):
             continue
-        if not 0 <= (today - published).days <= 7:
+        if not 0 <= (today - created.date()).days <= 7:
             continue
-        for variant, items in _dict(batch.get("additions")).items():
-            for key, text in _dict(items).items():
-                lines.append(f"{key} ({str(variant).replace('_', ' ')}): {text}")
-    if not lines:
+        items = sum(len(_dict(entries)) for entries in _dict(batch.get("additions")).values())
+        count += items
+        if since is not None and created.tzinfo is not None and created > since:
+            new += items
+    if not new:
         return []
-    return [f"*Bus descriptions published this week ({len(lines)})*",
-            *(f"- {line}" for line in lines[:60]),
-            "Ask Claude to pull any you don't like.", ""]
+    noun = "description" if new == 1 else "descriptions"
+    return [f"{new} new bus {noun} went live ({count} this week). They show on each "
+            "bus's page on bristolbuses.live; ask Claude to pull any you don't like."]
 
 
-def action_line(snapshot: dict, today: date | None = None) -> str:
-    if recovery_status(snapshot, today)[0]:
-        return '*You need to do:* Ask Claude to investigate the backup or timetable problem above; automatic retries have not fixed it.'
+def action_line(snapshot: dict, found: list[str]) -> str:
+    if found:
+        return "*You need to do:* Ask Claude to look at the problem above; automatic retries have not fixed it."
     blurbs = _dict(snapshot.get("blurb_generation"))
     if blurbs.get("status") == "pending_review":
-        pending = _dict(blurbs.get("pending_review"))
-        buses = int(pending.get("buses", 0) or 0)
+        buses = int(_dict(blurbs.get("pending_review")).get("buses", 0) or 0)
         noun = "bus" if buses == 1 else "buses"
-        return (
-            f"*You need to do:* Review descriptions for {buses} {noun} when "
-            "convenient. Nothing will publish by itself."
-        )
-    issues = snapshot.get("issues")
-    issues = issues if isinstance(issues, list) else []
-    safe_update_issues = {
-        "job:timetable-automation", "job:fleet-automation",
-        "job:locality-automation", "job:blurb-generation",
-        "job:editorial-refresh", "job:editorial-fetch",
-        "job:editorial-promote",
-    }
-    if issues and set(map(str, issues)).issubset(safe_update_issues):
-        return "*You need to do:* Nothing today. The Pi will retry automatically."
-    if snapshot.get("status") != "ok":
-        return (
-            "*You need to do:* Nothing immediately unless a separate alert "
-            "asks you for a decision; the safe version remains in use."
-        )
-    return "*You need to do:* Nothing today."
+        return (f"*You need to do:* Review descriptions for {buses} {noun} when "
+                "convenient. Nothing will publish by itself.")
+    return "*You need to do:* nothing."
 
 
 def daily_message(snapshot: dict, previous_state: dict | None = None,
-                  today: date | None = None) -> str:
-    heading, progress = progress_lines(snapshot, previous_state or {}, today)
-    warnings, freshness = recovery_status(snapshot, today)
-    lines = [
-        ":bus: *Bristol Bus Bot - daily update*",
-        "",
-        *(['*Needs attention*', *(f'- {line}' for line in warnings), ''] if warnings else []),
-        ('Backup or timetable freshness needs attention; see above.'
-         if warnings else overall_line(snapshot)),
-        "",
-        f"*{heading}*",
-        *(f"- {line}" for line in progress),
-        "",
-        "*Where the plan stands*",
-        "- The core automation checklist is complete; routine data updates no "
-        "longer depend on the Windows PC.",
-        "- The next real job is to save better evidence for suspicious readings "
-        "and investigate genuine examples.",
-        "- AI-written descriptions stay human-approved during the 30-day proving "
-        "period.",
-        "- Threads and new website ideas are optional and parked, not overdue "
-        "core work.",
-        "",
-        *published_description_lines(today),
-        "*Today's checks*",
-        *(f"- {line}" for line in freshness),
-        *(f"- {line}" for line in today_lines(snapshot, today)),
-        *(f"- {line}" for line in moving_occasion_lines(today)),
-        "",
-        action_line(snapshot, today),
+                  today: date | None = None,
+                  history: Path | None = None) -> str:
+    """Only what is true today: no fixed text beyond the heading (#141)."""
+    today = today or datetime.now(timezone.utc).date()
+    previous_state = previous_state or {}
+    found = problems(snapshot, today)
+    heading, progress = progress_lines(snapshot, previous_state, today)
+    try:
+        since = datetime.fromisoformat(str(previous_state.get("sent_at")))
+    except (TypeError, ValueError):
+        since = None
+    notes = [str(note) for note in snapshot.get("notes") or []
+             if isinstance(snapshot.get("notes"), list)]
+    timetable_note = timetable_today_line(snapshot, today)
+    if any(line.startswith("Timetable updates have been rejected") for line in found):
+        timetable_note = None    # already said under the problem
+    today_items = [
+        *([timetable_note] if timetable_note else []),
+        *change_lines(snapshot, previous_state),
+        *notes,
+        *published_description_lines(today, history, since),
+        *moving_occasion_lines(today),
     ]
+    lines = [":bus: *Bristol Bus Bot - daily update*", "", overall_line(snapshot, found)]
+    if found:
+        lines += ["", *(f"- {line}" for line in found)]
+    lines += ["", f"*{heading}*", *(f"- {line}" for line in progress)]
+    if today_items:
+        lines += ["", "*Today*", *(f"- {line}" for line in today_items)]
+    lines += ["", action_line(snapshot, found)]
     return "\n".join(lines)
 
 
 def _write_state(snapshot: dict) -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "fingerprints": _progress_fingerprints(snapshot),
+        "counts": standing_counts(snapshot),
     }
     DAILY_STATE.parent.mkdir(parents=True, exist_ok=True)
     temporary = DAILY_STATE.with_name(DAILY_STATE.name + ".tmp")
