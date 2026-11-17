@@ -137,7 +137,6 @@ for destination in \
     /usr/local/bin/bbb-evidence-pack \
     /usr/local/bin/bbb-collector-research-export \
     /usr/local/libexec/bbb-audit-origin-backfill \
-    /usr/local/bin/bbb-heavy \
     /etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules \
     /usr/local/libexec/bbb-enrichment-layout \
     /usr/local/bin/bbb-blurb-review \

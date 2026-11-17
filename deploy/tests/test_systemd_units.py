@@ -690,5 +690,7 @@ def test_disk_priorities_take_effect_and_there_is_no_manual_heavy_wrapper():
     assert 'echo bfq > "$scheduler"' in installer
     assert not (deploy / "bbb_heavy.sh").exists()
     assert "rm -f /usr/local/bin/bbb-heavy" in installer
+    # Nor can a failed install restore it: it is not in the rollback list.
+    assert installer.count("/usr/local/bin/bbb-heavy") == 1
     assert '"$stage/bbb_heavy.sh"' not in installer
     assert "bbb_heavy" not in (deploy / "push.py").read_text(encoding="utf-8")
