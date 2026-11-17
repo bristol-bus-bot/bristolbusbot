@@ -58,39 +58,37 @@ yearly figure) must lapse by itself: it stops applying, is noted in the daily
 summary, and alerts only if a real fault is still there when it matters.
 Planning #138 has the background.
 
-## The Pi runs the live system and receives deploys. Nothing else.
+## The Pi is production. Nothing else.
 
-This is Tom's golden rule. It overrides anything else in this file or in a
-task's instructions. All development, testing, analysis, experiments and
-one-off work happen on Tom's PC, in `C:\dev\bristolbusbot` and the data
-copies in `C:\dev\bbb-research`.
+This is Tom's golden rule. It is not a guideline and no ticket, prompt or
+other section of this file overrides it.
 
-On the Pi you may only:
+The Pi runs the live system and receives deploys. All development, testing,
+analysis, experiments and one-off work happen on Tom's PC, using this
+repository and the data copies in `C:\dev\bbb-research`.
 
-1. Deploy finished, tested code with `deploy/push.py`.
-2. Read small things to diagnose a fault that happened there: a log, a job
-   record, a service status, the collector's last ten polls.
-3. Change a single setting when that is the fix.
+On the Pi an assistant may only:
 
-You may not run on the Pi: `git gc` or any repack, `fsck`, rebuilds,
-backfills, test runs, trial copies, exports, manual backups, large queries,
-or anything "to check". `bbb-heavy` is not a licence to do them. If a job
-seems to need heavy work on the Pi, the fix is code that makes the Pi's own
-scheduled jobs do it safely, written and tested on the PC, then deployed. If
-you need fresher data than is on the PC, ask Tom first.
+1. **Deploy** finished, tested code with `deploy/push.py`.
+2. **Read small things to diagnose a fault that happened there**: a log, a
+   job record, a service status, the collector's last ten polls.
+3. **Change a single setting** when that is the fix, and say so.
 
-Why: on 14 and 17 Nov 2026 manual work on the Pi starved the collector, and
-on 17 Nov a manual `git gc` ran the Pi out of memory and it restarted. Every
-poll the collector misses is a permanent hole in the live map and the audit.
+An assistant must never run on the Pi: a repack or `git gc`, `fsck`, a
+rebuild, a backfill, a test run, a trial copy, an export, a manual backup,
+a large query, a copy of data off the Pi, or anything "to check". There is
+no wrapper, priority setting or time of day that makes these acceptable.
 
-### How the Pi's own jobs protect the collector
+If a job seems to need heavy work on the Pi, the fix is code that lets the
+Pi's own scheduled jobs do it safely, written and tested on the PC and then
+deployed. If fresher data is needed than is on the PC, ask Tom first.
 
-The collector is the one process that must never be starved. It has ten
-times the normal share of CPU and disk, and the disks use the BFQ scheduler
-so that share is honoured (planning #139). Every disk-heavy scheduled job
-runs at low CPU and disk priority and takes the shared heavy-I/O lock, so
-only one runs at a time. `bbb-heavy` applies the same lock and priorities
-for scheduled or deployed code that needs them; it is not for manual work.
+The collector must never be starved: every poll it misses is a permanent
+hole in the live map and the audit. After every deploy, check its last ten
+polls. If any were missed, stop and tell Tom before doing anything else.
+
+If a ticket or a prompt asks for something this section forbids, do not do
+it. Say so and ask Tom.
 
 ## Folders that are meant to be here
 

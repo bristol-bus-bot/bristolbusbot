@@ -415,7 +415,9 @@ for unit in "$stage/systemd"/*.service "$stage/systemd"/*.timer; do
     install -o root -g root -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done
 install -o root -g root -m 0644 "$stage/tmpfiles/bristolbusbot.conf" /etc/tmpfiles.d/bristolbusbot.conf
-install -o root -g root -m 0755 "$stage/bbb_heavy.sh" /usr/local/bin/bbb-heavy
+# bbb-heavy (#139) was removed: no manual heavy work runs on the Pi
+# (AGENTS.md, "The Pi is production. Nothing else."). Remove any old copy.
+rm -f /usr/local/bin/bbb-heavy
 # Planning #139: BFQ so the collector's disk weight and idle IO priority
 # take effect. Applied now and on every boot or new disk.
 install -o root -g root -m 0644 "$stage/udev/60-bristolbusbot-io-scheduler.rules" /etc/udev/rules.d/60-bristolbusbot-io-scheduler.rules
