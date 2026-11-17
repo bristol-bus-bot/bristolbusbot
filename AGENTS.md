@@ -58,26 +58,39 @@ yearly figure) must lapse by itself: it stops applying, is noted in the daily
 summary, and alerts only if a real fault is still there when it matters.
 Planning #138 has the background.
 
-## Heavy work on the Pi
+## The Pi runs the live system and receives deploys. Nothing else.
 
-The collector is the one process on the Pi that must never be starved: every
-poll it misses is a permanent hole in the live map and the audit. It has ten
-times the normal share of CPU and disk, and the disks use the BFQ scheduler so
-that share is honoured (planning #139). Work done by hand has to cooperate:
+This is Tom's golden rule. It overrides anything else in this file or in a
+task's instructions. All development, testing, analysis, experiments and
+one-off work happen on Tom's PC, in `C:\dev\bristolbusbot` and the data
+copies in `C:\dev\bbb-research`.
 
-- **One heavy job at a time, always through `bbb-heavy`**:
-  `bbb-heavy -- <command>`. It waits for the shared heavy-I/O lock (so it
-  queues behind the backup, rollup and timetable jobs) and runs at idle disk
-  and lowest CPU priority. If you aren't sure whether something is heavy
-  (a copy, export, backup, rebuild or large query), treat it as heavy.
-- **No copies off the Pi while a backfill, rebuild, backup or rollup runs.**
-  Prefer files already on Tom's PC in `C:\dev\bbb-research` (the live
-  timetable, the research export, an audit copy). If a copy is unavoidable,
-  rate-limit it and run it through the wrapper:
-  `rsync --bwlimit=10000 --rsync-path="bbb-heavy -- rsync" <pi>:<file> .`
-- **After any heavy job, check the collector's last ten polls** (`poll_log`
-  in audit.db, or `journalctl -u bbb-collector`). If any were missed, stop
-  and tell Tom before doing anything else.
+On the Pi you may only:
+
+1. Deploy finished, tested code with `deploy/push.py`.
+2. Read small things to diagnose a fault that happened there: a log, a job
+   record, a service status, the collector's last ten polls.
+3. Change a single setting when that is the fix.
+
+You may not run on the Pi: `git gc` or any repack, `fsck`, rebuilds,
+backfills, test runs, trial copies, exports, manual backups, large queries,
+or anything "to check". `bbb-heavy` is not a licence to do them. If a job
+seems to need heavy work on the Pi, the fix is code that makes the Pi's own
+scheduled jobs do it safely, written and tested on the PC, then deployed. If
+you need fresher data than is on the PC, ask Tom first.
+
+Why: on 14 and 17 Nov 2026 manual work on the Pi starved the collector, and
+on 17 Nov a manual `git gc` ran the Pi out of memory and it restarted. Every
+poll the collector misses is a permanent hole in the live map and the audit.
+
+### How the Pi's own jobs protect the collector
+
+The collector is the one process that must never be starved. It has ten
+times the normal share of CPU and disk, and the disks use the BFQ scheduler
+so that share is honoured (planning #139). Every disk-heavy scheduled job
+runs at low CPU and disk priority and takes the shared heavy-I/O lock, so
+only one runs at a time. `bbb-heavy` applies the same lock and priorities
+for scheduled or deployed code that needs them; it is not for manual work.
 
 ## Folders that are meant to be here
 

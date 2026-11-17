@@ -1,6 +1,7 @@
 #!/bin/sh
-# bbb-heavy: run disk-heavy manual work on the Pi without starving the
-# collector (planning #139).
+# bbb-heavy: run disk-heavy work from scheduled or deployed code without
+# starving the collector (planning #139). Not for manual work on the Pi:
+# see "The Pi runs the live system and receives deploys" in AGENTS.md.
 #
 #   bbb-heavy [--wait SECONDS] -- COMMAND [ARGS...]
 #
@@ -8,9 +9,6 @@
 # timetable jobs and they queue behind it, and runs the command at idle disk
 # priority and the lowest CPU priority. The disks use the BFQ scheduler, which
 # honours the idle class; the collector has the highest disk weight.
-#
-# Copies off the Pi go through it too, rate-limited, for example from the PC:
-#   rsync --bwlimit=10000 --rsync-path="bbb-heavy -- rsync" pi:/path/file .
 set -eu
 LOCK=/run/lock/bristolbusbot/heavy-io.lock
 WAIT=3600
