@@ -72,7 +72,7 @@ def test_a_job_can_name_its_failure_and_failures_are_counted(tmp_path, monkeypat
 
 def test_free_text_never_becomes_a_reason(tmp_path):
     path = tmp_path / "x.reason"
-    path.write_text("Traceback (most recent call last): /home/x", encoding="utf-8")
+    path.write_text("Traceback (most recent call last): File run.py, line 3", encoding="utf-8")
     assert run_recorded_job.read_reason(path) is None
     path.write_text("disk_full\n", encoding="utf-8")
     assert run_recorded_job.read_reason(path) == "disk_full"
