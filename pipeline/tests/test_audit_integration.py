@@ -343,3 +343,27 @@ def test_bus_profiles_use_the_town_labels_for_shared_route_numbers(monkeypatch):
     payload = integration.build_payload(conn, completed[-1])
     routes = {p["vehicle_ref"]: [r["route"] for r in p["routes"]] for p in payload["profiles"]}
     assert routes == {"FBRI-BATH": ["4 Bath"], "FBRI-BRIS": ["4 Bristol"]}
+
+
+def test_one_scan_gives_the_same_working_days_as_four():
+    """#112: the rare-workings counts come from one scan, not four."""
+    conn = database()
+    conn.row_factory = sqlite3.Row
+    days = dates_ending(date(2026, 11, 13), 20)
+    for index, day in enumerate(days):
+        add_observation(conn, day, "FBRI-1", "75", 1)
+        add_observation(conn, day, "FBRI-1", "75", 2)
+        if index % 3 == 0:
+            add_observation(conn, day, "FBRI-1", "76", 3)
+            add_observation(conn, day, "FBRI-2", "76", 4)
+    cur = conn.cursor()
+    recent = days[-14:]
+    expected = (
+        integration._group_days(cur, days, "operator,vehicle_ref", "operator,vehicle_ref"),
+        integration._group_days(cur, days, "operator,route", "operator,route"),
+        integration._group_days(cur, days, "operator,vehicle_ref,route", "operator,vehicle_ref,route"),
+        integration._group_days(cur, recent, "operator,vehicle_ref,route", "operator,vehicle_ref,route"),
+    )
+    assert integration._working_days(cur, days, recent) == expected
+    assert expected[2][("FBRI", "FBRI-1", "76")] == 7
+    assert integration._working_days(cur, [], []) == ({}, {}, {}, {})
