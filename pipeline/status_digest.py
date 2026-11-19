@@ -536,6 +536,12 @@ def problems(snapshot: dict, today: date | None = None) -> list[str]:
         if stuck >= TIMETABLE_STUCK_DAYS:
             found.append(f"Timetable updates have been rejected for {stuck} days running. "
                          f"{what} The current timetable stays live, but retries are not fixing it.")
+    size = _dict(snapshot.get("timetable_size"))
+    if _count(size.get("limit_bytes")) and \
+            _count(size.get("bytes")) >= TIMETABLE_SIZE_WARNING * _count(size.get("limit_bytes")):
+        found.append(f"The timetable file is {_count(size.get('bytes')) / MIB:.0f} MiB, over 90% of "
+                     f"the {_count(size.get('limit_bytes')) / MIB:.0f} MiB the Pi accepts; "
+                     "the next update may be refused.")
     age = _days_since(accepted.get("accepted_at"), today)
     if age is None:
         found.append("The timetable's last update date is unknown.")
@@ -585,6 +591,27 @@ def timetable_today_line(snapshot: dict, today: date) -> str | None:
     if when is None or age is None or age > TIMETABLE_MAX_AGE_DAYS:
         return None    # reported as a problem instead
     return f"Timetable: current, last updated {when}."
+
+
+TIMETABLE_SIZE_WARNING = 0.9
+MIB = 1024 * 1024
+
+
+def timetable_size_lines(snapshot: dict, previous_state: dict, today: date) -> list[str]:
+    """Mondays: the timetable's size and its change over the week (#130)."""
+    size = _dict(snapshot.get("timetable_size"))
+    current, limit = _count(size.get("bytes")), _count(size.get("limit_bytes"))
+    if not current or not limit or today.weekday() != 0:
+        return []
+    history = _dict(previous_state.get("timetable_bytes"))
+    week_ago = (today - timedelta(days=7)).isoformat()
+    earlier = [value for day, value in sorted(history.items()) if day <= week_ago]
+    line = (f"Timetable file: {current / MIB:.0f} MiB, {100 * current / limit:.0f}% of the "
+            f"{limit / MIB:.0f} MiB the Pi accepts")
+    if earlier:
+        change = (current - _count(earlier[-1])) / MIB
+        line += f" ({'up' if change >= 0 else 'down'} {abs(change):.0f} MiB on last week)"
+    return [line + "."]
 
 
 def change_lines(snapshot: dict, previous_state: dict) -> list[str]:
@@ -716,6 +743,7 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
     today_items = [
         *([timetable_note] if timetable_note else []),
         *change_lines(snapshot, previous_state),
+        *timetable_size_lines(snapshot, previous_state, today),
         *notes,
         *published_description_lines(today, history, since),
         *moving_occasion_lines(today),
@@ -730,12 +758,23 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
     return "\n".join(lines)
 
 
-def _write_state(snapshot: dict) -> None:
+def _size_history(snapshot: dict, previous: dict) -> dict[str, int]:
+    """The last five weeks of daily timetable sizes, for the weekly change."""
+    history = {day: _count(value) for day, value in _dict(previous.get("timetable_bytes")).items()}
+    size = _count(_dict(snapshot.get("timetable_size")).get("bytes"))
+    if size:
+        history[datetime.now(timezone.utc).date().isoformat()] = size
+    return dict(sorted(history.items())[-35:])
+
+
+def _write_state(snapshot: dict, previous: dict | None = None) -> None:
+    previous = previous or {}
     payload = {
         "schema_version": 2,
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "fingerprints": _progress_fingerprints(snapshot),
         "counts": standing_counts(snapshot),
+        "timetable_bytes": _size_history(snapshot, previous),
     }
     DAILY_STATE.parent.mkdir(parents=True, exist_ok=True)
     temporary = DAILY_STATE.with_name(DAILY_STATE.name + ".tmp")
@@ -754,7 +793,7 @@ def main() -> None:
     if _post_phone(*phone_summary(snapshot)):
         print("daily phone summary sent")
     if _post(message):
-        _write_state(snapshot)
+        _write_state(snapshot, previous)
         print("daily update posted")
 
 
