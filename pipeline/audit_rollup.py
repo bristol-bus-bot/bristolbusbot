@@ -1535,20 +1535,21 @@ def prune_old_raw(conn, before_date_str):
         (before_date_str,),
     )
     count = cur.fetchone()[0]
+    # poll_at is always UTC ISO text ("2026-11-08T07:00:22.123456+00:00"), so a
+    # plain comparison with the date selects the same rows as comparing its
+    # first ten characters, and can use the primary-key index (#113). The
+    # cutoff is a London date while poll_at is UTC, so during BST an extra hour
+    # of poll records is kept at the edge; that is harmless and unchanged.
+    iso_cutoff = f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}"
     poll_count = cur.execute(
-        "SELECT COUNT(*) FROM poll_log WHERE substr(poll_at,1,10) < ?",
-        (f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}",),
+        "SELECT COUNT(*) FROM poll_log WHERE poll_at < ?", (iso_cutoff,),
     ).fetchone()[0]
     if count or poll_count:
         cur.execute(
             "DELETE FROM timepoint_observations WHERE service_date < ?",
             (before_date_str,),
         )
-        iso_cutoff = f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}"
-        cur.execute(
-            "DELETE FROM poll_log WHERE substr(poll_at,1,10) < ?",
-            (iso_cutoff,),
-        )
+        cur.execute("DELETE FROM poll_log WHERE poll_at < ?", (iso_cutoff,))
         conn.commit()
     return count
 
@@ -1951,6 +1952,12 @@ def restate_final_stop(conn, dates, geo_index, fleet_index, report=print):
     return results
 
 
+def phase(name):
+    """Timestamp each phase in the job's log, so the real 07:00 run shows
+    where its time goes (#112)."""
+    print(f"[{datetime.now(timezone.utc):%H:%M:%S}] phase: {name}", flush=True)
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"ERROR: audit.db not found at {AUDIT_DB} (run the collector first).")
@@ -2071,13 +2078,16 @@ def main():
         print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
         return 2
 
+    phase("trip coverage")
     coverage_quality = rollup_trip_coverage(
         conn, date_str, SHOW_OPERATORS)
     print_trip_coverage_report(coverage_quality)
+    phase("duty gaps")
     duty_gap_result = rollup_duty_gaps(conn, date_str, SHOW_OPERATORS)
     print_duty_gap_report(duty_gap_result)
     geo_index = load_geo_index()
     fleet_index = load_fleet_index()
+    phase("geography check")
     geo_match = geography_match_stats(
         conn, date_str, SHOW_OPERATORS, geo_index
     )
@@ -2089,6 +2099,7 @@ def main():
             f"({geo_match['pct']}%; minimum {MIN_GEO_MATCH_PCT}%)"
         )
 
+    phase("published products")
     print(f"Rolling up WECA operators for {date_str}...")
     public_result = rollup_public_day(
         conn, date_str, coverage_quality["valid"], geo_index, fleet_index,
@@ -2115,6 +2126,7 @@ def main():
 
     # Timetable fit is an analysis product: a failure here is reported but
     # never undoes or blocks the published daily figures above.
+    phase("timetable fit")
     timetable = open_timetable()
     if timetable is None:
         print("  timetable fit: skipped, timetable database not found.")
@@ -2126,12 +2138,14 @@ def main():
             conn.rollback()
             print(f"  timetable fit: FAILED ({exc}); published figures unaffected.")
 
+    phase("prune")
     if not no_prune:
         cutoff = (datetime.now(TARGET_TZ) - timedelta(days=RAW_RETENTION_DAYS)).strftime("%Y%m%d")
         pruned = prune_old_raw(conn, cutoff)
         if pruned:
             print(f"  pruned {pruned} raw observations older than {cutoff} (rollups kept).")
 
+    phase("done")
     conn.close()
     return 0
 

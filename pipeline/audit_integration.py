@@ -16,6 +16,7 @@ import sqlite3
 
 import audit_writer
 import tempfile
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -493,6 +494,40 @@ def _init_evidence_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _working_days(cur: sqlite3.Cursor, dates: list[str],
+                  recent: list[str]) -> tuple[dict, dict, dict, dict]:
+    """Days each vehicle, route and vehicle-route pair worked, in one scan.
+
+    The same counts as four ``_group_days`` calls, which each scanned the
+    whole window (#112: 13 of the job's 38 seconds on the PC)."""
+    if not dates:
+        return {}, {}, {}, {}
+    rows = cur.execute(
+        f"""SELECT DISTINCT service_date, operator, vehicle_ref, route
+            FROM timepoint_observations
+            WHERE service_date IN ({_placeholders(dates)})
+              AND operator IN ({_placeholders(SHOW_OPERATORS)})
+              AND COALESCE(is_origin, 0) = 0
+              AND vehicle_ref IS NOT NULL AND trim(vehicle_ref) != ''
+              AND route IS NOT NULL AND trim(route) != ''
+              AND observed_delay_s IS NOT NULL
+              AND gps_distance_m IS NOT NULL AND gps_distance_m <= ?""",
+        (*dates, *SHOW_OPERATORS, DISTANCE_GATE_M),
+    ).fetchall()
+    recent_set = set(recent)
+    vehicle, route, pair, recent_pair = (defaultdict(set) for _ in range(4))
+    for row in rows:
+        day, operator = row["service_date"], row["operator"]
+        vehicle_ref, route_name = row["vehicle_ref"], row["route"]
+        vehicle[(operator, vehicle_ref)].add(day)
+        route[(operator, route_name)].add(day)
+        pair[(operator, vehicle_ref, route_name)].add(day)
+        if day in recent_set:
+            recent_pair[(operator, vehicle_ref, route_name)].add(day)
+    return tuple({key: len(days) for key, days in counts.items()}
+                 for counts in (vehicle, route, pair, recent_pair))
+
+
 def _group_days(cur: sqlite3.Cursor, dates: list[str], columns: str,
                 group_by: str) -> dict[tuple, int]:
     if not dates:
@@ -553,14 +588,8 @@ def _rare_workings(conn: sqlite3.Connection, completed_dates: list[str],
          RARE_MIN_READINGS, RARE_MIN_POINTS),
     ).fetchall()
 
-    vehicle_days = _group_days(cur, prior, "operator,vehicle_ref",
-                               "operator,vehicle_ref")
-    route_days = _group_days(cur, prior, "operator,route", "operator,route")
-    pair_days = _group_days(cur, prior, "operator,vehicle_ref,route",
-                            "operator,vehicle_ref,route")
-    recent_pair_days = _group_days(
-        cur, prior[-RARE_ABSENT_DAYS:], "operator,vehicle_ref,route",
-        "operator,vehicle_ref,route")
+    vehicle_days, route_days, pair_days, recent_pair_days = _working_days(
+        cur, prior, prior[-RARE_ABSENT_DAYS:])
     profile_slugs = {
         (p["operator"], p["vehicle_ref"]): p["slug"] for p in profiles
     }
