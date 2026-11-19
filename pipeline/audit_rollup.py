@@ -1535,20 +1535,21 @@ def prune_old_raw(conn, before_date_str):
         (before_date_str,),
     )
     count = cur.fetchone()[0]
+    # poll_at is always UTC ISO text ("2026-11-08T07:00:22.123456+00:00"), so a
+    # plain comparison with the date selects the same rows as comparing its
+    # first ten characters, and can use the primary-key index (#113). The
+    # cutoff is a London date while poll_at is UTC, so during BST an extra hour
+    # of poll records is kept at the edge; that is harmless and unchanged.
+    iso_cutoff = f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}"
     poll_count = cur.execute(
-        "SELECT COUNT(*) FROM poll_log WHERE substr(poll_at,1,10) < ?",
-        (f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}",),
+        "SELECT COUNT(*) FROM poll_log WHERE poll_at < ?", (iso_cutoff,),
     ).fetchone()[0]
     if count or poll_count:
         cur.execute(
             "DELETE FROM timepoint_observations WHERE service_date < ?",
             (before_date_str,),
         )
-        iso_cutoff = f"{before_date_str[:4]}-{before_date_str[4:6]}-{before_date_str[6:8]}"
-        cur.execute(
-            "DELETE FROM poll_log WHERE substr(poll_at,1,10) < ?",
-            (iso_cutoff,),
-        )
+        cur.execute("DELETE FROM poll_log WHERE poll_at < ?", (iso_cutoff,))
         conn.commit()
     return count
 
