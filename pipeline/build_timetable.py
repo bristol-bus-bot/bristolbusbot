@@ -20,6 +20,7 @@ from timetable_duplicate_evidence import reconcile_database as reconcile_duplica
 from timetable_journey_dedupe import collapse_same_day_copies
 from timetable_evidence_storage import compact_evidence
 from timetable_source_index import build_source_index
+from timetable_size_report import size_report, summary_line
 import ticket_machine_codes
 from timetable_quality_gates import check_candidate_quality
 
@@ -378,6 +379,12 @@ def main():
     except Exception:
         logger.exception("Candidate quality checks failed to run - refusing the candidate")
         return 2
+    # Where the size goes (#130). Informational: never refuses the candidate.
+    try:
+        quality["size"] = size_report(WECA_DB)
+        logger.info("Timetable size: %s", summary_line(quality["size"]))
+    except Exception:  # noqa: BLE001 - reported, not fatal
+        logger.exception("Timetable size report could not be produced")
     QUALITY_STATUS.write_text(json.dumps(quality, indent=2, sort_keys=True) + "\n",
                               encoding="utf-8")
     if not quality["passed"]:

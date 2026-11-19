@@ -65,6 +65,10 @@ PHONE_TOPIC = REMOTE_HOME / ".config/busbot-alerts/ntfy"
 SOURCE_CORRECTIONS = REMOTE_HOME / "bristolbusbot/current/pipeline/source_corrections.json"
 TIMETABLE_ALLOWANCES = Path("/usr/local/libexec/bristolbusbot-timetable/timetable_allowances.json")
 LIVE_TIMETABLE_SUMMARY = "live-timetable-summary.json.gz"
+# The live timetable and the size the Pi accepts (timetable_delivery's
+# MAX_DATABASE_BYTES; a test keeps the two equal). For the size trend (#130).
+LIVE_TIMETABLE = Path("/var/lib/bristolbusbot/pipeline/timetable.db")
+TIMETABLE_LIMIT_BYTES = 768 * 1024 * 1024
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
@@ -1877,6 +1881,15 @@ TIMETABLE_DELIVERY_REASONS = {
 }
 
 
+def timetable_size(path: Path | None = None) -> dict | None:
+    """The live timetable's size against the limit: a single stat, no read."""
+    try:
+        size = (path or LIVE_TIMETABLE).stat().st_size
+    except OSError:
+        return None
+    return {"bytes": size, "limit_bytes": TIMETABLE_LIMIT_BYTES}
+
+
 def timetable_problem_sentence(automation: dict) -> str | None:
     """What happened to a rejected timetable, in the alert's own words."""
     if automation.get("status") != "failed":
@@ -2046,6 +2059,7 @@ def main() -> int:
         "notes": notes,
         # Plain words for the daily message, so it never prints job names or
         # codes, and says the same thing as the immediate alert (#141).
+        "timetable_size": timetable_size(),
         "failures": job_failure_sentences(
             {name: check for name, check in jobs.items() if name != "timetable-automation"}),
         "timetable_problem": timetable_problem_sentence(timetable_automation),
