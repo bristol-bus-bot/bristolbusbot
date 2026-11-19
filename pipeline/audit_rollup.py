@@ -1951,6 +1951,12 @@ def restate_final_stop(conn, dates, geo_index, fleet_index, report=print):
     return results
 
 
+def phase(name):
+    """Timestamp each phase in the job's log, so the real 07:00 run shows
+    where its time goes (#112)."""
+    print(f"[{datetime.now(timezone.utc):%H:%M:%S}] phase: {name}", flush=True)
+
+
 def main():
     if not os.path.exists(AUDIT_DB):
         print(f"ERROR: audit.db not found at {AUDIT_DB} (run the collector first).")
@@ -2071,13 +2077,16 @@ def main():
         print(f"ERROR: date must be YYYYMMDD, got '{positional[0]}'")
         return 2
 
+    phase("trip coverage")
     coverage_quality = rollup_trip_coverage(
         conn, date_str, SHOW_OPERATORS)
     print_trip_coverage_report(coverage_quality)
+    phase("duty gaps")
     duty_gap_result = rollup_duty_gaps(conn, date_str, SHOW_OPERATORS)
     print_duty_gap_report(duty_gap_result)
     geo_index = load_geo_index()
     fleet_index = load_fleet_index()
+    phase("geography check")
     geo_match = geography_match_stats(
         conn, date_str, SHOW_OPERATORS, geo_index
     )
@@ -2089,6 +2098,7 @@ def main():
             f"({geo_match['pct']}%; minimum {MIN_GEO_MATCH_PCT}%)"
         )
 
+    phase("published products")
     print(f"Rolling up WECA operators for {date_str}...")
     public_result = rollup_public_day(
         conn, date_str, coverage_quality["valid"], geo_index, fleet_index,
@@ -2115,6 +2125,7 @@ def main():
 
     # Timetable fit is an analysis product: a failure here is reported but
     # never undoes or blocks the published daily figures above.
+    phase("timetable fit")
     timetable = open_timetable()
     if timetable is None:
         print("  timetable fit: skipped, timetable database not found.")
@@ -2126,12 +2137,14 @@ def main():
             conn.rollback()
             print(f"  timetable fit: FAILED ({exc}); published figures unaffected.")
 
+    phase("prune")
     if not no_prune:
         cutoff = (datetime.now(TARGET_TZ) - timedelta(days=RAW_RETENTION_DAYS)).strftime("%Y%m%d")
         pruned = prune_old_raw(conn, cutoff)
         if pruned:
             print(f"  pruned {pruned} raw observations older than {cutoff} (rollups kept).")
 
+    phase("done")
     conn.close()
     return 0
 
