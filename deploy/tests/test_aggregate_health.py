@@ -1487,3 +1487,14 @@ def test_a_refused_timetable_download_is_named_plainly():
     assert sentence == ("The new timetable file was larger than the Pi accepts, "
                         "so it was not downloaded.")
     assert aggregate_health.timetable_problem_sentence({"status": "healthy"}) is None
+
+
+def test_the_health_check_reads_the_timetable_size_against_the_same_limit(tmp_path):
+    """#130: one stat of the live file; the limit matches the delivery's."""
+    import timetable_delivery
+    assert aggregate_health.TIMETABLE_LIMIT_BYTES == timetable_delivery.MAX_DATABASE_BYTES
+    path = tmp_path / "timetable.db"
+    path.write_bytes(b"x" * 1000)
+    assert aggregate_health.timetable_size(path) == {
+        "bytes": 1000, "limit_bytes": aggregate_health.TIMETABLE_LIMIT_BYTES}
+    assert aggregate_health.timetable_size(tmp_path / "absent.db") is None

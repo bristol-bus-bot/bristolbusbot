@@ -476,3 +476,18 @@ def test_published_descriptions_are_one_line_and_only_when_new(tmp_path):
                      "bus's page on bristolbuses.live; ask Claude to pull any you don't like."]
     later = datetime.fromisoformat("2026-11-17T08:00:00+00:00")
     assert status_digest.published_description_lines(date(2026, 11, 18), tmp_path, later) == []
+
+
+def test_the_timetable_size_is_shown_on_mondays_with_the_weekly_change():
+    """#130: growth is seen before it hits the limit."""
+    snapshot = quiet_snapshot()
+    snapshot["timetable_size"] = {"bytes": 550_000_000, "limit_bytes": 768 * 1024 * 1024}
+    state = {"timetable_bytes": {"2026-11-09": 520_000_000, "2026-11-15": 548_000_000}}
+    assert status_digest.timetable_size_lines(snapshot, state, date(2026, 11, 16)) == [
+        "Timetable file: 525 MiB, 68% of the 768 MiB the Pi accepts (up 29 MiB on last week)."]
+    assert status_digest.timetable_size_lines(snapshot, state, date(2026, 11, 17)) == []
+    assert not any("timetable file" in line.lower()
+                   for line in status_digest.problems(snapshot, date(2026, 11, 17)))
+    snapshot["timetable_size"]["bytes"] = 760 * 1024 * 1024
+    assert any("over 90% of the 768 MiB the Pi accepts" in line
+               for line in status_digest.problems(snapshot, date(2026, 11, 17)))
