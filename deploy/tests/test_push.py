@@ -684,32 +684,8 @@ def test_heavy_deploy_steps_take_the_lock_at_low_priority_with_room_to_finish(mo
 NL = chr(10)
 
 
-def test_poll_report_names_every_missed_poll():
-    output = NL.join(["5", "2026-11-17T17:54:29+00:00 30", "2026-11-17T17:54:59+00:00 86",
-                      "2026-11-17T17:56:25+00:00 30", "2026-11-17T17:57:40+00:00 64", ""])
-    count, gaps = push.poll_gaps(output)
-    assert count == 5
-    assert gaps == [("2026-11-17T17:54:59+00:00", 86), ("2026-11-17T17:57:40+00:00", 64)]
-    assert push.poll_gaps(NL.join(["12", "2026-11-17T18:00:00+00:00 31", ""])) == (12, [])
-    assert push.poll_gaps("") == (0, [])
 
 
-def test_report_says_plainly_when_polls_were_missed(caplog):
-    class Polls(FakeRemote):
-        def run(self, command, check=True, timeout=None):
-            return NL.join(["3", "2026-11-17T17:54:59+00:00 86", "2026-11-17T17:56:25+00:00 30", ""])
-
-    with caplog.at_level("INFO"):
-        assert push.report_collector_polls(Polls(), "2026-11-17T17:51:00+00:00") is False
-    assert "THE COLLECTOR MISSED POLLS during this deploy: 86s gap" in caplog.text
-
-    class Clean(FakeRemote):
-        def run(self, command, check=True, timeout=None):
-            return "20" + NL
-
-    with caplog.at_level("INFO"):
-        assert push.report_collector_polls(Clean(), "2026-11-17T17:51:00+00:00") is True
-    assert "20 polls since 2026-11-17T17:51:00+00:00, none missed" in caplog.text
 
 
 def test_layout_install_runs_under_the_lock_and_restarts_the_collector_only_if_needed():
@@ -791,3 +767,75 @@ def test_the_collector_restarts_if_its_drop_ins_or_environment_changed():
     assert "cat " not in body          # hashed, never printed
     assert "collector_unit_before=$(collector_fingerprint)" in installer
     assert "collector_unit_after=$(collector_fingerprint)" in installer
+
+
+def poll_output(*rows, last):
+    """The poll query's output: count, one 'time gap' line per gap, then 'last'."""
+    return NL.join([str(len(rows) + 1), *rows, f"last {last}", ""])
+
+
+class PollRemote(FakeRemote):
+    """Answers remote_now with ``ended`` and the poll query with each reply in turn."""
+
+    def __init__(self, ended, *replies):
+        super().__init__()
+        self.ended, self.replies = ended, list(replies)
+
+    def run(self, command, check=True, timeout=None):
+        if command.startswith("date -u"):
+            return self.ended + NL
+        return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+
+
+def test_poll_report_names_every_missed_poll():
+    output = poll_output("2026-11-20T00:00:15+00:00 65", "2026-11-20T00:01:20+00:00 30",
+                         last="2026-11-20T00:01:50+00:00")
+    count, gaps, latest = push.poll_gaps(output)
+    assert count == 3 and gaps == [("2026-11-20T00:00:15+00:00", 65)]
+    assert latest == "2026-11-20T00:01:50+00:00"
+    assert push.poll_gaps("") == (0, [], None)
+
+
+def test_a_short_deploy_waits_for_a_poll_after_it_and_judges_a_real_gap(caplog):
+    """#150: a 30-second deploy used to print 'none missed' after 0 polls."""
+    before = poll_output(last="2026-11-20T00:05:40+00:00")                 # nothing after yet
+    after = poll_output("2026-11-20T00:05:40+00:00 31", last="2026-11-20T00:06:11+00:00")
+    remote = PollRemote("2026-11-20T00:05:58+00:00", before, after)
+    sleeps = []
+    with caplog.at_level("INFO"):
+        assert push.report_collector_polls(remote, "2026-11-20T00:05:55+00:00",
+                                           sleep=sleeps.append) is True
+    assert sleeps == [push.POLL_WAIT_STEP_SECONDS]
+    assert "none missed" in caplog.text and "0 polls" not in caplog.text
+
+
+def test_report_says_plainly_when_polls_were_missed(caplog):
+    output = poll_output("2026-11-20T00:01:20+00:00 65", last="2026-11-20T00:05:40+00:00")
+    with caplog.at_level("INFO"):
+        assert push.report_collector_polls(PollRemote("2026-11-20T00:05:32+00:00", output),
+                                           "2026-11-20T00:00:23+00:00", sleep=lambda _s: None) is False
+    assert "THE COLLECTOR MISSED POLLS during this deploy: 65s gap after 2026-11-20T00:01:20" in caplog.text
+
+
+def test_no_poll_after_the_deploy_is_a_warning_not_none_missed(caplog):
+    stuck = poll_output(last="2026-11-20T00:05:10+00:00")
+    with caplog.at_level("INFO"):
+        assert push.report_collector_polls(PollRemote("2026-11-20T00:05:58+00:00", stuck),
+                                           "2026-11-20T00:05:55+00:00", sleep=lambda _s: None) is False
+    assert "THE COLLECTOR RECORDED NO POLL in the 60s after this deploy ended" in caplog.text
+    assert "none missed" not in caplog.text
+
+
+def test_the_poll_query_starts_at_the_last_poll_before_the_deploy(tmp_path):
+    import sqlite3
+    import subprocess
+    db = tmp_path / "audit.db"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE poll_log (poll_at TEXT PRIMARY KEY)")
+        connection.executemany("INSERT INTO poll_log VALUES (?)", [
+            ("2026-11-20T00:05:10+00:00",), ("2026-11-20T00:05:40+00:00",),
+            ("2026-11-20T00:06:11+00:00",)])
+    code = push.POLL_GAP_QUERY.replace("/var/lib/bristolbusbot/collector/audit.db", db.as_posix())
+    output = subprocess.run([sys.executable, "-c", code, "2026-11-20T00:05:55+00:00"],
+                            capture_output=True, text=True, check=True).stdout
+    assert push.poll_gaps(output) == (2, [], "2026-11-20T00:06:11+00:00")

@@ -756,45 +756,75 @@ def remote_now(remote: Remote) -> str:
     return remote.run("date -u +%Y-%m-%dT%H:%M:%S+00:00").strip()
 
 
+# Polls from the last one before the deploy began, so even a deploy shorter
+# than one poll interval covers at least one whole gap (#150).
 POLL_GAP_QUERY = (
     "import sqlite3, sys\n"
     "from datetime import datetime\n"
     "c = sqlite3.connect('file:/var/lib/bristolbusbot/collector/audit.db?mode=ro', uri=True)\n"
+    "first = c.execute('SELECT MAX(poll_at) FROM poll_log WHERE poll_at < ?', (sys.argv[1],)).fetchone()[0]\n"
     "rows = [r[0] for r in c.execute("
-    "'SELECT poll_at FROM poll_log WHERE poll_at >= ? ORDER BY poll_at', (sys.argv[1],))]\n"
+    "'SELECT poll_at FROM poll_log WHERE poll_at >= ? ORDER BY poll_at', (first or sys.argv[1],))]\n"
     "print(len(rows))\n"
     "times = [datetime.fromisoformat(r.replace('Z', '+00:00')) for r in rows]\n"
     "for a, b, at in zip(times, times[1:], rows):\n"
     "    print(at, round((b - a).total_seconds()))\n"
+    "print('last', rows[-1] if rows else '-')\n"
 )
+POLL_WAIT_SECONDS = 60
+POLL_WAIT_STEP_SECONDS = 10
 
 
-def poll_gaps(output: str) -> tuple[int, list[tuple[str, int]]]:
+def poll_gaps(output: str) -> tuple[int, list[tuple[str, int]], str | None]:
+    """(polls, gaps over the limit, the latest poll) from the query's output."""
     lines = [line.split() for line in output.strip().splitlines() if line.strip()]
     if not lines:
-        return 0, []
+        return 0, [], None
     count = int(lines[0][0])
-    gaps = [(at, int(seconds)) for at, seconds in lines[1:]
-            if int(seconds) > MISSED_POLL_GAP_SECONDS]
-    return count, gaps
+    latest = None
+    gaps = []
+    for parts in lines[1:]:
+        if parts[0] == "last":
+            latest = None if parts[1] == "-" else parts[1]
+        elif int(parts[1]) > MISSED_POLL_GAP_SECONDS:
+            gaps.append((parts[0], int(parts[1])))
+    return count, gaps, latest
 
 
-def report_collector_polls(remote: Remote, since: str) -> bool:
-    """Say plainly whether the collector missed a poll since ``since``."""
-    output = remote.run(
-        f"/usr/bin/python3 -c {q(POLL_GAP_QUERY)} {q(since)}", check=False)
-    try:
-        count, gaps = poll_gaps(output)
-    except (ValueError, IndexError):
-        log.warning("could not read the collector's polls after this deploy: %s",
-                    output.strip()[:300])
-        return False
+def report_collector_polls(remote: Remote, since: str, *,
+                           wait_seconds: float = POLL_WAIT_SECONDS,
+                           sleep=time.sleep) -> bool:
+    """Say plainly whether the collector missed a poll during a deploy.
+
+    The window starts at the last poll before ``since`` and the report waits
+    (up to ``wait_seconds``) for a poll after the deploy ended, so it always
+    judges at least one real gap. Never "none missed" on no evidence (#150)."""
+    ended = remote_now(remote)
+    waited = 0.0
+    while True:
+        output = remote.run(
+            f"/usr/bin/python3 -c {q(POLL_GAP_QUERY)} {q(since)}", check=False)
+        try:
+            count, gaps, latest = poll_gaps(output)
+        except (ValueError, IndexError):
+            log.warning("could not read the collector's polls after this deploy: %s",
+                        output.strip()[:300])
+            return False
+        if latest is not None and latest > ended:
+            break
+        if waited >= wait_seconds:
+            log.warning("THE COLLECTOR RECORDED NO POLL in the %ds after this deploy ended "
+                        "(last poll %s); check it is running", int(wait_seconds), latest or "none")
+            return False
+        sleep(POLL_WAIT_STEP_SECONDS)
+        waited += POLL_WAIT_STEP_SECONDS
     if gaps:
         log.warning(
             "THE COLLECTOR MISSED POLLS during this deploy: %s",
             ", ".join(f"{seconds}s gap after {at}" for at, seconds in gaps))
         return False
-    log.info("collector: %d polls since %s, none missed", count, since)
+    log.info("collector: %d polls from the last one before %s to after the deploy, none missed",
+             count, since)
     return True
 
 
