@@ -783,6 +783,9 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
     notes = [str(note) for note in snapshot.get("notes") or []
              if isinstance(snapshot.get("notes"), list)]
     timetable_note = timetable_today_line(snapshot, today)
+    reviews = _dict(snapshot.get("editorial_reviews"))
+    overdue_count = _count(reviews.get("count"))
+    oldest_due = _day(reviews.get("oldest_due"))
     if any(line.startswith("Timetable updates have been rejected") for line in found):
         timetable_note = None    # already said under the problem
     today_items = [
@@ -793,6 +796,8 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         *notes,
         *published_description_lines(today, history, since),
         *moving_occasion_lines(today),
+        *([f"Facts due a check: {overdue_count} (oldest due {oldest_due})"]
+          if overdue_count > 0 and oldest_due else []),
     ]
     lines = [":bus: *Bristol Bus Bot - daily update*", "", overall_line(snapshot, found)]
     if found:

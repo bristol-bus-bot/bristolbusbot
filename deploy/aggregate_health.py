@@ -107,6 +107,8 @@ BRISTOL_TZ = ZoneInfo("Europe/London")
 TIMETABLE_RUN_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/actions/runs/{}")
 EDITORIAL_STATE = Path("/var/lib/bristolbusbot-editorial/state.json")
+EDITORIAL_CONTEXT = Path(os.getenv(
+    "BBB_EDITORIAL_CONTEXT", "/var/lib/bristolbusbot-editorial/editorial-context.json"))
 EDITORIAL_FILE_URL = (
     "https://github.com/bristol-bus-bot/bristolbusbot/blob/main/"
     "bot/data/editorial-context.json")
@@ -1692,6 +1694,27 @@ def _entry_date(entry: dict, field: str) -> date | None:
         return None
 
 
+def editorial_reviews(today: date | None = None, path: Path | None = None) -> dict:
+    today = today or utcnow().astimezone(BRISTOL_TZ).date()
+    try:
+        document = json.loads((path or EDITORIAL_CONTEXT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(document, dict):
+        return {}
+    overdue = []
+    for section in ("facts", "occasions"):
+        entries = document.get(section)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if isinstance(entry, dict):
+                due = _entry_date(entry, "review_due")
+                if due is not None and due < today:
+                    overdue.append(due)
+    return {"count": len(overdue), "oldest_due": min(overdue).isoformat() if overdue else None}
+
+
 def expired_source_corrections(today: date | None = None,
                                path: Path | None = None) -> list[dict]:
     """Entries past their expiry date. The build skips them by itself, so
@@ -2052,6 +2075,7 @@ def main() -> int:
         "locality_automation": locality_automation,
         "blurb_generation": blurb_generation,
         "editorial_refresh": editorial_refresh,
+        "editorial_reviews": editorial_reviews(),
         "feed": {"last_success_at": feed_at,
                  "age_seconds": round(feed_age, 1) if feed_age is not None else None},
         "audit": {"latest_rollup_service_date": audit_day,

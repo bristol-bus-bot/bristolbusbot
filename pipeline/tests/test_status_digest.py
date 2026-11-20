@@ -301,6 +301,17 @@ def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
     assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []
 
 
+def test_daily_message_shows_editorial_reviews_only_when_overdue(tmp_path, monkeypatch):
+    monkeypatch.setattr(status_digest, "EDITORIAL_CONTEXT", tmp_path / "missing.json")
+    today = date(2026, 11, 20)
+    snapshot = {"editorial_reviews": {"count": 1, "oldest_due": "2026-10-15"}}
+    message = status_digest.daily_message(snapshot, today=today, history=tmp_path)
+    assert "*Today*\n- Facts due a check: 1 (oldest due 15 Oct)" in message
+    snapshot["editorial_reviews"] = {"count": 0, "oldest_due": None}
+    assert "Facts due a check" not in status_digest.daily_message(
+        snapshot, today=today, history=tmp_path)
+
+
 def test_daily_phone_summary_only_says_the_state(monkeypatch):
     monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: ([], []))
     assert status_digest.phone_summary({"status": "ok", "issues": []}) == (
