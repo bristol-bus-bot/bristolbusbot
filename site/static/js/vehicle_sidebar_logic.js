@@ -4,6 +4,9 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Format the compact YYYYMMDD service-date used by the audit snapshot. */
+/**
+ * @param {string | null | undefined} value
+ */
 export function formatServiceDate(value) {
     const text = String(value || "");
     if (!/^\d{8}$/.test(text)) return text;
@@ -13,6 +16,9 @@ export function formatServiceDate(value) {
 }
 
 /** Turn a live vehicle into the wording and colour class shared by the sidebar. */
+/**
+ * @param {LiveBus | null | undefined} bus
+ */
 function baseStatusPresentation(bus) {
     if (!bus) return {
         text: "not currently running",
@@ -34,6 +40,7 @@ function baseStatusPresentation(bus) {
             text: "waiting to depart", longText: "waiting to depart",
             cls: "vs-status-waiting", shape: "vs-shape-waiting",
         };
+    // @ts-expect-error The API sends number | null. parseInt coerces it at runtime.
     const delay = Number.parseInt(bus.delayMinutes, 10) || 0;
     if (delay >= 4) return {
         text: `${delay}m late`, longText: `${delay} minutes late`,
@@ -50,6 +57,9 @@ function baseStatusPresentation(bus) {
     };
 }
 
+/**
+ * @param {LiveBus | null | undefined} bus
+ */
 export function statusPresentation(bus) {
     const result = baseStatusPresentation(bus);
     if (bus?.timingSource === "route_estimate") {
@@ -60,6 +70,10 @@ export function statusPresentation(bus) {
 }
 
 /** Build a bounded dot-strip model from the aggregate audit histogram. */
+/**
+ * @param {unknown} edgesInput
+ * @param {unknown} countsInput
+ */
 export function delayDotColumns(
     edgesInput, countsInput, maxDots = 600, maxColumnDots = 30,
 ) {
@@ -82,6 +96,7 @@ export function delayDotColumns(
         Math.ceil(total / Math.max(1, maxDots)),
         Math.ceil(largestBucket / Math.max(1, maxColumnDots)),
     );
+    /** @param {number} value */
     const percentage = value => Math.max(
         0, Math.min(100, ((value - minS) / range) * 100));
     const centres = counts.map((_, index) => {
