@@ -22,6 +22,7 @@ from timetable_evidence_storage import compact_evidence
 from timetable_source_index import build_source_index
 from timetable_size_report import size_report, summary_line
 import ticket_machine_codes
+import timetable_shared_stop_times
 from timetable_quality_gates import check_candidate_quality
 
 HERE = Path(__file__).parent
@@ -105,6 +106,12 @@ def promote_atomically(staged_db: Path, live_db: Path) -> Path:
         shutil.copy2(live_db, previous_db)
     os.replace(staged_db, live_db)
     return previous_db
+
+
+def timetable_layout_requested() -> str:
+    """'shared' only when BBB_TIMETABLE_LAYOUT=shared; anything else keeps the current layout."""
+    value = os.environ.get("BBB_TIMETABLE_LAYOUT", "").strip().lower()
+    return "shared" if value == "shared" else "repeated"
 
 
 def finalize_static_database(path: Path) -> None:
@@ -446,6 +453,17 @@ def main():
         staged_db.unlink(missing_ok=True)
         logger.error("Could not finalize static timetable database: %s", exc)
         return 2
+
+    # Planning #151: store each repeated journey once. Off unless the build
+    # is asked for it; the default is the current (repeated) layout.
+    if timetable_layout_requested() == "shared":
+        try:
+            counts = timetable_shared_stop_times.convert(staged_db)
+        except (OSError, sqlite3.Error, RuntimeError) as exc:
+            staged_db.unlink(missing_ok=True)
+            logger.error("Shared stop-time layout failed - refusing to publish: %s", exc)
+            return 2
+        logger.info("Shared stop-time layout: %s", counts)
 
     final_validation = validate(staged_db)
     if final_validation["integrity"] != "ok" or final_validation["stale"] \
