@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-31T02:26:33Z",
+  "updated_at": "2026-11-20T20:04:21Z",
   "facts": [
     {
       "id": "bristol-single-fare-2026",
@@ -18,8 +18,8 @@
           "A4"
         ]
       },
-      "review_due": "2026-10-15",
-      "claim": "A First Bus adult single in Bristol is £2.60 from 1 January 2026.",
+      "review_due": "2026-12-31",
+      "claim": "A First Bus adult single in the Bristol fare zone is £2.60.",
       "prompt_hint": "Use the exact £2.60 fare only when a fare comparison genuinely fits the live bus event.",
       "requirements": [
         {
@@ -36,20 +36,20 @@
           ]
         },
         {
-          "label": "Bristol scope",
+          "label": "Bristol fare zone",
           "alternatives": [
-            "Bristol"
+            "Bristol fare zone",
+            "Bristol zone"
           ]
         }
       ],
-      "active_from": "2026-01-01",
+      "active_from": "2026-01-04",
       "active_until": "2026-12-31",
       "source": {
         "publisher": "First Bus",
         "title": "Tap On, Tap Off fares",
         "url": "https://www.firstbus.co.uk/bristol-bath-and-west/tickets/tap-tap",
-        "published_on": "2026-01-01",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -59,7 +59,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "First Bus adjusted operating profit rose 7% to £102.8 million in FY2026.",
       "prompt_hint": "Contrast the £102.8 million figure with the observed service, without implying that one individual bus proves a company-wide trend.",
       "requirements": [
@@ -104,7 +104,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -114,7 +114,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup reported an 8.8% adjusted operating margin for Regional Bus in FY2026, down from 9.7% in FY2025.",
       "prompt_hint": "The direction matters: profit rose, but the Regional Bus margin fell from 9.7% to 8.8%. Do not say the margin rose.",
       "requirements": [
@@ -165,7 +165,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -175,7 +175,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup recorded 390.4 million Regional Bus passenger journeys in FY2026, down from 403.3 million in FY2025.",
       "prompt_hint": "Use the exact annual totals. Do not present this national Regional Bus figure as Bristol-only data.",
       "requirements": [
@@ -228,7 +228,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -238,7 +238,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup returned £89 million to shareholders through dividends and its FY2026 £50 million buyback, then announced a further £100 million buyback.",
       "prompt_hint": "Keep the completed £89 million return separate from the newly announced £100 million programme.",
       "requirements": [
@@ -289,7 +289,7 @@
         "title": "FY2026 results",
         "url": "https://www.firstgroupplc.com/investors/results-centre.aspx",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -299,7 +299,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup adjusted revenue rose 25% to £1.716 billion in FY2026.",
       "prompt_hint": "This is a FirstGroup-wide figure, not Bristol or First Bus revenue.",
       "requirements": [
@@ -344,7 +344,7 @@
         "title": "FY2026 results",
         "url": "https://www.firstgroupplc.com/investors/results-centre.aspx",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -354,7 +354,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup chief executive Graham Sutherland received £2.974 million total remuneration in FY2026, including £2.337 million of annual bonus and long-term incentive awards.",
       "prompt_hint": "Say total remuneration, not salary. His salary was £605,700; £2.337 million came from the two variable-pay columns.",
       "requirements": [
@@ -406,7 +406,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -416,7 +416,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup said Regional Bus lost mileage fell from 1.8% to 1.5% in FY2026 and its Net Promoter Score rose from 11 to 17.",
       "prompt_hint": "This is a positive operational result. Give credit where it is due and do not claim it describes today's one observed journey.",
       "requirements": [
@@ -461,7 +461,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -471,7 +471,7 @@
           "FBRI"
         ]
       },
-      "review_due": "2026-12-15",
+      "review_due": "2027-06-17",
       "claim": "FirstGroup reported about £190 million of accelerated capital expenditure, principally on First Bus electrification, with 26% of its UK bus fleet zero-emission by March 2026.",
       "prompt_hint": "This is another positive result. Do not imply all Bristol buses are zero-emission.",
       "requirements": [
@@ -524,7 +524,7 @@
         "title": "Annual Report and Accounts 2026",
         "url": "https://www.firstgroupplc.com/~/media/Files/F/Firstgroup-Plc/reports-and-presentations/reports/annual-report-2026.pdf",
         "published_on": "2026-06-18",
-        "verified_on": "2026-09-15"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -534,7 +534,7 @@
           "SSWL"
         ]
       },
-      "review_due": "2026-11-01",
+      "review_due": "2027-05-20",
       "claim": "Stagecoach South Wales said in November 2025 that it ran 99.4% of its scheduled mileage over the previous 12 months.",
       "prompt_hint": "This is the company's own network-wide figure for a past year. Set it against the observed bus with dry wit, without implying that one bus disproves it.",
       "requirements": [
@@ -564,7 +564,7 @@
         "title": "Stagecoach South Wales celebrates success of £1 bus fares for young people and expansion",
         "url": "https://www.stagecoachbus.com/news/south-wales/2025/november/stagecoach-south-wales-celebrates-success-of-1-bus-fares-for-young-people-and-expansion",
         "published_on": "2025-11-04",
-        "verified_on": "2026-10-04"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -1620,7 +1620,7 @@
     },
     {
       "id": "diwali-2026",
-      "review_due": "2026-11-11",
+      "review_due": "2027-10-30",
       "label": "Diwali",
       "prompt_hint": "It's the Diwali festival of lights. A warm greeting and a light nod to lights on a dark evening is fine. Be warm and respectful: a greeting and at most a light nod to buses. No jokes about the faith, its practices or fasting, and no claims about beliefs beyond naming the day. Keep every bus fact accurate.",
       "requirements": [
@@ -1643,7 +1643,7 @@
         "publisher": "Wikipedia",
         "title": "Diwali",
         "url": "https://en.wikipedia.org/wiki/Diwali",
-        "verified_on": "2026-10-31"
+        "verified_on": "2026-11-20"
       }
     },
     {
@@ -2096,7 +2096,7 @@
         "publisher": "Wikipedia",
         "title": "Diwali",
         "url": "https://en.wikipedia.org/wiki/Diwali",
-        "verified_on": "2026-10-31"
+        "verified_on": "2026-11-20"
       }
     },
     {
