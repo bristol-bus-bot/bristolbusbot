@@ -664,15 +664,40 @@ RUNTIME_RECORD = (
 )
 
 
-def setup_command(component: str, release_dir: PurePosixPath) -> str:
+PYTHON_COMPONENTS = ("collector", "site", "pipeline")
+# Where a venv keeps its installed packages, relative to the venv.
+SITE_PACKAGES = ("venv/bin/python -c \"import os, sys, sysconfig; "
+                 "print(os.path.relpath(sysconfig.get_paths()['purelib'], sys.prefix))\"")
+
+
+def reuse_packages(previous: str) -> str:
+    """Copy the replaced release's installed packages into the new venv.
+
+    Used only when requirements.lock is unchanged, so the heavy, memory-hungry
+    pip install of the whole lock is skipped (#150). Only installed package
+    files are copied, never the old venv's scripts, whose first lines name the
+    old release's path; every service runs ``venv/bin/python -m``."""
+    old = q(f"{previous}/venv")
+    # If the copy can't be made, fall back to the full install, not a failure.
+    return (f"{{ packages=$({SITE_PACKAGES}) && test -d {old}/\"$packages\" && "
+            f"cp -a {old}/\"$packages\"/. venv/\"$packages\"/; }} || {{ {LOCKED_INSTALL}; }}")
+
+
+def setup_command(component: str, release_dir: PurePosixPath,
+                  reuse_from: str | None = None) -> str:
     cd = f"cd {q(release_dir)}"
+    if reuse_from and component in PYTHON_COMPONENTS:
+        packages = reuse_packages(reuse_from)
+        local = f"{LOCAL_INSTALL} --force-reinstall"   # our own code always changes
+    else:
+        packages, local = LOCKED_INSTALL, LOCAL_INSTALL
     if component == "collector":
-        return (f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
-                f"{LOCAL_INSTALL} . && {RUNTIME_RECORD}")
+        return (f"{cd} && python3 -m venv venv && {packages} && "
+                f"{local} . && {RUNTIME_RECORD}")
     if component == "site":
         return (
-            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
-            f"{LOCAL_INSTALL} ./_collector . && {RUNTIME_RECORD}"
+            f"{cd} && python3 -m venv venv && {packages} && "
+            f"{local} ./_collector . && {RUNTIME_RECORD}"
         )
     if component == "bot":
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
@@ -680,7 +705,7 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
     if component == "pipeline":
         return (
-            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
+            f"{cd} && python3 -m venv venv && {packages} && "
             f"{RUNTIME_RECORD} && "
             "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
             "load_geo_index()' && "
@@ -690,6 +715,17 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
             "chmod 0755 publish_to_github.sh"
         )
     raise RuntimeError(f"no setup command for {component}")
+
+
+def lock_unchanged(remote: Remote, previous: str, release_dir: PurePosixPath) -> bool:
+    """True when the release being replaced has the same requirements.lock
+    and a venv to copy from."""
+    if not previous:
+        return False
+    output = remote.run(
+        f"cmp -s {q(previous + '/requirements.lock')} {q(release_dir / 'requirements.lock')} "
+        f"&& test -d {q(previous + '/venv')} && echo same", check=False)
+    return output.strip() == "same"
 
 
 def low_priority(command: str) -> str:
@@ -948,7 +984,11 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
             f"/usr/local/libexec/bbb-verify-release {q(release_dir)} "
             f"{q(component)} {q(built.release)}"
         ), timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
-        remote.run(low_priority(setup_command(component, release_dir)),
+        reuse = component in PYTHON_COMPONENTS and lock_unchanged(remote, previous, release_dir)
+        if reuse:
+            log.info("%s: requirements.lock unchanged; reusing the installed packages", component)
+        remote.run(low_priority(setup_command(component, release_dir,
+                                              previous if reuse else None)),
                    timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
         atomic_switch(remote, component, str(release_dir))
         switched = True

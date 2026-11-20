@@ -839,3 +839,49 @@ def test_the_poll_query_starts_at_the_last_poll_before_the_deploy(tmp_path):
     output = subprocess.run([sys.executable, "-c", code, "2026-11-20T00:05:55+00:00"],
                             capture_output=True, text=True, check=True).stdout
     assert push.poll_gaps(output) == (2, [], "2026-11-20T00:06:11+00:00")
+
+
+def test_an_unchanged_lock_reuses_the_installed_packages_and_a_changed_one_installs(monkeypatch, tmp_path):
+    """#150: skip the memory-hungry pip install when requirements.lock hasn't changed."""
+    archive = tmp_path / "collector.tar.gz"
+    archive.write_bytes(b"archive")
+    built = push.BuiltRelease("collector", "release-2", archive, push.sha256_file(archive))
+    monkeypatch.setattr(push, "wait_healthy", lambda *_: True)
+    monkeypatch.setattr(push, "notify", lambda *_: None)
+    monkeypatch.setattr(push, "report_collector_polls", lambda *_a, **_k: True)
+    monkeypatch.setattr(push, "ensure_no_scheduled_heavy_job", lambda _remote: None)
+
+    class Pi(FakeRemote):
+        def __init__(self, lock_same):
+            super().__init__()
+            self.lock_same = lock_same
+
+        def run(self, command, check=True, timeout=None):
+            self.commands.append(command)
+            if command.startswith("test -L"):
+                return "/srv/releases/collector/release-1" + NL
+            if command.startswith("cmp -s"):
+                return "same" + NL if self.lock_same else ""
+            return ""
+
+    same = Pi(lock_same=True)
+    push.deploy_release(same, built)
+    setup = next(c for c in same.commands if "python3 -m venv venv" in c)
+    assert "cp -a" in setup and "/srv/releases/collector/release-1/venv" in setup
+    assert "--force-reinstall ." in setup                     # our own code is always reinstalled
+    assert setup.index("cp -a") < setup.index("--require-hashes")   # full install only as the fallback
+    assert "|| {" in setup
+
+    changed = Pi(lock_same=False)
+    push.deploy_release(changed, built)
+    setup = next(c for c in changed.commands if "python3 -m venv venv" in c)
+    assert "cp -a" not in setup and "--require-hashes" in setup and "--force-reinstall" not in setup
+
+
+def test_reuse_is_only_for_python_components_and_only_with_a_previous_release():
+    from pathlib import PurePosixPath
+    release = PurePosixPath("/srv/releases/bot/r2")
+    assert push.setup_command("bot", release, "/srv/releases/bot/r1") == push.setup_command("bot", release)
+    assert "cp -a" in push.setup_command("pipeline", release, "/srv/old")
+    assert "cp -a" not in push.setup_command("pipeline", release)
+    assert push.lock_unchanged(FakeRemote(), "", release) is False
