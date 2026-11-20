@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022"
+  },
+  "include": [
+    "static/js/status_filter.js",
+    "static/js/util.js",
+    "static/js/search_logic.js",
+    "static/js/vehicle_sidebar_logic.js"
+  ]
+}

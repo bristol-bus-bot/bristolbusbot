@@ -3,15 +3,25 @@
  * makes the user-facing thresholds testable without a browser framework.
  */
 
+/**
+ * @param {unknown} value
+ */
 function compact(value) {
     return String(value ?? "").toLowerCase().replace(/\s+/g, "");
 }
 
+/**
+ * @param {string} routeKey
+ */
 function routeParts(routeKey) {
     const parts = String(routeKey).split("_");
     return { operator: parts[0], line: parts.slice(1).join("_") };
 }
 
+/**
+ * @param {LiveBus | null | undefined} bus
+ * @param {string} routeKey
+ */
 export function isBusOnRoute(bus, routeKey) {
     const { operator, line } = routeParts(routeKey);
     return Boolean(bus
@@ -20,6 +30,11 @@ export function isBusOnRoute(bus, routeKey) {
         && bus.eventType !== "depot");
 }
 
+/**
+ * @param {FleetSearchRecord[] | null | undefined} fleetData
+ * @param {LiveBus[] | null | undefined} latestBusData
+ * @param {string | null | undefined} query
+ */
 export function getFleetMatches(
     fleetData, latestBusData, query, limit = 8,
 ) {
@@ -79,6 +94,12 @@ export function getFleetMatches(
     return { matches: tagged.slice(0, limit), total: tagged.length };
 }
 
+/**
+ * @param {Record<string, Pick<RouteShape, 'route' | 'operator' | 'direction' | 'points'>[]> | null | undefined} routeIndex
+ * @param {LiveBus[] | null | undefined} latestBusData
+ * @param {string | null | undefined} query
+ * @param {Record<string, string>} operatorNames
+ */
 export function getRouteMatches(
     routeIndex, latestBusData, query, operatorNames = {},
 ) {
@@ -134,6 +155,10 @@ export function getRouteMatches(
         || a.operatorName.localeCompare(b.operatorName));
 }
 
+/**
+ * @param {LiveBus[] | null | undefined} latestBusData
+ * @param {string} routeKey
+ */
 export function routeFallbackCandidates(latestBusData, routeKey, limit = 4) {
     const active = (Array.isArray(latestBusData) ? latestBusData : [])
         .filter(bus => isBusOnRoute(bus, routeKey))
@@ -153,14 +178,23 @@ export function routeFallbackCandidates(latestBusData, routeKey, limit = 4) {
     return chosen;
 }
 
+/**
+ * @param {readonly unknown[]} routeMatches
+ */
 export function fleetResultLimit(routeMatches) {
     return routeMatches.length ? 3 : 8;
 }
 
+/**
+ * @param {boolean} mobile
+ */
 export function routeSelectionSheetState(mobile) {
     return mobile ? "peek" : "collapsed";
 }
 
+/**
+ * @param {boolean} mobile
+ */
 export function routeFitOptions(mobile, viewportHeight = 800) {
     if (!mobile) return { padding: [40, 40] };
     return {
@@ -172,6 +206,11 @@ export function routeFitOptions(mobile, viewportHeight = 800) {
     };
 }
 
+/**
+ * @param {number} routeCount
+ * @param {number} stopCount
+ * @param {number} busCount
+ */
 export function searchAnnouncement(routeCount, stopCount, busCount) {
     return `${routeCount} route${routeCount === 1 ? "" : "s"}, `
         + `${stopCount} stop${stopCount === 1 ? "" : "s"} and `
