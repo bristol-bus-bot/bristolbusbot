@@ -1,0 +1,13 @@
+[Unit]
+Description=Write the nightly small data export after the audit publish
+
+[Timer]
+# After the 07:00 rollup and 07:30 publish, before the 08:00 Slack update.
+OnCalendar=*-*-* 07:45:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=30s
+Unit=bbb-daily-export.service
+
+[Install]
+WantedBy=timers.target

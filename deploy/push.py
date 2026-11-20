@@ -394,6 +394,8 @@ def populate_release(component: str, root: Path) -> None:
         copy_file(REPO / "audit-site/AUDIT_METHODOLOGY.md",
                   root / "AUDIT_METHODOLOGY.md")
         copy_file(DEPLOY / "publish_to_github.sh", root / "publish_to_github.sh")
+        # The nightly export (#152) runs the repository's secret scan on its files.
+        copy_file(REPO / "scripts/scan_secrets.py", root / "scan_secrets.py")
     else:
         raise RuntimeError(f"cannot build release for {component}")
 

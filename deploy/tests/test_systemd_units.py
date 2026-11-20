@@ -694,3 +694,25 @@ def test_disk_priorities_take_effect_and_there_is_no_manual_heavy_wrapper():
     assert installer.count("/usr/local/bin/bbb-heavy") == 1
     assert '"$stage/bbb_heavy.sh"' not in installer
     assert "bbb_heavy" not in (deploy / "push.py").read_text(encoding="utf-8")
+
+
+def test_daily_export_is_bounded_locked_read_only_and_after_the_publish():
+    """#152: one small export a night, never in the way of the collector."""
+    service = (SYSTEMD / "bbb-daily-export.service").read_text(encoding="utf-8")
+    timer = (SYSTEMD / "bbb-daily-export.timer").read_text(encoding="utf-8")
+    assert "--name daily-export" in service
+    assert "flock -w 900 -E 75 /run/lock/bristolbusbot/heavy-io.lock" in service
+    assert "--skip-exit-code 75" in service
+    assert "MemoryMax=" in service and "TimeoutStartSec=20min" in service
+    assert ("ReadOnlyPaths=/var/lib/bristolbusbot/collector/audit.db "
+            "/var/lib/bristolbusbot/bot") in service
+    assert ("ReadWritePaths=/var/lib/bristolbusbot/daily-export "
+            "/var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot") in service
+    assert "After=bbb-audit-rollup.service bbb-audit-publish.service" in service
+    assert "OnCalendar=*-*-* 07:45:00" in timer
+    job = _settings("daily-export")
+    assert int(job["Nice"]) >= 10 and int(job["IOWeight"]) <= 10 and int(job["CPUWeight"]) <= 50
+    tmpfiles = (SYSTEMD.parent / "tmpfiles" / "bristolbusbot.conf").read_text(encoding="utf-8")
+    assert "d /var/lib/bristolbusbot/daily-export 0750 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -" in tmpfiles
+    installer = (SYSTEMD.parent / "install_unified_deploy.sh").read_text(encoding="utf-8")
+    assert "enable --now bbb-daily-export.timer" in installer

@@ -514,6 +514,9 @@ fi
 /usr/bin/systemctl enable --now bbb-collector-anomaly.timer
 # Publishes descriptions approved by their checks; does nothing otherwise.
 /usr/bin/systemctl enable --now bbb-blurb-promote.timer
+# Nightly small data export (#152). Until its deploy key is set up it records
+# "store_not_configured" and the daily update says so; nothing else waits on it.
+/usr/bin/systemctl enable --now bbb-daily-export.timer
 for timer in "$stage/systemd"/*.timer; do
     timer_name=$(basename "$timer")
     if [ "$timer_name" = bbb-timetable-shadow.timer ] && \
