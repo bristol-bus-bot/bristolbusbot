@@ -62,6 +62,10 @@ def create_app(config: Config | None = None) -> Flask:
     from .services.route_hours import RouteHours
     app.extensions["bbb_route_hours"] = RouteHours(cfg.audit_hourly_dir)
     from .services.route_pages import RoutePages
+    from .services.pinch_points import PinchPoints
+    from .routes.api_misc import pinch_point_shapes, pinch_point_stops
+    app.extensions["bbb_pinch_points"] = PinchPoints(
+        cfg.audit_site_dir, pinch_point_stops, pinch_point_shapes)
     app.extensions["bbb_route_pages"] = RoutePages(cfg.audit_site_dir)
     app.extensions["bbb_audit_integration"] = AuditIntegration(
         cfg.audit_integration_json, cfg.audit_max_age_seconds)

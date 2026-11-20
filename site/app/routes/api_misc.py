@@ -159,6 +159,41 @@ def api_route_shapes():
     return jsonify(_cache("route_shapes", build))
 
 
+def pinch_point_stops() -> dict:
+    """Stop code -> (lat, lon, name), from the same list /api/stops caches."""
+    from ..services import stops as stops_svc
+    cache = current_app.extensions.setdefault("bbb_cache", {})
+    if "stops" not in cache:
+        cache["stops"] = stops_svc.all_stops(db.gtfs())
+    return {s["stop_code"]: (s["latitude"], s["longitude"], s["common_name"])
+            for s in cache["stops"]}
+
+
+def pinch_point_shapes() -> dict:
+    """(route, operator, direction) -> list of shape variants, [[lat, lon], ...]."""
+    shapes: dict = {}
+    g = db.gtfs()
+    if not g.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='route_shapes'").fetchone():
+        return shapes
+    for name, noc, direction, points in g.execute(
+            "SELECT route_name, operator_noc, direction_id, points_json FROM route_shapes"):
+        try:
+            shapes.setdefault((name, noc, direction), []).append(json.loads(points))
+        except ValueError:
+            continue
+    return shapes
+
+
+@bp.route("/api/pinch-points")
+def api_pinch_points():
+    """Road sections where the timetable doesn't allow enough time (#145)."""
+    band = (request.args.get("band") or "pm_peak")[:12]
+    day = (request.args.get("day") or "weekday")[:8]
+    response = jsonify(current_app.extensions["bbb_pinch_points"].get(band, day))
+    response.headers["Cache-Control"] = "public, max-age=900"
+    return response
+
+
 @bp.route("/api/boundary")
 def api_boundary():
     def build():
