@@ -74,12 +74,36 @@ def paths(root: Path = ROOT) -> tuple[Path, Path, Path, Path]:
     )
 
 
+# The shared layout (#151) stores each repeated journey's stop times once:
+# stop_times is a view over pattern_stop_times, with these indexes instead.
+SHARED_LAYOUT_INDEXES = {
+    "idx_pattern_stop_times_seq",
+    "idx_pattern_stop_times_stop",
+    "idx_trips_stop_pattern",
+}
+REPEATED_LAYOUT_INDEXES = {"idx_stop_times_stop", "idx_stop_times_trip_seq"}
+
+
+def _shared_layout(connection: sqlite3.Connection) -> bool:
+    row = connection.execute(
+        "SELECT type FROM sqlite_master WHERE name='stop_times'").fetchone()
+    if not row or row[0] != "view":
+        return False
+    if not connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pattern_stop_times'").fetchone():
+        raise RuntimeError("stop_times is a view but pattern_stop_times is missing")
+    return True
+
+
 def _validate_schema(connection: sqlite3.Connection, *,
                      require_stop_routes: bool = False) -> set[str]:
+    shared = _shared_layout(connection)
     tables = {
         row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")
     }
+    if shared:
+        tables.add("stop_times")
     missing_tables = sorted(set(REQUIRED_COLUMNS) - tables)
     if missing_tables:
         raise RuntimeError(
@@ -101,7 +125,8 @@ def _validate_schema(connection: sqlite3.Connection, *,
         row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='index'")
     }
-    missing_indexes = sorted(REQUIRED_INDEXES - indexes)
+    required_indexes = (REQUIRED_INDEXES - REPEATED_LAYOUT_INDEXES) | SHARED_LAYOUT_INDEXES         if shared else REQUIRED_INDEXES
+    missing_indexes = sorted(required_indexes - indexes)
     if missing_indexes:
         raise RuntimeError(
             "missing required timetable indexes: " + ", ".join(missing_indexes))
