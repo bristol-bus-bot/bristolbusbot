@@ -9,16 +9,18 @@ export const BANDS = [
 ];
 export const DAYS = [['weekday', 'Weekdays'], ['weekend', 'Weekends']];
 export const LEVELS = [
-    { min: 7, level: 'high', colour: '#b91c1c', label: '7+ min' },
-    { min: 4, level: 'mid', colour: '#ea580c', label: '4–7 min' },
-    { min: 0, level: 'low', colour: '#f2a900', label: '2–4 min' },
+    { min: 7, level: 'high', colour: '#b91c1c', label: '7+', words: '7 or more' },
+    { min: 4, level: 'mid', colour: '#ea580c', label: '4–7', words: '4 to 7' },
+    { min: 0, level: 'low', colour: '#f2a900', label: '2–4', words: '2 to 4' },
 ];
+export const DEFINITION = 'Road sections where buses usually take at least 2 minutes longer than the '
+    + 'timetable allows, over 4 weeks. It describes the timetable, not the drivers.';
 
 export function lostLevel(minutes) {
     return LEVELS.find(l => minutes >= l.min) || LEVELS[LEVELS.length - 1];
 }
 
-const minutes = value => `${Number(value).toFixed(value % 1 ? 1 : 0)} min`;
+const wholeMinutes = value => `${Math.round(Number(value))} min`;
 
 export function formatWindow(window) {
     if (!window?.from || !window?.to) return '';
@@ -27,21 +29,39 @@ export function formatWindow(window) {
     return `${date(window.from)} to ${date(window.to)}`;
 }
 
-export function routeLine(route) {
-    return `Route ${route.route}: the timetable allows ${minutes(route.timetable_min)}, ` +
-        `buses usually take ${minutes(route.typical_min)} (${route.journeys} journeys)`;
+/** Two bars on one scale, as the audit page's timetable-fit bars. */
+export function minuteBars(route, scale) {
+    const row = (label, value, kind) => {
+        const fill = el('span', { class: `pinch-fill pinch-fill-${kind}` }, []);
+        fill.style.width = `${Math.min(100, (100 * Number(value)) / scale)}%`;
+        return el('div', { class: 'pinch-mins' }, [
+            el('span', {}, [label]),
+            el('span', { class: 'pinch-track' }, [fill]),
+            el('span', {}, [wholeMinutes(value)]),
+        ]);
+    };
+    return [row('Timetable', route.timetable_min, 'timetable'), row('Usually', route.typical_min, 'usual')];
 }
 
-export function popupContent(props, window, bandLabel) {
+export function popupContent(props, window, when) {
     const place = (name, town) => (town ? `${name}, ${town}` : name);
-    return el('div', { class: 'pinch-popup' }, [
-        el('strong', {}, [`${place(props.from, props.from_place)} → ${place(props.to, props.to_place)}`]),
-        el('p', { class: 'pinch-popup-when' }, [`${bandLabel}. Measured ${formatWindow(window)}.`]),
-        el('ul', {}, props.routes.map(r => el('li', {}, [routeLine(r)]))),
-        props.approximate
-            ? el('p', { class: 'pinch-popup-note' }, ['Line drawn straight between the two stops.'])
-            : null,
-    ].filter(Boolean));
+    const stretch = `${place(props.from, props.from_place)} → ${place(props.to, props.to_place)}`;
+    const scale = Math.max(1, ...props.routes.map(r => Number(r.typical_min) || 0));
+    const range = formatWindow(window);
+    const label = `${stretch}. ${DEFINITION}`
+        + (props.approximate ? ' The line is drawn straight between the two stops.' : '');
+    return el('div', { class: 'pinch-popup', 'aria-label': label }, [
+        el('strong', { class: 'pinch-popup-heading' }, [stretch]),
+        ...props.routes.map(r => el('div', {
+            class: 'pinch-popup-route',
+            'aria-label': `Route ${r.route}, ${when}: the timetable allows ${wholeMinutes(r.timetable_min)}, `
+                + `buses usually take ${wholeMinutes(r.typical_min)}, from ${r.journeys} journeys, ${range}.`,
+        }, [
+            el('p', { class: 'pinch-popup-when' }, [`Route ${r.route} · ${when}`]),
+            ...minuteBars(r, scale),
+            el('p', { class: 'pinch-popup-count' }, [`${r.journeys} journeys · ${range}`]),
+        ])),
+    ]);
 }
 
 export function lineStyle(props) {
@@ -64,16 +84,21 @@ export function createPinchPointLayer(map, { host, fetchImpl = fetch, L = window
         class: 'pinch-choice', 'aria-pressed': String(key === day), 'data-day': key,
         onClick: () => { day = key; sync(); load(); },
     }, [label]));
-    const legend = el('div', { class: 'pinch-legend', 'aria-label': 'Minutes lost' },
-        [...LEVELS].reverse().map(l => el('span', { class: `pinch-key pinch-key-${l.level}` }, [l.label])));
-    const panel = el('section', { class: 'pinch-panel', 'aria-label': 'Pinch points' }, [
-        el('h2', {}, ['Not enough time allowed']),
+    const legend = el('div', {
+        class: 'pinch-legend',
+        'aria-label': 'Extra minutes buses usually take, compared with the timetable: '
+            + [...LEVELS].reverse().map(l => `${l.words} minutes`).join(', '),
+    }, [
+        el('span', { class: 'pinch-legend-label' }, ['Extra minutes buses usually take']),
+        el('span', { class: 'pinch-keys' },
+            [...LEVELS].reverse().map(l => el('span', { class: `pinch-key pinch-key-${l.level}` }, [l.label]))),
+    ]);
+    const panel = el('section', { class: 'pinch-panel', 'aria-label': `Where the timetable is too tight. ${DEFINITION}` }, [
+        el('h2', {}, ['Where the timetable is too tight']),
         el('div', { class: 'pinch-choices', role: 'group', 'aria-label': 'Time of day' }, bandButtons),
         el('div', { class: 'pinch-choices', role: 'group', 'aria-label': 'Days' }, dayButtons),
         legend,
         status,
-        el('p', { class: 'pinch-note' }, [
-            'Where buses usually take 2+ minutes longer than timetabled. It describes the timetable, not drivers. Tap a line for figures.']),
     ]);
     panel.hidden = true;
     host.appendChild(panel);
@@ -84,6 +109,16 @@ export function createPinchPointLayer(map, { host, fetchImpl = fetch, L = window
     function sync() {
         bandButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.band === band)));
         dayButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.day === day)));
+    }
+
+    /** Pop-ups open clear of the panel, so its heading is never hidden (phones). */
+    function popupOptions() {
+        // On a phone the panel spans the map's width; on a desktop it sits to one side.
+        const narrow = (map.getSize?.().x ?? 1000) < 769;
+        const below = panel.hidden || !narrow ? 10 : (panel.offsetTop || 0) + (panel.offsetHeight || 0) + 12;
+        return { maxWidth: 300, minWidth: 220, autoPan: true,
+                 autoPanPaddingTopLeft: L?.point ? L.point(10, below) : [10, below],
+                 autoPanPaddingBottomRight: L?.point ? L.point(10, 90) : [10, 90] };
     }
 
     async function load() {
@@ -99,21 +134,21 @@ export function createPinchPointLayer(map, { host, fetchImpl = fetch, L = window
         if (mine !== request || panel.hidden) return;
         if (layer) { map.removeLayer(layer); layer = null; }
         if (!body.available) {
-            status.textContent = 'No current data: the nightly audit files are missing or out of date.';
+            status.textContent = 'No current data';
+            status.setAttribute('aria-label', 'No current data: the nightly audit files are missing or out of date.');
             return;
         }
-        const bandLabel = `${(DAYS.find(d => d[0] === day) || [])[1]}, ${(BANDS.find(b => b[0] === band) || [])[1]}`;
+        const when = `${(DAYS.find(d => d[0] === day) || [])[1]} · ${(BANDS.find(b => b[0] === band) || [])[1]}`;
         layer = L.geoJSON(body, {
             style: feature => lineStyle(feature.properties),
             onEachFeature: (feature, line) => {
-                line.bindPopup(() => popupContent(feature.properties, body.window, bandLabel),
-                               { maxWidth: 320 });
+                line.bindPopup(() => popupContent(feature.properties, body.window, when), popupOptions());
             },
         }).addTo(map);
         const count = body.features.length;
-        status.textContent = count
-            ? `${count} section${count === 1 ? '' : 's'}, ${formatWindow(body.window)}.`
-            : `None at this time, ${formatWindow(body.window)}.`;
+        status.textContent = `${formatWindow(body.window)} · tap a line`;
+        status.setAttribute('aria-label',
+            `${count} section${count === 1 ? '' : 's'} shown, measured ${formatWindow(body.window)}. Tap a line for its figures.`);
     }
 
     return {

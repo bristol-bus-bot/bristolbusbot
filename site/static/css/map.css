@@ -164,7 +164,9 @@
   cursor: pointer;
 }
 .pinch-choice[aria-pressed="true"] { background: var(--fg-1); border-color: var(--fg-1); color: var(--surface-1); }
-.pinch-legend { display: flex; gap: 8px; margin: 2px 0 6px; color: var(--fg-2); }
+.pinch-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 2px 0 4px; color: var(--fg-2); }
+.pinch-legend-label { font-size: 12px; }
+.pinch-keys { display: flex; gap: 8px; }
 .pinch-key::before {
   content: "";
   display: inline-block;
@@ -177,13 +179,27 @@
 .pinch-key-low::before { background: #f2a900; }
 .pinch-key-mid::before { background: #ea580c; }
 .pinch-key-high::before { background: #b91c1c; }
-.pinch-status { margin: 0 0 4px; font-weight: 600; }
-.pinch-note { margin: 0; color: var(--fg-2); font-size: 12px; }
+.pinch-status { margin: 0; color: var(--fg-3); font-size: 12px; }
+/* Pop-up: the audit page's timetable-fit bars. */
 .pinch-popup { padding: 4px 30px 4px 8px; }
-.pinch-popup strong { display: block; margin-bottom: 2px; }
+.pinch-popup-heading { display: block; margin-bottom: 4px; }
+.pinch-popup-route + .pinch-popup-route { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .pinch-popup p { margin: 2px 0; }
-.pinch-popup ul { margin: 4px 0 0; padding-left: 16px; }
-.pinch-popup-note { color: var(--fg-3); font-size: 12px; }
+.pinch-popup-when { color: var(--fg-2); }
+.pinch-popup-count { color: var(--fg-3); font-size: 12px; }
+.pinch-mins {
+  display: grid;
+  grid-template-columns: 70px 1fr 48px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--fg-2);
+}
+.pinch-track { height: 8px; border-radius: 4px; background: var(--surface-2); }
+.pinch-fill { display: block; height: 8px; border-radius: 4px; }
+.pinch-fill-timetable { background: var(--fg-3); }
+.pinch-fill-usual { background: #b91c1c; }
 @media (max-width: 768px) {
   .pinch-panel { left: 50px; width: calc(100% - 66px); font-size: 12px; padding: 8px 10px; }
   .pinch-choice { min-height: 36px; }
