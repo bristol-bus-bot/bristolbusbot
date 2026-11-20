@@ -614,6 +614,51 @@ def timetable_size_lines(snapshot: dict, previous_state: dict, today: date) -> l
     return [line + "."]
 
 
+DAILY_EXPORT_NAMES = {"readings": "readings", "rare-workings": "rare workings",
+                      "writer-drafts": "writer drafts"}
+DAILY_EXPORT_REASONS = {
+    "store_not_configured": "the private store is not set up yet",
+    "push_failed": "it could not reach the private store",
+    "source_missing": "its source file is missing",
+    "source_unreadable": "its source could not be read",
+    "source_table_missing": "a table it needs is missing",
+    "query_would_scan": "it would have had to read a whole table, so it stopped",
+    "secret_scan_finding": "the secret scan flagged something, so nothing was sent",
+    "file_too_large": "the file was larger than allowed",
+}
+
+
+def daily_export_lines(snapshot: dict, today: date) -> list[str]:
+    """One plain line on the nightly small data export (#152)."""
+    status = _dict(snapshot.get("daily_export"))
+    if not status:
+        return []
+    try:
+        finished = datetime.fromisoformat(str(status.get("finished_at")))
+        stale = (today - finished.astimezone(timezone.utc).date()).days > 1
+    except ValueError:
+        stale = True
+    if stale:
+        return ["Data export for the PC: no run since "
+                f"{str(status.get('finished_at'))[:10]}."]
+    parts = _dict(status.get("parts"))
+    failed = {name: _dict(part) for name, part in parts.items() if not _dict(part).get("ok")}
+    left = sum(_count(_dict(part).get("days_left")) or 0 for part in parts.values())
+    if not failed:
+        line = "Data export for the PC: readings, rare workings and writer drafts all sent"
+        return [line + (f"; {left} catch-up days still to go." if left else ".")]
+    reasons = {_dict(part).get("reason") for part in failed.values()}
+    if reasons == {"store_not_configured"}:
+        return ["Data export for the PC: not running yet, the private store is not set up."]
+    sent = [DAILY_EXPORT_NAMES.get(n, n) for n in parts if n not in failed]
+    failures = "; ".join(
+        f"{DAILY_EXPORT_NAMES.get(name, name)} failed because "
+        f"{DAILY_EXPORT_REASONS.get(str(part.get('reason')), 'of an unexpected error')}"
+        for name, part in failed.items())
+    return [f"Data export for the PC: {failures}"
+            + (f"; {' and '.join(sent)} sent." if sent else ".")]
+
+
 def change_lines(snapshot: dict, previous_state: dict) -> list[str]:
     """Standing notes only when their count changed since yesterday."""
     before = _dict(previous_state.get("counts"))
@@ -744,6 +789,7 @@ def daily_message(snapshot: dict, previous_state: dict | None = None,
         *([timetable_note] if timetable_note else []),
         *change_lines(snapshot, previous_state),
         *timetable_size_lines(snapshot, previous_state, today),
+        *daily_export_lines(snapshot, today),
         *notes,
         *published_description_lines(today, history, since),
         *moving_occasion_lines(today),

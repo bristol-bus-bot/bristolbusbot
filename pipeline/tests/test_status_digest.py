@@ -491,3 +491,28 @@ def test_the_timetable_size_is_shown_on_mondays_with_the_weekly_change():
     snapshot["timetable_size"]["bytes"] = 760 * 1024 * 1024
     assert any("over 90% of the 768 MiB the Pi accepts" in line
                for line in status_digest.problems(snapshot, date(2026, 11, 17)))
+
+
+def test_daily_export_line_says_which_part_failed_and_why():
+    """#152: one plain line; each part reported on its own."""
+    today = date(2026, 11, 20)
+    ok = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
+        "readings": {"ok": True, "days_left": 3}, "rare-workings": {"ok": True, "days_left": 0},
+        "writer-drafts": {"ok": True}}}
+    assert status_digest.daily_export_lines({"daily_export": ok}, today) == [
+        "Data export for the PC: readings, rare workings and writer drafts all sent; "
+        "3 catch-up days still to go."]
+    failed = json.loads(json.dumps(ok))
+    failed["parts"]["writer-drafts"] = {"ok": False, "reason": "push_failed"}
+    assert status_digest.daily_export_lines({"daily_export": failed}, today) == [
+        "Data export for the PC: writer drafts failed because it could not reach the "
+        "private store; readings and rare workings sent."]
+    unset = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
+        name: {"ok": False, "reason": "store_not_configured"}
+        for name in ("readings", "rare-workings", "writer-drafts")}}
+    assert status_digest.daily_export_lines({"daily_export": unset}, today) == [
+        "Data export for the PC: not running yet, the private store is not set up."]
+    stale = {**ok, "finished_at": "2026-11-17T07:46:00+00:00"}
+    assert status_digest.daily_export_lines({"daily_export": stale}, today) == [
+        "Data export for the PC: no run since 2026-11-17."]
+    assert status_digest.daily_export_lines({}, today) == []

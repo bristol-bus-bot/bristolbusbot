@@ -1890,6 +1890,18 @@ def timetable_size(path: Path | None = None) -> dict | None:
     return {"bytes": size, "limit_bytes": TIMETABLE_LIMIT_BYTES}
 
 
+DAILY_EXPORT_STATUS = STATE / "daily-export.json"
+
+
+def daily_export(path: Path | None = None) -> dict | None:
+    """The nightly export's own status file (#152): parts, days, reasons."""
+    try:
+        value = json.loads((path or DAILY_EXPORT_STATUS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def timetable_problem_sentence(automation: dict) -> str | None:
     """What happened to a rejected timetable, in the alert's own words."""
     if automation.get("status") != "failed":
@@ -2060,6 +2072,7 @@ def main() -> int:
         # Plain words for the daily message, so it never prints job names or
         # codes, and says the same thing as the immediate alert (#141).
         "timetable_size": timetable_size(),
+        "daily_export": daily_export(),
         "failures": job_failure_sentences(
             {name: check for name, check in jobs.items() if name != "timetable-automation"}),
         "timetable_problem": timetable_problem_sentence(timetable_automation),
