@@ -151,6 +151,44 @@ workstation, passed in a command argument or printed. A site code deployment
 requires the key to be present in `/etc/bristolbusbot/site.env` and refuses to
 proceed when it is missing.
 
+### Nightly small data export (use this instead)
+
+Fresh data for the PC comes from the Pi's own nightly job, not from anything
+run by hand (planning #152). At 07:45, after the rollup and the publish,
+`bbb-daily-export.service` writes three small files and pushes each one as its
+own branch to the private repository `bristol-bus-bot/bristolbusbot-daily-data`.
+It uses a deploy key, the same way the audit publish pushes the public site.
+
+| Folder | What | For |
+|---|---|---|
+| `readings/` | One service day: timing-point readings, expected trips, coverage and summary rows, matching receipts, poll health (gzipped SQLite) | analysis on the PC |
+| `rare-workings/` | The bot's rare-working shadow observations first seen that day (gzipped JSON lines) | #67 |
+| `writer-drafts/` | The writer's training drafts added since the last export (gzipped JSON lines) | #93 |
+
+Each part succeeds or fails on its own, and the 08:00 daily update says so in
+one line. Days missed since 14 Nov, or any missed later, are caught up a few
+per night. Branches older than 120 days are deleted by the same job. Every
+file passes `scripts/scan_secrets.py`'s patterns before it leaves the Pi.
+
+On the PC, from the repository root:
+
+```powershell
+python deploy\get_daily_exports.py --combine
+```
+
+This downloads any days not yet in `C:\dev\bbb-research\daily\` using your
+own GitHub sign-in. `--combine` rebuilds `daily\readings-combined.db`.
+
+**One-time setup** (Tom, once). Until it is done the job records "store not
+set up" and nothing else is affected:
+
+1. Create the private repository `bristol-bus-bot/bristolbusbot-daily-data`
+   on GitHub, empty.
+2. On the Pi, as the deploy user, make its key:
+   `ssh-keygen -t ed25519 -N "" -C bbb-daily-export -f ~/.ssh/bbb_daily_export`
+3. Add `~/.ssh/bbb_daily_export.pub` to that repository's deploy keys, with
+   **Allow write access** ticked.
+
 ### Private collector research dataset
 
 **An assistant must not run this export.** It builds a large copy on the Pi

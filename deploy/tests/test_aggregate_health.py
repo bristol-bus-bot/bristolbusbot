@@ -1,10 +1,28 @@
 import json
 import sqlite3
 import stat
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from deploy import aggregate_health
+
+
+def test_editorial_reviews_count_overdue_facts_and_occasions(tmp_path):
+    path = tmp_path / "editorial-context.json"
+    today = date(2026, 11, 20)
+    assert aggregate_health.editorial_reviews(today, path) == {}
+    path.write_text(json.dumps({
+        "facts": [{"review_due": "2026-10-15"}, {"review_due": "2026-11-20"},
+                  {"review_due": "invalid"}, {}],
+        "occasions": [{"review_due": "2026-11-10"}],
+        "news": [{"review_due": "2026-01-01"}],
+    }), encoding="utf-8")
+    assert aggregate_health.editorial_reviews(today, path) == {
+        "count": 2, "oldest_due": "2026-10-15",
+    }
+    assert aggregate_health.editorial_reviews(date(2026, 10, 15), path) == {
+        "count": 0, "oldest_due": None,
+    }
 
 
 def test_previous_boot_running_job_is_interrupted_even_with_recent_success(tmp_path, monkeypatch):

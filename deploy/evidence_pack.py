@@ -54,7 +54,8 @@ def open_read_only(path: Path) -> sqlite3.Connection:
 
 def table_exists(connection: sqlite3.Connection, table: str) -> bool:
     return connection.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        # A view counts: stop_times is one in the shared layout (planning #151).
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name=?", (table,)
     ).fetchone() is not None
 
 

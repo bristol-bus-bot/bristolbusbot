@@ -301,6 +301,17 @@ def test_moving_occasions_without_next_years_dates_are_flagged(tmp_path):
     assert status_digest.moving_occasion_lines(date(2027, 4, 28), tmp_path / "missing.json") == []
 
 
+def test_daily_message_shows_editorial_reviews_only_when_overdue(tmp_path, monkeypatch):
+    monkeypatch.setattr(status_digest, "EDITORIAL_CONTEXT", tmp_path / "missing.json")
+    today = date(2026, 11, 20)
+    snapshot = {"editorial_reviews": {"count": 1, "oldest_due": "2026-10-15"}}
+    message = status_digest.daily_message(snapshot, today=today, history=tmp_path)
+    assert "*Today*\n- Facts due a check: 1 (oldest due 15 Oct)" in message
+    snapshot["editorial_reviews"] = {"count": 0, "oldest_due": None}
+    assert "Facts due a check" not in status_digest.daily_message(
+        snapshot, today=today, history=tmp_path)
+
+
 def test_daily_phone_summary_only_says_the_state(monkeypatch):
     monkeypatch.setattr(status_digest, "recovery_status", lambda s, t=None: ([], []))
     assert status_digest.phone_summary({"status": "ok", "issues": []}) == (
@@ -491,3 +502,28 @@ def test_the_timetable_size_is_shown_on_mondays_with_the_weekly_change():
     snapshot["timetable_size"]["bytes"] = 760 * 1024 * 1024
     assert any("over 90% of the 768 MiB the Pi accepts" in line
                for line in status_digest.problems(snapshot, date(2026, 11, 17)))
+
+
+def test_daily_export_line_says_which_part_failed_and_why():
+    """#152: one plain line; each part reported on its own."""
+    today = date(2026, 11, 20)
+    ok = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
+        "readings": {"ok": True, "days_left": 3}, "rare-workings": {"ok": True, "days_left": 0},
+        "writer-drafts": {"ok": True}}}
+    assert status_digest.daily_export_lines({"daily_export": ok}, today) == [
+        "Data export for the PC: readings, rare workings and writer drafts all sent; "
+        "3 catch-up days still to go."]
+    failed = json.loads(json.dumps(ok))
+    failed["parts"]["writer-drafts"] = {"ok": False, "reason": "push_failed"}
+    assert status_digest.daily_export_lines({"daily_export": failed}, today) == [
+        "Data export for the PC: writer drafts failed because it could not reach the "
+        "private store; readings and rare workings sent."]
+    unset = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
+        name: {"ok": False, "reason": "store_not_configured"}
+        for name in ("readings", "rare-workings", "writer-drafts")}}
+    assert status_digest.daily_export_lines({"daily_export": unset}, today) == [
+        "Data export for the PC: not running yet, the private store is not set up."]
+    stale = {**ok, "finished_at": "2026-11-17T07:46:00+00:00"}
+    assert status_digest.daily_export_lines({"daily_export": stale}, today) == [
+        "Data export for the PC: no run since 2026-11-17."]
+    assert status_digest.daily_export_lines({}, today) == []

@@ -1,0 +1,42 @@
+[Unit]
+Description=Bristol Bus Bot nightly small data export to the private store (#152)
+After=bbb-audit-rollup.service bbb-audit-publish.service
+
+[Service]
+Type=oneshot
+User=@BBB_DEPLOY_USER@
+Group=@BBB_DEPLOY_USER@
+WorkingDirectory=@BBB_DEPLOY_BASE@/current/pipeline
+# The private repository and its write-only deploy key (one-time setup, see
+# deploy/README.md). Until the key exists the job records "store_not_configured".
+Environment=BBB_DAILY_EXPORT_REMOTE=git@github.com:bristol-bus-bot/bristolbusbot-daily-data.git
+Environment=BBB_DAILY_EXPORT_KEY=@BBB_REMOTE_HOME@/.ssh/bbb_daily_export
+Environment=HOME=@BBB_REMOTE_HOME@
+ExecStart=/usr/local/libexec/bbb-run-recorded-job --name daily-export --skip-exit-code 75 -- /usr/bin/flock -w 900 -E 75 /run/lock/bristolbusbot/heavy-io.lock @BBB_DEPLOY_BASE@/current/pipeline/venv/bin/python3 @BBB_DEPLOY_BASE@/current/pipeline/daily_export.py
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+IOWeight=10
+CPUWeight=20
+# Measured on the PC: 3-4 s and well under 100 MB per day of readings.
+MemoryHigh=192M
+MemoryMax=256M
+MemorySwapMax=64M
+TimeoutStartSec=20min
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/bristolbusbot/collector/audit.db /var/lib/bristolbusbot/bot
+ReadWritePaths=/var/lib/bristolbusbot/daily-export /var/lib/bristolbusbot/monitoring /run/lock/bristolbusbot
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

@@ -357,6 +357,8 @@ def populate_release(component: str, root: Path) -> None:
             copy_tree(REPO / "site" / name, root / name)
         for pattern in ("*.json", "*.geojson"):
             for path in (REPO / "site").glob(pattern):
+                if path.name in {"tsconfig.check.json", "package-lock.json"}:
+                    continue
                 copy_file(path, root / path.name)
         copy_file(REPO / "collector/pyproject.toml", root / "_collector/pyproject.toml")
         copy_tree(REPO / "collector/src", root / "_collector/src")
@@ -392,6 +394,8 @@ def populate_release(component: str, root: Path) -> None:
         copy_file(REPO / "audit-site/AUDIT_METHODOLOGY.md",
                   root / "AUDIT_METHODOLOGY.md")
         copy_file(DEPLOY / "publish_to_github.sh", root / "publish_to_github.sh")
+        # The nightly export (#152) runs the repository's secret scan on its files.
+        copy_file(REPO / "scripts/scan_secrets.py", root / "scan_secrets.py")
     else:
         raise RuntimeError(f"cannot build release for {component}")
 

@@ -205,3 +205,25 @@ def test_can_require_a_minimum_future_service_window(tmp_path):
     assert validate(path, today=date(2026, 7, 17), minimum_service_days=3)
     with pytest.raises(RuntimeError, match="stale/too short"):
         validate(path, today=date(2026, 7, 17), minimum_service_days=4)
+
+
+def test_accepts_the_shared_stop_time_layout_with_identical_counts(tmp_path):
+    """Planning #151: a converted file passes the same checks with the same counts."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pipeline"))
+    import timetable_shared_stop_times
+
+    repeated = tmp_path / "repeated.db"
+    converted = tmp_path / "shared.db"
+    make_timetable(repeated)
+    make_timetable(converted)
+    timetable_shared_stop_times.convert(converted)
+    before, after = validate(repeated), validate(converted)
+    for key in ("trips", "stop_times", "routes", "stops", "latest_service"):
+        assert before[key] == after[key]
+
+    connection = sqlite3.connect(converted)
+    connection.execute("DROP INDEX idx_pattern_stop_times_seq")
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="idx_pattern_stop_times_seq"):
+        validate(converted)
