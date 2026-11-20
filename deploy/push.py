@@ -664,15 +664,40 @@ RUNTIME_RECORD = (
 )
 
 
-def setup_command(component: str, release_dir: PurePosixPath) -> str:
+PYTHON_COMPONENTS = ("collector", "site", "pipeline")
+# Where a venv keeps its installed packages, relative to the venv.
+SITE_PACKAGES = ("venv/bin/python -c \"import os, sys, sysconfig; "
+                 "print(os.path.relpath(sysconfig.get_paths()['purelib'], sys.prefix))\"")
+
+
+def reuse_packages(previous: str) -> str:
+    """Copy the replaced release's installed packages into the new venv.
+
+    Used only when requirements.lock is unchanged, so the heavy, memory-hungry
+    pip install of the whole lock is skipped (#150). Only installed package
+    files are copied, never the old venv's scripts, whose first lines name the
+    old release's path; every service runs ``venv/bin/python -m``."""
+    old = q(f"{previous}/venv")
+    # If the copy can't be made, fall back to the full install, not a failure.
+    return (f"{{ packages=$({SITE_PACKAGES}) && test -d {old}/\"$packages\" && "
+            f"cp -a {old}/\"$packages\"/. venv/\"$packages\"/; }} || {{ {LOCKED_INSTALL}; }}")
+
+
+def setup_command(component: str, release_dir: PurePosixPath,
+                  reuse_from: str | None = None) -> str:
     cd = f"cd {q(release_dir)}"
+    if reuse_from and component in PYTHON_COMPONENTS:
+        packages = reuse_packages(reuse_from)
+        local = f"{LOCAL_INSTALL} --force-reinstall"   # our own code always changes
+    else:
+        packages, local = LOCKED_INSTALL, LOCAL_INSTALL
     if component == "collector":
-        return (f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
-                f"{LOCAL_INSTALL} . && {RUNTIME_RECORD}")
+        return (f"{cd} && python3 -m venv venv && {packages} && "
+                f"{local} . && {RUNTIME_RECORD}")
     if component == "site":
         return (
-            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
-            f"{LOCAL_INSTALL} ./_collector . && {RUNTIME_RECORD}"
+            f"{cd} && python3 -m venv venv && {packages} && "
+            f"{local} ./_collector . && {RUNTIME_RECORD}"
         )
     if component == "bot":
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
@@ -680,7 +705,7 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
         return f"{cd} && npm ci --omit=dev --no-audit --no-fund"
     if component == "pipeline":
         return (
-            f"{cd} && python3 -m venv venv && {LOCKED_INSTALL} && "
+            f"{cd} && python3 -m venv venv && {packages} && "
             f"{RUNTIME_RECORD} && "
             "venv/bin/python3 -c 'from audit_geo import load_geo_index; "
             "load_geo_index()' && "
@@ -690,6 +715,17 @@ def setup_command(component: str, release_dir: PurePosixPath) -> str:
             "chmod 0755 publish_to_github.sh"
         )
     raise RuntimeError(f"no setup command for {component}")
+
+
+def lock_unchanged(remote: Remote, previous: str, release_dir: PurePosixPath) -> bool:
+    """True when the release being replaced has the same requirements.lock
+    and a venv to copy from."""
+    if not previous:
+        return False
+    output = remote.run(
+        f"cmp -s {q(previous + '/requirements.lock')} {q(release_dir / 'requirements.lock')} "
+        f"&& test -d {q(previous + '/venv')} && echo same", check=False)
+    return output.strip() == "same"
 
 
 def low_priority(command: str) -> str:
@@ -756,45 +792,75 @@ def remote_now(remote: Remote) -> str:
     return remote.run("date -u +%Y-%m-%dT%H:%M:%S+00:00").strip()
 
 
+# Polls from the last one before the deploy began, so even a deploy shorter
+# than one poll interval covers at least one whole gap (#150).
 POLL_GAP_QUERY = (
     "import sqlite3, sys\n"
     "from datetime import datetime\n"
     "c = sqlite3.connect('file:/var/lib/bristolbusbot/collector/audit.db?mode=ro', uri=True)\n"
+    "first = c.execute('SELECT MAX(poll_at) FROM poll_log WHERE poll_at < ?', (sys.argv[1],)).fetchone()[0]\n"
     "rows = [r[0] for r in c.execute("
-    "'SELECT poll_at FROM poll_log WHERE poll_at >= ? ORDER BY poll_at', (sys.argv[1],))]\n"
+    "'SELECT poll_at FROM poll_log WHERE poll_at >= ? ORDER BY poll_at', (first or sys.argv[1],))]\n"
     "print(len(rows))\n"
     "times = [datetime.fromisoformat(r.replace('Z', '+00:00')) for r in rows]\n"
     "for a, b, at in zip(times, times[1:], rows):\n"
     "    print(at, round((b - a).total_seconds()))\n"
+    "print('last', rows[-1] if rows else '-')\n"
 )
+POLL_WAIT_SECONDS = 60
+POLL_WAIT_STEP_SECONDS = 10
 
 
-def poll_gaps(output: str) -> tuple[int, list[tuple[str, int]]]:
+def poll_gaps(output: str) -> tuple[int, list[tuple[str, int]], str | None]:
+    """(polls, gaps over the limit, the latest poll) from the query's output."""
     lines = [line.split() for line in output.strip().splitlines() if line.strip()]
     if not lines:
-        return 0, []
+        return 0, [], None
     count = int(lines[0][0])
-    gaps = [(at, int(seconds)) for at, seconds in lines[1:]
-            if int(seconds) > MISSED_POLL_GAP_SECONDS]
-    return count, gaps
+    latest = None
+    gaps = []
+    for parts in lines[1:]:
+        if parts[0] == "last":
+            latest = None if parts[1] == "-" else parts[1]
+        elif int(parts[1]) > MISSED_POLL_GAP_SECONDS:
+            gaps.append((parts[0], int(parts[1])))
+    return count, gaps, latest
 
 
-def report_collector_polls(remote: Remote, since: str) -> bool:
-    """Say plainly whether the collector missed a poll since ``since``."""
-    output = remote.run(
-        f"/usr/bin/python3 -c {q(POLL_GAP_QUERY)} {q(since)}", check=False)
-    try:
-        count, gaps = poll_gaps(output)
-    except (ValueError, IndexError):
-        log.warning("could not read the collector's polls after this deploy: %s",
-                    output.strip()[:300])
-        return False
+def report_collector_polls(remote: Remote, since: str, *,
+                           wait_seconds: float = POLL_WAIT_SECONDS,
+                           sleep=time.sleep) -> bool:
+    """Say plainly whether the collector missed a poll during a deploy.
+
+    The window starts at the last poll before ``since`` and the report waits
+    (up to ``wait_seconds``) for a poll after the deploy ended, so it always
+    judges at least one real gap. Never "none missed" on no evidence (#150)."""
+    ended = remote_now(remote)
+    waited = 0.0
+    while True:
+        output = remote.run(
+            f"/usr/bin/python3 -c {q(POLL_GAP_QUERY)} {q(since)}", check=False)
+        try:
+            count, gaps, latest = poll_gaps(output)
+        except (ValueError, IndexError):
+            log.warning("could not read the collector's polls after this deploy: %s",
+                        output.strip()[:300])
+            return False
+        if latest is not None and latest > ended:
+            break
+        if waited >= wait_seconds:
+            log.warning("THE COLLECTOR RECORDED NO POLL in the %ds after this deploy ended "
+                        "(last poll %s); check it is running", int(wait_seconds), latest or "none")
+            return False
+        sleep(POLL_WAIT_STEP_SECONDS)
+        waited += POLL_WAIT_STEP_SECONDS
     if gaps:
         log.warning(
             "THE COLLECTOR MISSED POLLS during this deploy: %s",
             ", ".join(f"{seconds}s gap after {at}" for at, seconds in gaps))
         return False
-    log.info("collector: %d polls since %s, none missed", count, since)
+    log.info("collector: %d polls from the last one before %s to after the deploy, none missed",
+             count, since)
     return True
 
 
@@ -918,7 +984,11 @@ def deploy_release(remote: Remote, built: BuiltRelease, *,
             f"/usr/local/libexec/bbb-verify-release {q(release_dir)} "
             f"{q(component)} {q(built.release)}"
         ), timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
-        remote.run(low_priority(setup_command(component, release_dir)),
+        reuse = component in PYTHON_COMPONENTS and lock_unchanged(remote, previous, release_dir)
+        if reuse:
+            log.info("%s: requirements.lock unchanged; reusing the installed packages", component)
+        remote.run(low_priority(setup_command(component, release_dir,
+                                              previous if reuse else None)),
                    timeout=HEAVY_COMMAND_TIMEOUT_SECONDS)
         atomic_switch(remote, component, str(release_dir))
         switched = True
