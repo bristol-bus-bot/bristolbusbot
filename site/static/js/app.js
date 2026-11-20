@@ -982,6 +982,37 @@
             updateToggleBtn('toggle-boundary-btn', boundaryVisible);
         }
 
+        // Pinch points (#145): loaded the first time the layer is switched on.
+        let pinchLayer = null;
+        let pinchVisible = false;
+        async function togglePinchPoints(force, options = {}) {
+            const show = typeof force === 'boolean' ? force : !pinchVisible;
+            pinchVisible = show;
+            updateToggleBtn('toggle-pinch-btn', show);
+            updateToggleBtn('fab-pinch', show);
+            if (show && !pinchLayer) {
+                const url = document.getElementById('toggle-pinch-btn')?.dataset.module;
+                if (!url) return;
+                try {
+                    const module = await import(url);
+                    pinchLayer = module.createPinchPointLayer(map, {
+                        host: document.querySelector('.map-container') });
+                } catch (e) {
+                    console.error('pinch points failed to load:', e);
+                    return;
+                }
+            }
+            if (!pinchLayer) return;
+            pinchLayer.set(options);
+            if (pinchVisible) pinchLayer.show(); else pinchLayer.hide();
+        }
+
+        function openLayerFromAddress() {
+            const params = new URLSearchParams(location.search);
+            if (params.get('layer') !== 'pinch-points') return;
+            togglePinchPoints(true, { band: params.get('band'), day: params.get('day') });
+        }
+
         function updateToggleBtn(id, active) {
             const btn = document.getElementById(id);
             if (!btn) return;
@@ -1739,6 +1770,8 @@
             on('fab-polylines', 'click', togglePolylinesBtn);
             on('toggle-boundary-btn', 'click', toggleBoundaryBtn);
             on('fab-boundary', 'click', toggleBoundaryBtn);
+            on('toggle-pinch-btn', 'click', () => togglePinchPoints());
+            on('fab-pinch', 'click', () => togglePinchPoints());
             on('geolocate-btn', 'click', geolocateUser);
             on('sidebar-toggle', 'click', toggleSidebar);
             document.querySelectorAll('[data-status-filter]').forEach(button => {
@@ -1814,6 +1847,7 @@
         fetchBusDescriptions();
         fetchBusbotPosts();
         openRouteFromAddress();
+        openLayerFromAddress();
         map.on('zoomend moveend', () => updateStopMarkers(allStops));
         refreshInterval = setInterval(fetchBuses, 15000);
         fetchStopNotices();

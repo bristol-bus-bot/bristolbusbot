@@ -58,6 +58,12 @@
                     aria-label="Show routes" title="Show routes">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/></svg>
             </button>
+            <button id="toggle-pinch-btn" class="toggle-btn" type="button" aria-pressed="false"
+                    data-module="{{ asset_url('js/pinch_points.js') }}"
+                    aria-label="Show pinch points: where buses take longer than timetabled"
+                    title="Pinch points">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c4-2 4-6 8-8s4-6 8-8"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </button>
             <button id="toggle-boundary-btn" class="toggle-btn toggle-active" type="button" aria-pressed="true"
                     aria-label="Show boundary" title="Show boundary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke-dasharray="4 2"/></svg>
@@ -156,6 +162,11 @@
                         type="button" title="Toggle routes" aria-label="Routes layer"
                         aria-pressed="false">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg>
+                </button>
+                <button id="fab-pinch" class="map-fab mobile-layer-fab"
+                        type="button" title="Pinch points" aria-label="Pinch points layer"
+                        aria-pressed="false">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c4-2 4-6 8-8s4-6 8-8"/><circle cx="12" cy="12" r="2.5"/></svg>
                 </button>
                 <button id="geolocate-btn" class="map-fab" type="button"
                         title="Find my location" aria-label="Find my location">
