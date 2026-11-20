@@ -27,6 +27,18 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: npm
+    directory: /site
+    open-pull-requests-limit: 3
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/London
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
     directory: /social
     open-pull-requests-limit: 3
     schedule:

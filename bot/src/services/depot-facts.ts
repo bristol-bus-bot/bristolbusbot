@@ -1,7 +1,7 @@
 // Checked depot facts, keyed by operator and the fleet file's garage name.
-// Checked against their sources on 2026-10-22. A fact describes the depot,
-// never this bus's movements. Lawrence Hill and Wells have no checked fact
-// yet; the Bedminster biomethane station belongs to Bristol Community
+// The first four depots were checked on 2026-10-22. Lawrence Hill and Wells
+// were checked on 2026-11-20. A fact describes the depot, never this bus's
+// movements. The Bedminster biomethane station belongs to Bristol Community
 // Transport, not a First depot.
 
 export interface DepotFact { claim: string; qualification: string; source: string }
@@ -30,6 +30,20 @@ export const DEPOT_FACTS: Record<string, DepotFact[]> = {
         claim: 'Bristol\'s Marlborough Street bus station first opened in 1958 with its own depot; the current bus station opened in 2006.',
         qualification: 'Site history.',
         source: 'https://en.wikipedia.org/wiki/Bristol_bus_station',
+    }],
+};
+
+// These cards can be reviewed before being made available to the writer.
+export const DEPOT_CARDS_FOR_REVIEW: Record<string, DepotFact[]> = {
+    'FBRI:Lawrence Hill': [{
+        claim: 'In May 2026 First Bus said electrification work was underway at Lawrence Hill depot and planned to run 116 new electric buses from there on the Bristol network from autumn.',
+        qualification: 'The operator\'s May 2026 plan.',
+        source: 'https://www.firstbus.co.uk/news-and-service-updates/news/bath-welcomes-first-electric-buses-and-first-repowers-west-england',
+    }],
+    'FBRI:Wells': [{
+        claim: 'In February 2024 Somerset Council reported offering temporary overnight parking at Wells Bus Station. First had asked for space for up to six buses, and the council understood that First\'s Wells depot was short of space.',
+        qualification: 'A temporary offer recorded by the council in 2024.',
+        source: 'https://somerset.moderngov.co.uk/documents/g6870/Public%20reports%20pack%2006th-Feb-2024%2010.00%20Bus%20Advisory%20Board.pdf?T=10',
     }],
 };
 

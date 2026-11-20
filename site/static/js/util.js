@@ -1,5 +1,13 @@
 /** Create a DOM element using the supported attributes and event handlers. */
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {ElementAttributes} attrs
+ * @param {(ElementChild | ElementChild[])[]} children
+ */
 export function el(tag, attrs = {}, children = []) {
+    /** @type {HTMLElementTagNameMap[Tag] & Pick<HTMLAnchorElement, 'relList'>} */
+    // @ts-expect-error relList is only used in the tag === "a" branches; TypeScript cannot correlate tag and node.
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs)) {
         if (value === null || value === undefined || value === false) continue;
@@ -49,12 +57,20 @@ export function el(tag, attrs = {}, children = []) {
 }
 
 /** Replace a target's contents with one child tree. */
+/**
+ * @param {Element} target
+ * @param {Node | null | undefined} newChild
+ */
 export function replaceContent(target, newChild) {
     target.replaceChildren();
     if (newChild) target.appendChild(newChild);
 }
 
 /** Replace contents with several children. */
+/**
+ * @param {Element} target
+ * @param {Node[]} children
+ */
 export function replaceContents(target, children) {
     target.replaceChildren(...children.filter(Boolean));
 }
