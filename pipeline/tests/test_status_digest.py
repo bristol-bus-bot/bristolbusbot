@@ -365,6 +365,7 @@ def quiet_snapshot():
 
 def quiet_state(snapshot):
     return {"fingerprints": status_digest._progress_fingerprints(snapshot),
+            "standing_counts_version": status_digest.STANDING_COUNTS_VERSION,
             "counts": status_digest.standing_counts(snapshot),
             "sent_at": "2026-11-14T08:00:00+00:00"}
 
@@ -451,7 +452,40 @@ def test_standing_notes_appear_only_when_their_count_changes():
     assert status_digest.change_lines(snapshot, state) == []
     snapshot["collector_anomaly"]["detectors"]["extreme_delays"]["count"] = 14
     assert status_digest.change_lines(snapshot, state) == [
-        "Odd readings for Claude to look at (clues, not faults): 14, up from 9."]
+        "Odd readings in the last 48 hours: 14 flags (very late or early 14), up from 9. "
+        "These need a person to check them."]
+
+
+def test_standing_notes_exclude_origins_and_ignore_old_comparisons():
+    snapshot = {
+        "collector_anomaly": {"status": "attention", "detectors": {
+            "excluded_origin_timing_points": {"count": 399},
+            "extreme_delays": {"count": 2},
+            "gps_near_match_gate": {"count": 10},
+            "gps_distance_m": {"count": 700},
+        }},
+        "data_health": {"status": "warning", "weekly_missing_details": {
+            "distinct_buses": 1, "missing_livery": 1, "missing_descriptions": 1,
+        }},
+    }
+    previous = {"counts": {"missing_details": 99, "odd_readings": 300}}
+    assert status_digest.change_lines(snapshot, previous) == [
+        "Buses seen in the last 7 days without full details: 1 distinct bus "
+        "(livery unknown 1, missing descriptions 1). "
+        "The weekly fleet refresh can fill source gaps. Description drafts need approval.",
+        "Odd readings in the last 48 hours: 12 flags (far from the stop 10, very late or early 2). "
+        "These need a person to check them.",
+    ]
+
+
+def test_quiet_standing_notes_are_omitted_even_after_a_busier_day():
+    snapshot = {"collector_anomaly": {"status": "ok", "detectors": {
+        "excluded_origin_timing_points": {"count": 399},
+    }}, "data_health": {"status": "clean", "weekly_missing_details": {"distinct_buses": 0}}}
+    previous = {"standing_counts_version": status_digest.STANDING_COUNTS_VERSION,
+                "counts": {"missing_details": 1, "odd_readings": 9}}
+    assert status_digest.standing_counts(snapshot) == {"missing_details": 0, "odd_readings": 0}
+    assert status_digest.change_lines(snapshot, previous) == []
 
 
 def test_warnings_name_what_is_coming_up():
