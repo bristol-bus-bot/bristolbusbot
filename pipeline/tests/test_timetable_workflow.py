@@ -68,3 +68,10 @@ def test_external_actions_are_pinned_to_immutable_commits():
         reference = line.split("@", 1)[1].split()[0]
         assert len(reference) == 40
         assert all(character in "0123456789abcdef" for character in reference)
+
+
+def test_github_build_uses_the_shared_stop_time_layout():
+    """Planning #151: the published timetable stores each repeated journey once."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    build = workflow.split("- name: Build complete timetable candidate", 1)[1].split("- name:", 1)[0]
+    assert "BBB_TIMETABLE_LAYOUT: shared" in build
