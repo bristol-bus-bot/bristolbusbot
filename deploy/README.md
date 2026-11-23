@@ -155,7 +155,7 @@ proceed when it is missing.
 
 Fresh data for the PC comes from the Pi's own nightly job, not from anything
 run by hand (planning #152). At 07:45, after the rollup and the publish,
-`bbb-daily-export.service` writes three small files and pushes each one as its
+`bbb-daily-export.service` exports four parts and pushes each export as its
 own branch to the private repository `bristol-bus-bot/bristolbusbot-daily-data`.
 It uses a deploy key, the same way the audit publish pushes the public site.
 
@@ -164,10 +164,12 @@ It uses a deploy key, the same way the audit publish pushes the public site.
 | `readings/` | One service day: timing-point readings, expected trips, coverage and summary rows, matching receipts, poll health (gzipped SQLite) | analysis on the PC |
 | `rare-workings/` | The bot's rare-working shadow observations first seen that day (gzipped JSON lines) | #67 |
 | `writer-drafts/` | The writer's training drafts added since the last export (gzipped JSON lines) | #93 |
+| `reports/` | The latest collector anomaly and data health snapshots, both unchanged JSON files in a timestamped folder | #154 |
 
 Each part succeeds or fails on its own, and the 08:00 daily update says so in
-one line. Days missed since 14 Nov, or any missed later, are caught up a few
-per night. Branches older than 120 days are deleted by the same job. Every
+one line. Missed readings and rare-working days are caught up a few per
+night. The report pair is exported together from the latest snapshots.
+Branches older than 120 days are deleted by the same job. Every
 file passes `scripts/scan_secrets.py`'s patterns before it leaves the Pi.
 
 On the PC, from the repository root:

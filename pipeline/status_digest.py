@@ -641,7 +641,7 @@ def timetable_size_lines(snapshot: dict, previous_state: dict, today: date) -> l
 
 
 DAILY_EXPORT_NAMES = {"readings": "readings", "rare-workings": "rare workings",
-                      "writer-drafts": "writer drafts"}
+                      "writer-drafts": "writer drafts", "reports": "reports"}
 DAILY_EXPORT_REASONS = {
     "store_not_configured": "the private store is not set up yet",
     "push_failed": "it could not reach the private store",
@@ -649,7 +649,7 @@ DAILY_EXPORT_REASONS = {
     "source_unreadable": "its source could not be read",
     "source_table_missing": "a table it needs is missing",
     "query_would_scan": "it would have had to read a whole table, so it stopped",
-    "secret_scan_finding": "the secret scan flagged something, so nothing was sent",
+    "secret_scan_finding": "the secret scan flagged its contents",
     "file_too_large": "the file was larger than allowed",
 }
 
@@ -670,19 +670,22 @@ def daily_export_lines(snapshot: dict, today: date) -> list[str]:
     parts = _dict(status.get("parts"))
     failed = {name: _dict(part) for name, part in parts.items() if not _dict(part).get("ok")}
     left = sum(_count(_dict(part).get("days_left")) or 0 for part in parts.values())
+    sent = [label for name, label in DAILY_EXPORT_NAMES.items() if name in parts and name not in failed]
+    sent_names = f"{', '.join(sent[:-1])} and {sent[-1]}" if len(sent) > 1 else "".join(sent)
     if not failed:
-        line = "Data export for the PC: readings, rare workings and writer drafts all sent"
+        if not sent_names:
+            return []
+        line = f"Data export for the PC: {sent_names} all sent"
         return [line + (f"; {left} catch-up days still to go." if left else ".")]
     reasons = {_dict(part).get("reason") for part in failed.values()}
     if reasons == {"store_not_configured"}:
         return ["Data export for the PC: not running yet, the private store is not set up."]
-    sent = [DAILY_EXPORT_NAMES.get(n, n) for n in parts if n not in failed]
     failures = "; ".join(
         f"{DAILY_EXPORT_NAMES.get(name, name)} failed because "
         f"{DAILY_EXPORT_REASONS.get(str(part.get('reason')), 'of an unexpected error')}"
         for name, part in failed.items())
     return [f"Data export for the PC: {failures}"
-            + (f"; {' and '.join(sent)} sent." if sent else ".")]
+            + (f"; {sent_names} sent." if sent_names else ".")]
 
 
 def change_lines(snapshot: dict, previous_state: dict) -> list[str]:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Nightly small data export for analysis on Tom's PC (planning #152).
 
-The Pi's own scheduled job writes three small files each morning and pushes
+The Pi's own scheduled job exports four parts each morning and pushes
 them to a private GitHub repository, the same way the audit publish pushes
 the public site. Nobody connects to the Pi to collect them.
 
@@ -12,6 +12,7 @@ the public site. Nobody connects to the Pi to collect them.
   day (for #67), as gzipped JSON lines.
 * writer-drafts: the writer's training drafts added since the last export
   (for #93), read from a saved byte offset, as gzipped JSON lines.
+* reports: the latest collector anomaly and data health JSON files, unchanged.
 
 Each part succeeds or fails on its own; a status file feeds one plain line
 into the daily Slack summary. Days missed since 14 Nov (and any missed
@@ -52,15 +53,19 @@ CATCH_UP_FROM = date(2026, 11, 14)     # the PC copies stop here; lapses once fi
 RETENTION_DAYS = 120
 CATCH_UP_PER_NIGHT = {"readings": 4, "rare-workings": 31}
 MAX_PART_BYTES = 40 * 1024 * 1024      # well under GitHub's 100 MB file limit
-PARTS = ("readings", "rare-workings", "writer-drafts")
+PARTS = ("readings", "rare-workings", "writer-drafts", "reports")
 
 DEFAULT_AUDIT_DB = Path("/var/lib/bristolbusbot/collector/audit.db")
 DEFAULT_APP_DB = Path("/var/lib/bristolbusbot/bot/app_data.db")
 DEFAULT_TRAINING = Path("/var/lib/bristolbusbot/bot/editorial-usage.json.training.jsonl")
 DEFAULT_STATE_DIR = Path("/var/lib/bristolbusbot/daily-export")
 DEFAULT_STATUS = Path("/var/lib/bristolbusbot/monitoring/daily-export.json")
+REPORT_SOURCES = {
+    "collector-anomaly.json": Path("collector-anomaly/latest.json"),
+    "data-health.json": Path("data-health.json"),
+}
 REASON_RE = re.compile(r"^[a-z][a-z_]{0,39}$")
-BRANCH_RE = re.compile(r"^(readings|rare-workings|writer-drafts)/(\d{4}-\d{2}-\d{2})")
+BRANCH_RE = re.compile(r"^(readings|rare-workings|writer-drafts|reports)/(\d{4}-\d{2}-\d{2})")
 
 
 class PartError(RuntimeError):
@@ -367,6 +372,28 @@ def scan_file_text(texts: Iterable[str]) -> None:
                 raise PartError("secret_scan_finding")
 
 
+def export_reports(monitoring_dir: Path, out_dir: Path) -> tuple[dict[str, Path], int]:
+    files = {}
+    size = 0
+    for name, relative in REPORT_SOURCES.items():
+        source = monitoring_dir / relative
+        try:
+            with source.open("rb") as handle:
+                content = handle.read(MAX_PART_BYTES - size + 1)
+            size += len(content)
+            if size > MAX_PART_BYTES:
+                raise PartError("file_too_large", str(size))
+            scan_file_text(content.decode("utf-8").splitlines())
+        except FileNotFoundError as exc:
+            raise PartError("source_missing", str(source)) from exc
+        except (OSError, UnicodeError) as exc:
+            raise PartError("source_unreadable", str(source)) from exc
+        target = out_dir / name
+        target.write_bytes(content)
+        files[name] = target
+    return files, size
+
+
 def gzip_file(path: Path) -> Path:
     target = path.with_name(path.name + ".gz")
     with path.open("rb") as source, gzip.open(target, "wb", compresslevel=9) as out:
@@ -418,12 +445,12 @@ def days_to_export(done: set[str], first: date, yesterday: date, per_night: int)
 
 
 # ---------------------------------------------------------------------------
-# The store: a private GitHub repository, one branch per file
+# The store: a private GitHub repository, one branch per export
 # ---------------------------------------------------------------------------
 class GitStore:
-    """Pushes each file as its own single-commit branch; no clone is kept.
+    """Pushes each export as its own single-commit branch; no clone is kept.
 
-    One branch per file keeps the Pi free of a growing repository (git gc is
+    One branch per export keeps the Pi free of a growing repository (git gc is
     off on the Pi), lets each part push on its own, and makes retention a
     branch delete.
     """
@@ -452,13 +479,17 @@ class GitStore:
         return result.stdout
 
     def push(self, branch: str, path_in_repo: str, file: Path, message: str) -> None:
+        self.push_files(branch, {path_in_repo: file}, message)
+
+    def push_files(self, branch: str, files: dict[str, Path], message: str) -> None:
         with tempfile.TemporaryDirectory(prefix="bbb-daily-export-") as work:
             repo = Path(work)
             self.git("init", "-q", "-b", "main", str(repo))
-            target = repo / path_in_repo
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(file, target)
-            self.git("add", path_in_repo, cwd=repo)
+            for path_in_repo, file in files.items():
+                target = repo / path_in_repo
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(file, target)
+            self.git("-c", "core.autocrlf=false", "add", "--", *files, cwd=repo)
             self.git("commit", "-q", "-m", message, cwd=repo)
             self.git("push", "-q", "--force", self.remote, f"HEAD:refs/heads/{branch}", cwd=repo)
 
@@ -487,7 +518,8 @@ def expired_branches(branches: list[str], today: date) -> list[str]:
 # The nightly run
 # ---------------------------------------------------------------------------
 def run(*, audit_db: Path, app_db: Path, training: Path, state_dir: Path, status_path: Path,
-        store: GitStore | None, now: datetime | None = None) -> dict:
+        store: GitStore | None, now: datetime | None = None,
+        monitoring_dir: Path = DEFAULT_STATUS.parent) -> dict:
     now = now or datetime.now(timezone.utc)
     today = now.astimezone(LONDON).date()
     yesterday = today - timedelta(days=1)
@@ -553,6 +585,22 @@ def run(*, audit_db: Path, app_db: Path, training: Path, state_dir: Path, status
     parts["writer-drafts"] = result
     write_json(state_path, state)
 
+    # Reports are snapshots. Ship the pair in one commit after scanning both.
+    result = {"ok": True}
+    try:
+        with tempfile.TemporaryDirectory(prefix="reports-", dir=out_dir) as work:
+            files, size = export_reports(monitoring_dir, Path(work))
+            if store is not None:
+                branch = f"reports/{label}"
+                store.push_files(branch, {f"{branch}/{name}": file for name, file in files.items()},
+                                 f"reports {label}")
+            result.update(label=label, bytes=size, rows=len(files))
+    except PartError as exc:
+        result.update(ok=False, reason=exc.code)
+    except Exception as exc:  # noqa: BLE001
+        result.update(ok=False, reason="unexpected_error", error=type(exc).__name__)
+    parts["reports"] = result
+
     retention: dict = {"ok": True, "deleted": 0}
     if store is not None:
         try:
@@ -576,6 +624,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--training", type=Path, default=DEFAULT_TRAINING)
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     parser.add_argument("--status", type=Path, default=DEFAULT_STATUS)
+    parser.add_argument("--monitoring-dir", type=Path, default=DEFAULT_STATUS.parent)
     parser.add_argument("--no-push", action="store_true", help="build the files only")
     return parser.parse_args(argv)
 
@@ -598,7 +647,8 @@ def main(argv: list[str] | None = None) -> int:
         store = GitStore(remote, Path(key) if key else None)
     started = time.monotonic()
     status = run(audit_db=args.audit_db, app_db=args.app_db, training=args.training,
-                 state_dir=args.state_dir, status_path=args.status, store=store)
+                 state_dir=args.state_dir, status_path=args.status, store=store,
+                 monitoring_dir=args.monitoring_dir)
     failed = [name for name, part in status["parts"].items() if not part.get("ok")]
     for name, part in status["parts"].items():
         print(f"{name}: {'ok' if part.get('ok') else 'FAILED ' + part.get('reason', '')} "

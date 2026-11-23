@@ -18,6 +18,10 @@ import daily_export as d  # noqa: E402
 import get_daily_exports as pc  # noqa: E402
 
 NOW = datetime(2026, 11, 20, 7, 45, tzinfo=timezone.utc)      # yesterday = 19 Nov
+REPORTS = {
+    "collector-anomaly/latest.json": b'{\r\n  "detectors": {}\r\n}\r\n',
+    "data-health.json": b'{ "summary": {} }\n',
+}
 
 
 def make_audit(path: Path, days=("20261118", "20261119"), index=True) -> None:
@@ -72,13 +76,18 @@ def sources(tmp_path):
     make_audit(audit)
     make_app_db(app)
     write_drafts(training, 3)
+    for relative, content in REPORTS.items():
+        report = tmp_path / "monitoring" / relative
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_bytes(content)
     return audit, app, training
 
 
 def run(tmp_path, sources, store=None, now=NOW):
     audit, app, training = sources
     return d.run(audit_db=audit, app_db=app, training=training, state_dir=tmp_path / "state",
-                 status_path=tmp_path / "monitoring" / "daily-export.json", store=store, now=now)
+                 status_path=tmp_path / "monitoring" / "daily-export.json", store=store, now=now,
+                 monitoring_dir=tmp_path / "monitoring")
 
 
 class FakeStore:
@@ -86,12 +95,15 @@ class FakeStore:
         self.pushed, self.fail_parts, self.deleted = {}, set(fail_parts), []
 
     def push(self, branch, path_in_repo, file, message):
+        self.push_files(branch, {path_in_repo: file}, message)
+
+    def push_files(self, branch, files, message):
         if branch.split("/")[0] in self.fail_parts:
             raise d.PartError("push_failed")
-        self.pushed[branch] = (path_in_repo, file.read_bytes())
+        self.pushed[branch] = {name: file.read_bytes() for name, file in files.items()}
 
     def branches(self):
-        return list(self.pushed) + ["readings/2026-07-01", "not-ours"]
+        return list(self.pushed) + ["readings/2026-07-01", "reports/2026-07-01T0745Z", "not-ours"]
 
     def delete(self, branches):
         self.deleted += branches
@@ -167,7 +179,8 @@ def test_nightly_run_catches_up_and_each_part_stands_alone(tmp_path, sources):
     assert status["parts"]["rare-workings"] == {**status["parts"]["rare-workings"],
                                                 "ok": False, "reason": "push_failed"}
     assert status["parts"]["writer-drafts"]["ok"] and status["parts"]["writer-drafts"]["rows"] == 3
-    assert status["retention"]["deleted"] == 1 and store.deleted == ["readings/2026-07-01"]
+    assert status["retention"]["deleted"] == 2
+    assert store.deleted == ["readings/2026-07-01", "reports/2026-07-01T0745Z"]
     saved = json.loads((tmp_path / "monitoring" / "daily-export.json").read_text())
     assert saved["parts"]["rare-workings"]["reason"] == "push_failed"
 
@@ -185,6 +198,22 @@ def test_a_failed_draft_push_does_not_advance_the_offset(tmp_path, sources):
     run(tmp_path, sources, FakeStore(fail_parts={"writer-drafts"}))
     status = run(tmp_path, sources, FakeStore())
     assert status["parts"]["writer-drafts"]["rows"] == 3
+
+
+@pytest.mark.parametrize("reason", ["source_missing", "secret_scan_finding", "push_failed"])
+def test_reports_fail_as_a_pair_and_leave_other_parts_running(tmp_path, sources, reason):
+    report = tmp_path / "monitoring" / "data-health.json"
+    store = FakeStore(fail_parts={"reports"} if reason == "push_failed" else ())
+    if reason == "source_missing":
+        report.unlink()
+    if reason == "secret_scan_finding":
+        report.write_text(json.dumps({"detail": "AIza" + "x" * 35}), encoding="utf-8")
+
+    parts = run(tmp_path, sources, store)["parts"]
+    assert parts.pop("reports") == {"ok": False, "reason": reason}
+    assert all(part["ok"] for part in parts.values())
+    assert not any(branch.startswith("reports/") for branch in store.pushed)
+    assert not list((tmp_path / "state" / "outgoing").glob("reports-*"))
 
 
 def test_unconfigured_store_writes_a_status_and_fails(tmp_path, monkeypatch):
@@ -207,7 +236,12 @@ def test_end_to_end_through_a_git_store_to_the_pc(tmp_path, sources):
     root = tmp_path / "pc"
     saved = pc.download(str(remote), root)
     assert (root / "readings" / "2026-11-19.sqlite.gz") in saved
+    reports = root / "reports" / "2026-11-20T0745Z"
+    assert (reports / "collector-anomaly.json").read_bytes() == REPORTS["collector-anomaly/latest.json"]
+    assert (reports / "data-health.json").read_bytes() == REPORTS["data-health.json"]
     assert pc.download(str(remote), root) == []          # nothing new the second time
+    (reports / "data-health.json").unlink()
+    assert reports / "data-health.json" in pc.download(str(remote), root)
     combined = sqlite3.connect(pc.combine(root))
     # The first night sends 19 Nov and the three oldest gap days (14-16 Nov).
     assert combined.execute("SELECT COUNT(*) FROM timepoint_observations").fetchone()[0] == 3
