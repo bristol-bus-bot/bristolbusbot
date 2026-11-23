@@ -63,7 +63,7 @@ def test_external_actions_are_pinned_to_immutable_commits():
             stripped = stripped[2:]
         if stripped.startswith("uses:"):
             uses_lines.append(stripped)
-    assert len(uses_lines) == 3
+    assert len(uses_lines) == 4      # checkout, setup-python, two uploads (#151)
     for line in uses_lines:
         reference = line.split("@", 1)[1].split()[0]
         assert len(reference) == 40
@@ -75,3 +75,13 @@ def test_github_build_uses_the_shared_stop_time_layout():
     workflow = WORKFLOW.read_text(encoding="utf-8")
     build = workflow.split("- name: Build complete timetable candidate", 1)[1].split("- name:", 1)[0]
     assert "BBB_TIMETABLE_LAYOUT: shared" in build
+
+
+def test_refused_build_keeps_its_quality_report():
+    """#151: when the gate refuses a candidate, its full result is kept for a week."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    step = workflow.split("- name: Keep the quality report when the build is refused", 1)[1].split("- name:", 1)[0]
+    assert "if: failure()" in step
+    assert "name: timetable-quality-report" in step
+    assert "bbb-timetable-sources/busaudit_timetable_quality.json" in step
+    assert "retention-days: 7" in step

@@ -114,6 +114,26 @@ def timetable_layout_requested() -> str:
     return "shared" if value == "shared" else "repeated"
 
 
+def quality_failure_summary(quality: dict, limit: int = 10) -> dict:
+    """Each quality check's verdict and its failing dates, without the size report.
+
+    The full result is in QUALITY_STATUS (uploaded by the workflow when the
+    build fails); this is what the log needs to say why.
+    """
+    summary = {}
+    for name in ("duplicate_active_schedules", "source_schedule_agreement"):
+        check = quality.get(name)
+        if not isinstance(check, dict):
+            summary[name] = check
+            continue
+        summary[name] = {key: check.get(key) for key in (
+            "passed", "days", "failing_dates", "first_failing_date", "limit",
+            "lower_ratio", "upper_ratio", "worst") if key in check}
+        if isinstance(check.get("failures"), list):
+            summary[name]["failures"] = check["failures"][:limit]
+    return summary
+
+
 def finalize_static_database(path: Path) -> None:
     """Optimize the candidate and make the published DB truly read-only.
 
@@ -396,7 +416,7 @@ def main():
                               encoding="utf-8")
     if not quality["passed"]:
         logger.error("VALIDATION FAILED: candidate contains duplicated or source-inconsistent "
-                     "First service: %s", json.dumps(quality, sort_keys=True)[:2000])
+                     "First service: %s", json.dumps(quality_failure_summary(quality), sort_keys=True))
         return 2
     logger.info("Quality checks passed: %s", json.dumps(
         {"duplicates": quality["duplicate_active_schedules"]["worst"]}, sort_keys=True))
