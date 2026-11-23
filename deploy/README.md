@@ -181,6 +181,21 @@ python deploy\get_daily_exports.py --combine
 This downloads any days not yet in `C:\dev\bbb-research\daily\` using your
 own GitHub sign-in. `--combine` rebuilds `daily\readings-combined.db`.
 
+It runs by itself: a Windows scheduled task, **BristolBusBot daily exports**,
+runs it at 09:00 each day with `--combine --log`. If the PC was off at 09:00,
+it runs as soon as the PC is next on. It runs only while Tom is signed in, so
+it uses his own GitHub sign-in. Each run appends one short result to
+`daily\get-daily-exports.log`. A scheduled task was chosen over a note for
+assistants because it doesn't depend on anyone starting a session.
+
+To set it up again on a new PC (PowerShell, from the repository root):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "$PWD\.venv\Scripts\pythonw.exe" -Argument "deploy\get_daily_exports.py --combine --log" -WorkingDirectory "$PWD"
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+Register-ScheduledTask -TaskName "BristolBusBot daily exports" -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At 09:00) -Settings $settings
+```
+
 **One-time setup** (Tom, once). Until it is done the job records "store not
 set up" and nothing else is affected:
 
