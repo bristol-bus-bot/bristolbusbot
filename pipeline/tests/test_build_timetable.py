@@ -210,3 +210,25 @@ def test_duplicated_first_service_refuses_build_before_publication(tmp_path, mon
     monkeypatch.setattr(sys, 'argv', ['build_timetable.py', '--skip-deploy', '--no-download'])
     assert builder.main() == 2
     assert not builder.TIMETABLE_DB.exists()
+
+
+def test_quality_failure_log_names_the_failing_check_before_any_size_detail():
+    """#151: the size report filled the old 2,000-character log line first."""
+    quality = {
+        "passed": False,
+        "duplicate_active_schedules": {"passed": True, "days": 180, "failing_dates": 0,
+                                       "first_failing_date": None, "limit": 0.005,
+                                       "worst": {"date": "2027-03-22", "rate": 0.0002}},
+        "source_schedule_agreement": {"passed": False, "days": 60, "failing_dates": 12,
+                                      "lower_ratio": 0.9, "upper_ratio": 1.1,
+                                      "failures": [{"date": f"2026-12-{d:02d}"} for d in range(1, 13)],
+                                      "sample": [{"date": "2026-11-23"}]},
+        "size": {"operators": {f"OP{n}": {"trips": n} for n in range(500)}},
+    }
+    summary = builder.quality_failure_summary(quality)
+    assert "size" not in summary
+    agreement = summary["source_schedule_agreement"]
+    assert agreement["passed"] is False and agreement["failing_dates"] == 12
+    assert len(agreement["failures"]) == 10 and "sample" not in agreement
+    assert summary["duplicate_active_schedules"]["passed"] is True
+    assert len(json.dumps(summary)) < 2000

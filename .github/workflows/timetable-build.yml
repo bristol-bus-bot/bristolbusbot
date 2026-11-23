@@ -52,6 +52,15 @@ jobs:
           # (about 100 MiB instead of 526). Remove this line to go back.
           BBB_TIMETABLE_LAYOUT: shared
 
+      - name: Keep the quality report when the build is refused
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: timetable-quality-report
+          path: ${{ runner.temp }}/bbb-timetable-sources/busaudit_timetable_quality.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Run independent production validation
         run: python deploy/timetable_control.py validate "$BBB_TIMETABLE_DB"
 
