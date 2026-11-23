@@ -214,6 +214,27 @@ def load_current_observed(live_db: Path,
     return observed
 
 
+def load_weekly_observed(live_db: Path, audit_db: Path,
+                         now: datetime) -> set[tuple[str, str]]:
+    cutoff = now - timedelta(days=7)
+    # A reading after midnight may belong to the previous service day. Keep
+    # the service-date index usable, then check the actual observation time.
+    first_day = (cutoff - timedelta(days=1)).strftime("%Y%m%d")
+    with connect_read_only(live_db) as connection:
+        live = connection.execute(
+            "SELECT DISTINCT operator_ref, vehicle_ref FROM vehicles "
+            "WHERE updated_at >= ? AND updated_at <= ?",
+            (cutoff.isoformat(), now.isoformat())).fetchall()
+    with connect_read_only(audit_db) as connection:
+        audit = connection.execute(
+            "SELECT DISTINCT operator, vehicle_ref FROM timepoint_observations "
+            "WHERE service_date >= ? AND datetime(recorded_at) BETWEEN datetime(?) AND datetime(?)",
+            (first_day, cutoff.isoformat(), now.isoformat())).fetchall()
+    return {(str(operator).strip().upper(), str(vehicle).strip())
+            for rows in (live, audit) for operator, vehicle in rows
+            if str(operator or "").strip() and str(vehicle or "").strip()}
+
+
 def livery_gap_reason(record: dict) -> str | None:
     """Describe an honest source gap without inventing a vehicle colour."""
     livery = record.get("livery")
@@ -314,6 +335,7 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
     index = build_fleet_index(active_records)
     observed = load_observed(
         live_db, audit_db, int(THRESHOLDS["observed_days"]))
+    weekly_observed = load_weekly_observed(live_db, audit_db, generated)
     current_observed = load_current_observed(
         live_db, int(THRESHOLDS["current_vehicle_hours"]))
     description_keys = {
@@ -327,6 +349,7 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
 
     matched: dict[tuple[str, str], dict] = {}
     missing_fleet: list[str] = []
+    weekly_missing_fleet: set[tuple[str, str]] = set()
     missing_fleet_reasons: dict[str, list[str]] = defaultdict(list)
     missing_fleet_by_operator: Counter[str] = Counter()
     for operator, vehicle in sorted(observed):
@@ -334,6 +357,8 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
         if record is None:
             identity = f"{operator}:{vehicle}"
             missing_fleet.append(identity)
+            if (operator, vehicle) in weekly_observed:
+                weekly_missing_fleet.add((operator, vehicle))
             missing_fleet_by_operator[operator] += 1
             reason = missing_fleet_reason(
                 operator, current=(operator, vehicle) in current_observed,
@@ -343,23 +368,31 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
             matched[(operator, vehicle)] = record
 
     missing_livery_reasons: dict[str, list[str]] = defaultdict(list)
+    weekly_missing_livery: set[tuple[str, str]] = set()
+    weekly_missing_descriptions: set[tuple[str, str]] = set()
+    missing_blurbs: dict[str, list[str]] = {name: [] for name in description_keys}
     for (operator, vehicle), record in matched.items():
+        code = fleet_code(record)
+        bus = (operator, registration(record.get("reg")) or code or vehicle)
+        seen_this_week = (operator, vehicle) in weekly_observed
         reason = livery_gap_reason(record)
         if reason:
             missing_livery_reasons[reason].append(f"{operator}:{vehicle}")
+            if seen_this_week:
+                weekly_missing_livery.add(bus)
+        if code:
+            fleet_identity = f"{operator}:{code}"
+            for name, keys in description_keys.items():
+                if fleet_identity in keys or (code in keys and len(index["owners"][code]) == 1):
+                    continue
+                missing_blurbs[name].append(fleet_identity)
+                if seen_this_week:
+                    weekly_missing_descriptions.add(bus)
     missing_livery = sorted(
         identity for values in missing_livery_reasons.values()
         for identity in values)
-    missing_blurbs: dict[str, list[str]] = {}
-    for name, keys in description_keys.items():
-        missing_blurbs[name] = sorted(
-            f"{operator}:{fleet_code(record)}"
-            for (operator, _vehicle), record in matched.items()
-            if fleet_code(record) and not (
-                f"{operator}:{fleet_code(record)}" in keys
-                or (fleet_code(record) in keys
-                    and len(index["owners"].get(fleet_code(record), set())) == 1)
-            ))
+    for values in missing_blurbs.values():
+        values.sort()
 
     observed_by_operator = dict(sorted(Counter(
         operator for operator, _vehicle in observed).items()))
@@ -454,6 +487,13 @@ def build_report(*, output: Path, live_db: Path, audit_db: Path,
         "mode": "report_only",
         "status": "warning" if findings else "clean",
         "thresholds": dict(THRESHOLDS),
+        "weekly_missing_details": {
+            "distinct_buses": len(weekly_missing_fleet | weekly_missing_livery
+                                  | weekly_missing_descriptions),
+            "missing_fleet": len(weekly_missing_fleet),
+            "missing_livery": len(weekly_missing_livery),
+            "missing_descriptions": len(weekly_missing_descriptions),
+        },
         "summary": {
             "observed_identities": len(observed),
             "matched_fleet_identities": len(matched),

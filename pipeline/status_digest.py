@@ -502,17 +502,43 @@ def _days_since(value: object, today: date) -> int | None:
     return max(0, (today - moment).days)
 
 
+STANDING_COUNTS_VERSION = 2
+
+
+def weekly_missing_details(snapshot: dict) -> dict:
+    report = _dict(snapshot.get("data_health"))
+    if report.get("status") in {"unavailable", "stale"}:
+        return {}
+    return _dict(report.get("weekly_missing_details"))
+
+
+def odd_reading_counts(snapshot: dict) -> dict[str, int] | None:
+    anomalies = _dict(snapshot.get("collector_anomaly"))
+    if str(anomalies.get("status") or "unavailable") in {"unavailable", "stale"}:
+        return None
+    detectors = _dict(anomalies.get("detectors"))
+
+    def count(name: str) -> int:
+        return _count(_dict(detectors.get(name)).get("count"))
+
+    speed_detector = ("timetable_stop_transition_speeds"
+                      if "timetable_stop_transition_speeds" in detectors
+                      else "impossible_implied_speeds")
+    return {
+        "very late or early": count("extreme_delays"),
+        "stops in reverse order": count("backwards_stop_progress"),
+        "impossible speed": count(speed_detector),
+        "bus on two journeys at once": count("overlapping_vehicle_trips"),
+        "far from the stop": count("gps_near_match_gate"),
+    }
+
+
 def standing_counts(snapshot: dict) -> dict[str, int | None]:
     """The counts behind the two standing notes, for day-to-day comparison."""
-    summary = _dict(_dict(snapshot.get("data_health")).get("summary"))
-    missing = (_count(summary.get("missing_fleet")) + _count(summary.get("missing_livery"))
-               + sum(_count(value) for value in _dict(summary.get("missing_blurbs")).values()))
-    anomalies = _dict(snapshot.get("collector_anomaly"))
-    odd = None
-    if str(anomalies.get("status") or "unavailable") not in {"unavailable", "stale"}:
-        odd = sum(_count(_dict(item).get("count"))
-                  for item in _dict(anomalies.get("detectors")).values())
-    return {"missing_details": missing if summary else None, "odd_readings": odd}
+    missing = weekly_missing_details(snapshot).get("distinct_buses")
+    odd = odd_reading_counts(snapshot)
+    return {"missing_details": _count(missing) if missing is not None else None,
+            "odd_readings": sum(odd.values()) if odd is not None else None}
 
 
 def timetable_days_failing(snapshot: dict, today: date) -> int | None:
@@ -661,22 +687,35 @@ def daily_export_lines(snapshot: dict, today: date) -> list[str]:
 
 def change_lines(snapshot: dict, previous_state: dict) -> list[str]:
     """Standing notes only when their count changed since yesterday."""
-    before = _dict(previous_state.get("counts"))
+    before = (_dict(previous_state.get("counts"))
+              if previous_state.get("standing_counts_version") == STANDING_COUNTS_VERSION
+              else {})
     now = standing_counts(snapshot)
+    missing = weekly_missing_details(snapshot)
+    odd = odd_reading_counts(snapshot) or {}
+    notes = (
+        ("missing_details", "Buses seen in the last 7 days without full details",
+         ("distinct bus", "distinct buses"), {
+             "no fleet record": _count(missing.get("missing_fleet")),
+             "livery unknown": _count(missing.get("missing_livery")),
+             "missing descriptions": _count(missing.get("missing_descriptions")),
+         }, "The weekly fleet refresh can fill source gaps. Description drafts need approval."),
+        ("odd_readings", "Odd readings in the last 48 hours", ("flag", "flags"), odd,
+         "These need a person to check them."),
+    )
     lines = []
-    labels = {
-        "missing_details": "Buses still missing source details or descriptions",
-        "odd_readings": "Odd readings for Claude to look at (clues, not faults)",
-    }
-    for key, label in labels.items():
+    for key, label, units, kinds, action in notes:
         current, earlier = now.get(key), before.get(key)
-        if current is None or current == earlier:
+        if not current or current == earlier:
             continue
-        if earlier is None:
-            lines.append(f"{label}: {current}.")
-        else:
+        breakdown = ", ".join(f"{name} {count:,}" for name, count in
+                              sorted(kinds.items(), key=lambda item: -item[1]) if count)
+        change = ""
+        if isinstance(earlier, int):
             direction = "up" if current > earlier else "down"
-            lines.append(f"{label}: {current}, {direction} from {earlier}.")
+            change = f", {direction} from {earlier:,}"
+        unit = units[0] if current == 1 else units[1]
+        lines.append(f"{label}: {current:,} {unit} ({breakdown}){change}. {action}")
     return lines
 
 
@@ -824,6 +863,7 @@ def _write_state(snapshot: dict, previous: dict | None = None) -> None:
         "schema_version": 2,
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "fingerprints": _progress_fingerprints(snapshot),
+        "standing_counts_version": STANDING_COUNTS_VERSION,
         "counts": standing_counts(snapshot),
         "timetable_bytes": _size_history(snapshot, previous),
     }

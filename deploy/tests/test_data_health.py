@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deploy import data_health
@@ -55,7 +55,7 @@ def databases(tmp_path: Path, *, vehicle_ref: str = "FBRI-100") -> tuple[Path, P
     with sqlite3.connect(audit) as connection:
         connection.execute(
             "CREATE TABLE timepoint_observations "
-            "(operator TEXT, vehicle_ref TEXT, service_date TEXT)")
+            "(operator TEXT, vehicle_ref TEXT, service_date TEXT, recorded_at TEXT)")
 
     timetable = tmp_path / "timetable.db"
     with sqlite3.connect(timetable) as connection:
@@ -153,6 +153,28 @@ def test_previous_operator_count_collapse_is_detected(tmp_path):
         finding["code"] for finding in report["findings"]}
 
 
+def test_weekly_missing_details_deduplicate_buses_across_gaps_and_sources(tmp_path):
+    inputs = paths(tmp_path, [vehicle(code, livery=False) for code in (100, 101, 102)])
+    for path in inputs["description_paths"].values():
+        write_json(path, {})
+    now = datetime.now(timezone.utc)
+    with sqlite3.connect(inputs["audit_db"]) as connection:
+        for reference, days_ago in (("100", 1), ("FBRI-101", 6), ("FBRI-102", 8),
+                                    ("FBRI-999", 2)):
+            recorded = now - timedelta(days=days_ago)
+            connection.execute("INSERT INTO timepoint_observations VALUES (?,?,?,?)",
+                               ("FBRI", reference, recorded.strftime("%Y%m%d"),
+                                recorded.isoformat()))
+
+    report = data_health.build_report(**inputs)
+
+    assert report["weekly_missing_details"] == {
+        "distinct_buses": 3, "missing_fleet": 1, "missing_livery": 2,
+        "missing_descriptions": 2,
+    }
+    assert report["summary"]["missing_livery"] == 4  # still counts observed identities
+
+
 def test_explicit_vitr_to_kemt_transition_is_not_a_false_collapse(tmp_path):
     fleet = [
         *(vehicle(code, operator="KEMT") for code in range(100, 114)),
@@ -225,10 +247,10 @@ def test_missing_fleet_cases_are_explained_by_recency_and_source(tmp_path):
             ("FBRI", "FBRI-101", now.isoformat()))
     with sqlite3.connect(inputs["audit_db"]) as connection:
         connection.executemany(
-            "INSERT INTO timepoint_observations VALUES (?,?,?)", [
-                ("FBRI", "FBRI-999", now.date().isoformat()),
-                ("VITR", "VITR-300", now.date().isoformat()),
-                ("SCSO", "SCSO-1", now.date().isoformat()),
+            "INSERT INTO timepoint_observations VALUES (?,?,?,?)", [
+                (operator, reference, now.strftime("%Y%m%d"), now.isoformat())
+                for operator, reference in (("FBRI", "FBRI-999"), ("VITR", "VITR-300"),
+                                            ("SCSO", "SCSO-1"))
             ])
 
     report = data_health.build_report(**inputs)
