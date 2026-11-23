@@ -48,6 +48,9 @@ jobs:
           BODS_API_KEY: ${{ secrets.BODS_API_KEY }}
           TNDS_USER: ${{ secrets.TNDS_USER }}
           TNDS_PASS: ${{ secrets.TNDS_PASS }}
+          # Planning #151: store each repeated journey's stop times once
+          # (about 100 MiB instead of 526). Remove this line to go back.
+          BBB_TIMETABLE_LAYOUT: shared
 
       - name: Run independent production validation
         run: python deploy/timetable_control.py validate "$BBB_TIMETABLE_DB"
