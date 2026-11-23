@@ -543,18 +543,18 @@ def test_daily_export_line_says_which_part_failed_and_why():
     today = date(2026, 11, 20)
     ok = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
         "readings": {"ok": True, "days_left": 3}, "rare-workings": {"ok": True, "days_left": 0},
-        "writer-drafts": {"ok": True}}}
+        "writer-drafts": {"ok": True}, "reports": {"ok": True}}}
     assert status_digest.daily_export_lines({"daily_export": ok}, today) == [
-        "Data export for the PC: readings, rare workings and writer drafts all sent; "
+        "Data export for the PC: readings, rare workings, writer drafts and reports all sent; "
         "3 catch-up days still to go."]
     failed = json.loads(json.dumps(ok))
-    failed["parts"]["writer-drafts"] = {"ok": False, "reason": "push_failed"}
+    failed["parts"]["reports"] = {"ok": False, "reason": "secret_scan_finding"}
     assert status_digest.daily_export_lines({"daily_export": failed}, today) == [
-        "Data export for the PC: writer drafts failed because it could not reach the "
-        "private store; readings and rare workings sent."]
+        "Data export for the PC: reports failed because the secret scan flagged its contents; "
+        "readings, rare workings and writer drafts sent."]
     unset = {"finished_at": "2026-11-20T07:46:00+00:00", "parts": {
         name: {"ok": False, "reason": "store_not_configured"}
-        for name in ("readings", "rare-workings", "writer-drafts")}}
+        for name in ("readings", "rare-workings", "writer-drafts", "reports")}}
     assert status_digest.daily_export_lines({"daily_export": unset}, today) == [
         "Data export for the PC: not running yet, the private store is not set up."]
     stale = {**ok, "finished_at": "2026-11-17T07:46:00+00:00"}

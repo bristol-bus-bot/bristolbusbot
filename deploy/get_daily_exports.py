@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Bring the PC's daily data up to yesterday from the private store (#152).
 
-The Pi's nightly export pushes one branch per file to a private GitHub
+The Pi's nightly export pushes one branch per export to a private GitHub
 repository. This downloads any not yet on the PC, using your own GitHub
 sign-in (the one `git` and `gh` already use). Nothing connects to the Pi.
 
     python deploy\\get_daily_exports.py               # download new days
     python deploy\\get_daily_exports.py --combine     # and rebuild readings-combined.db
 
-Files land in C:\\dev\\bbb-research\\daily\\ under readings\\, rare-workings\\
-and writer-drafts\\. --combine rebuilds daily\\readings-combined.db from every
+Files land in C:\\dev\\bbb-research\\daily\\ under readings\\, rare-workings\\,
+writer-drafts\\ and reports\\. Each report pair is in its own timestamped
+folder. --combine rebuilds daily\\readings-combined.db from every
 readings file, one table per source table plus an export_days table.
 """
 from __future__ import annotations
@@ -27,8 +28,9 @@ from pathlib import Path
 DEFAULT_REMOTE = "https://github.com/bristol-bus-bot/bristolbusbot-daily-data.git"
 DEFAULT_ROOT = Path(r"C:\dev\bbb-research\daily")
 BRANCH_RE = re.compile(
-    r"^(readings|rare-workings|writer-drafts)/(\d{4}-\d{2}-\d{2}(?:T\d{4}Z)?)$")
+    r"^(readings|rare-workings|writer-drafts|reports)/(\d{4}-\d{2}-\d{2}(?:T\d{4}Z)?)$")
 SUFFIX = {"readings": ".sqlite.gz", "rare-workings": ".jsonl.gz", "writer-drafts": ".jsonl.gz"}
+REPORT_NAMES = ("collector-anomaly.json", "data-health.json")
 FETCH_BATCH = 50
 
 
@@ -55,13 +57,16 @@ def remote_branches(remote: str) -> list[str]:
     return sorted(heads)
 
 
-def local_path(root: Path, branch: str) -> Path:
+def local_paths(root: Path, branch: str) -> tuple[Path, ...]:
     part, label = BRANCH_RE.match(branch).groups()
-    return root / part / f"{label}{SUFFIX[part]}"
+    if part == "reports":
+        return tuple(root / part / label / name for name in REPORT_NAMES)
+    return (root / part / f"{label}{SUFFIX[part]}",)
 
 
 def download(remote: str, root: Path) -> list[Path]:
-    wanted = [b for b in remote_branches(remote) if not local_path(root, b).exists()]
+    wanted = [b for b in remote_branches(remote)
+              if not all(path.exists() for path in local_paths(root, b))]
     if not wanted:
         return []
     cache = root / ".cache.git"
@@ -73,14 +78,15 @@ def download(remote: str, root: Path) -> list[Path]:
         git("fetch", "-q", "--depth", "1", "--no-tags", remote,
             *[f"+refs/heads/{b}:refs/daily/{b}" for b in batch], cwd=cache)
         for branch in batch:
-            target = local_path(root, branch)
-            part = branch.split("/", 1)[0]
-            blob = git_bytes("show", f"refs/daily/{branch}:{part}/{target.name}", cwd=cache)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            partial = target.with_name(target.name + ".part")
-            partial.write_bytes(blob)
-            partial.replace(target)
-            saved.append(target)
+            targets = local_paths(root, branch)
+            blobs = [git_bytes("show", f"refs/daily/{branch}:{target.relative_to(root).as_posix()}",
+                               cwd=cache) for target in targets]
+            for target, blob in zip(targets, blobs, strict=True):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                partial = target.with_name(target.name + ".part")
+                partial.write_bytes(blob)
+                partial.replace(target)
+                saved.append(target)
     return saved
 
 
