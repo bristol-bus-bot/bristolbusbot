@@ -252,3 +252,16 @@ def test_end_to_end_through_a_git_store_to_the_pc(tmp_path, sources):
 
     store.delete(["readings/2026-11-18"])
     assert "readings/2026-11-18" not in store.branches()
+
+
+def test_pc_log_mode_records_success_and_failure(tmp_path):
+    """The scheduled task runs hidden, so --log is its only report."""
+    remote = tmp_path / "store.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    root = tmp_path / "pc"
+    assert pc.main(["--remote", str(remote), "--root", str(root), "--log"]) == 0
+    assert pc.main(["--remote", str(tmp_path / "missing.git"), "--root", str(root), "--log"]) == 1
+    lines = (root / pc.LOG_NAME).read_text(encoding="utf-8").splitlines()
+    assert lines[0].endswith(" ok") and "0 new file(s)" in lines[1]
+    assert any(line.endswith(" FAILED") for line in lines)
+    assert any("git ls-remote failed" in line for line in lines)

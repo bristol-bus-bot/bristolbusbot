@@ -16,13 +16,17 @@ readings file, one table per source table plus an export_days table.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gzip
+import io
+import os
 import re
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 DEFAULT_REMOTE = "https://github.com/bristol-bus-bot/bristolbusbot-daily-data.git"
@@ -32,6 +36,8 @@ BRANCH_RE = re.compile(
 SUFFIX = {"readings": ".sqlite.gz", "rare-workings": ".jsonl.gz", "writer-drafts": ".jsonl.gz"}
 REPORT_NAMES = ("collector-anomaly.json", "data-health.json")
 FETCH_BATCH = 50
+LOG_NAME = "get-daily-exports.log"
+LOG_KEEP_LINES = 400
 
 
 def git(*args: str, cwd: Path | None = None) -> str:
@@ -145,8 +151,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--combine", action="store_true",
                         help="rebuild readings-combined.db from every readings file")
+    parser.add_argument("--log", action="store_true",
+                        help="append the output to daily\\get-daily-exports.log (for the scheduled task)")
     args = parser.parse_args(argv)
     args.root.mkdir(parents=True, exist_ok=True)
+    if not args.log:
+        return run(args)
+    log = args.root / LOG_NAME
+    buffer = io.StringIO()
+    code = 1
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+        try:
+            code = run(args)
+        except SystemExit as exc:
+            print(exc)
+        except Exception as exc:  # noqa: BLE001 - the log is the only place a hidden task can report
+            print(f"failed: {type(exc).__name__}: {exc}")
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = [f"{stamp} {'ok' if code == 0 else 'FAILED'}",
+             *(f"  {line}" for line in buffer.getvalue().splitlines() if not line.startswith("saved "))]
+    previous = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    log.write_text("\n".join((previous + lines)[-LOG_KEEP_LINES:]) + "\n", encoding="utf-8")
+    return code
+
+
+def run(args: argparse.Namespace) -> int:
+    os.environ.setdefault("GIT_TERMINAL_PROMPT", "0")    # never wait for a password prompt
     saved = download(args.remote, args.root)
     for path in saved:
         print("saved", path)
