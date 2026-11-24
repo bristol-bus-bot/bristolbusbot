@@ -68,7 +68,7 @@ LIVE_TIMETABLE_SUMMARY = "live-timetable-summary.json.gz"
 # The live timetable and the size the Pi accepts (timetable_delivery's
 # MAX_DATABASE_BYTES; a test keeps the two equal). For the size trend (#130).
 LIVE_TIMETABLE = Path("/var/lib/bristolbusbot/pipeline/timetable.db")
-TIMETABLE_LIMIT_BYTES = 768 * 1024 * 1024
+TIMETABLE_LIMIT_BYTES = 256 * 1024 * 1024
 SERVICES = ("bbb-site.service", "bbb-collector.service", "bbb-bot.service",
             "bbb-tunnel.service")
 JOB_MAX_AGE_HOURS = {
