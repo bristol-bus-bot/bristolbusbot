@@ -418,3 +418,39 @@ def test_leftover_on_a_route_number_shared_by_two_first_scopes_is_kept(tmp_path)
     duplicate_db(tmp_path / 'd.db', [('current', 'x', 'VJ1', OTHER), ('other', 'z', 'VJ2', CALLS),
                                      ('leftover', 'y', 'VJ5863', later)])
     assert duplicate.reconcile_database(tmp_path / 'd.db', tmp_path, index)['trips_corrected'] == 0
+
+
+# --- An old edition re-dated by the feed (#151, 23 Nov 2026) ----------------
+
+NOV8, NOV22, NOV29 = date(2026, 11, 8), date(2026, 11, 22), date(2026, 11, 29)
+NOV23, NOV24 = date(2026, 11, 23), date(2026, 11, 24)
+
+
+def test_old_edition_redated_to_the_download_day_is_retired_from_its_replacement():
+    # First's 8 Nov edition has VJ2799; its 22 Nov edition replaced it with other
+    # journeys. The feed, downloaded on 23 Nov, gives both editions that start date.
+    index = index_of(journey('VJ2799', NOV8), journey('VJ5000', NOV22, calls=OTHER),
+                     journey('VJ5001', NOV29, calls=OTHER))
+    old = key('VJ2799')
+    carried = {SCOPE: {NOV22}}
+    proof = duplicate.superseded_clipped_calendar(NOV24, old, index, carried, NOV23)
+    assert [item.start for item in proof] == [NOV8]
+    # Not when the feed kept the edition's own start: the date resolver handles that.
+    assert not duplicate.superseded_clipped_calendar(NOV24, old, index, carried, NOV8)
+    # Not before the replacement starts, nor when the GTFS lacks the replacement.
+    assert not duplicate.superseded_clipped_calendar(date(2026, 11, 21), old, index, carried, NOV23)
+    assert not duplicate.superseded_clipped_calendar(NOV24, old, index, {}, NOV23)
+    # Not for a journey that is also in the edition in force.
+    index.add(journey('VJ2799', NOV22))
+    assert not duplicate.superseded_clipped_calendar(NOV24, old, index, carried, NOV23)
+
+
+def test_redated_rule_needs_one_scope_and_a_known_calendar_start():
+    other_scope = ('PH0000132:02', 'D1x')
+    index = index_of(journey('VJ2799', NOV8), journey('VJ2799', NOV8, scope=other_scope),
+                     journey('VJ5000', NOV22, calls=OTHER))
+    assert not duplicate.superseded_clipped_calendar(
+        NOV24, key('VJ2799'), index, {SCOPE: {NOV22}}, NOV23)
+    single = index_of(journey('VJ2799', NOV8), journey('VJ5000', NOV22, calls=OTHER))
+    assert not duplicate.superseded_clipped_calendar(
+        NOV24, key('VJ2799'), single, {SCOPE: {NOV22}}, None)
