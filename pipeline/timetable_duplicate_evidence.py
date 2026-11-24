@@ -70,6 +70,35 @@ def profile_conditions_on_day(profile, weekday):
         return None
 
 
+def superseded_clipped_calendar(day, key, index, represented, calendar_start):
+    """An old edition's journey that the BODS feed re-dated to the download day.
+
+    BODS GTFS moves every start date that has passed to the day it was
+    generated, so First's previous edition and the one that replaced it can
+    arrive with the same start date. The date-based edition resolver then
+    cannot tell them apart and the old journeys run on beside the new ones
+    (#151, 23 Nov 2026: 1,053 journeys of First's 8 Nov edition on 23-26 Nov,
+    after its 22 Nov edition). Retire such a journey on ``day`` only when:
+    its whole lineage lies in one scope and ends in an older edition than the
+    one in force on ``day``; that newer edition is carried by the GTFS; and
+    the journey's GTFS calendar starts after its newest edition did, so the
+    feed re-dated it. ``superseded_nonoperation`` still needs an explicit
+    statement; this covers only the re-dated case, where the edition dates
+    themselves are the operator's statement.
+    """
+    from timetable_source_index import single_scope_lineage
+    found = single_scope_lineage(index, key)
+    if found is None or calendar_start is None:
+        return []
+    scope, newest, witnesses = found
+    in_force = index.in_force(scope, day)
+    if in_force is None or in_force <= newest or in_force not in represented.get(scope, ()):
+        return []
+    if calendar_start <= newest:
+        return []       # the feed kept the edition's own start: the resolver handles it
+    return [item for item in witnesses if item.start == newest]
+
+
 def replacement_proof(day, old, new, evidence, editions):
     older = [item for item in evidence.get(old, []) if item.start <= day]
     newer = witnesses_for(day, evidence.get(new, []), editions)
@@ -372,6 +401,23 @@ def reconcile_database(database: Path, directory: Path, index=None) -> dict:
                             corrections[old][day.strftime('%Y%m%d')]=dict(
                                 replacement_trip_id=new,witnesses=[w.record() for w in proof],
                                 **({'basis':basis} if basis else {}))
+        if index is not None:
+            # Last resort, after every exact proof above: an old edition's
+            # journey that the feed re-dated, on days nothing else has settled.
+            for trip in sorted(stale):
+                calendar=calendars.get(trips[trip]['service_id'])
+                start=(datetime.strptime(calendar['start_date'],'%Y%m%d').date()
+                       if calendar and calendar.get('start_date') else None)
+                for day in sorted(days.get(trips[trip]['service_id'], set())):
+                    text=day.strftime('%Y%m%d')
+                    if text in excluded_by_source[trip] or text in corrections.get(trip, {}):
+                        continue
+                    proof=superseded_clipped_calendar(day, keys[trip], index, represented, start)
+                    if proof:
+                        excluded_by_source[trip][text]=dict(
+                            reason='superseded_edition_redated_by_feed',
+                            replaced_by_edition=index.in_force(proof[0].scope, day).isoformat(),
+                            witnesses=[w.record() for w in proof])
         resolve_replacements(corrections)
         conn.execute('''CREATE TABLE IF NOT EXISTS duplicate_source_corrections (
             trip_id TEXT NOT NULL,date TEXT NOT NULL,original_service_id TEXT NOT NULL,
