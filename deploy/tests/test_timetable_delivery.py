@@ -556,7 +556,7 @@ def test_delivery_limits_leave_room_for_the_growing_timetable():
     """546-550 MB builds on 12-13 Nov 2026 exceeded the old 512 MiB limit."""
     import timetable_delivery
     import timetable_service_profile
-    assert timetable_delivery.MAX_DATABASE_BYTES == 768 * 1024 * 1024
+    assert timetable_delivery.MAX_DATABASE_BYTES == 256 * 1024 * 1024
     assert timetable_delivery.MAX_ARCHIVE_BYTES == 192 * 1024 * 1024
     assert timetable_service_profile.MAX_DATABASE_BYTES == timetable_delivery.MAX_DATABASE_BYTES
     assert timetable_delivery.MAX_TOTAL_BYTES > timetable_delivery.MAX_DATABASE_BYTES

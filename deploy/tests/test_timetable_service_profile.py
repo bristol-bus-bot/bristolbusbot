@@ -418,7 +418,7 @@ def test_oversized_and_locked_database_fail_with_named_context(
         compare_databases(database, database, start_date=START)
     assert oversized.value.code == "database_too_large"
 
-    monkeypatch.setattr(service_profile, "MAX_DATABASE_BYTES", 768 * 1024 * 1024)
+    monkeypatch.setattr(service_profile, "MAX_DATABASE_BYTES", 256 * 1024 * 1024)
 
     def locked(*_args, **_kwargs):
         raise sqlite3.OperationalError("database is locked")
@@ -440,10 +440,13 @@ def test_bristol_local_date_handles_dst_instants():
     not EXACT_CURRENT.is_file() or not EXACT_CANDIDATE.is_file(),
     reason="exact seven-day GitHub artifacts are not available locally",
 )
-def test_exact_22_and_29_july_artifacts_pass_semantic_policy(tmp_path):
+def test_exact_22_and_29_july_artifacts_pass_semantic_policy(tmp_path, monkeypatch):
     # The 29 July candidate lists 951 FlixBus journeys more than once a day,
     # which policy service-window-v4 refuses. Once the build's duplicate-journey
     # step (#202) has cleaned them, the same artifacts must pass.
+    # These July files predate the shared layout (#151) and exceed today's
+    # 256 MiB limit; this test is about the journey policy, not size.
+    monkeypatch.setattr(service_profile, "MAX_DATABASE_BYTES", 768 * 1024 * 1024)
     with pytest.raises(ServiceProfileError) as error:
         compare_databases(EXACT_CURRENT, EXACT_CANDIDATE, start_date=START,
                           deadline_seconds=10 * 60)
