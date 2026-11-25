@@ -472,7 +472,7 @@ def test_standing_notes_exclude_origins_and_ignore_old_comparisons():
     assert status_digest.change_lines(snapshot, previous) == [
         "Buses seen in the last 7 days without full details: 1 distinct bus "
         "(livery unknown 1, missing descriptions 1). "
-        "The weekly fleet refresh can fill source gaps. Description drafts need approval.",
+        "The weekly fleet refresh can fill source gaps. New buses get descriptions automatically (up to 60 a month); older buses do not.",
         "Odd readings in the last 48 hours: 12 flags (far from the stop 10, very late or early 2). "
         "These need a person to check them.",
     ]
