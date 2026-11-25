@@ -59,7 +59,10 @@ test('a depot story carries one checked fact for that operator\'s garage, when t
   assert.match(depot.context.depot.depotFact.claim, /first electrified bus depot/);
   const lh = subjectsWithDepot({ ...event, busDetails: { garage: { name: 'Lawrence Hill' } },
     depotContext: { ...event.depotContext, name: 'Lawrence Hill' } }, null, null).find(c => c.kind === 'depot');
-  assert.equal(lh.context.depot.depotFact, undefined, 'no checked fact, depot story without one');
+  assert.match(lh.context.depot.depotFact.claim, /116 new electric buses/, 'approved 23 Nov 2026');
+  const wells = subjectsWithDepot({ ...event, busDetails: { garage: { name: 'Wells' } },
+    depotContext: { ...event.depotContext, name: 'Wells' } }, null, null).find(c => c.kind === 'depot');
+  assert.equal(wells?.context.depot.depotFact, undefined, 'no live fact, depot story without one');
   assert.equal(depotFact('SSWL', 'Hengrove'), undefined, 'keyed by operator');
   for (const facts of Object.values(DEPOT_FACTS)) for (const f of facts) assert.match(f.source, /^https:\/\//);
 });
