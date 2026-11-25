@@ -63,6 +63,13 @@ MAX_SUCCESSFUL_POLL_GAP_S = 15 * 60
 MIN_MATCH_RATE_PCT = 80.0
 MIN_DUTY_DETAIL_COVERAGE_PCT = 95.0
 MAX_DUTY_CONNECTION_S = 60 * 60
+# Planning #146, "bus was on another journey" (an estimate, kept apart from
+# "very likely didn't run"): the scheduled bus has a reading on a different
+# journey at least this far inside the missing journey's run.
+OTHER_JOURNEY_MARGIN_S = 10 * 60
+# Another timetable copy of the same journey: same route and direction,
+# starting within this of it. A bus on that copy says nothing.
+DUPLICATE_COPY_S = 5 * 60
 FUZZY_MATCH_WINDOW_S = 10 * 60
 UNKNOWN_ROUTE = "(unknown)"
 UNKNOWN_DIRECTION = -1
@@ -417,6 +424,32 @@ def init_summary_tables(conn):
                next_match_window        INTEGER NOT NULL,
                PRIMARY KEY (service_date, operator, trip_id)
            )"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_other_journey_gaps (
+               service_date             TEXT NOT NULL,
+               operator                 TEXT NOT NULL,
+               block_id                 TEXT NOT NULL,
+               trip_id                  TEXT NOT NULL,
+               route                    TEXT NOT NULL,
+               direction                INTEGER NOT NULL,
+               first_departure          TEXT NOT NULL,
+               last_departure           TEXT NOT NULL,
+               vehicle_ref              TEXT NOT NULL,
+               other_trip_id            TEXT NOT NULL,
+               other_route              TEXT NOT NULL,
+               other_recorded_at        TEXT NOT NULL,
+               PRIMARY KEY (service_date, operator, trip_id)
+           )"""
+    )
+    cur.execute(
+        """CREATE VIEW IF NOT EXISTS valid_daily_other_journey_gaps AS
+               SELECT gap.*
+               FROM daily_other_journey_gaps gap
+               JOIN daily_duty_gap_days day
+                 ON day.service_date = gap.service_date
+                AND day.operator = gap.operator
+               WHERE day.is_valid = 1"""
     )
     cur.execute(
         """CREATE VIEW IF NOT EXISTS valid_daily_duty_gap_days AS
@@ -1079,6 +1112,86 @@ def clear_surrounding_match(trip, observation):
     )
 
 
+def clock_change_day(date_str):
+    """True on a day the UK clocks change; its times are an hour out."""
+    day = datetime.strptime(date_str, "%Y%m%d")
+    start = day.replace(tzinfo=TARGET_TZ).utcoffset()
+    end = (day + timedelta(hours=23, minutes=59)).replace(
+        tzinfo=TARGET_TZ).utcoffset()
+    return start != end
+
+
+def load_vehicle_readings(conn, date_str, operators):
+    """Every timing-point reading's time, by operator and bus.
+
+    Older snapshots without recorded_at give nothing, so nothing moves."""
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(timepoint_observations)")}
+    if not {"vehicle_ref", "recorded_at"} <= columns:
+        return {}
+    op_ph = ",".join("?" for _ in operators)
+    readings = {}
+    for operator, vehicle, trip_id, recorded in conn.execute(
+            f"""SELECT operator, vehicle_ref, trip_id, recorded_at
+                  FROM timepoint_observations
+                 WHERE service_date = ? AND operator IN ({op_ph})
+                   AND NULLIF(vehicle_ref, '') IS NOT NULL
+                   AND recorded_at IS NOT NULL""",
+            (date_str, *operators)):
+        try:
+            when = datetime.fromisoformat(str(recorded).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            continue
+        readings.setdefault((operator, vehicle), []).append((trip_id, when))
+    return readings
+
+
+def on_other_journey(missing, before, after, observations, operator,
+                     readings, trips_by_id, midnight, match_window):
+    """Planning #146: was the bus scheduled for ``missing`` busy elsewhere?
+
+    The bus is the one seen, with an unambiguous match, on the journey before
+    or after in the block. Seen on different buses either side, a swap is the
+    likeliest story, so nothing is claimed. The bus must have a reading on
+    another journey (not the one before, and not another timetable copy of
+    this one) at least OTHER_JOURNEY_MARGIN_S inside this journey's run.
+    Returns (vehicle, other trip, other route, reading time) or None."""
+    vehicles = set()
+    for neighbour in (before, after):
+        if neighbour is None:
+            continue
+        observation = observations.get((operator, neighbour["trip_id"]))
+        if (observation and match_window(neighbour) == 1
+                and clear_surrounding_match(neighbour, observation)):
+            vehicles.add(observation["vehicle_ref"])
+    if len(vehicles) != 1:
+        return None
+    vehicle = vehicles.pop()
+    if missing["end_s"] - missing["start_s"] < 2 * OTHER_JOURNEY_MARGIN_S:
+        return None
+    start = midnight + timedelta(
+        seconds=missing["start_s"] + OTHER_JOURNEY_MARGIN_S)
+    end = midnight + timedelta(
+        seconds=missing["end_s"] - OTHER_JOURNEY_MARGIN_S)
+    for trip_id, when in sorted(
+            readings.get((operator, vehicle), []), key=lambda item: item[1]):
+        if not start <= when <= end:
+            continue
+        if trip_id == missing["trip_id"] or (
+                before is not None and trip_id == before["trip_id"]):
+            continue
+        other = trips_by_id.get(trip_id)
+        if (other is not None and other["route"] == missing["route"]
+                and other["direction"] == missing["direction"]
+                and other["start_s"] is not None
+                and abs(other["start_s"] - missing["start_s"]) <= DUPLICATE_COPY_S):
+            continue
+        return vehicle, trip_id, (other or {}).get("route") or "", when
+    return None
+
+
 def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
     """Preserve strict candidate duty gaps privately.
 
@@ -1095,6 +1208,10 @@ def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
         (date_str,),
     ).fetchone()
     coverage_valid = bool(coverage_row and coverage_row[0])
+
+    vehicle_readings = load_vehicle_readings(conn, date_str, operators)
+    midnight = datetime.strptime(date_str, "%Y%m%d").replace(
+        tzinfo=TARGET_TZ).astimezone(timezone.utc)
 
     by_operator = {operator: [] for operator in operators}
     for trip in scheduled:
@@ -1249,6 +1366,33 @@ def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
 
             is_valid = not reasons
             retained_candidates = candidates if is_valid else []
+
+            other_journey = []
+            if is_valid and not clock_change_day(date_str):
+                strict = {row[3] for row in candidates}
+                trips_by_id = {trip["trip_id"]: trip for trip in trips}
+                for block_id, block_trips in usable:
+                    for index, missing in enumerate(block_trips):
+                        if missing["trip_id"] in strict or observations.get(
+                                (operator, missing["trip_id"])):
+                            continue
+                        found = on_other_journey(
+                            missing,
+                            block_trips[index - 1] if index else None,
+                            block_trips[index + 1]
+                            if index + 1 < len(block_trips) else None,
+                            observations, operator, vehicle_readings,
+                            trips_by_id, midnight, match_window)
+                        if found:
+                            vehicle, other_trip, other_route, when = found
+                            other_journey.append((
+                                date_str, operator, str(block_id)[:256],
+                                str(missing["trip_id"])[:256],
+                                str(missing["route"])[:256],
+                                missing["direction"], missing["first_departure"],
+                                missing["last_departure"], str(vehicle)[:256],
+                                str(other_trip)[:256], str(other_route)[:256],
+                                when.isoformat()))
             conn.execute(
                 """DELETE FROM daily_duty_gap_candidates
                      WHERE service_date = ? AND operator = ?""",
@@ -1275,6 +1419,16 @@ def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
                        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 retained_candidates,
             )
+            conn.execute(
+                """DELETE FROM daily_other_journey_gaps
+                     WHERE service_date = ? AND operator = ?""",
+                (date_str, operator),
+            )
+            conn.executemany(
+                """INSERT INTO daily_other_journey_gaps VALUES
+                       (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                other_journey,
+            )
             results[operator] = {
                 "valid": is_valid,
                 "invalid_reasons": reasons,
@@ -1288,6 +1442,7 @@ def rollup_duty_gaps(conn, date_str, operators=SHOW_OPERATORS):
                 "short_connections": short_connections,
                 "ambiguous": ambiguous,
                 "candidates": len(retained_candidates),
+                "other_journey": len(other_journey),
             }
     return results
 

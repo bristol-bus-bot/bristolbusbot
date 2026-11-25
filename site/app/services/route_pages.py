@@ -201,7 +201,22 @@ class RoutePages:
         })
         view["hours"], view["worst_hour"] = self._hours(entry)
         view["stretch"] = self._stretch(entry)
+        view["missed"] = self._missed(entry)
         return view
+
+    def _missed(self, entry: dict) -> dict | None:
+        """Planning #146: journeys that very likely didn't run, and the
+        estimate of those whose bus was on another journey. Only for an
+        operator whose duty check passed; never called cancellations."""
+        journeys = (self._operator_file("hourly", entry["operator"]) or {}).get("journeys") or {}
+        if not journeys.get("duty_checked"):
+            return None
+        total = ((journeys.get("routes") or {}).get(entry["label"]) or {}).get("total")
+        if not isinstance(total, list) or len(total) < 3:
+            return None
+        likely = int(total[2] or 0)
+        elsewhere = int(total[3] or 0) if len(total) > 3 else 0
+        return {"likely": likely, "elsewhere": elsewhere}
 
     def _hours(self, entry: dict) -> tuple[list[dict], str | None]:
         payload = self._operator_file("hourly", entry["operator"]) or {}

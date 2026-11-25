@@ -158,6 +158,7 @@ def test_strict_rollup_rejects_ambiguous_long_and_swapped_gaps():
         "short_connections": 3,
         "ambiguous": 2,
         "candidates": 1,
+        "other_journey": 0,
     }
     assert connection.execute(
         """SELECT trip_id, route, vehicle_ref, connection_before_s,

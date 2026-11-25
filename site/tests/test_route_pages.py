@@ -42,7 +42,10 @@ def install_routes(app, tmp_path):
     weekday["18"] = [36, 7, 114]
     (folder / "hourly" / "FBRI.json").write_text(json.dumps({
         "window": {"from": "20261004", "to": "20261031"}, "min_readings": 30,
-        "routes": {"72": {"weekday": weekday}}}), encoding="utf-8")
+        "routes": {"72": {"weekday": weekday}},
+        "journeys": {"duty_checked": True, "routes": {
+            "72": {"total": [992, 959, 4, 7]}, "75": {"total": [500, 490, 2]}}}}),
+        encoding="utf-8")
     (folder / "segments" / "FBRI.json").write_text(json.dumps({"routes": {"72": [{
         "kind": "tight", "from": "Cotham Hill", "to": "Baldwin Street",
         "from_place": "Kingsdown", "to_place": "Bristol City Centre",
@@ -73,6 +76,10 @@ def test_a_route_page_shows_its_figures_in_plain_words(app, client, tmp_path):
     assert '<link rel="canonical" href="https://bristolbuses.live/routes/first/72">' in html
     assert response.headers["Cache-Control"] == "public, max-age=0, s-maxage=3600"
     assert chr(0x2014) not in html  # no em-dashes
+    # Planning #146: both groups, the second labelled as an estimate.
+    assert "<strong>4</strong><span>very likely didn't run</span>" in html
+    assert "<strong>7</strong><span>bus was on another journey (estimate)</span>" in html
+    assert "Neither is proof of cancellation." in html
 
 
 def test_shared_numbers_resolve_to_the_right_town(app, client, tmp_path):
@@ -153,3 +160,22 @@ def test_shared_numbers_list_their_own_towns_buses(app, client, tmp_path):
     html = client.get("/routes/first/4-bath").get_data(as_text=True)
     assert f'href="/vehicles/{SLUG}"' in html
     assert 'href="/routes/first/4-bath"' in client.get(f"/vehicles/{SLUG}").get_data(as_text=True)
+
+
+def test_missed_journeys_need_a_passed_duty_check(app, client, tmp_path):
+    install_routes(app, tmp_path)
+    hourly = tmp_path / "audit_site" / "hourly" / "FBRI.json"
+    data = json.loads(hourly.read_text(encoding="utf-8"))
+    data["journeys"]["duty_checked"] = False
+    hourly.write_text(json.dumps(data), encoding="utf-8")
+    app.extensions["bbb_route_pages"] = RoutePages(str(tmp_path / "audit_site"))
+    html = client.get("/routes/first/72").get_data(as_text=True)
+    assert "very likely didn't run" not in html
+    assert "another journey" not in html
+
+
+def test_older_files_without_the_estimate_show_zero(app, client, tmp_path):
+    install_routes(app, tmp_path)
+    html = client.get("/routes/first/75").get_data(as_text=True)
+    assert "<strong>2</strong><span>very likely didn't run</span>" in html
+    assert "<strong>0</strong><span>bus was on another journey (estimate)</span>" in html

@@ -158,13 +158,19 @@ def test_journeys_count_only_healthy_days_and_checked_duty_gaps():
             "INSERT INTO daily_duty_gap_candidates VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (day, "FBRI", "B1", trip, "43", 0, departure, departure, "V1", "P", "43",
              "07:00:00", "0700", "N", "43", "09:00:00", "0900", 60, 60, 1, 1))
+    # #146: "bus was on another journey" estimates; only checked days count.
+    for day, trip in (("20261020", "E1"), ("20261021", "E2")):
+        conn.execute(
+            "INSERT INTO daily_other_journey_gaps VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (day, "FBRI", "B1", trip, "43", 0, "08:30:00", "09:30:00", "V1",
+             "X", "m1", "2026-10-20T08:45:00+00:00"))
     journeys = audit_export.build_journeys(conn.cursor(), days, "FBRI")
     route = journeys["routes"]["43"]
     # Only the two healthy coverage days count; the invalid 22nd is ignored.
-    assert route["total"] == [60, 54, 2]
-    assert route["bands"]["am_peak"] == [20, 18, 1]
-    assert route["bands"]["evening"] == [40, 36, 1]
-    assert journeys["network"]["total"] == [60, 54, 2]
+    assert route["total"] == [60, 54, 2, 1]
+    assert route["bands"]["am_peak"] == [20, 18, 1, 1]
+    assert route["bands"]["evening"] == [40, 36, 1, 0]
+    assert journeys["network"]["total"] == [60, 54, 2, 1]
     assert journeys["duty_checked"] is True
 
 
