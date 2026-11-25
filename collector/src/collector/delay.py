@@ -262,6 +262,12 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
             recorded_utc, cs.row, service_midnight_dt, delay_s)
     if not plausible_delay(delay_s, offset_s):
         return None, "sanity_rejected"
+    is_final = cs.index == len(schedule_rows) - 1 and cs.index != 0
+    # On a clock-change night the times may be an hour out until run.py
+    # resolves them, so the guard is left off there.
+    if is_final and not offset_s and last_stop_before_start(
+            recorded_utc, schedule_rows, service_midnight_dt):
+        return None, "last_stop_before_start"
     return SettledReading(
         stop_sequence=int(seq),
         stop_code=stop_code,
@@ -271,8 +277,27 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
         gps_distance_m=int(cs.distance_m),
         is_origin=cs.index == 0,
         clock_offset_s=offset_s,
-        is_final=cs.index == len(schedule_rows) - 1 and cs.index != 0,
+        is_final=is_final,
     ), None
+
+
+def last_stop_before_start(recorded_utc: datetime, schedule_rows: list,
+                           service_midnight_dt: datetime) -> bool:
+    """A last-stop reading from before the journey has really started.
+
+    Planning #156. Feeds can switch a bus to its next journey while it is
+    still finishing the last one, near the new journey's last stop. Such a
+    reading would end the journey before it begins and block every later
+    reading. A real arrival cannot come in the first half of the journey's
+    scheduled running time: that would be more than half the journey early,
+    well past the 15-minute early cut-off on any journey over half an hour.
+    """
+    start = gtfs_seconds(schedule_rows[0][1])
+    end = gtfs_seconds(schedule_rows[-1][1])
+    if start is None or end is None or end <= start:
+        return False
+    halfway = scheduled_local(service_midnight_dt, (start + end) // 2)
+    return recorded_utc < halfway.astimezone(timezone.utc)
 
 
 def settled_reading(lat: float, lon: float, recorded_utc: datetime,

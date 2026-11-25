@@ -13,6 +13,10 @@ from zoneinfo import ZoneInfo
 
 from .operator_registry import SHOW_OPERATORS
 
+# A reading this close to a journey's last stop means the bus has reached the
+# end; nothing more is stored against that journey (planning #156). It is the
+# publication gate, so the stored last-stop reading is always a usable one.
+FINAL_STOP_PASSED_M = 150
 MATCHING_EVIDENCE_DAILY_LIMIT = 250
 MATCHING_EVIDENCE_TOTAL_LIMIT = 5000
 MATCHING_EVIDENCE_ALTERNATIVES_LIMIT = 3
@@ -218,19 +222,36 @@ def apply_clock_reading(cur, service_date: str, trip_id: str,
 
 
 def upsert_observation(cur, obs: tuple) -> None:
-    """Keep the closest observation for each trip and timing point.
+    """Keep the closest observation for each trip and timing point, in order.
+
+    Planning #156: a reading is stored only while it fits the bus's progress
+    along the journey. Once the journey has a reading at a later stop, a
+    reading at an earlier stop is neither stored nor allowed to replace one.
+    Once the journey has a reading within the publication gate of its last
+    stop, the bus has passed the end and nothing more is stored against it,
+    not even a closer reading at that last stop. Readings arrive in poll
+    order (held writes are replayed in order), so "later" means later in time.
 
     ``obs`` ends with is_final; older 15-field tuples mean not final.
     """
     if len(obs) == 15:
         obs = (*obs, 0)
+    # A malformed tuple must still fail as a database error, not IndexError.
+    service_date, trip_id, stop_sequence = (
+        (obs[0], obs[3], obs[5]) if len(obs) == 16 else (None, None, None))
     cur.execute(
         """INSERT INTO timepoint_observations
                (service_date, operator, route, trip_id, siri_journey_ref,
                 stop_sequence, stop_code, scheduled_local, observed_delay_s,
                 on_time, gps_distance_m, recorded_at, vehicle_ref, is_origin,
                 match_tier, is_final)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+           WHERE NOT EXISTS (
+               SELECT 1 FROM timepoint_observations later
+               WHERE later.service_date = ? AND later.trip_id = ?
+                 AND (later.stop_sequence > ?
+                      OR (later.is_final = 1
+                          AND later.gps_distance_m <= ?)))
            ON CONFLICT(service_date, trip_id, stop_sequence) DO UPDATE SET
                observed_delay_s = excluded.observed_delay_s,
                on_time          = excluded.on_time,
@@ -245,7 +266,7 @@ def upsert_observation(cur, obs: tuple) -> None:
                match_tier       = excluded.match_tier,
                is_final         = excluded.is_final
            WHERE excluded.gps_distance_m < timepoint_observations.gps_distance_m""",
-        obs)
+        (*obs, service_date, trip_id, stop_sequence, FINAL_STOP_PASSED_M))
 
 
 def _bounded_text(value, limit: int = 256) -> str | None:
