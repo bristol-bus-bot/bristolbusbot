@@ -427,7 +427,7 @@ management problem, and that is where the criticism belongs.
 Changes that affect comparability of the published figures are recorded
 here.
 
-**November 2026 - timetabled waits and set-down-only stops.** Readings
+**25 November 2026 - timetabled waits and set-down-only stops.** Readings
 taken from the day this change went live use the timetable's arrival time
 where it sets a wait at a timing point, and never count a set-down-only stop
 as early (see "On-time definition"). Before, every reading was compared with

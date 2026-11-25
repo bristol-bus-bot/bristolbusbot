@@ -127,6 +127,8 @@ def app(tmp_path):
         ("T_NIGHT", "24:10:00", "24:10:00", "S1", 1, 1),
         ("T_NIGHT", "24:20:00", "24:20:00", "S3", 2, 1),
     ])
+    # Real timetables carry GTFS pickup_type; the collector reads it (#155).
+    g.execute("ALTER TABLE stop_times ADD COLUMN pickup_type INT DEFAULT 0")
     g.commit(); g.close()
 
     fleet_path = tmp_path / "fleet.json"
