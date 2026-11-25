@@ -451,10 +451,45 @@ def _not_older(left: object, right: object) -> bool:
         return True
 
 
+# A live file this much newer than the last automatic acceptance was put on
+# by hand (push.py --timetable). Automatic promotion records its acceptance
+# after the file is in place, so it never trips this.
+HAND_INSTALL_MARGIN_S = 600
+
+
+def newest_accepted(accepted: object, live: Path | None = None) -> object:
+    """The automatic acceptance, or the live file's install if that is newer.
+
+    ``push.py --timetable`` replaces the live file without touching the
+    automatic promotion record, so the daily message kept the older date.
+    The live file's modification time is when it was uploaded."""
+    live = live or LIVE_TIMETABLE
+    try:
+        installed = datetime.fromtimestamp(live.stat().st_mtime, timezone.utc)
+    except OSError:
+        return accepted
+    known = accepted.get("accepted_at") if isinstance(accepted, dict) else None
+    if known:
+        try:
+            when = datetime.fromisoformat(str(known).replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+        except ValueError:
+            when = None
+        if when is not None and                 (installed - when).total_seconds() <= HAND_INSTALL_MARGIN_S:
+            return accepted
+    return {"accepted_at": installed.isoformat(), "source": "by_hand",
+            "automatic": accepted if isinstance(accepted, dict) else None}
+
+
 def timetable_automation_check() -> tuple[dict, list[str]]:
     """Correlate shadow and promotion as one causal transaction."""
     delivery, delivery_issues = timetable_delivery_check()
     promotion, promotion_issues = timetable_promotion_check()
+    promotion = dict(promotion)
+    if "last_accepted" in promotion or LIVE_TIMETABLE.exists():
+        promotion["last_accepted"] = newest_accepted(
+            promotion.get("last_accepted"))
     provisional_issues = [item for item in promotion_issues
                           if item in {'timetable:provisional-holiday-due',
                                       'timetable:operator-missing'}]
