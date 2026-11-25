@@ -23,7 +23,10 @@ EVENT_DELAYED_MIN_S = 4 * 60
 EVENT_EARLY_MAX_S = -3 * 60
 
 # Schedule rows everywhere in this module are tuples:
-# (stop_sequence, departure_time, timepoint, stop_code, stop_lat, stop_lon)
+# (stop_sequence, departure_time, timepoint, stop_code, stop_lat, stop_lon,
+#  stop_name, arrival_time, pickup_type); the last three may be absent.
+# GTFS pickup_type 1 means passengers may not board: a set-down-only stop.
+NO_PICKUP = 1
 
 
 @dataclass
@@ -110,6 +113,32 @@ def closest_stop(lat: float, lon: float, schedule_rows: list,
                 candidate.distance_m, candidate.index)
 
     return min(nearby, key=time_score)
+
+
+def timetable_window_delay(recorded_utc: datetime, row: tuple,
+                           service_midnight_dt: datetime,
+                           departure_delay_s: int) -> int:
+    """Audit delay at a timing point, using what the timetable says there.
+
+    Planning #155. Where the timetable gives an earlier arrival time than
+    departure time, the bus is meant to wait. A reading before the arrival
+    time is early by how far it is before the arrival; a reading during the
+    wait is on time (0); after the departure time, lateness is measured
+    against the departure as before. At a set-down-only stop nobody can be
+    left behind, so a reading is never early there (0); late is still late.
+    """
+    delay_s = departure_delay_s
+    arrival_secs = gtfs_seconds(row[7]) if len(row) > 7 and row[7] else None
+    departure_secs = gtfs_seconds(row[1])
+    if (arrival_secs is not None and departure_secs is not None
+            and arrival_secs < departure_secs and delay_s < 0):
+        arrival = scheduled_local(service_midnight_dt, arrival_secs)
+        before_arrival = int(round((
+            recorded_utc - arrival.astimezone(timezone.utc)).total_seconds()))
+        delay_s = min(before_arrival, 0)
+    if len(row) > 8 and row[8] is not None and int(row[8]) == NO_PICKUP:
+        delay_s = max(delay_s, 0)
+    return delay_s
 
 
 def plausible_delay(delay_s: int, clock_offset_s: int = 0) -> bool:
@@ -226,6 +255,11 @@ def settled_reading_result(lat: float, lon: float, recorded_utc: datetime,
     sched = scheduled_local(service_midnight_dt, stop_secs)
     delay_s = int(round((recorded_utc - sched.astimezone(timezone.utc)).total_seconds()))
     offset_s = clock_change_offset_s(service_midnight_dt, stop_secs)
+    if not offset_s:
+        # A clock-change night keeps the plain departure measure; the clock
+        # resolution in run.py shifts that number and must not be mixed.
+        delay_s = timetable_window_delay(
+            recorded_utc, cs.row, service_midnight_dt, delay_s)
     if not plausible_delay(delay_s, offset_s):
         return None, "sanity_rejected"
     return SettledReading(
