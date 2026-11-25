@@ -716,3 +716,11 @@ def test_daily_export_is_bounded_locked_read_only_and_after_the_publish():
     assert "d /var/lib/bristolbusbot/daily-export 0750 @BBB_DEPLOY_USER@ @BBB_DEPLOY_USER@ -" in tmpfiles
     installer = (SYSTEMD.parent / "install_unified_deploy.sh").read_text(encoding="utf-8")
     assert "enable --now bbb-daily-export.timer" in installer
+
+
+def test_data_health_has_room_to_finish():
+    """24 Nov 2026: a normal 2.5-4 minute run went past a 5-minute limit and
+    was killed before it recorded a result. It only reads, so allow 20."""
+    unit = (Path(__file__).resolve().parents[1] / "systemd"
+            / "bbb-data-health.service").read_text(encoding="utf-8")
+    assert "TimeoutStartSec=20min" in unit
