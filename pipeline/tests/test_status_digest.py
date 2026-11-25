@@ -472,7 +472,7 @@ def test_standing_notes_exclude_origins_and_ignore_old_comparisons():
     assert status_digest.change_lines(snapshot, previous) == [
         "Buses seen in the last 7 days without full details: 1 distinct bus "
         "(livery unknown 1, missing descriptions 1). "
-        "The weekly fleet refresh can fill source gaps. Description drafts need approval.",
+        "The weekly fleet refresh can fill source gaps. New buses get descriptions automatically (up to 60 a month); older buses do not.",
         "Odd readings in the last 48 hours: 12 flags (far from the stop 10, very late or early 2). "
         "These need a person to check them.",
     ]
@@ -561,3 +561,11 @@ def test_daily_export_line_says_which_part_failed_and_why():
     assert status_digest.daily_export_lines({"daily_export": stale}, today) == [
         "Data export for the PC: no run since 2026-11-17."]
     assert status_digest.daily_export_lines({}, today) == []
+
+
+def test_timetable_put_on_by_hand_is_named(monkeypatch, tmp_path):
+    snapshot = quiet_snapshot()
+    snapshot["timetable_automation"]["last_accepted"] = {
+        "accepted_at": "2026-11-24T01:19:10+00:00", "source": "by_hand"}
+    line = status_digest.timetable_today_line(snapshot, date(2026, 11, 25))
+    assert line == "Timetable: current, put on by hand 24 Nov."
