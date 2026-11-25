@@ -42,6 +42,9 @@ SIRI_VM_URL = "https://data.bus-data.dft.gov.uk/api/v1/datafeed/"
 SIRI_SX_URL = "https://data.bus-data.dft.gov.uk/api/v1/siri-sx/"
 EVIDENCE_EXTREME_LATE_S = 45 * 60
 EVIDENCE_EXTREME_EARLY_S = -10 * 60
+# A bus holds its journey against a second fuzzy match while its last
+# position is at most this old (planning #156).
+FOLLOWED_TRIP_FRESH_S = 600
 CLOCK_CHANGE_TRIPS = ClockChangeTrips()
 
 
@@ -211,6 +214,54 @@ def _apply_clock_change(clock_trips, service_date, match, est, reading,
     return est, reading, estimate_reason, reading_reason
 
 
+class FollowedTrips:
+    """Which journey each recently seen bus is following (planning #156).
+
+    Loaded from live.db at the start of a poll and kept current as each
+    vehicle is processed, so two buses in one poll are handled in order. A
+    bus counts as following a journey while its last position is no older
+    than FOLLOWED_TRIP_FRESH_S; a bus that has vanished releases it.
+    """
+
+    def __init__(self, live_conn, now_utc: datetime) -> None:
+        self._by_vehicle: dict[str, str] = {}
+        self._by_trip: dict[str, str] = {}
+        cutoff = now_utc - timedelta(seconds=FOLLOWED_TRIP_FRESH_S)
+        rows = live_conn.execute(
+            "SELECT vehicle_ref, trip_id, recorded_at FROM vehicles "
+            "WHERE trip_id IS NOT NULL").fetchall()
+        for vehicle_ref, trip_id, recorded_at in rows:
+            try:
+                recorded = datetime.fromisoformat(recorded_at)
+            except (TypeError, ValueError):
+                continue
+            if recorded.tzinfo is not None and recorded >= cutoff:
+                self.follow(vehicle_ref, trip_id)
+
+    def taken_by_others(self, vehicle_ref: str) -> "_TakenTrips":
+        return _TakenTrips(self._by_trip, vehicle_ref)
+
+    def follow(self, vehicle_ref: str, trip_id: str | None) -> None:
+        old = self._by_vehicle.pop(vehicle_ref, None)
+        if old is not None and self._by_trip.get(old) == vehicle_ref:
+            del self._by_trip[old]
+        if trip_id:
+            self._by_vehicle[vehicle_ref] = trip_id
+            self._by_trip.setdefault(trip_id, vehicle_ref)
+
+
+class _TakenTrips:
+    """Container view: journeys followed by any bus except this one."""
+
+    def __init__(self, by_trip: dict[str, str], vehicle_ref: str) -> None:
+        self._by_trip = by_trip
+        self._vehicle_ref = vehicle_ref
+
+    def __contains__(self, trip_id: object) -> bool:
+        holder = self._by_trip.get(trip_id)  # type: ignore[arg-type]
+        return holder is not None and holder != self._vehicle_ref
+
+
 def _journey_within_age_limit(match, origin_local, now_utc, max_age_h):
     """Let a valid timetable's finish and late allowance extend the age limit.
 
@@ -343,6 +394,7 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
     counters["vehicles_total"] = len(acts)
     now_utc = now_utc or datetime.now(timezone.utc)
     now_local = now_utc.astimezone(target_tz)
+    followed = FollowedTrips(live_conn, now_utc)
 
     for act in acts:
         snap = extract_snapshot(act)
@@ -375,7 +427,9 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                                   snap.journey_ref, cfg.enable_exact_match,
                                   vehicle_pos=(snap.lat, snap.lon),
                                   origin_ref=snap.origin_stop_ref,
-                                  destination_ref=snap.destination_stop_ref)
+                                  destination_ref=snap.destination_stop_ref,
+                                  taken_trips=followed.taken_by_others(
+                                      snap.vehicle_ref))
             if match and not _journey_within_age_limit(
                     match, origin_local, now_utc, cfg.max_journey_age_h):
                 match = None
@@ -411,6 +465,7 @@ def vm_cycle(fetch, tt_cur, live_conn, audit_conn, boundary: BoundaryFilter,
                         int(reading.is_final))))
                     counters["obs_written"] += 1
 
+        followed.follow(snap.vehicle_ref, match.trip_id if match else None)
         decision = live_db.upsert_vehicle(live_conn, snap, est, match,
                                           destination=clean_destination(snap.destination_raw))
         if decision.emit:

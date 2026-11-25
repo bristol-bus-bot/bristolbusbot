@@ -12,6 +12,7 @@ unmatched.
 """
 from __future__ import annotations
 
+from collections.abc import Container
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -200,10 +201,15 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
                 origin_local: datetime,
                 vehicle_pos: tuple[float, float] | None = None,
                 origin_ref: str | None = None,
-                destination_ref: str | None = None) -> Match | None:
+                destination_ref: str | None = None,
+                taken_trips: Container[str] = ()) -> Match | None:
     """Tier 1: fuzzy matching, with deterministic
     candidate selection (nearest departure-time gap) and, when vehicle_pos
-    is given, a route-proximity gate (see module docstring)."""
+    is given, a route-proximity gate (see module docstring).
+
+    ``taken_trips`` are journeys another bus is already following. When the
+    chosen journey is one of them the bus is left unmatched: a fuzzy match
+    never puts a second bus on a journey (planning #156)."""
     if not line_name or line_name in ("Unknown", "") or not operator_noc:
         return None
 
@@ -271,6 +277,11 @@ def match_fuzzy(cur, operator_noc: str, line_name: str, direction_ref: str | Non
                     continue  # same line number, different town
                 if _reversed_endpoints(cur, row[0], origin_ref, destination_ref):
                     continue
+                if row[0] in taken_trips:
+                    # The best candidate is another bus's journey. Leave this
+                    # bus unmatched rather than try the next journey or the
+                    # other direction, which would usually be wrong too.
+                    return None
                 return Match(trip_id=row[0], route_short_name=row[1],
                              schedule=schedule, tier="fuzzy")
     return None
@@ -281,8 +292,12 @@ def match_vehicle(cur, operator_noc: str, line_name: str, direction_ref: str | N
                   enable_exact: bool = False,
                   vehicle_pos: tuple[float, float] | None = None,
                   origin_ref: str | None = None,
-                  destination_ref: str | None = None) -> Match | None:
-    """The one entry point. Exact tier only when explicitly enabled."""
+                  destination_ref: str | None = None,
+                  taken_trips: Container[str] = ()) -> Match | None:
+    """The one entry point. Exact tier only when explicitly enabled.
+
+    ``taken_trips`` applies to the fuzzy tier only: an exact journey code
+    from the operator is trusted even when another bus holds the journey."""
     if enable_exact:
         m = match_exact(
             cur, operator_noc, journey_ref, origin_local, line_name,
@@ -291,7 +306,8 @@ def match_vehicle(cur, operator_noc: str, line_name: str, direction_ref: str | N
             return m
     return match_fuzzy(cur, operator_noc, line_name, direction_ref, origin_local,
                        vehicle_pos=vehicle_pos, origin_ref=origin_ref,
-                       destination_ref=destination_ref)
+                       destination_ref=destination_ref,
+                       taken_trips=taken_trips)
 
 
 def _diagnostic_rows(cur, operator_noc: str, line_name: str,
