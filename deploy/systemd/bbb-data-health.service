@@ -12,7 +12,11 @@ IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 IOWeight=10
 CPUWeight=20
-TimeoutStartSec=5min
+# Normal runs take 2.5 to 4 minutes, mostly waiting for the disk at the
+# lowest I/O priority. On 24 Nov 2026 one ran past the old 5-minute limit and
+# was killed before it could record a result. It only reads, so a longer
+# limit costs nothing.
+TimeoutStartSec=20min
 UMask=0077
 Nice=10
 NoNewPrivileges=yes
