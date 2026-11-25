@@ -289,7 +289,10 @@ def build_journeys(cur, window, operator):
     routes withheld for duplicate timetable entries are already left out of
     daily_trip_coverage. "Very likely didn't run" counts only from operator
     days whose duty-gap check passed. Each entry is [timetabled, seen,
-    very_likely_not_run], in total and by the band the journey starts in.
+    very_likely_not_run, on_another_journey], in total and by the band the
+    journey starts in. The fourth is an estimate (planning #146): not seen,
+    and the bus scheduled for it was tracked on a different journey at the
+    time. It never overlaps the third.
     """
     from audit_rollup import trip_time_band_for
     pooled = operator == NETWORK_LABEL
@@ -316,9 +319,17 @@ def build_journeys(cur, window, operator):
         return None
     if not coverage:
         return None
+    try:
+        elsewhere = cur.execute(
+            f"""SELECT operator, service_date, route, first_departure
+                  FROM valid_daily_other_journey_gaps
+                 WHERE service_date IN ({placeholders}) AND operator IN ({op_ph})""",
+            (*window, *ops)).fetchall()
+    except sqlite3.OperationalError:
+        elsewhere = []     # an audit.db from before #146
 
     def blank():
-        return {"total": [0, 0, 0], "bands": {band: [0, 0, 0] for band in JOURNEY_BANDS}}
+        return {"total": [0, 0, 0, 0], "bands": {band: [0, 0, 0, 0] for band in JOURNEY_BANDS}}
 
     result = {"duty_checked": bool(checked), "network": blank(), "routes": {}}
 
@@ -332,10 +343,11 @@ def build_journeys(cur, window, operator):
         route = public_route(row["operator"], row["route"], pooled)
         add(route, row["time_band"], 0, int(row["scheduled"] or 0))
         add(route, row["time_band"], 1, int(row["seen"] or 0))
-    for row in gaps:
-        if (row["operator"], row["service_date"]) in checked:
-            add(public_route(row["operator"], row["route"], pooled),
-                trip_time_band_for(row["first_departure"]), 2, 1)
+    for index, rows in ((2, gaps), (3, elsewhere)):
+        for row in rows:
+            if (row["operator"], row["service_date"]) in checked:
+                add(public_route(row["operator"], row["route"], pooled),
+                    trip_time_band_for(row["first_departure"]), index, 1)
     return result
 
 

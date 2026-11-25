@@ -45,7 +45,10 @@
                 <div><strong>{{ route.on_time_pct }}%</strong><span>on time, from {{ '{:,}'.format(route.readings) }} readings</span></div>
                 {% if route.typical %}<div><strong>{{ route.typical }}</strong><span>typical lateness</span></div>{% endif %}
                 {% if route.journeys %}<div><strong>{{ route.journeys[0] }} of {{ route.journeys[1] }}</strong><span>timetabled journeys seen running</span></div>{% endif %}
+                {% if route.missed %}<div><strong>{{ route.missed.likely }}</strong><span>very likely didn't run</span></div>
+                <div><strong>{{ route.missed.elsewhere }}</strong><span>bus was on another journey (estimate)</span></div>{% endif %}
             </div>
+            {% if route.missed %}<p class="profile-note">Very likely didn't run: the same bus was tracked on the journeys either side, but not this one. Bus was on another journey: not seen, and the bus due to run it was tracked on a different journey at the time; another, untracked bus may have run it. Neither is proof of cancellation.</p>{% endif %}
             <p class="profile-note">On time means between 1 minute early and 5 min 59 s late at a timing point, measured within 150 m of it. Each reading is the bus's closest recorded position to the timing point, so a bus that arrived early and waited can count as early.</p>
         </section>
 

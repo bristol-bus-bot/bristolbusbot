@@ -316,17 +316,20 @@ const JOURNEY_BAND_LABELS = {
 
 function journeyCounts(entry, dutyChecked) {
   if (!entry) return null;
-  const [timetabled, seen, likely] = entry.total.map((v) => finiteNumber(v));
+  const [timetabled, seen, likely, elsewhere] = entry.total.map((v) => finiteNumber(v));
   if (!timetabled) return null;
   const counted = dutyChecked ? likely : 0;
-  return { timetabled, seen, likely: counted, unseen: Math.max(0, timetabled - seen - counted) };
+  // #146: an estimate, kept apart from "very likely didn't run".
+  const other = dutyChecked ? (elsewhere || 0) : 0;
+  return { timetabled, seen, likely: counted, elsewhere: other,
+    unseen: Math.max(0, timetabled - seen - counted - other) };
 }
 
 // Three honestly separate numbers, never added together into "cancelled".
 function journeysHTML(entry, dutyChecked) {
   const counts = journeyCounts(entry, dutyChecked);
   if (!counts) return "";
-  const { timetabled, seen, likely, unseen } = counts;
+  const { timetabled, seen, likely, elsewhere, unseen } = counts;
   const overallMissing = (timetabled - seen) / timetabled;
   const worst = Object.entries(entry.bands || {})
     .map(([band, v]) => ({ band, timetabled: finiteNumber(v[0]), seen: finiteNumber(v[1]) }))
@@ -340,9 +343,15 @@ function journeysHTML(entry, dutyChecked) {
     <h3>Journeys observed</h3>
     <div class="turnup">
       <div><b>${Math.round((100 * seen) / timetabled)}%</b><span>seen / ${timetabled.toLocaleString()} scheduled</span></div>
-      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span><strong title="The same bus was tracked on the journeys either side, but not this one. This is not proof of cancellation.">Very likely didn't run</strong></span></div>` : ""}
-      <div><b>${unseen.toLocaleString()}</b><span><strong title="Cancellation or missing tracking: we cannot tell which.">Not seen</strong></span></div>
+      ${dutyChecked ? `<div><b>${likely.toLocaleString()}</b><span><strong>Very likely didn't run</strong></span></div>` : ""}
+      ${dutyChecked ? `<div><b>${elsewhere.toLocaleString()}</b><span><strong>Bus was on another journey</strong> (estimate)</span></div>` : ""}
+      <div><b>${unseen.toLocaleString()}</b><span><strong>Not seen</strong></span></div>
     </div>
+    <details class="small"><summary>What these mean</summary>
+      <p>Very likely didn't run: the same bus was tracked on the journeys either side, but not this one.</p>
+      ${dutyChecked ? "<p>Bus was on another journey: not seen, and the bus due to run it was tracked on a different journey at the time. An estimate: another, untracked bus may have run it.</p>" : ""}
+      <p>Not seen: cancelled or not tracked; we cannot tell which. None of these is proof of cancellation.</p>
+    </details>
     ${worstLine}
 `;
 }
@@ -497,7 +506,7 @@ function likelyReasons(route, hourly, segments, row) {
     const missing = (counts.timetabled - counts.seen) / counts.timetabled;
     if (missing >= 0.1 || counts.likely >= 5) {
       out.push({ title: "Unseen journeys",
-        text: `${Math.round((100 * counts.seen) / counts.timetabled)} in 100 seen${counts.likely ? ` · ${counts.likely} very likely didn't run` : ""}` });
+        text: `${Math.round((100 * counts.seen) / counts.timetabled)} in 100 seen${counts.likely ? ` · ${counts.likely} very likely didn't run` : ""}${counts.elsewhere ? ` · ${counts.elsewhere} bus on another journey (estimate)` : ""}` });
     }
   }
   const tightPlaces = new Set(tight.map((t) => `${t.from}|${t.to}`));
