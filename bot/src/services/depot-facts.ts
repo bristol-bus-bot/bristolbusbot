@@ -1,6 +1,7 @@
 // Checked depot facts, keyed by operator and the fleet file's garage name.
 // The first four depots were checked on 2026-10-22. Lawrence Hill and Wells
-// were checked on 2026-11-20. A fact describes the depot, never this bus's
+// were checked on 2026-11-20; Tom approved Lawrence Hill on 2026-11-23 and
+// Wells stays unused (too thin). A fact describes the depot, never this bus's
 // movements. The Bedminster biomethane station belongs to Bristol Community
 // Transport, not a First depot.
 
@@ -31,15 +32,15 @@ export const DEPOT_FACTS: Record<string, DepotFact[]> = {
         qualification: 'Site history.',
         source: 'https://en.wikipedia.org/wiki/Bristol_bus_station',
     }],
-};
-
-// These cards can be reviewed before being made available to the writer.
-export const DEPOT_CARDS_FOR_REVIEW: Record<string, DepotFact[]> = {
     'FBRI:Lawrence Hill': [{
         claim: 'In May 2026 First Bus said electrification work was underway at Lawrence Hill depot and planned to run 116 new electric buses from there on the Bristol network from autumn.',
         qualification: 'The operator\'s May 2026 plan.',
         source: 'https://www.firstbus.co.uk/news-and-service-updates/news/bath-welcomes-first-electric-buses-and-first-repowers-west-england',
     }],
+};
+
+// Checked cards not given to the writer.
+export const DEPOT_CARDS_FOR_REVIEW: Record<string, DepotFact[]> = {
     'FBRI:Wells': [{
         claim: 'In February 2024 Somerset Council reported offering temporary overnight parking at Wells Bus Station. First had asked for space for up to six buses, and the council understood that First\'s Wells depot was short of space.',
         qualification: 'A temporary offer recorded by the council in 2024.',

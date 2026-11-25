@@ -17,8 +17,9 @@ test('depot cards have a claim, qualification and source', () => {
 });
 
 test('the two depot cards under review are unavailable to the writer', () => {
-  assert.deepEqual(Object.keys(DEPOT_CARDS_FOR_REVIEW).sort(), ['FBRI:Lawrence Hill', 'FBRI:Wells']);
-  assert.equal(depotFact('FBRI', 'Lawrence Hill'), undefined);
+  // Tom, 23 Nov 2026: Lawrence Hill goes live; Wells stays unused.
+  assert.deepEqual(Object.keys(DEPOT_CARDS_FOR_REVIEW).sort(), ['FBRI:Wells']);
+  assert.match(depotFact('FBRI', 'Lawrence Hill').claim, /Lawrence Hill depot/);
   assert.equal(depotFact('FBRI', 'Wells'), undefined);
 });
 
