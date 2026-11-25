@@ -82,7 +82,8 @@ interpolation and no assumed speed: every figure is a real recorded position.
 Readings must follow the bus along its journey. Once a journey has a reading
 at a later timing point, no reading at an earlier one is stored or replaces
 one. Once the bus has been recorded within 150 metres of the journey's last
-timing point, nothing more is stored against that journey. This stops a bus
+timing point, nothing more is stored against that journey; that first reading
+within 150 metres is the one kept for the last timing point. This stops a bus
 that is laying over, running its return journey, or passing the same place
 twice on a loop from being recorded against the wrong moment. A journey
 already followed by one bus is never given to a second bus by the fuzzy
@@ -444,7 +445,7 @@ the departure time only, so a bus that arrived on time and waited could
 count as early. Earlier days are not recalculated; they leave the 28-day
 view by themselves within four weeks. Planning #155.
 
-**November 2026 - readings must follow the bus along its journey.** From the
+**25 November 2026 - readings must follow the bus along its journey.** From the
 day this change went live, a reading that contradicts the bus's progress is
 not stored: one at an earlier timing point after a later one, anything after
 the bus has reached the last timing point, and a second bus fuzzy-matched to
@@ -452,7 +453,9 @@ a journey another bus is following (see "Where delay is measured"). Before,
 the closest reading was kept whenever it was taken, so a bus laying over or
 running back on an old journey code could be recorded as very late. At the
 last timing point the first reading within 150 metres is now kept, rather
-than the closest. Earlier days are not recalculated; they leave the 28-day
+than the closest. A reading at the last timing point taken in the first half
+of the journey's scheduled time is ignored: the bus has not really started
+that journey yet, so it cannot end it. Earlier days are not recalculated; they leave the 28-day
 view by themselves within four weeks. Planning #156.
 
 **November 2026 - early arrival at the last stop counts as on time.** A

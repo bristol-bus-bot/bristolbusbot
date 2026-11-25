@@ -186,3 +186,71 @@ def test_bus_already_following_keeps_its_journey_on_the_next_poll():
     assert result["matched"] == 1
     trips = dict(live_conn.execute("SELECT vehicle_ref, trip_id FROM vehicles"))
     assert trips == {"FBRI-36205": "T_OUT", "FBRI-99999": None}
+
+
+# A last-stop reading taken before the journey has started (Tom, 25 Nov):
+# it must not block the journey's later readings. Rows from the 20 Nov
+# timetable; reading times are the real ones from the ticket.
+
+def nov(day, h, m, s=0):
+    return datetime(2026, 11, day, h, m, s, tzinfo=timezone.utc)
+
+
+def sm(day, first):
+    from collector.timeparse import gtfs_seconds, service_midnight
+    h, m, _ = map(int, first.split(":"))
+    return service_midnight(datetime(2026, 11, day, h, m, tzinfo=LDN),
+                            gtfs_seconds(first))
+
+
+ROUTE_3_0611 = [
+    (0, "06:11:00", 1, "bthmgaj", 51.40367, -2.31231, "Morris Lane"),
+    (1, "06:12:00", 1, "bthmdpt", 51.4054, -2.31783, "Stambridge"),
+    (5, "06:15:00", 1, "bthmatw", 51.40007, -2.33319, "Bailbrook House"),
+    (14, "06:25:00", 1, "bthmtwg", 51.37797, -2.35942, "Dorchester Street"),
+]
+
+
+def settle(schedule, index, recorded, midnight):
+    from collector.delay import settled_reading_result
+    row = schedule[index]
+    return settled_reading_result(row[4], row[5], recorded, schedule, midnight)
+
+
+def test_route_3_last_stop_before_the_start_does_not_block_the_journey():
+    # First 3, FBRI-30218, 23 Nov, 06:11 journey: recorded at Dorchester
+    # Street (its last stop) at 06:11:34, then left Morris Lane 16 late.
+    midnight = sm(23, "06:11:00")
+    reading, reason = settle(ROUTE_3_0611, 3, nov(23, 6, 11, 34), midnight)
+    assert reading is None and reason == "last_stop_before_start"
+    # So the journey's real readings are all kept.
+    kept = store([
+        obs("3", 0, "06:26", 960, origin=True, day="20261123"),
+        obs("3", 1, "06:28", 1020, day="20261123"),
+        obs("3", 5, "06:31", 1020, day="20261123"),
+    ], day="20261123")
+    assert set(kept) == {0, 1, 5}
+
+
+def test_route_31_last_stop_before_the_start_is_not_stored():
+    # First 31, FBRI-30209, 22 Nov, 11:15 journey: at Lansdown P&R at 11:10.
+    route_31 = [
+        (0, "11:15:00", 1, "bthjmpj", 51.38334, -2.36292, "Queen Square"),
+        (12, "11:25:00", 1, "bthdwaj", 51.41124, -2.38719, "Lansdown P&R"),
+    ]
+    reading, reason = settle(route_31, 1, nov(22, 11, 10, 12),
+                             sm(22, "11:15:00"))
+    assert reading is None and reason == "last_stop_before_start"
+
+
+def test_real_last_stop_arrival_is_still_stored():
+    # The same route 3 journey arriving at 06:41 (16 late) is a real arrival.
+    reading, reason = settle(ROUTE_3_0611, 3, nov(23, 6, 41), sm(23, "06:11:00"))
+    assert reason is None and reading.is_final
+    assert reading.observed_delay_s == 16 * 60
+
+
+def test_early_but_possible_last_stop_arrival_is_still_stored():
+    # 4 minutes early at the end of a 14-minute journey: past halfway, kept.
+    reading, reason = settle(ROUTE_3_0611, 3, nov(23, 6, 21), sm(23, "06:11:00"))
+    assert reason is None and reading.observed_delay_s == -240
