@@ -23,6 +23,7 @@ import { TrafficService } from './services/traffic-service.js';
 import { logger, TARGET_TIMEZONE, setSummaryMode } from './utils/logging.js';
 import { EventReader } from './ingest/event-reader.js';
 import { RareWorkingShadowReader } from './ingest/rare-working-shadow-reader.js';
+import { visitorPostsEnabled } from './services/visitor-posts.js';
 import { SystemdWatchdog, pausedIngestKeepalive } from './services/systemd-watchdog.js';
 import { LOCAL_BUS_OPERATORS } from './services/editorial-commentary-policy.js';
 import { HolidaySchedule } from './services/holiday-schedule.js';
@@ -316,8 +317,12 @@ class BristolBusBot {
                 // Share the bot's one app_data.db handle rather than open a second.
                 const stateDb = this.databaseManager.getAppDataDb()
                     ?? (process.env.APP_DATA_DB_PATH || '/var/lib/bristolbusbot/bot/app_data.db');
+                // Planning #67: visitor posts only when switched on (off by default).
+                const publish = visitorPostsEnabled()
+                    ? (text: string) => this.socialMediaManager.postSummary(text)
+                    : null;
                 this.rareWorkingShadowReader = new RareWorkingShadowReader(
-                    snapshotPath, stateDb);
+                    snapshotPath, stateDb, undefined, publish);
                 this.rareWorkingShadowReader.start();
             }
         }
