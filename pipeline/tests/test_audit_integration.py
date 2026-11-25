@@ -367,3 +367,50 @@ def test_one_scan_gives_the_same_working_days_as_four():
     assert integration._working_days(cur, days, recent) == expected
     assert expected[2][("FBRI", "FBRI-1", "76")] == 7
     assert integration._working_days(cur, [], []) == ({}, {}, {}, {})
+
+
+def _visitor_case(*, usual_days=20, shared=0, moved=1, pair_once=False):
+    """V1 usually works 75; route X has its own regular buses."""
+    conn = database()
+    completed = dates_ending(date(2026, 7, 17), 57)
+    add_completed(conn, completed)
+    prior, candidate = completed[:-1], completed[-1]
+    for day_index, day in enumerate(prior[:20]):          # 20 days in service
+        route = "75" if day_index < usual_days else f"Y{day_index}"
+        add_observation(conn, day, "FBRI-V1", route, day_index * 10)
+    for bus in range(10):
+        for day_index, day in enumerate(prior[:10]):
+            add_observation(conn, day, f"FBRI-X{bus}", "X", 1000 + bus * 10 + day_index)
+    for bus in range(shared):                # X regulars that also work 75
+        for day_index, day in enumerate(prior[:4]):
+            add_observation(conn, day, f"FBRI-X{bus}", "75", 3000 + bus * 10 + day_index)
+    if pair_once:
+        add_observation(conn, prior[0], "FBRI-V1", "X", 4000)
+    for bus in range(1, moved):              # other 75 regulars out on X today
+        name = f"FBRI-M{bus}"
+        for day_index, day in enumerate(prior[:20]):
+            add_observation(conn, day, name, "75", 5000 + bus * 100 + day_index)
+        for point in range(3):
+            add_observation(conn, candidate, name, "X", 6000 + bus * 10 + point, stop=f"X-{point}")
+    for point in range(3):
+        add_observation(conn, candidate, "FBRI-V1", "X", 7000 + point, stop=f"X-{point}")
+    conn.commit()
+    payload = integration.build_payload(conn, candidate, now=datetime(2026, 7, 18, tzinfo=timezone.utc))
+    return {e["vehicle_ref"]: e["evidence"] for e in payload["rare_workings"]["events"]}
+
+
+def test_visitor_is_a_bus_far_from_its_usual_route():
+    """#67: usual route 75 (20 days), route X shares none of its regulars."""
+    evidence = _visitor_case()["FBRI-V1"]
+    assert evidence["usual_route"] == "75" and evidence["usual_route_days"] == 20
+    assert evidence["shared_regulars_pct"] == 0.0
+    assert evidence["visitor"] is True
+
+
+def test_visitor_needs_routes_that_share_no_pool_a_real_usual_route_and_no_group_move():
+    assert _visitor_case(shared=1)["FBRI-V1"]["visitor"] is False          # 10% shared
+    assert _visitor_case(usual_days=14)["FBRI-V1"]["visitor"] is False     # a floater
+    assert _visitor_case(pair_once=True)["FBRI-V1"]["visitor"] is False    # worked X before
+    moved = _visitor_case(moved=3)
+    assert moved["FBRI-V1"]["moved_together"] == 3
+    assert moved["FBRI-V1"]["visitor"] is False                            # reallocation

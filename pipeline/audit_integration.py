@@ -45,6 +45,18 @@ RARE_MAX_PAIR_DAYS = 2
 RARE_ABSENT_DAYS = 14
 RARE_MIN_READINGS = 3
 RARE_MIN_POINTS = 3
+# Planning #67, "visitor": a rare working from another part of the network.
+# A route's regular buses are those that worked it on at least this many days
+# of the 56; the bus's usual route is the one it worked on most days.
+VISITOR_REGULAR_DAYS = 3
+# Under this share of the route's regular buses also work the bus's usual
+# route: the two routes don't share a pool of buses.
+VISITOR_MAX_SHARED_PCT = 5.0
+# This many or more buses from the same usual route on the same route that
+# day is a reallocation, not a visit.
+VISITOR_MOVED_TOGETHER = 3
+# The bus must really have a usual route: worked on at least this many days.
+VISITOR_MIN_USUAL_DAYS = 15
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_AUDIT_DB = Path(os.getenv("BBB_AUDIT_DB", HERE / "audit.db"))
@@ -594,6 +606,39 @@ def _rare_workings(conn: sqlite3.Connection, completed_dates: list[str],
         (p["operator"], p["vehicle_ref"]): p["slug"] for p in profiles
     }
 
+    # Planning #67: each bus's usual route and each route's regular buses,
+    # from the same 56 days of dated readings (no fleet or livery claims).
+    regulars = defaultdict(set)
+    usual = {}
+    for (operator, vehicle_ref, route_name), days in pair_days.items():
+        if days >= VISITOR_REGULAR_DAYS:
+            regulars[(operator, route_name)].add(vehicle_ref)
+        best = usual.get((operator, vehicle_ref))
+        if best is None or (days, route_name) > (best[1], best[0]):
+            usual[(operator, vehicle_ref)] = (route_name, days)
+    moved = defaultdict(int)
+    for row in candidates:
+        home = usual.get((row["operator"], row["vehicle_ref"]))
+        if home:
+            moved[(row["operator"], row["route"], home[0])] += 1
+
+    def visitor_check(operator, vehicle_ref, route_name, pair):
+        home = usual.get((operator, vehicle_ref))
+        regular = regulars.get((operator, route_name), set())
+        if not home or not regular or home[0] == route_name:
+            return {"usual_route": home[0] if home else None,
+                    "usual_route_days": home[1] if home else 0,
+                    "shared_regulars_pct": None, "moved_together": 0,
+                    "visitor": False}
+        shared = len(regular & regulars.get((operator, home[0]), set()))
+        pct = round(100.0 * shared / len(regular), 1)
+        together = moved[(operator, route_name, home[0])]
+        return {"usual_route": home[0], "usual_route_days": home[1],
+                "shared_regulars_pct": pct, "moved_together": together,
+                "visitor": (pair == 0 and pct < VISITOR_MAX_SHARED_PCT
+                            and together < VISITOR_MOVED_TOGETHER
+                            and home[1] >= VISITOR_MIN_USUAL_DAYS)}
+
     accepted = 0
     for row in candidates:
         operator, vehicle_ref, route = (
@@ -644,8 +689,13 @@ def _rare_workings(conn: sqlite3.Connection, completed_dates: list[str],
                 "absent_days": RARE_ABSENT_DAYS,
                 "minimum_readings": RARE_MIN_READINGS,
                 "minimum_points": RARE_MIN_POINTS,
+                "visitor_regular_days": VISITOR_REGULAR_DAYS,
+                "visitor_max_shared_pct": VISITOR_MAX_SHARED_PCT,
+                "visitor_moved_together": VISITOR_MOVED_TOGETHER,
+                "visitor_min_usual_days": VISITOR_MIN_USUAL_DAYS,
             },
             "cooldown_passed": bool(queued),
+            **visitor_check(operator, vehicle_ref, route, stats["pair_days"]),
         }
         cur.execute(
             """INSERT INTO rare_working_evidence
