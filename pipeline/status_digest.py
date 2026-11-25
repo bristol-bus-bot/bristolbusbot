@@ -704,7 +704,7 @@ def change_lines(snapshot: dict, previous_state: dict) -> list[str]:
              "no fleet record": _count(missing.get("missing_fleet")),
              "livery unknown": _count(missing.get("missing_livery")),
              "missing descriptions": _count(missing.get("missing_descriptions")),
-         }, "The weekly fleet refresh can fill source gaps. Description drafts need approval."),
+         }, "The weekly fleet refresh can fill source gaps. New buses get descriptions automatically (up to 60 a month); older buses do not."),
         ("odd_readings", "Odd readings in the last 48 hours", ("flag", "flags"), odd,
          "These need a person to check them."),
     )
