@@ -26,10 +26,12 @@ DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sun
 
 # Schedule rows returned to callers, everywhere in the collector:
 # (stop_sequence, departure_time, timepoint, stop_code, stop_lat, stop_lon,
-#  stop_name): name appended last so index-based consumers stay valid
+#  stop_name, arrival_time, pickup_type): later fields are appended at the end
+#  so index-based consumers stay valid
 _SCHEDULE_SQL = """
     SELECT st.stop_sequence, st.departure_time, st.timepoint,
-           s.stop_code, s.stop_lat, s.stop_lon, s.stop_name
+           s.stop_code, s.stop_lat, s.stop_lon, s.stop_name,
+           st.arrival_time, st.pickup_type
     FROM stop_times st
     JOIN stops s ON st.stop_id = s.stop_id
     WHERE st.trip_id = ?

@@ -100,7 +100,15 @@ acceptable for buses to arrive early at their final destination." So a
 reading at the last timing point that is more than a minute early counts as
 on time. Late is still late: more than 5 minutes 59 seconds late at the last
 stop is late, as anywhere else. The audit page also gives the stricter
-figure, with those early arrivals counted as early, beside the headline. WECA's latest published Enhanced Partnership Scheme sets an
+figure, with those early arrivals counted as early, beside the headline.
+
+Two more timetable details are used. Where the timetable gives a bus an
+arrival time and a later departure time at a timing point, it is meant to
+wait there: a reading during that wait counts as on time, and only a reading
+before the arrival time can be early (measured from the arrival time).
+Lateness is still measured from the departure time. At a stop where
+passengers may only get off (set-down only), a reading never counts as early,
+because nobody can be left behind; late is still late. WECA's latest published Enhanced Partnership Scheme sets an
 annual area-wide target schedule in Appendix 5, Table 9:
 
 | Financial year | Area-wide target |
@@ -377,9 +385,10 @@ page names the routes withheld each day.
   by up to about half a minute.
 - **A reading is neither an arrival nor a departure.** We keep the single
   position where the bus was closest to the timing point and compare it with
-  the timetable's departure time. If a bus waits at the stop, that position
-  can come from any moment of the wait, so a bus that arrived early and
-  waited can count as early. The official standard, and the Department for
+  the timetable's departure time (or, where the timetable sets a wait, with
+  its arrival and departure times). If a bus waits at a stop where the
+  timetable sets no wait, that position can come from any moment of the
+  wait, so a bus that arrived early and waited can count as early. The official standard, and the Department for
   Transport's ABODS tool, judge departure times; this audit does not yet
   detect the moment a bus leaves.
 - Readings more than 15 minutes early or more than 90 minutes late are
@@ -417,6 +426,14 @@ management problem, and that is where the criticism belongs.
 
 Changes that affect comparability of the published figures are recorded
 here.
+
+**November 2026 - timetabled waits and set-down-only stops.** Readings
+taken from the day this change went live use the timetable's arrival time
+where it sets a wait at a timing point, and never count a set-down-only stop
+as early (see "On-time definition"). Before, every reading was compared with
+the departure time only, so a bus that arrived on time and waited could
+count as early. Earlier days are not recalculated; they leave the 28-day
+view by themselves within four weeks. Planning #155.
 
 **November 2026 - early arrival at the last stop counts as on time.** A
 reading at the last timing point of a journey that is more than a minute
