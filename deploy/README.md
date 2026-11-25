@@ -195,7 +195,7 @@ starting a session.
 To set it up again on a new PC (PowerShell, from the repository root):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File deployegister_daily_exports_task.ps1
+powershell -ExecutionPolicy Bypass -File deploy\register_daily_exports_task.ps1
 ```
 
 **One-time setup** (Tom, once). Until it is done the job records "store not
