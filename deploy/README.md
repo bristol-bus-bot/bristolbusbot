@@ -182,18 +182,20 @@ This downloads any days not yet in `C:\dev\bbb-research\daily\` using your
 own GitHub sign-in. `--combine` rebuilds `daily\readings-combined.db`.
 
 It runs by itself: a Windows scheduled task, **BristolBusBot daily exports**,
-runs it at 09:00 each day with `--combine --log`. If the PC was off at 09:00,
-it runs as soon as the PC is next on. It runs only while Tom is signed in, so
-it uses his own GitHub sign-in. Each run appends one short result to
-`daily\get-daily-exports.log`. A scheduled task was chosen over a note for
-assistants because it doesn't depend on anyone starting a session.
+runs it with `--combine --log --once-a-day` when Tom signs in, when he unlocks
+the PC, and every hour while the PC is on. Only the first successful run of
+the day does any work; the rest exit at once, and a failed run is tried again
+at the next trigger. A single 09:00 run was tried first, but on 24 and 25 Nov
+2026 the laptop was asleep at 09:00 and never caught up. It runs only while
+Tom is signed in, so it uses his own GitHub sign-in. Each working run appends
+one short result to `daily\get-daily-exports.log`. A scheduled task was
+chosen over a note for assistants because it doesn't depend on anyone
+starting a session.
 
 To set it up again on a new PC (PowerShell, from the repository root):
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute "$PWD\.venv\Scripts\pythonw.exe" -Argument "deploy\get_daily_exports.py --combine --log" -WorkingDirectory "$PWD"
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
-Register-ScheduledTask -TaskName "BristolBusBot daily exports" -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At 09:00) -Settings $settings
+powershell -ExecutionPolicy Bypass -File deploy\register_daily_exports_task.ps1
 ```
 
 **One-time setup** (Tom, once). Until it is done the job records "store not

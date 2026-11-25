@@ -38,6 +38,10 @@ REPORT_NAMES = ("collector-anomaly.json", "data-health.json")
 FETCH_BATCH = 50
 LOG_NAME = "get-daily-exports.log"
 LOG_KEEP_LINES = 400
+# --once-a-day: the scheduled task fires at sign-in, at unlock and every hour,
+# because a sleeping laptop misses a single fixed time (24 and 25 Nov 2026).
+# Only the first successful run of the day does any work.
+DONE_NAME = ".last-success"
 
 
 def git(*args: str, cwd: Path | None = None) -> str:
@@ -153,10 +157,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="rebuild readings-combined.db from every readings file")
     parser.add_argument("--log", action="store_true",
                         help="append the output to daily\\get-daily-exports.log (for the scheduled task)")
+    parser.add_argument("--once-a-day", action="store_true",
+                        help="do nothing if a run already succeeded today (for the scheduled task)")
     args = parser.parse_args(argv)
     args.root.mkdir(parents=True, exist_ok=True)
-    if not args.log:
-        return run(args)
+    today = datetime.now().strftime("%Y-%m-%d")
+    done = args.root / DONE_NAME
+    if args.once_a_day and done.exists() and \
+            done.read_text(encoding="utf-8").strip() == today:
+        return 0
+    code = _logged(args) if args.log else run(args)
+    if args.once_a_day and code == 0:
+        done.write_text(today + "\n", encoding="utf-8")
+    return code
+
+
+def _logged(args: argparse.Namespace) -> int:
     log = args.root / LOG_NAME
     buffer = io.StringIO()
     code = 1
@@ -183,7 +199,7 @@ def run(args: argparse.Namespace) -> int:
     readings = sorted(p.name for p in (args.root / "readings").glob("*.sqlite.gz"))
     print(f"{len(saved)} new file(s). Readings on the PC: "
           + (f"{readings[0][:10]} to {readings[-1][:10]} ({len(readings)} days)" if readings else "none"))
-    if args.combine:
+    if args.combine and (saved or not (args.root / "readings-combined.db").exists()):
         print("combined copy:", combine(args.root))
     return 0
 
