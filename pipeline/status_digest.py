@@ -616,6 +616,8 @@ def timetable_today_line(snapshot: dict, today: date) -> str | None:
     age = _days_since(accepted.get("accepted_at"), today)
     if when is None or age is None or age > TIMETABLE_MAX_AGE_DAYS:
         return None    # reported as a problem instead
+    if accepted.get("source") == "by_hand":
+        return f"Timetable: current, put on by hand {when}."
     return f"Timetable: current, last updated {when}."
 
 
