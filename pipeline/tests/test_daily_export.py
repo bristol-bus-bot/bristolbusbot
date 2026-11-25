@@ -265,3 +265,42 @@ def test_pc_log_mode_records_success_and_failure(tmp_path):
     assert lines[0].endswith(" ok") and "0 new file(s)" in lines[1]
     assert any(line.endswith(" FAILED") for line in lines)
     assert any("git ls-remote failed" in line for line in lines)
+
+
+def test_pc_once_a_day_does_the_work_only_once(tmp_path):
+    """24 and 25 Nov 2026: the laptop slept through the single 09:00 run, so
+    the task now also fires at sign-in, unlock and hourly. Only the first
+    successful run of the day does anything; a failure is retried."""
+    remote = tmp_path / "store.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    root = tmp_path / "pc"
+    missing = ["--remote", str(tmp_path / "missing.git"), "--root", str(root),
+               "--log", "--once-a-day"]
+    assert pc.main(missing) == 1
+    assert not (root / pc.DONE_NAME).exists()           # failure: try again
+    good = ["--remote", str(remote), "--root", str(root), "--log", "--once-a-day"]
+    assert pc.main(good) == 0
+    lines_after_first = (root / pc.LOG_NAME).read_text(encoding="utf-8")
+    assert pc.main(good) == 0
+    assert pc.main(missing) == 0                        # already done today
+    assert (root / pc.LOG_NAME).read_text(encoding="utf-8") == lines_after_first
+
+
+def test_pc_combine_is_skipped_when_nothing_is_new(tmp_path, monkeypatch):
+    root = tmp_path / "pc"
+    root.mkdir()
+    (root / "readings-combined.db").write_bytes(b"")
+    monkeypatch.setattr(pc, "download", lambda remote, folder: [])
+    called = []
+    monkeypatch.setattr(pc, "combine", lambda folder: called.append(folder))
+    assert pc.main(["--root", str(root), "--combine"]) == 0
+    assert called == []
+
+
+def test_task_registration_script_uses_the_catch_up_triggers():
+    script = (Path(__file__).resolve().parents[2] / "deploy"
+              / "register_daily_exports_task.ps1").read_text(encoding="utf-8")
+    assert "--once-a-day" in script
+    assert "AtLogOn" in script
+    assert "StateChange" in script and "8" in script     # session unlock
+    assert "RepetitionInterval" in script
