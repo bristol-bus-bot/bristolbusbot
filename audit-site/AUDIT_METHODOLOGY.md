@@ -201,7 +201,7 @@ opens that view, so the main data file doesn't grow.
 
 ## Did the buses turn up?
 
-Each route shows three separate numbers for the same 28 days. They are never
+Each route shows four separate numbers for the same 28 days. They are never
 added together into one "cancelled" figure.
 
 - **Timetabled and seen.** Journeys in the timetable, and how many of them we
@@ -217,6 +217,18 @@ added together into one "cancelled" figure.
   because a bus can still run a journey with its tracker off. Days when an
   operator's timetable has block details for fewer than 95% of journeys
   don't count at all.
+- **Bus was on another journey (an estimate).** A journey we didn't see,
+  whose bus, the one tracked on the journey before or after it in its block,
+  was tracked on a different journey at least 10 minutes into this one's
+  timetabled run, and at least 10 minutes before its end. The bus was busy
+  elsewhere, so it didn't run this journey. Another bus might have, without
+  its tracker on, so this is an estimate, kept separate from "very likely
+  didn't run", which is unchanged. It doesn't count: the journey before (a
+  late-running bus), another timetable copy of the same journey (same route
+  and direction, starting within 5 minutes), journeys under 20 minutes, a
+  different bus on each side (likely a swap), or days the
+  clocks change. Same duty-checked days as above. Added 25 November 2026
+  (planning #146); earlier days have none.
 - **Not seen.** The rest of the journeys we didn't see. That could be a
   cancellation, or a bus with its tracker switched off. We can't tell which,
   so we don't count them either way.
