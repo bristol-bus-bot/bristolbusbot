@@ -1,3 +1,4 @@
+import os
 import json
 import sqlite3
 import stat
@@ -1516,3 +1517,35 @@ def test_the_health_check_reads_the_timetable_size_against_the_same_limit(tmp_pa
     assert aggregate_health.timetable_size(path) == {
         "bytes": 1000, "limit_bytes": aggregate_health.TIMETABLE_LIMIT_BYTES}
     assert aggregate_health.timetable_size(tmp_path / "absent.db") is None
+
+
+def _live_file(tmp_path, when):
+    live = tmp_path / "timetable.db"
+    live.write_bytes(b"x")
+    stamp = datetime.fromisoformat(when).timestamp()
+    os.utime(live, (stamp, stamp))
+    return live
+
+
+def test_timetable_put_on_by_hand_is_newer_than_the_automatic_one(tmp_path):
+    # 24 Nov 2026: push.py --timetable put the shared-layout file on at
+    # 01:19; the last automatic acceptance was 20 Nov.
+    live = _live_file(tmp_path, "2026-11-24T01:19:10+00:00")
+    automatic = {"run_id": "1", "accepted_at": "2026-11-20T05:17:00+00:00"}
+    result = aggregate_health.newest_accepted(automatic, live)
+    assert result["source"] == "by_hand"
+    assert result["accepted_at"].startswith("2026-11-24T01:19:10")
+    assert result["automatic"] == automatic
+
+
+def test_automatic_acceptance_is_kept_when_it_is_the_newest(tmp_path):
+    # Automatic promotion writes its record a few seconds after the file.
+    live = _live_file(tmp_path, "2026-11-20T05:17:17+00:00")
+    automatic = {"run_id": "1", "accepted_at": "2026-11-20T05:17:40+00:00"}
+    assert aggregate_health.newest_accepted(automatic, live) is automatic
+
+
+def test_no_live_file_leaves_the_record_alone(tmp_path):
+    automatic = {"accepted_at": "2026-11-20T05:17:40+00:00"}
+    assert aggregate_health.newest_accepted(
+        automatic, tmp_path / "missing.db") is automatic
